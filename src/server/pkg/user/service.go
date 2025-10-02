@@ -20,6 +20,8 @@ type Service interface {
 	VerifyPassword(user *User, password string) bool
 	ChangePassword(userID uuid.UUID, req *ChangePasswordRequest) error
 	UpdateLastLogin(userID uuid.UUID) error
+	UpdateEmailVerified(userID uuid.UUID, verified bool) error
+	UpdatePassword(userID uuid.UUID, newPassword string) error
 }
 
 type service struct {
@@ -189,5 +191,33 @@ func (s *service) UpdateLastLogin(userID uuid.UUID) error {
 		s.logger.Error("Failed to update last login", zap.Error(err), zap.String("user_id", userID.String()))
 		return fmt.Errorf("failed to update last login: %w", err)
 	}
+	return nil
+}
+
+// UpdateEmailVerified updates the email verification status
+func (s *service) UpdateEmailVerified(userID uuid.UUID, verified bool) error {
+	if err := s.db.Model(&User{}).Where("id = ?", userID).Update("email_verified", verified).Error; err != nil {
+		s.logger.Error("Failed to update email verified status", zap.Error(err), zap.String("user_id", userID.String()))
+		return fmt.Errorf("failed to update email verified status: %w", err)
+	}
+	s.logger.Info("Email verified status updated", zap.String("user_id", userID.String()), zap.Bool("verified", verified))
+	return nil
+}
+
+// UpdatePassword updates user password (for password reset)
+func (s *service) UpdatePassword(userID uuid.UUID, newPassword string) error {
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Update password
+	if err := s.db.Model(&User{}).Where("id = ?", userID).Update("password_hash", string(hashedPassword)).Error; err != nil {
+		s.logger.Error("Failed to update password", zap.Error(err), zap.String("user_id", userID.String()))
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	s.logger.Info("Password updated successfully", zap.String("user_id", userID.String()))
 	return nil
 }

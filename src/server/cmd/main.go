@@ -12,7 +12,9 @@ import (
 	"authway/src/server/internal/service"
 	"authway/src/server/internal/service/social"
 	"authway/src/server/pkg/client"
+	"authway/src/server/pkg/email"
 	"authway/src/server/pkg/user"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -40,15 +42,12 @@ func main() {
 		zapLogger.Fatal("Failed to connect to database", zap.Error(err))
 	}
 
-	// Auto-migrate models (temporarily disabled due to GORM "insufficient arguments" error)
-	// The database schema is already properly aligned with Go models
-	zapLogger.Info("Skipping database migration (database schema already aligned)")
-
-	// TODO: Investigate and fix GORM "insufficient arguments" error in AutoMigrate
-	// Original migration code:
-	// if err := database.Migrate(db, &user.User{}, &client.Client{}); err != nil {
-	//     zapLogger.Fatal("Failed to migrate database", zap.Error(err))
-	// }
+	// Auto-migrate models
+	if err := database.Migrate(db, &user.User{}, &client.Client{}, &email.EmailVerification{}, &email.PasswordReset{}); err != nil {
+		zapLogger.Warn("Failed to migrate database (may already be migrated)", zap.Error(err))
+	} else {
+		zapLogger.Info("Database migration completed successfully")
+	}
 
 	// Initialize Redis
 	_, err = database.ConnectRedis(cfg.Redis)
@@ -59,10 +58,17 @@ func main() {
 	// Initialize Hydra client
 	hydraClient := hydra.NewClient(cfg.Hydra.AdminURL)
 
+	// Initialize validator
+	validate := validator.New()
+
 	// Initialize services
 	userService := user.NewService(db, zapLogger)
 	clientService := client.NewService(db, zapLogger)
 	googleService := social.NewGoogleService(&cfg.Google, userService, clientService, zapLogger)
+
+	// Initialize email services
+	emailService := email.NewService(&cfg.Email, cfg.App.BaseURL, zapLogger)
+	emailRepo := email.NewRepository(db, zapLogger)
 
 	// Create services struct for handlers
 	services := &service.Services{
@@ -99,6 +105,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(userService, hydraClient)
 	socialHandler := handler.NewSocialHandler(googleService, userService, hydraClient, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger)
+	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, validate, zapLogger)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
@@ -116,22 +123,28 @@ func main() {
 	app.Get("/auth/google/url", socialHandler.GetGoogleAuthURL)
 
 	// API routes
-	api := app.Group("/api/v1")
+	api := app.Group("/api")
+
+	// Email verification and password reset routes
+	emailHandler.RegisterRoutes(api)
+
+	// API v1 routes
+	v1 := app.Group("/api/v1")
 
 	// User profile routes
-	api.Get("/profile/:id", authHandler.Profile)
+	v1.Get("/profile/:id", authHandler.Profile)
 
 	// Client management routes
-	api.Post("/clients", clientHandler.Create)
-	api.Get("/clients/:id", clientHandler.Get)
-	api.Put("/clients/:id", clientHandler.Update)
-	api.Delete("/clients/:id", clientHandler.Delete)
-	api.Get("/clients", clientHandler.List)
+	v1.Post("/clients", clientHandler.Create)
+	v1.Get("/clients/:id", clientHandler.Get)
+	v1.Put("/clients/:id", clientHandler.Update)
+	v1.Delete("/clients/:id", clientHandler.Delete)
+	v1.Get("/clients", clientHandler.List)
 
 	// Client Google OAuth configuration routes
-	api.Put("/clients/:id/google-oauth", clientHandler.UpdateGoogleOAuth)
-	api.Delete("/clients/:id/google-oauth", clientHandler.DisableGoogleOAuth)
-	api.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
+	v1.Put("/clients/:id/google-oauth", clientHandler.UpdateGoogleOAuth)
+	v1.Delete("/clients/:id/google-oauth", clientHandler.DisableGoogleOAuth)
+	v1.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
 
 	// Start server
 	port := os.Getenv("PORT")
