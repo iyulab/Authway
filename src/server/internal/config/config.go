@@ -1,0 +1,170 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	App      AppConfig         `mapstructure:"app"`
+	Database DatabaseConfig    `mapstructure:"database"`
+	Redis    RedisConfig       `mapstructure:"redis"`
+	JWT      JWTConfig         `mapstructure:"jwt"`
+	OAuth    OAuthConfig       `mapstructure:"oauth"`
+	Hydra    HydraConfig       `mapstructure:"hydra"`
+	CORS     CORSConfig        `mapstructure:"cors"`
+	Email    EmailConfig       `mapstructure:"email"`
+	Google   GoogleOAuthConfig `mapstructure:"google"`
+}
+
+type AppConfig struct {
+	Name        string `mapstructure:"name"`
+	Version     string `mapstructure:"version"`
+	Environment string `mapstructure:"environment"`
+	Port        string `mapstructure:"port"`
+	BaseURL     string `mapstructure:"base_url"`
+}
+
+type DatabaseConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
+	SSLMode  string `mapstructure:"ssl_mode"`
+}
+
+type RedisConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+type JWTConfig struct {
+	AccessTokenSecret  string `mapstructure:"access_token_secret"`
+	RefreshTokenSecret string `mapstructure:"refresh_token_secret"`
+	AccessTokenExpiry  string `mapstructure:"access_token_expiry"`
+	RefreshTokenExpiry string `mapstructure:"refresh_token_expiry"`
+	Issuer             string `mapstructure:"issuer"`
+	PrivateKeyPath     string `mapstructure:"private_key_path"`
+	PublicKeyPath      string `mapstructure:"public_key_path"`
+}
+
+type OAuthConfig struct {
+	AuthorizeCodeExpiry string   `mapstructure:"authorize_code_expiry"`
+	AllowedGrantTypes   []string `mapstructure:"allowed_grant_types"`
+	AllowedScopes       []string `mapstructure:"allowed_scopes"`
+	RequirePKCE         bool     `mapstructure:"require_pkce"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
+type HydraConfig struct {
+	AdminURL  string `mapstructure:"admin_url"`
+	PublicURL string `mapstructure:"public_url"`
+}
+
+type EmailConfig struct {
+	SMTPHost     string `mapstructure:"smtp_host"`
+	SMTPPort     int    `mapstructure:"smtp_port"`
+	SMTPUser     string `mapstructure:"smtp_user"`
+	SMTPPassword string `mapstructure:"smtp_password"`
+	FromEmail    string `mapstructure:"from_email"`
+	FromName     string `mapstructure:"from_name"`
+}
+
+type GoogleOAuthConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+func Load() (*Config, error) {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("./configs")
+	viper.AddConfigPath("/etc/authway")
+
+	// Set environment variable prefix
+	viper.SetEnvPrefix("AUTHWAY")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	// Set defaults
+	setDefaults()
+
+	// Read config file
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+		// Config file not found, continue with environment variables and defaults
+	}
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	return &config, nil
+}
+
+func setDefaults() {
+	// App defaults
+	viper.SetDefault("app.name", "Authway")
+	viper.SetDefault("app.version", "1.0.0")
+	viper.SetDefault("app.environment", "development")
+	viper.SetDefault("app.port", "8080")
+	viper.SetDefault("app.base_url", "http://localhost:8080")
+
+	// Database defaults
+	viper.SetDefault("database.host", "localhost")
+	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.user", "authway")
+	viper.SetDefault("database.password", "authway")
+	viper.SetDefault("database.name", "authway")
+	viper.SetDefault("database.ssl_mode", "disable")
+
+	// Redis defaults
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.db", 0)
+
+	// JWT defaults
+	viper.SetDefault("jwt.access_token_secret", "your-secret-key-change-in-production")
+	viper.SetDefault("jwt.refresh_token_secret", "your-refresh-secret-key-change-in-production")
+	viper.SetDefault("jwt.access_token_expiry", "15m")
+	viper.SetDefault("jwt.refresh_token_expiry", "7d")
+	viper.SetDefault("jwt.issuer", "authway")
+
+	// OAuth defaults
+	viper.SetDefault("oauth.authorize_code_expiry", "10m")
+	viper.SetDefault("oauth.allowed_grant_types", []string{"authorization_code", "refresh_token"})
+	viper.SetDefault("oauth.allowed_scopes", []string{"openid", "profile", "email"})
+	viper.SetDefault("oauth.require_pkce", true)
+
+	// Hydra defaults
+	viper.SetDefault("hydra.admin_url", "http://localhost:4445")
+	viper.SetDefault("hydra.public_url", "http://localhost:4444")
+
+	// CORS defaults
+	viper.SetDefault("cors.allowed_origins", []string{"http://localhost:3000", "http://localhost:3001"})
+
+	// Email defaults
+	viper.SetDefault("email.smtp_host", "localhost")
+	viper.SetDefault("email.smtp_port", 587)
+	viper.SetDefault("email.from_email", "noreply@authway.dev")
+	viper.SetDefault("email.from_name", "Authway")
+
+	// Google OAuth defaults
+	viper.SetDefault("google.enabled", false)
+	viper.SetDefault("google.redirect_url", "http://localhost:8080/auth/google/callback")
+}

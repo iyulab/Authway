@@ -1,0 +1,155 @@
+services:
+  # PostgreSQL Database (Shared)
+  postgres:
+    image: postgres:15-alpine
+    container_name: authway-postgres
+    environment:
+      POSTGRES_DB: authway
+      POSTGRES_USER: authway
+      POSTGRES_PASSWORD: authway
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authway -d authway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: authway-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+
+  # Ory Hydra (OAuth2 Core)
+  hydra-migrate:
+    image: oryd/hydra:v2.2.0
+    container_name: authway-hydra-migrate
+    environment:
+      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
+    command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
+    volumes:
+      - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - authway-network
+
+  hydra:
+    image: oryd/hydra:v2.2.0
+    container_name: authway-hydra
+    environment:
+      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
+      URLS_SELF_ISSUER: http://localhost:4444
+      URLS_CONSENT: http://localhost:8080/consent
+      URLS_LOGIN: http://localhost:8080/login
+      URLS_LOGOUT: http://localhost:8080/logout
+      SERVE_COOKIES_SECURE: false
+      SERVE_PUBLIC_CORS_ENABLED: true
+      SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "*"
+      SERVE_ADMIN_CORS_ENABLED: true
+      SERVE_ADMIN_CORS_ALLOWED_ORIGINS: "*"
+    command: serve -c /etc/config/hydra/hydra.yml all --dev
+    volumes:
+      - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
+    ports:
+      - "4444:4444" # Public port
+      - "4445:4445" # Admin port
+    depends_on:
+      - hydra-migrate
+    networks:
+      - authway-network
+
+  # Authway API (User Management Layer)
+  authway-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: authway-api
+    environment:
+      AUTHWAY_APP_ENVIRONMENT: development
+      AUTHWAY_APP_PORT: 8080
+      AUTHWAY_DATABASE_HOST: postgres
+      AUTHWAY_DATABASE_PORT: 5432
+      AUTHWAY_DATABASE_USER: authway
+      AUTHWAY_DATABASE_PASSWORD: authway
+      AUTHWAY_DATABASE_NAME: authway
+      AUTHWAY_REDIS_HOST: redis
+      AUTHWAY_REDIS_PORT: 6379
+      AUTHWAY_HYDRA_PUBLIC_URL: http://hydra:4444
+      AUTHWAY_HYDRA_ADMIN_URL: http://hydra:4445
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hydra:
+        condition: service_started
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["air", "-c", ".air.toml"]
+    networks:
+      - authway-network
+
+  # Admin Dashboard (React)
+  admin-dashboard:
+    build:
+      context: ./packages/web/admin-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: authway-admin
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_HYDRA_PUBLIC_URL: http://localhost:4444
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./packages/web/admin-dashboard:/app
+      - /app/node_modules
+    networks:
+      - authway-network
+
+  # Login UI (React)
+  login-ui:
+    build:
+      context: ./packages/web/login-ui
+      dockerfile: Dockerfile.dev
+    container_name: authway-login
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_HYDRA_PUBLIC_URL: http://localhost:4444
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./packages/web/login-ui:/app
+      - /app/node_modules
+    networks:
+      - authway-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  authway-network:
+    driver: bridge

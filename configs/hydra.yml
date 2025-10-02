@@ -1,0 +1,74 @@
+version: v1.11.8
+
+dsn: memory
+
+serve:
+  cookies:
+    secure: false
+    same_site_mode: Lax
+  public:
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:3000
+        - http://localhost:3001
+        - http://localhost:8080
+      allowed_methods:
+        - POST
+        - GET
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+      exposed_headers:
+        - Content-Type
+      allow_credentials: true
+  admin:
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:3000
+        - http://localhost:8080
+      allowed_methods:
+        - POST
+        - GET
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+      exposed_headers:
+        - Content-Type
+      allow_credentials: true
+
+urls:
+  self:
+    issuer: http://localhost:4444
+  consent: http://localhost:8080/consent
+  login: http://localhost:8080/login
+  logout: http://localhost:8080/logout
+  error: http://localhost:8080/error
+  post_logout_redirect: http://localhost:8080/
+
+oauth2:
+  expose_internal_errors: true
+
+secrets:
+  system:
+    - youReallyNeedToChangeThis
+
+log:
+  level: debug
+  format: json
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - pairwise
+      - public
+    pairwise:
+      salt: youReallyNeedToChangeThis
+
