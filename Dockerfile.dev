@@ -1,0 +1,28 @@
+# Development Dockerfile for Authway Backend
+# Uses hot-reload for rapid development
+
+FROM golang:1.21-alpine
+
+# Install development tools
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+
+# Install Air for hot reload
+RUN go install github.com/cosmtrek/air@latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY src/ ./src/
+
+# Expose port
+EXPOSE 8080
+
+# Run with Air for hot reload
+CMD ["air", "-c", ".air.toml"]

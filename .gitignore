@@ -175,3 +175,14 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Air hot reload
+tmp/
+build-errors.log
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Documentation artifacts
+claudedocs/

@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: authway-postgres
+    environment:
+      POSTGRES_DB: authway
+      POSTGRES_USER: authway
+      POSTGRES_PASSWORD: authway
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authway -d authway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: authway-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+
+  # MailHog (Email Testing)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: authway-mailhog
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI port
+    networks:
+      - authway-network
+
+  # Authway Backend API
+  authway-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: authway-api
+    environment:
+      # App
+      AUTHWAY_APP_NAME: Authway
+      AUTHWAY_APP_VERSION: 1.0.0
+      AUTHWAY_APP_ENVIRONMENT: development
+      AUTHWAY_APP_PORT: 8080
+      AUTHWAY_APP_BASE_URL: http://localhost:8080
+
+      # Database
+      AUTHWAY_DATABASE_HOST: postgres
+      AUTHWAY_DATABASE_PORT: 5432
+      AUTHWAY_DATABASE_USER: authway
+      AUTHWAY_DATABASE_PASSWORD: authway
+      AUTHWAY_DATABASE_NAME: authway
+      AUTHWAY_DATABASE_SSL_MODE: disable
+
+      # Redis
+      AUTHWAY_REDIS_HOST: redis
+      AUTHWAY_REDIS_PORT: 6379
+      AUTHWAY_REDIS_PASSWORD: ""
+      AUTHWAY_REDIS_DB: 0
+
+      # JWT
+      AUTHWAY_JWT_ACCESS_TOKEN_SECRET: dev-secret-key-change-in-production
+      AUTHWAY_JWT_REFRESH_TOKEN_SECRET: dev-refresh-secret-key-change-in-production
+      AUTHWAY_JWT_ACCESS_TOKEN_EXPIRY: 15m
+      AUTHWAY_JWT_REFRESH_TOKEN_EXPIRY: 7d
+      AUTHWAY_JWT_ISSUER: authway
+
+      # OAuth
+      AUTHWAY_OAUTH_AUTHORIZE_CODE_EXPIRY: 10m
+      AUTHWAY_OAUTH_ALLOWED_GRANT_TYPES: authorization_code,refresh_token
+      AUTHWAY_OAUTH_ALLOWED_SCOPES: openid,profile,email
+      AUTHWAY_OAUTH_REQUIRE_PKCE: "true"
+
+      # CORS
+      AUTHWAY_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
+
+      # Email (MailHog)
+      AUTHWAY_EMAIL_SMTP_HOST: mailhog
+      AUTHWAY_EMAIL_SMTP_PORT: 1025
+      AUTHWAY_EMAIL_SMTP_USER: ""
+      AUTHWAY_EMAIL_SMTP_PASSWORD: ""
+      AUTHWAY_EMAIL_FROM_EMAIL: noreply@authway.dev
+      AUTHWAY_EMAIL_FROM_NAME: Authway
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+      - ./go.mod:/app/go.mod
+      - ./go.sum:/app/go.sum
+    networks:
+      - authway-network
+    restart: unless-stopped
+
+  # Login UI (React + Vite)
+  login-ui:
+    build:
+      context: ./packages/web/login-ui
+      dockerfile: Dockerfile.dev
+    container_name: authway-login-ui
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./packages/web/login-ui:/app
+      - /app/node_modules
+    networks:
+      - authway-network
+    restart: unless-stopped
+
+  # Admin Dashboard (React + Vite) - Optional
+  admin-dashboard:
+    build:
+      context: ./packages/web/admin-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: authway-admin-dashboard
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./packages/web/admin-dashboard:/app
+      - /app/node_modules
+    networks:
+      - authway-network
+    restart: unless-stopped
+    profiles:
+      - full  # Optional service, start with: docker-compose --profile full up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  authway-network:
+    driver: bridge
