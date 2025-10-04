@@ -6,8 +6,8 @@ FROM golang:1.21-alpine
 # Install development tools
 RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
 
-# Install Air for hot reload
-RUN go install github.com/cosmtrek/air@latest
+# Install Air for hot reload (v1.49.0 is last version compatible with Go 1.21)
+RUN go install github.com/cosmtrek/air@v1.49.0
 
 # Set working directory
 WORKDIR /app
