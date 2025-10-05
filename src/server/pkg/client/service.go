@@ -15,6 +15,7 @@ type Service interface {
 	Create(req *CreateClientRequest) (*Client, *ClientCredentials, error)
 	GetByID(id uuid.UUID) (*Client, error)
 	GetByClientID(clientID string) (*Client, error)
+	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client, int64, error)
 	Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error)
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*Client, int64, error)
@@ -35,12 +36,28 @@ func NewService(db *gorm.DB, logger *zap.Logger) Service {
 }
 
 func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials, error) {
+	// Validate tenant_id
+	tenantID, err := uuid.Parse(req.TenantID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid tenant_id: %w", err)
+	}
+
+	// Verify tenant exists
+	var tenantExists bool
+	if err := s.db.Raw("SELECT EXISTS(SELECT 1 FROM tenants WHERE id = ? AND active = true)", tenantID).Scan(&tenantExists).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to verify tenant: %w", err)
+	}
+	if !tenantExists {
+		return nil, nil, fmt.Errorf("tenant not found or inactive")
+	}
+
 	// Generate client ID and secret
 	clientID := s.generateClientID()
 	clientSecret := s.generateClientSecret()
 
 	client := &Client{
 		ID:           uuid.New(),
+		TenantID:     tenantID,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Name:         req.Name,
@@ -54,8 +71,33 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		Active:       true,
 	}
 
+	// Set Google OAuth if provided
+	if req.GoogleOAuthEnabled {
+		client.GoogleOAuthEnabled = true
+		if req.GoogleClientID != "" {
+			client.GoogleClientID = &req.GoogleClientID
+		}
+		if req.GoogleClientSecret != "" {
+			client.GoogleClientSecret = &req.GoogleClientSecret
+		}
+		if req.GoogleRedirectURI != "" {
+			client.GoogleRedirectURI = &req.GoogleRedirectURI
+		}
+	}
+
+	// Set GitHub OAuth if provided
+	if req.GithubOAuthEnabled {
+		client.GithubOAuthEnabled = true
+		if req.GithubClientID != "" {
+			client.GithubClientID = &req.GithubClientID
+		}
+		if req.GithubClientSecret != "" {
+			client.GithubClientSecret = &req.GithubClientSecret
+		}
+	}
+
 	if err := s.db.Create(client).Error; err != nil {
-		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name))
+		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name), zap.String("tenant_id", tenantID.String()))
 		return nil, nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
@@ -67,7 +109,8 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	s.logger.Info("Client created successfully",
 		zap.String("id", client.ID.String()),
 		zap.String("client_id", clientID),
-		zap.String("name", client.Name))
+		zap.String("name", client.Name),
+		zap.String("tenant_id", tenantID.String()))
 
 	return client, credentials, nil
 }
@@ -242,4 +285,22 @@ func (s *service) generateClientSecret() string {
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	return strings.ReplaceAll(base64.URLEncoding.EncodeToString(bytes), "=", "")
+}
+
+// GetByTenant retrieves all clients for a specific tenant with pagination
+func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client, int64, error) {
+	var clients []*Client
+	var total int64
+
+	// Get total count for this tenant
+	if err := s.db.Model(&Client{}).Where("tenant_id = ?", tenantID).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count clients: %w", err)
+	}
+
+	// Get clients with pagination
+	if err := s.db.Where("tenant_id = ?", tenantID).Limit(limit).Offset(offset).Find(&clients).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list clients: %w", err)
+	}
+
+	return clients, total, nil
 }

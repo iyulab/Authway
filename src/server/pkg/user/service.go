@@ -11,9 +11,11 @@ import (
 )
 
 type Service interface {
-	Create(req *CreateUserRequest) (*User, error)
+	Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error)
 	GetByID(id uuid.UUID) (*User, error)
-	GetByEmail(email string) (*User, error)
+	GetByEmail(email string) (*User, error) // Deprecated: Use GetByEmailAndTenant
+	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
+	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
 	Update(id uuid.UUID, req *UpdateUserRequest) (*User, error)
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*User, int64, error)
@@ -36,15 +38,16 @@ func NewService(db *gorm.DB, logger *zap.Logger) Service {
 	}
 }
 
-func (s *service) Create(req *CreateUserRequest) (*User, error) {
-	// Check if user already exists
+func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error) {
+	// Check if user already exists in this tenant
 	var existingUser User
-	if err := s.db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
-		return nil, fmt.Errorf("user with email %s already exists", req.Email)
+	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, req.Email).First(&existingUser).Error; err == nil {
+		return nil, fmt.Errorf("user with email %s already exists in this tenant", req.Email)
 	}
 
 	user := &User{
 		ID:            uuid.New(),
+		TenantID:      tenantID,
 		Email:         req.Email,
 		Name:          &req.Name,
 		EmailVerified: false,
@@ -61,11 +64,11 @@ func (s *service) Create(req *CreateUserRequest) (*User, error) {
 	}
 
 	if err := s.db.Create(user).Error; err != nil {
-		s.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email))
+		s.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	s.logger.Info("User created successfully", zap.String("id", user.ID.String()), zap.String("email", user.Email))
+	s.logger.Info("User created successfully", zap.String("id", user.ID.String()), zap.String("email", user.Email), zap.String("tenant_id", tenantID.String()))
 	return user, nil
 }
 
@@ -220,4 +223,34 @@ func (s *service) UpdatePassword(userID uuid.UUID, newPassword string) error {
 
 	s.logger.Info("Password updated successfully", zap.String("user_id", userID.String()))
 	return nil
+}
+
+// GetByEmailAndTenant retrieves a user by email and tenant ID
+func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error) {
+	var user User
+	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, email).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	return &user, nil
+}
+
+// GetByTenant retrieves all users for a specific tenant with pagination
+func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error) {
+	var users []*User
+	var total int64
+
+	// Get total count for this tenant
+	if err := s.db.Model(&User{}).Where("tenant_id = ?", tenantID).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	// Get users with pagination
+	if err := s.db.Where("tenant_id = ?", tenantID).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	return users, total, nil
 }

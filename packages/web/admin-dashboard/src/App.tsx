@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
-import UsersPage from '@/pages/UsersPage'
+import TenantsPage from '@/pages/TenantsPage'
 import ClientsPage from '@/pages/ClientsPage'
 import SettingsPage from '@/pages/SettingsPage'
 
@@ -24,7 +24,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/users" element={<UsersPage />} />
+        <Route path="/tenants" element={<TenantsPage />} />
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/login" element={<Navigate to="/dashboard" replace />} />

@@ -1,4 +1,272 @@
 import React, { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { usersApi, clientsApi, User, Client } from '@/lib/api'
-import {\n  UsersIcon,\n  KeyIcon,\n  CheckCircleIcon,\n  ExclamationTriangleIcon,\n} from '@heroicons/react/24/outline'\n\ninterface DashboardStats {\n  totalUsers: number\n  totalClients: number\n  activeUsers: number\n  recentLogins: number\n}\n\nconst DashboardPage: React.FC = () => {\n  const [stats, setStats] = useState<DashboardStats>({\n    totalUsers: 0,\n    totalClients: 0,\n    activeUsers: 0,\n    recentLogins: 0,\n  })\n\n  // 사용자 목록 조회\n  const { data: usersData, isLoading: usersLoading } = useQuery({\n    queryKey: ['users'],\n    queryFn: () => usersApi.list({ limit: 100 }),\n  })\n\n  // 클라이언트 목록 조회\n  const { data: clientsData, isLoading: clientsLoading } = useQuery({\n    queryKey: ['clients'],\n    queryFn: () => clientsApi.list({ limit: 100 }),\n  })\n\n  // 통계 계산\n  useEffect(() => {\n    if (usersData && clientsData) {\n      const users = usersData.data.users || []\n      const clients = clientsData.data.clients || []\n      \n      const activeUsers = users.filter((user: User) => user.active).length\n      const recentLogins = users.filter((user: User) => {\n        if (!user.last_login_at) return false\n        const lastLogin = new Date(user.last_login_at)\n        const now = new Date()\n        const daysDiff = (now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24)\n        return daysDiff <= 7 // 지난 7일 내 로그인\n      }).length\n\n      setStats({\n        totalUsers: users.length,\n        totalClients: clients.length,\n        activeUsers,\n        recentLogins,\n      })\n    }\n  }, [usersData, clientsData])\n\n  const isLoading = usersLoading || clientsLoading\n\n  if (isLoading) {\n    return (\n      <div className=\"flex items-center justify-center h-64\">\n        <div className=\"animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600\"></div>\n      </div>\n    )\n  }\n\n  const statCards = [\n    {\n      name: '총 사용자',\n      value: stats.totalUsers,\n      icon: UsersIcon,\n      color: 'bg-blue-500',\n      bgColor: 'bg-blue-50',\n      textColor: 'text-blue-600',\n    },\n    {\n      name: '활성 사용자',\n      value: stats.activeUsers,\n      icon: CheckCircleIcon,\n      color: 'bg-green-500',\n      bgColor: 'bg-green-50',\n      textColor: 'text-green-600',\n    },\n    {\n      name: 'OAuth 클라이언트',\n      value: stats.totalClients,\n      icon: KeyIcon,\n      color: 'bg-purple-500',\n      bgColor: 'bg-purple-50',\n      textColor: 'text-purple-600',\n    },\n    {\n      name: '최근 로그인',\n      value: stats.recentLogins,\n      icon: ExclamationTriangleIcon,\n      color: 'bg-orange-500',\n      bgColor: 'bg-orange-50',\n      textColor: 'text-orange-600',\n      description: '지난 7일',\n    },\n  ]\n\n  return (\n    <div className=\"space-y-6\">\n      {/* 통계 카드 */}\n      <div className=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4\">\n        {statCards.map((stat) => {\n          const Icon = stat.icon\n          return (\n            <div\n              key={stat.name}\n              className={`relative overflow-hidden rounded-lg ${stat.bgColor} px-4 py-5 shadow sm:px-6`}\n            >\n              <div className=\"flex items-center\">\n                <div className=\"flex-shrink-0\">\n                  <Icon className={`h-8 w-8 ${stat.textColor}`} />\n                </div>\n                <div className=\"ml-5 w-0 flex-1\">\n                  <dl>\n                    <dt className={`text-sm font-medium ${stat.textColor} truncate`}>\n                      {stat.name}\n                    </dt>\n                    <dd className=\"flex items-baseline\">\n                      <div className={`text-2xl font-semibold ${stat.textColor}`}>\n                        {stat.value.toLocaleString()}\n                      </div>\n                      {stat.description && (\n                        <div className={`ml-2 text-sm font-medium ${stat.textColor} opacity-75`}>\n                          {stat.description}\n                        </div>\n                      )}\n                    </dd>\n                  </dl>\n                </div>\n              </div>\n            </div>\n          )\n        })}\n      </div>\n\n      {/* 최근 활동 */}\n      <div className=\"grid grid-cols-1 gap-6 lg:grid-cols-2\">\n        {/* 최근 등록된 사용자 */}\n        <div className=\"bg-white overflow-hidden shadow rounded-lg\">\n          <div className=\"px-4 py-5 sm:px-6\">\n            <h3 className=\"text-lg leading-6 font-medium text-gray-900\">\n              최근 등록된 사용자\n            </h3>\n            <p className=\"mt-1 max-w-2xl text-sm text-gray-500\">\n              최근에 가입한 사용자 목록입니다.\n            </p>\n          </div>\n          <div className=\"border-t border-gray-200\">\n            <div className=\"divide-y divide-gray-200\">\n              {usersData?.data.users?.slice(0, 5).map((user: User) => (\n                <div key={user.id} className=\"px-4 py-4 sm:px-6\">\n                  <div className=\"flex items-center justify-between\">\n                    <div className=\"flex items-center\">\n                      <div className=\"flex-shrink-0\">\n                        <div className=\"h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center\">\n                          <span className=\"text-sm font-medium text-gray-700\">\n                            {(user.first_name?.[0] || user.email[0]).toUpperCase()}\n                          </span>\n                        </div>\n                      </div>\n                      <div className=\"ml-4\">\n                        <div className=\"text-sm font-medium text-gray-900\">\n                          {user.first_name} {user.last_name}\n                        </div>\n                        <div className=\"text-sm text-gray-500\">{user.email}</div>\n                      </div>\n                    </div>\n                    <div className=\"flex items-center\">\n                      {user.email_verified ? (\n                        <CheckCircleIcon className=\"h-5 w-5 text-green-500\" />\n                      ) : (\n                        <ExclamationTriangleIcon className=\"h-5 w-5 text-yellow-500\" />\n                      )}\n                    </div>\n                  </div>\n                </div>\n              )) || (\n                <div className=\"px-4 py-8 text-center text-gray-500\">\n                  등록된 사용자가 없습니다.\n                </div>\n              )}\n            </div>\n          </div>\n        </div>\n\n        {/* 최근 생성된 클라이언트 */}\n        <div className=\"bg-white overflow-hidden shadow rounded-lg\">\n          <div className=\"px-4 py-5 sm:px-6\">\n            <h3 className=\"text-lg leading-6 font-medium text-gray-900\">\n              최근 생성된 OAuth 클라이언트\n            </h3>\n            <p className=\"mt-1 max-w-2xl text-sm text-gray-500\">\n              최근에 생성된 OAuth 클라이언트 목록입니다.\n            </p>\n          </div>\n          <div className=\"border-t border-gray-200\">\n            <div className=\"divide-y divide-gray-200\">\n              {clientsData?.data.clients?.slice(0, 5).map((client: Client) => (\n                <div key={client.id} className=\"px-4 py-4 sm:px-6\">\n                  <div className=\"flex items-center justify-between\">\n                    <div className=\"flex items-center\">\n                      <div className=\"flex-shrink-0\">\n                        <KeyIcon className=\"h-8 w-8 text-purple-500\" />\n                      </div>\n                      <div className=\"ml-4\">\n                        <div className=\"text-sm font-medium text-gray-900\">\n                          {client.name}\n                        </div>\n                        <div className=\"text-sm text-gray-500\">{client.client_id}</div>\n                      </div>\n                    </div>\n                    <div className=\"flex items-center\">\n                      {client.active ? (\n                        <CheckCircleIcon className=\"h-5 w-5 text-green-500\" />\n                      ) : (\n                        <ExclamationTriangleIcon className=\"h-5 w-5 text-red-500\" />\n                      )}\n                    </div>\n                  </div>\n                </div>\n              )) || (\n                <div className=\"px-4 py-8 text-center text-gray-500\">\n                  생성된 클라이언트가 없습니다.\n                </div>\n              )}\n            </div>\n          </div>\n        </div>\n      </div>\n\n      {/* Ory Hydra 상태 */}\n      <div className=\"bg-white overflow-hidden shadow rounded-lg\">\n        <div className=\"px-4 py-5 sm:px-6\">\n          <h3 className=\"text-lg leading-6 font-medium text-gray-900\">\n            Ory Hydra 연동 상태\n          </h3>\n          <p className=\"mt-1 max-w-2xl text-sm text-gray-500\">\n            현재 Ory Hydra 서비스와의 연동 상태를 확인할 수 있습니다.\n          </p>\n        </div>\n        <div className=\"border-t border-gray-200 px-4 py-5 sm:px-6\">\n          <div className=\"flex items-center\">\n            <CheckCircleIcon className=\"h-6 w-6 text-green-500 mr-3\" />\n            <div>\n              <p className=\"text-sm font-medium text-gray-900\">\n                Ory Hydra 연동 정상\n              </p>\n              <p className=\"text-sm text-gray-500\">\n                OAuth2/OIDC 서비스가 정상적으로 작동 중입니다.\n              </p>\n            </div>\n          </div>\n        </div>\n      </div>\n    </div>\n  )\n}\n\nexport default DashboardPage
+import { tenantsApi, clientsApi, Tenant, Client } from '@/lib/api'
+import {
+  BuildingOfficeIcon,
+  KeyIcon,
+  CheckCircleIcon,
+} from '@heroicons/react/24/outline'
+
+interface DashboardStats {
+  totalTenants: number
+  totalClients: number
+  activeTenants: number
+  activeClients: number
+}
+
+const DashboardPage: React.FC = () => {
+  const [stats, setStats] = useState<DashboardStats>({
+    totalTenants: 0,
+    totalClients: 0,
+    activeTenants: 0,
+    activeClients: 0,
+  })
+
+  // 테넌트 목록 조회
+  const { data: tenantsData, isLoading: tenantsLoading } = useQuery({
+    queryKey: ['tenants'],
+    queryFn: () => tenantsApi.list({ limit: 100 }),
+  })
+
+  // 클라이언트 목록 조회
+  const { data: clientsData, isLoading: clientsLoading } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => clientsApi.list({ limit: 100 }),
+  })
+
+  // 통계 계산
+  useEffect(() => {
+    if (tenantsData && clientsData) {
+      const tenants = tenantsData.data.tenants || []
+      const clients = clientsData.data.clients || []
+
+      const activeTenants = tenants.filter((tenant: Tenant) => tenant.active).length
+      const activeClients = clients.filter((client: Client) => client.active).length
+
+      setStats({
+        totalTenants: tenants.length,
+        totalClients: clients.length,
+        activeTenants,
+        activeClients,
+      })
+    }
+  }, [tenantsData, clientsData])
+
+  const isLoading = tenantsLoading || clientsLoading
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
+
+  const statCards = [
+    {
+      name: '총 테넌트',
+      value: stats.totalTenants,
+      icon: BuildingOfficeIcon,
+      color: 'bg-blue-500',
+      bgColor: 'bg-blue-50',
+      textColor: 'text-blue-600',
+    },
+    {
+      name: '활성 테넌트',
+      value: stats.activeTenants,
+      icon: CheckCircleIcon,
+      color: 'bg-green-500',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+    },
+    {
+      name: '총 앱(클라이언트)',
+      value: stats.totalClients,
+      icon: KeyIcon,
+      color: 'bg-purple-500',
+      bgColor: 'bg-purple-50',
+      textColor: 'text-purple-600',
+    },
+    {
+      name: '활성 앱',
+      value: stats.activeClients,
+      icon: CheckCircleIcon,
+      color: 'bg-green-500',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">대시보드</h2>
+        <p className="mt-2 text-sm text-gray-600">
+          Authway 관리 콘솔에 오신 것을 환영합니다.
+        </p>
+      </div>
+
+      {/* 통계 카드 */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {statCards.map((stat) => {
+          const Icon = stat.icon
+          return (
+            <div
+              key={stat.name}
+              className={`relative overflow-hidden rounded-lg ${stat.bgColor} px-4 py-5 shadow sm:px-6`}
+            >
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Icon className={`h-8 w-8 ${stat.textColor}`} />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className={`text-sm font-medium ${stat.textColor} truncate`}>
+                      {stat.name}
+                    </dt>
+                    <dd className="flex items-baseline">
+                      <div className={`text-2xl font-semibold ${stat.textColor}`}>
+                        {stat.value.toLocaleString()}
+                      </div>
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 최근 활동 */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* 최근 생성된 테넌트 */}
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              최근 생성된 테넌트
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              최근에 생성된 테넌트 목록입니다.
+            </p>
+          </div>
+          <div className="border-t border-gray-200">
+            <div className="divide-y divide-gray-200">
+              {tenantsData?.data.tenants?.slice(0, 5).map((tenant: Tenant) => (
+                <div key={tenant.id} className="px-4 py-4 sm:px-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <BuildingOfficeIcon className="h-8 w-8 text-blue-500" />
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {tenant.name}
+                        </div>
+                        <div className="text-sm text-gray-500">{tenant.slug}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      {tenant.active ? (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <div className="h-5 w-5 rounded-full bg-gray-300"></div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )) || (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  생성된 테넌트가 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 최근 생성된 클라이언트 */}
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              최근 생성된 앱(클라이언트)
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              최근에 생성된 앱 목록입니다.
+            </p>
+          </div>
+          <div className="border-t border-gray-200">
+            <div className="divide-y divide-gray-200">
+              {clientsData?.data.clients?.slice(0, 5).map((client: Client) => (
+                <div key={client.id} className="px-4 py-4 sm:px-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <KeyIcon className="h-8 w-8 text-purple-500" />
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {client.name}
+                        </div>
+                        <div className="text-sm text-gray-500">{client.client_id}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      {client.active ? (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <div className="h-5 w-5 rounded-full bg-gray-300"></div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )) || (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  생성된 앱이 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 시스템 정보 */}
+      <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">
+            시스템 정보
+          </h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Authway OAuth 2.0 서버 시스템 정보입니다.
+          </p>
+        </div>
+        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+            <div>
+              <dt className="text-sm font-medium text-gray-500">서버 버전</dt>
+              <dd className="mt-1 text-sm text-gray-900">v1.0.0</dd>
+            </div>
+            <div>
+              <dt className="text-sm font-medium text-gray-500">Ory Hydra 연동</dt>
+              <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
+                정상
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm font-medium text-gray-500">데이터베이스</dt>
+              <dd className="mt-1 text-sm text-gray-900">PostgreSQL</dd>
+            </div>
+            <div>
+              <dt className="text-sm font-medium text-gray-500">Redis 캐시</dt>
+              <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
+                연결됨
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default DashboardPage

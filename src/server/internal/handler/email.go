@@ -3,14 +3,11 @@ package handler
 import (
 	"authway/src/server/pkg/email"
 	"authway/src/server/pkg/user"
-	"errors"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // EmailHandler handles email verification and password reset requests

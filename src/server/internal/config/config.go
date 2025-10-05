@@ -17,6 +17,9 @@ type Config struct {
 	CORS     CORSConfig        `mapstructure:"cors"`
 	Email    EmailConfig       `mapstructure:"email"`
 	Google   GoogleOAuthConfig `mapstructure:"google"`
+	GitHub   GitHubOAuthConfig `mapstructure:"github"`
+	Tenant   TenantConfig      `mapstructure:"tenant"`
+	Admin    AdminConfig       `mapstructure:"admin"`
 }
 
 type AppConfig struct {
@@ -83,6 +86,24 @@ type GoogleOAuthConfig struct {
 	ClientSecret string `mapstructure:"client_secret"`
 	RedirectURL  string `mapstructure:"redirect_url"`
 	Enabled      bool   `mapstructure:"enabled"`
+}
+
+type GitHubOAuthConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+type TenantConfig struct {
+	SingleTenantMode bool   `mapstructure:"single_tenant_mode"`
+	TenantName       string `mapstructure:"tenant_name"`
+	TenantSlug       string `mapstructure:"tenant_slug"`
+}
+
+type AdminConfig struct {
+	APIKey   string `mapstructure:"api_key"`
+	Password string `mapstructure:"password"`
 }
 
 func Load() (*Config, error) {
@@ -167,4 +188,17 @@ func setDefaults() {
 	// Google OAuth defaults
 	viper.SetDefault("google.enabled", false)
 	viper.SetDefault("google.redirect_url", "http://localhost:8080/auth/google/callback")
+
+	// GitHub OAuth defaults
+	viper.SetDefault("github.enabled", false)
+	viper.SetDefault("github.redirect_url", "http://localhost:8080/auth/github/callback")
+
+	// Tenant defaults
+	viper.SetDefault("tenant.single_tenant_mode", false)
+	viper.SetDefault("tenant.tenant_name", "")
+	viper.SetDefault("tenant.tenant_slug", "")
+
+	// Admin defaults
+	viper.SetDefault("admin.api_key", "")
+	viper.SetDefault("admin.password", "")
 }

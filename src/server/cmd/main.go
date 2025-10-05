@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"authway/src/server/internal/config"
 	"authway/src/server/internal/database"
@@ -11,9 +13,12 @@ import (
 	"authway/src/server/internal/middleware"
 	"authway/src/server/internal/service"
 	"authway/src/server/internal/service/social"
+	"authway/src/server/pkg/admin"
 	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/email"
+	"authway/src/server/pkg/tenant"
 	"authway/src/server/pkg/user"
+	adminMiddleware "authway/src/server/pkg/middleware"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -43,11 +48,42 @@ func main() {
 	}
 
 	// Auto-migrate models
-	if err := database.Migrate(db, &user.User{}, &client.Client{}, &email.EmailVerification{}, &email.PasswordReset{}); err != nil {
+	if err := database.Migrate(db, &tenant.Tenant{}, &user.User{}, &client.Client{}, &email.EmailVerification{}, &email.PasswordReset{}, &admin.AdminSession{}); err != nil {
 		zapLogger.Warn("Failed to migrate database (may already be migrated)", zap.Error(err))
 	} else {
 		zapLogger.Info("Database migration completed successfully")
 	}
+
+	// Initialize Tenant Service
+	tenantService := tenant.NewService(db)
+
+	// Tenant initialization based on mode
+	if cfg.Tenant.SingleTenantMode {
+		// Single Tenant Mode: Create dedicated tenant
+		zapLogger.Info("Starting in Single Tenant Mode",
+			zap.String("tenant_name", cfg.Tenant.TenantName),
+			zap.String("tenant_slug", cfg.Tenant.TenantSlug))
+
+		if cfg.Tenant.TenantName == "" || cfg.Tenant.TenantSlug == "" {
+			zapLogger.Fatal("Single Tenant Mode requires TENANT_NAME and TENANT_SLUG")
+		}
+
+		_, err := tenantService.CreateSingleTenant(cfg.Tenant.TenantName, cfg.Tenant.TenantSlug)
+		if err != nil {
+			zapLogger.Fatal("Failed to create single tenant", zap.Error(err))
+		}
+	} else {
+		// Multi-Tenant Mode: Ensure default tenant exists
+		zapLogger.Info("Starting in Multi-Tenant Mode")
+
+		if err := tenantService.EnsureDefaultTenant(); err != nil {
+			zapLogger.Fatal("Failed to ensure default tenant", zap.Error(err))
+		}
+	}
+
+	// Initialize Admin Service
+	adminService := admin.NewService(db, zapLogger, cfg.Admin.Password)
+	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version)
 
 	// Initialize Redis
 	_, err = database.ConnectRedis(cfg.Redis)
@@ -67,8 +103,17 @@ func main() {
 	googleService := social.NewGoogleService(&cfg.Google, userService, clientService, zapLogger)
 
 	// Initialize email services
-	emailService := email.NewService(&cfg.Email, cfg.App.BaseURL, zapLogger)
-	emailRepo := email.NewRepository(db, zapLogger)
+	emailConfig := email.Config{
+		SMTPHost:     cfg.Email.SMTPHost,
+		SMTPPort:     fmt.Sprintf("%d", cfg.Email.SMTPPort),
+		SMTPUsername: cfg.Email.SMTPUser,
+		SMTPPassword: cfg.Email.SMTPPassword,
+		FromEmail:    cfg.Email.FromEmail,
+		FromName:     cfg.Email.FromName,
+		FrontendURL:  cfg.App.BaseURL,
+	}
+	emailService := email.NewService(emailConfig, zapLogger)
+	emailRepo := email.NewRepository(db)
 
 	// Create services struct for handlers
 	services := &service.Services{
@@ -102,7 +147,7 @@ func main() {
 	})
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, hydraClient)
+	authHandler := handler.NewAuthHandler(userService, clientService, hydraClient)
 	socialHandler := handler.NewSocialHandler(googleService, userService, hydraClient, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, validate, zapLogger)
@@ -145,6 +190,25 @@ func main() {
 	v1.Put("/clients/:id/google-oauth", clientHandler.UpdateGoogleOAuth)
 	v1.Delete("/clients/:id/google-oauth", clientHandler.DisableGoogleOAuth)
 	v1.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
+
+	// Tenant Management API routes (Admin only)
+	tenantHandler := tenant.NewHandler(tenantService)
+	adminAuth := adminMiddleware.AdminAuth(cfg.Admin.APIKey)
+	tenantHandler.RegisterRoutes(app, adminAuth)
+
+	// Admin Console routes
+	adminHandler.RegisterRoutes(app)
+
+	// Cleanup expired admin sessions periodically
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := adminService.CleanupExpiredSessions(); err != nil {
+				zapLogger.Error("Failed to cleanup expired admin sessions", zap.Error(err))
+			}
+		}
+	}()
 
 	// Start server
 	port := os.Getenv("PORT")

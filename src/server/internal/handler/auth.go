@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"authway/src/server/internal/hydra"
+	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -11,14 +12,16 @@ import (
 )
 
 type AuthHandler struct {
-	userService user.Service
-	hydraClient *hydra.Client
+	userService   user.Service
+	clientService client.Service
+	hydraClient   *hydra.Client
 }
 
-func NewAuthHandler(userService user.Service, hydraClient *hydra.Client) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, hydraClient *hydra.Client) *AuthHandler {
 	return &AuthHandler{
-		userService: userService,
-		hydraClient: hydraClient,
+		userService:   userService,
+		clientService: clientService,
+		hydraClient:   hydraClient,
 	}
 }
 
@@ -39,22 +42,47 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 		})
 	}
 
-	// If user is already authenticated and session is still valid, skip login
-	if loginReq.Skip {
-		acceptBody := &hydra.AcceptLoginRequest{
-			Subject:     loginReq.Subject,
-			Remember:    true,
-			RememberFor: 3600,
-		}
+	// Get client information to check tenant
+	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get client information",
+		})
+	}
 
-		resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to accept login request",
-			})
-		}
+	// SSO Check: If user is already authenticated, verify tenant match
+	if loginReq.Skip && loginReq.Subject != "" {
+		userID, err := uuid.Parse(loginReq.Subject)
+		if err == nil {
+			// Get user to check tenant
+			authenticatedUser, err := h.userService.GetByID(userID)
+			if err == nil {
+				// Compare tenant_id for SSO eligibility
+				if authenticatedUser.TenantID == requestedClient.TenantID {
+					// Same tenant → SSO automatic approval
+					acceptBody := &hydra.AcceptLoginRequest{
+						Subject:     loginReq.Subject,
+						Remember:    true,
+						RememberFor: 3600,
+						Context: map[string]interface{}{
+							"email":     authenticatedUser.Email,
+							"name":      authenticatedUser.Name,
+							"tenant_id": authenticatedUser.TenantID.String(),
+						},
+					}
 
-		return c.Redirect(resp.RedirectTo)
+					resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
+					if err != nil {
+						return c.Status(500).JSON(fiber.Map{
+							"error": "Failed to accept login request",
+						})
+					}
+
+					return c.Redirect(resp.RedirectTo)
+				}
+				// Different tenant → Force re-authentication
+			}
+		}
 	}
 
 	// Render login form with challenge
@@ -62,6 +90,7 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 		"challenge":       challenge,
 		"client_name":     loginReq.Client.ClientName,
 		"requested_scope": loginReq.RequestedScope,
+		"tenant_id":       requestedClient.TenantID.String(),
 	})
 }
 
@@ -120,8 +149,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Remember:    req.Remember,
 		RememberFor: rememberFor,
 		Context: map[string]interface{}{
-			"email": user.Email,
-			"name":  user.Name,
+			"email":     user.Email,
+			"name":      user.Name,
+			"tenant_id": user.TenantID.String(),
 		},
 	}
 
@@ -270,6 +300,7 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 
 // Registration endpoint
 type RegisterRequest struct {
+	TenantID string `json:"tenant_id"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
@@ -290,6 +321,20 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 
+	if req.TenantID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Tenant ID is required",
+		})
+	}
+
+	// Parse tenant ID
+	tenantID, err := uuid.Parse(req.TenantID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid tenant ID format",
+		})
+	}
+
 	// Create user request
 	createReq := &user.CreateUserRequest{
 		Email:    req.Email,
@@ -297,7 +342,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		Name:     req.Name,
 	}
 
-	createdUser, err := h.userService.Create(createReq)
+	createdUser, err := h.userService.Create(tenantID, createReq)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create user",
@@ -305,9 +350,10 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}
 
 	return c.Status(201).JSON(fiber.Map{
-		"id":    createdUser.ID,
-		"email": createdUser.Email,
-		"name":  createdUser.Name,
+		"id":        createdUser.ID,
+		"tenant_id": createdUser.TenantID,
+		"email":     createdUser.Email,
+		"name":      createdUser.Name,
 	})
 }
 

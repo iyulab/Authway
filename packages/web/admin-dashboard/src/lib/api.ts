@@ -65,22 +65,44 @@ export interface Client {
   updated_at: string
 }
 
+export interface Tenant {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  settings?: Record<string, any>
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface LoginRequest {
-  email: string
   password: string
 }
 
 export interface LoginResponse {
-  user: User
+  token: string
+  expires_at: string
 }
 
-// Auth API
+export interface AdminInfo {
+  authenticated: boolean
+  version: string
+}
+
+// Admin Auth API
 export const authApi = {
   login: (data: LoginRequest) =>
-    api.post<{ user: User; tokens: { access_token: string } }>('/auth/login', data),
+    api.post<LoginResponse>('/admin/login', data),
 
-  getUserProfile: (id: string) =>
-    api.get<User>(`/profile/${id}`),
+  logout: () =>
+    api.post<{ message: string }>('/admin/logout'),
+
+  validate: () =>
+    api.get<{ valid: boolean; info: AdminInfo }>('/admin/validate'),
+
+  info: () =>
+    api.get<AdminInfo>('/admin/info'),
 }
 
 // Users API (Note: This is for admin dashboard - not implemented in backend yet)
@@ -126,4 +148,48 @@ export const clientsApi = {
 
   regenerateSecret: (id: string) =>
     api.post<{ message: string; credentials: { client_id: string; client_secret: string } }>(`/api/clients/${id}/regenerate-secret`),
+}
+
+// Tenants API
+export const tenantsApi = {
+  list: (params?: { limit?: number; offset?: number }) =>
+    api.get<{ tenants: Tenant[]; total: number }>('/api/tenants', {
+      params,
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  get: (id: string) =>
+    api.get<{ tenant: Tenant }>(`/api/tenants/${id}`, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  create: (data: {
+    name: string
+    slug: string
+    description?: string
+    settings?: Record<string, any>
+  }) =>
+    api.post<{ tenant: Tenant }>('/api/tenants', data, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  update: (id: string, data: Partial<Tenant>) =>
+    api.put<{ tenant: Tenant }>(`/api/tenants/${id}`, data, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  delete: (id: string) =>
+    api.delete<{ message: string }>(`/api/tenants/${id}`, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  activate: (id: string) =>
+    api.put<{ tenant: Tenant }>(`/api/tenants/${id}/activate`, {}, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
+
+  deactivate: (id: string) =>
+    api.put<{ tenant: Tenant }>(`/api/tenants/${id}/deactivate`, {}, {
+      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
+    }),
 }

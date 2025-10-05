@@ -13,6 +13,7 @@ import (
 	"authway/src/server/internal/config"
 	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/user"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -221,6 +222,24 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		zap.String("code_length", fmt.Sprintf("%d", len(code))),
 		zap.String("client_id", clientID))
 
+	// Get client to determine tenant
+	var clientTenantID uuid.UUID
+	if clientID != "" {
+		client, err := g.clientService.GetByClientID(clientID)
+		if err != nil {
+			g.logger.Error("Failed to get client for tenant determination", zap.Error(err))
+			return nil, fmt.Errorf("failed to get client: %w", err)
+		}
+		clientTenantID = client.TenantID
+	} else {
+		// If no clientID, use default tenant
+		// This shouldn't happen in production but handle gracefully
+		g.logger.Warn("No client ID provided, using default tenant")
+		// You might want to get default tenant ID here
+		// For now, return error
+		return nil, fmt.Errorf("client_id required for tenant determination")
+	}
+
 	// Exchange authorization code for access token using client-specific or central config
 	tokenResp, err := g.ExchangeCodeForClient(ctx, code, clientID)
 	if err != nil {
@@ -235,10 +254,10 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
-	// Check if user already exists
-	existingUser, err := g.userService.GetByEmail(googleUser.Email)
+	// Check if user already exists in this tenant
+	existingUser, err := g.userService.GetByEmailAndTenant(clientTenantID, googleUser.Email)
 	if err == nil {
-		// User exists, update Google-specific fields
+		// User exists in this tenant, update Google-specific fields
 		existingUser.GoogleID = &googleUser.ID
 		existingUser.Picture = &googleUser.Picture
 		existingUser.EmailVerified = googleUser.VerifiedEmail
@@ -254,12 +273,13 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		g.logger.Info("Updated existing user with Google account",
 			zap.String("user_id", existingUser.ID.String()),
 			zap.String("email", existingUser.Email),
+			zap.String("tenant_id", clientTenantID.String()),
 			zap.String("client_id", clientID))
 
 		return existingUser, nil
 	}
 
-	// Create new user account
+	// Create new user account in this tenant
 	fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)
 	createReq := &user.CreateUserRequest{
 		Email:    googleUser.Email,
@@ -267,15 +287,27 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		Name:     fullName,
 	}
 
-	newUser, err := g.userService.Create(createReq)
+	newUser, err := g.userService.Create(clientTenantID, createReq)
 	if err != nil {
 		g.logger.Error("Failed to create new user from Google", zap.Error(err))
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// Update Google-specific fields
+	newUser.GoogleID = &googleUser.ID
+	newUser.Picture = &googleUser.Picture
+	newUser.EmailVerified = googleUser.VerifiedEmail
+	updateReq := &user.UpdateUserRequest{
+		AvatarURL: googleUser.Picture,
+	}
+	if _, err := g.userService.Update(newUser.ID, updateReq); err != nil {
+		g.logger.Warn("Failed to update new user with Google fields", zap.Error(err))
+	}
+
 	g.logger.Info("Created new user from Google account",
 		zap.String("user_id", newUser.ID.String()),
 		zap.String("email", newUser.Email),
+		zap.String("tenant_id", clientTenantID.String()),
 		zap.String("client_id", clientID))
 
 	return newUser, nil

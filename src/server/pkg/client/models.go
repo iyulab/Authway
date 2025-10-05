@@ -9,10 +9,12 @@ import (
 )
 
 // Client represents an OAuth 2.0 client application
+// Each client belongs to one tenant
 type Client struct {
 	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	TenantID     uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	ClientID     string         `json:"client_id" gorm:"uniqueIndex;not null"`
-	ClientSecret string         `json:"-" gorm:"not null"` // Never include in JSON responses
+	ClientSecret string         `json:"-" gorm:"not null"`
 	Name         string         `json:"name" gorm:"not null"`
 	Description  string         `json:"description"`
 	Website      string         `json:"website"`
@@ -20,14 +22,19 @@ type Client struct {
 	RedirectURIs pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
 	GrantTypes   pq.StringArray `json:"grant_types" gorm:"type:text[]"`
 	Scopes       pq.StringArray `json:"scopes" gorm:"type:text[]"`
-	Public       bool           `json:"public" gorm:"default:false"` // Public clients (mobile apps, SPAs)
+	Public       bool           `json:"public" gorm:"default:false"`
 	Active       bool           `json:"active" gorm:"default:true"`
 
-	// Google OAuth Settings (optional - if null, uses central Authway settings)
+	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"default:false"`
-	GoogleClientID     *string `json:"-" gorm:"null"` // Never include in JSON responses
-	GoogleClientSecret *string `json:"-" gorm:"null"` // Never include in JSON responses
+	GoogleClientID     *string `json:"-" gorm:"null"`
+	GoogleClientSecret *string `json:"-" gorm:"null"`
 	GoogleRedirectURI  *string `json:"google_redirect_uri" gorm:"null"`
+
+	// Client-specific GitHub OAuth (optional)
+	GithubOAuthEnabled bool    `json:"github_oauth_enabled" gorm:"default:false"`
+	GithubClientID     *string `json:"-" gorm:"null"`
+	GithubClientSecret *string `json:"-" gorm:"null"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -45,6 +52,7 @@ func (c *Client) BeforeCreate(tx *gorm.DB) error {
 // PublicClient returns client data safe for public consumption
 type PublicClient struct {
 	ID           uuid.UUID `json:"id"`
+	TenantID     uuid.UUID `json:"tenant_id"`
 	ClientID     string    `json:"client_id"`
 	Name         string    `json:"name"`
 	Description  string    `json:"description"`
@@ -56,9 +64,10 @@ type PublicClient struct {
 	Public       bool      `json:"public"`
 	Active       bool      `json:"active"`
 
-	// Google OAuth Settings (public fields only)
+	// OAuth Settings (public fields only)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled"`
 	GoogleRedirectURI  *string `json:"google_redirect_uri"`
+	GithubOAuthEnabled bool    `json:"github_oauth_enabled"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -68,6 +77,7 @@ type PublicClient struct {
 func (c *Client) ToPublic() PublicClient {
 	return PublicClient{
 		ID:           c.ID,
+		TenantID:     c.TenantID,
 		ClientID:     c.ClientID,
 		Name:         c.Name,
 		Description:  c.Description,
@@ -79,9 +89,10 @@ func (c *Client) ToPublic() PublicClient {
 		Public:       c.Public,
 		Active:       c.Active,
 
-		// Google OAuth public fields
+		// OAuth public fields
 		GoogleOAuthEnabled: c.GoogleOAuthEnabled,
 		GoogleRedirectURI:  c.GoogleRedirectURI,
+		GithubOAuthEnabled: c.GithubOAuthEnabled,
 
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
@@ -90,10 +101,11 @@ func (c *Client) ToPublic() PublicClient {
 
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
+	TenantID     string   `json:"tenant_id" validate:"required,uuid"` // Required!
 	Name         string   `json:"name" validate:"required"`
 	Description  string   `json:"description"`
-	Website      string   `json:"website" validate:"url"`
-	Logo         string   `json:"logo" validate:"url"`
+	Website      string   `json:"website" validate:"omitempty,url"`
+	Logo         string   `json:"logo" validate:"omitempty,url"`
 	RedirectURIs []string `json:"redirect_uris" validate:"required,min=1,dive,url"`
 	GrantTypes   []string `json:"grant_types" validate:"required,min=1"`
 	Scopes       []string `json:"scopes" validate:"required,min=1"`
@@ -104,6 +116,11 @@ type CreateClientRequest struct {
 	GoogleClientID     string `json:"google_client_id" validate:"required_with=GoogleOAuthEnabled"`
 	GoogleClientSecret string `json:"google_client_secret" validate:"required_with=GoogleOAuthEnabled"`
 	GoogleRedirectURI  string `json:"google_redirect_uri" validate:"required_with=GoogleOAuthEnabled,omitempty,url"`
+
+	// GitHub OAuth Settings (optional)
+	GithubOAuthEnabled bool   `json:"github_oauth_enabled"`
+	GithubClientID     string `json:"github_client_id" validate:"required_with=GithubOAuthEnabled"`
+	GithubClientSecret string `json:"github_client_secret" validate:"required_with=GithubOAuthEnabled"`
 }
 
 // UpdateClientRequest represents the request to update an OAuth client

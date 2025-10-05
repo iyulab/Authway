@@ -8,17 +8,20 @@ import (
 )
 
 // User represents a user in the system
+// Users are isolated by tenant - same email can exist in different tenants
 type User struct {
 	ID            uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
-	Email         string         `json:"email" gorm:"uniqueIndex;not null"`
-	PasswordHash  string         `json:"-" gorm:"not null"` // Match SQL schema
-	Name          *string        `json:"name"`              // Match SQL schema - single name field
-	AvatarURL     *string        `json:"avatar_url"`        // Match SQL schema column name
+	TenantID      uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index:idx_users_tenant_email"`
+	Email         string         `json:"email" gorm:"not null;index:idx_users_tenant_email;index"`
+	PasswordHash  string         `json:"-" gorm:"not null"`
+	Name          *string        `json:"name"`
+	AvatarURL     *string        `json:"avatar_url"`
 	EmailVerified bool           `json:"email_verified" gorm:"default:false"`
 	Active        bool           `json:"active" gorm:"default:true"`
-	Provider      string         `json:"provider" gorm:"default:local"` // local, google, github, etc.
-	GoogleID      *string        `json:"-" gorm:"index"`                // Google user ID
-	Picture       *string        `json:"picture"`                       // Profile picture URL
+	Provider      string         `json:"provider" gorm:"default:local"` // local, google, github
+	GoogleID      *string        `json:"-" gorm:"index"`
+	GithubID      *string        `json:"-" gorm:"index"`
+	Picture       *string        `json:"picture"`
 	LastLoginAt   *time.Time     `json:"last_login_at"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`

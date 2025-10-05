@@ -1,9 +1,10 @@
 import React from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/lib/api'
 import {
   HomeIcon,
-  UsersIcon,
+  BuildingOfficeIcon,
   CogIcon,
   KeyIcon,
   ArrowRightOnRectangleIcon,
@@ -15,19 +16,25 @@ interface LayoutProps {
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: HomeIcon },
-  { name: '사용자 관리', href: '/users', icon: UsersIcon },
-  { name: 'OAuth 클라이언트', href: '/clients', icon: KeyIcon },
+  { name: '테넌트 관리', href: '/tenants', icon: BuildingOfficeIcon },
+  { name: '앱(클라이언트) 관리', href: '/clients', icon: KeyIcon },
   { name: '설정', href: '/settings', icon: CogIcon },
 ]
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const logout = useAuthStore((state) => state.logout)
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      await authApi.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      logout()
+      navigate('/login')
+    }
   }
 
   return (
@@ -63,21 +70,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           })}
         </nav>
 
-        {/* 사용자 정보 및 로그아웃 */}
+        {/* 로그아웃 */}
         <div className="px-4 py-4 border-t border-gray-200">
-          <div className="flex items-center">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{user?.first_name} {user?.last_name}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              title="로그아웃"
-            >
-              <ArrowRightOnRectangleIcon className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors"
+          >
+            <ArrowRightOnRectangleIcon className="w-5 h-5 mr-3" />
+            로그아웃
+          </button>
         </div>
       </div>
 
