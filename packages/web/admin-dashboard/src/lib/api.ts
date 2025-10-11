@@ -123,10 +123,10 @@ export const usersApi = {
 // Clients API
 export const clientsApi = {
   list: (params?: { limit?: number; offset?: number }) =>
-    api.get<{ clients: Client[]; total: number; limit: number; offset: number }>('/api/clients', { params }),
+    api.get<{ clients: Client[]; total: number; limit: number; offset: number }>('/api/v1/clients', { params }),
 
   get: (id: string) =>
-    api.get<{ client: Client }>(`/api/clients/${id}`),
+    api.get<{ client: Client }>(`/api/v1/clients/${id}`),
 
   create: (data: {
     name: string
@@ -138,28 +138,28 @@ export const clientsApi = {
     scopes: string[]
     public: boolean
   }) =>
-    api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>('/api/clients', data),
+    api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>('/api/v1/clients', data),
 
   update: (id: string, data: Partial<Client>) =>
-    api.put<{ message: string; client: Client }>(`/api/clients/${id}`, data),
+    api.put<{ message: string; client: Client }>(`/api/v1/clients/${id}`, data),
 
   delete: (id: string) =>
-    api.delete<{ message: string }>(`/api/clients/${id}`),
+    api.delete<{ message: string }>(`/api/v1/clients/${id}`),
 
   regenerateSecret: (id: string) =>
-    api.post<{ message: string; credentials: { client_id: string; client_secret: string } }>(`/api/clients/${id}/regenerate-secret`),
+    api.post<{ message: string; credentials: { client_id: string; client_secret: string } }>(`/api/v1/clients/${id}/regenerate-secret`),
 }
 
 // Tenants API
 export const tenantsApi = {
   list: (params?: { limit?: number; offset?: number }) =>
-    api.get<{ tenants: Tenant[]; total: number }>('/api/tenants', {
+    api.get<Tenant[]>('/api/v1/tenants', {
       params,
       headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
     }),
 
   get: (id: string) =>
-    api.get<{ tenant: Tenant }>(`/api/tenants/${id}`, {
+    api.get<Tenant>(`/api/v1/tenants/${id}`, {
       headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
     }),
 
@@ -169,27 +169,17 @@ export const tenantsApi = {
     description?: string
     settings?: Record<string, any>
   }) =>
-    api.post<{ tenant: Tenant }>('/api/tenants', data, {
+    api.post<Tenant>('/api/v1/tenants', data, {
       headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
     }),
 
   update: (id: string, data: Partial<Tenant>) =>
-    api.put<{ tenant: Tenant }>(`/api/tenants/${id}`, data, {
+    api.put<Tenant>(`/api/v1/tenants/${id}`, data, {
       headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
     }),
 
   delete: (id: string) =>
-    api.delete<{ message: string }>(`/api/tenants/${id}`, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
-
-  activate: (id: string) =>
-    api.put<{ tenant: Tenant }>(`/api/tenants/${id}/activate`, {}, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
-
-  deactivate: (id: string) =>
-    api.put<{ tenant: Tenant }>(`/api/tenants/${id}/deactivate`, {}, {
+    api.delete<void>(`/api/v1/tenants/${id}`, {
       headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
     }),
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/src/server/internal/hydra"
 	"authway/src/server/pkg/email"
 	"authway/src/server/pkg/user"
 	"net/http"
@@ -15,6 +16,7 @@ type EmailHandler struct {
 	emailRepo   *email.Repository
 	emailSvc    *email.Service
 	userSvc     user.Service
+	hydraClient *hydra.Client
 	validator   *validator.Validate
 	logger      *zap.Logger
 }
@@ -24,6 +26,7 @@ func NewEmailHandler(
 	emailRepo *email.Repository,
 	emailSvc *email.Service,
 	userSvc user.Service,
+	hydraClient *hydra.Client,
 	validator *validator.Validate,
 	logger *zap.Logger,
 ) *EmailHandler {
@@ -31,6 +34,7 @@ func NewEmailHandler(
 		emailRepo:   emailRepo,
 		emailSvc:    emailSvc,
 		userSvc:     userSvc,
+		hydraClient: hydraClient,
 		validator:   validator,
 		logger:      logger,
 	}
@@ -308,7 +312,17 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 		h.logger.Error("Failed to mark reset as used", zap.Error(err))
 	}
 
-	// TODO: Invalidate all user sessions for security
+	// Invalidate all user sessions for security
+	if err := h.hydraClient.RevokeUserSessions(reset.UserID.String()); err != nil {
+		h.logger.Error("Failed to revoke user sessions after password reset",
+			zap.String("user_id", reset.UserID.String()),
+			zap.Error(err))
+		// Don't fail the request even if session revocation fails
+		// The password has already been reset successfully
+	} else {
+		h.logger.Info("Successfully revoked all user sessions after password reset",
+			zap.String("user_id", reset.UserID.String()))
+	}
 
 	return c.JSON(fiber.Map{
 		"message": "Password reset successfully",

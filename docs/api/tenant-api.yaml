@@ -1,0 +1,496 @@
+openapi: 3.0.3
+info:
+  title: Authway Tenant Management API
+  description: |
+    Multi-tenancy management API for Authway authentication system.
+
+    ## Features
+    - Complete tenant isolation (users, clients, sessions)
+    - Same email support across different tenants
+    - Soft delete with referential integrity
+    - Admin API key authentication required
+
+    ## Security
+    All endpoints require Admin API Key authentication via Bearer token.
+  version: 0.1.0
+  contact:
+    name: Authway API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+security:
+  - AdminApiKey: []
+
+tags:
+  - name: Tenants
+    description: Tenant management operations
+
+paths:
+  /api/v1/tenants:
+    post:
+      summary: Create a new tenant
+      tags: [Tenants]
+      description: |
+        Creates a new tenant with the specified configuration.
+
+        **Constraints:**
+        - Tenant slug must be unique
+        - Slug can only contain alphanumeric characters
+        - Name minimum 2 characters, maximum 255 characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+            examples:
+              minimal:
+                summary: Minimal tenant creation
+                value:
+                  name: "Acme Corporation"
+                  slug: "acme"
+              full:
+                summary: Full tenant configuration
+                value:
+                  name: "Acme Corporation"
+                  slug: "acme"
+                  description: "Main corporate tenant"
+                  logo: "https://example.com/logo.png"
+                  primary_color: "#FF5733"
+                  settings:
+                    require_email_verification: true
+                    password_min_length: 10
+                    session_timeout: 120
+                    allowed_domains: ["acme.com", "acme.net"]
+      responses:
+        '201':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          description: Invalid request (validation failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                validation:
+                  value:
+                    error: "Validation failed"
+                    details: "Field validation for 'slug' failed on the 'alphanum' tag"
+        '401':
+          description: Unauthorized (missing or invalid API key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (slug already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "A tenant with this slug already exists"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Failed to create tenant"
+
+    get:
+      summary: List all tenants
+      tags: [Tenants]
+      description: |
+        Retrieves a list of all active tenants.
+
+        **Notes:**
+        - Only returns non-deleted tenants
+        - No pagination (yet)
+        - Settings field excluded from public response
+      responses:
+        '200':
+          description: List of tenants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/tenants/{id}:
+    get:
+      summary: Get tenant by ID
+      tags: [Tenants]
+      description: Retrieves a single tenant by its UUID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Tenant UUID
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          description: Invalid UUID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid tenant ID format"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Tenant not found"
+
+    put:
+      summary: Update tenant
+      tags: [Tenants]
+      description: |
+        Updates an existing tenant's configuration.
+
+        **Constraints:**
+        - Cannot deactivate the default tenant
+        - All fields optional (partial updates supported)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Tenant UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+            examples:
+              partial:
+                summary: Partial update (name only)
+                value:
+                  name: "Acme Corp (Updated)"
+              full:
+                summary: Full update
+                value:
+                  name: "Acme Corporation Ltd"
+                  description: "Updated description"
+                  logo: "https://example.com/new-logo.png"
+                  primary_color: "#00FF00"
+                  active: true
+                  settings:
+                    require_email_verification: false
+                    password_min_length: 8
+                    session_timeout: 60
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (e.g., trying to deactivate default tenant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Cannot deactivate the default tenant"
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete tenant
+      tags: [Tenants]
+      description: |
+        Soft deletes a tenant (sets deleted_at timestamp).
+
+        **Constraints:**
+        - Cannot delete default tenant (00000000-0000-0000-0000-000000000001)
+        - Cannot delete tenant with existing users
+        - Cannot delete tenant with existing OAuth clients
+
+        **Important:** This is a soft delete. Data remains in database but is excluded from queries.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Tenant UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tenant deleted successfully (no content)
+        '400':
+          description: Invalid UUID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (trying to delete default tenant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Cannot delete the default tenant"
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (tenant has dependencies)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                users:
+                  summary: Tenant has users
+                  value:
+                    error: "Cannot delete tenant with existing users"
+                clients:
+                  summary: Tenant has OAuth clients
+                  value:
+                    error: "Cannot delete tenant with existing clients"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: Admin API key required for all tenant operations
+
+  schemas:
+    CreateTenantRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Human-readable tenant name
+          example: "Acme Corporation"
+        slug:
+          type: string
+          minLength: 2
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9]+$'
+          description: URL-safe unique identifier (alphanumeric only)
+          example: "acme"
+        description:
+          type: string
+          maxLength: 1000
+          description: Optional tenant description
+          example: "Main corporate tenant for Acme Corporation"
+        logo:
+          type: string
+          format: uri
+          description: URL to tenant logo image
+          example: "https://example.com/logo.png"
+        primary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Primary brand color (hex format)
+          example: "#4F46E5"
+          default: "#4F46E5"
+        settings:
+          $ref: '#/components/schemas/TenantSettings'
+
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Human-readable tenant name
+          example: "Acme Corporation Ltd"
+        description:
+          type: string
+          maxLength: 1000
+          description: Tenant description
+        logo:
+          type: string
+          format: uri
+          description: URL to tenant logo image
+        primary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Primary brand color (hex format)
+        active:
+          type: boolean
+          description: Whether the tenant is active (cannot deactivate default tenant)
+        settings:
+          $ref: '#/components/schemas/TenantSettings'
+
+    TenantSettings:
+      type: object
+      description: Tenant-specific security and authentication settings
+      properties:
+        require_email_verification:
+          type: boolean
+          description: Whether email verification is required for new users
+          default: true
+        password_min_length:
+          type: integer
+          minimum: 8
+          maximum: 128
+          description: Minimum password length for users
+          default: 8
+        session_timeout:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          description: Session timeout in minutes
+          default: 60
+        allowed_domains:
+          type: array
+          items:
+            type: string
+            format: hostname
+          description: List of allowed email domains for registration
+          example: ["acme.com", "acme.net"]
+          default: []
+
+    TenantResponse:
+      type: object
+      description: |
+        Public tenant data (Settings field excluded for security).
+        This is the response format for all successful tenant operations.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Tenant unique identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: Tenant name
+          example: "Acme Corporation"
+        slug:
+          type: string
+          description: URL-safe unique identifier
+          example: "acme"
+        description:
+          type: string
+          description: Tenant description
+          example: "Main corporate tenant"
+        logo:
+          type: string
+          description: Logo URL
+          example: "https://example.com/logo.png"
+        primary_color:
+          type: string
+          description: Brand color
+          example: "#4F46E5"
+        active:
+          type: boolean
+          description: Whether tenant is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: Tenant creation timestamp
+          example: "2025-10-11T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2025-10-11T15:45:00Z"
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Tenant not found"
+        details:
+          type: string
+          description: Additional error details (validation errors)
+          example: "Field validation for 'slug' failed on the 'alphanum' tag"

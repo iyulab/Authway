@@ -37,7 +37,7 @@ const DashboardPage: React.FC = () => {
   // 통계 계산
   useEffect(() => {
     if (tenantsData && clientsData) {
-      const tenants = tenantsData.data.tenants || []
+      const tenants = tenantsData.data || []
       const clients = clientsData.data.clients || []
 
       const activeTenants = tenants.filter((tenant: Tenant) => tenant.active).length
@@ -151,7 +151,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="border-t border-gray-200">
             <div className="divide-y divide-gray-200">
-              {tenantsData?.data.tenants?.slice(0, 5).map((tenant: Tenant) => (
+              {tenantsData?.data?.slice(0, 5).map((tenant: Tenant) => (
                 <div key={tenant.id} className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">

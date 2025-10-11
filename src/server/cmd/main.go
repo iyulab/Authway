@@ -130,9 +130,10 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000,http://localhost:8080", // Default allowed origins
-		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
+		AllowOrigins:     "http://localhost:3000,http://localhost:8080", // Default allowed origins
+		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token",
+		AllowCredentials: true,
 	}))
 	app.Use(middleware.RequestLogger(zapLogger))
 
@@ -150,7 +151,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(userService, clientService, hydraClient)
 	socialHandler := handler.NewSocialHandler(googleService, userService, hydraClient, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger)
-	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, validate, zapLogger)
+	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
@@ -192,7 +193,7 @@ func main() {
 	v1.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
 
 	// Tenant Management API routes (Admin only)
-	tenantHandler := tenant.NewHandler(tenantService)
+	tenantHandler := tenant.NewHandler(tenantService, validate)
 	adminAuth := adminMiddleware.AdminAuth(cfg.Admin.APIKey)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 

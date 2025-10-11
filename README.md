@@ -1,159 +1,323 @@
-# Authway
+# 🔐 Authway
 
-오픈소스 OAuth 2.0 인증 서버
+**Version**: 0.1.0
+**Status**: Production Ready
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![React Version](https://img.shields.io/badge/React-18+-61DAFB?style=flat&logo=react)](https://reactjs.org)
-
----
-
-## 개요
-
-Authway는 Go로 작성된 OAuth 2.0 인증 서버입니다. 자체 인증 시스템을 운영하고자 하는 프로젝트를 위해 만들어졌습니다.
-
-**주요 목표:**
-- 표준 OAuth 2.0 / OpenID Connect 구현
-- 간단한 설정과 배포
-- 오픈소스 라이선스 (MIT)
+Authway est un serveur d'authentification OAuth 2.0 / OpenID Connect moderne avec support multi-tenant, conçu pour être simple à déployer et à maintenir.
 
 ---
 
-## 기능
+## ✨ Fonctionnalités
 
-### 인증
-- OAuth 2.0 Authorization Code Flow (PKCE 지원)
-- JWT 기반 토큰 발급 및 검증
-- 이메일/비밀번호 로그인
-- 이메일 인증
-- 비밀번호 재설정
+### 🎯 Core
+- **Multi-Tenancy** - Isolation complète des tenants avec gestion centralisée
+- **OAuth 2.0 / OpenID Connect** - Protocoles standards d'authentification
+- **JWT Tokens** - Access et refresh tokens sécurisés
+- **Email Verification** - Vérification d'email avec MailHog en développement
+- **Password Reset** - Flux de réinitialisation de mot de passe sécurisé
 
-### 관리
-- 사용자 관리 API
-- OAuth 클라이언트 관리
-- React 기반 관리자 대시보드
-- React SDK (@authway/react)
+### 🔌 Intégrations Sociales
+- **Google OAuth** - Sign-in avec Google
+- **GitHub OAuth** (à venir)
 
-### 인프라
-- Docker 기반 배포
-- PostgreSQL 데이터베이스
-- Redis 캐싱
-- MailHog 이메일 테스트 (개발 환경)
+### 🛡️ Sécurité
+- **Admin Console** - Interface d'administration sécurisée
+- **Session Management** - Gestion de sessions avec Redis
+- **CORS** - Configuration CORS sécurisée
+- **SSL/TLS** - Support SSL pour PostgreSQL en production
+
+### 📊 Monitoring (à venir)
+- **Prometheus** - Métriques système
+- **Jaeger** - Distributed tracing
+- **AlertManager** - Gestion des alertes
 
 ---
 
-## 빠른 시작
+## 🚀 Démarrage Rapide
 
-### Docker로 실행
+### Prérequis
+
+- **Docker Desktop** (recommandé)
+- **Go 1.21+** (pour développement local)
+- **Node.js 18+** (pour les UIs)
+- **PostgreSQL 15+** (si non-Docker)
+
+### Installation en 1 Minute
 
 ```bash
-git clone https://github.com/authway/authway.git
+# Cloner le repository
+git clone https://github.com/yourusername/authway.git
 cd authway
-docker-compose -f docker-compose.dev.yml up -d
+
+# Démarrer tous les services
+.\start-dev.ps1  # Windows
+./start-dev.sh   # Linux/Mac
 ```
 
-**서비스 URL:**
-- Login UI: http://localhost:3001
-- Backend API: http://localhost:8080
-- MailHog: http://localhost:8025
+**C'est tout!** 🎉
 
-**다음 단계:**
-1. http://localhost:3001 접속
-2. 회원가입 진행
-3. MailHog에서 인증 이메일 확인
-4. 로그인
+### Accès aux Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| 🎨 **Admin Dashboard** | http://localhost:3000 | Console d'administration |
+| 🔑 **Login UI** | http://localhost:3001 | Interface de connexion |
+| 🔧 **Backend API** | http://localhost:8080 | API REST |
+| 📧 **MailHog** | http://localhost:8025 | Interface email (dev) |
+
+**Mot de passe admin par défaut**: `authway0`
 
 ---
 
-## 아키텍처
+## 📚 Documentation
+
+### Guides de Démarrage
+
+- **[START-HERE.md](START-HERE.md)** - Guide de démarrage rapide
+- **[DOCKER-GUIDE.md](DOCKER-GUIDE.md)** - Guide Docker complet
+- **[CONFIGURATION.md](CONFIGURATION.md)** - Configuration détaillée
+
+### Guides Techniques
+
+- **[TESTING-GUIDE.md](TESTING-GUIDE.md)** - Tests et validation
+- **[docs/architecture/multi-tenancy.md](docs/architecture/multi-tenancy.md)** - Architecture multi-tenant
+- **[docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md)** - Sécurité en production
+
+### Documentation API
+
+- **[docs/api/api-verification-report.md](docs/api/api-verification-report.md)** - Rapport de vérification API
+
+---
+
+## 🏗️ Architecture
+
+### Stack Technique
+
+**Backend**:
+- Go 1.21+ avec Fiber framework
+- PostgreSQL 15 (base de données principale)
+- Redis 7 (sessions et cache)
+- Ory Hydra (serveur OAuth optionnel)
+
+**Frontend**:
+- React 18 avec TypeScript
+- Vite (build tool)
+- TailwindCSS (styling)
+- Zustand (state management)
+
+**Infrastructure**:
+- Docker & Docker Compose
+- Prometheus & Grafana (monitoring)
+- MailHog (development email)
+
+### Structure du Projet
 
 ```
-┌─────────────────────────┐
-│    Your Applications    │
-│  (Service A, B, C...)   │
-└───────────┬─────────────┘
-            │ OAuth 2.0
-┌───────────▼─────────────┐
-│    Authway API (Go)     │
-│  - OAuth 2.0/OIDC       │
-│  - User Management      │
-│  - Email Services       │
-└───────────┬─────────────┘
-            │
-    ┌───────┼───────┐
-    │       │       │
-┌───▼──┐ ┌──▼──┐ ┌─▼────┐
-│Users │ │Redis│ │ SMTP │
-│  DB  │ │     │ │      │
-└──────┘ └─────┘ └──────┘
+authway/
+├── src/server/              # Backend Go
+│   ├── cmd/main.go         # Point d'entrée
+│   ├── internal/           # Code interne
+│   └── pkg/                # Packages publics
+│       ├── admin/          # Admin console
+│       ├── client/         # OAuth clients
+│       ├── tenant/         # Multi-tenancy
+│       └── user/           # User management
+│
+├── packages/web/
+│   ├── admin-dashboard/    # React admin UI
+│   └── login-ui/           # React login UI
+│
+├── scripts/                # Utilitaires
+│   ├── migrations/         # DB migrations
+│   └── update-version.*    # Version management
+│
+├── configs/                # Fichiers de configuration
+├── docs/                   # Documentation technique
+└── claudedocs/             # Documentation de conception
 ```
 
 ---
 
-## React SDK 사용
+## 🔧 Configuration
 
-### 설치
+### Variables d'Environnement Essentielles
 
 ```bash
-npm install @authway/react
+# Application
+AUTHWAY_APP_VERSION=0.1.0
+AUTHWAY_APP_ENVIRONMENT=development  # development|production
+AUTHWAY_APP_PORT=8080
+
+# Database
+AUTHWAY_DATABASE_HOST=localhost
+AUTHWAY_DATABASE_PASSWORD=authway  # CHANGER EN PRODUCTION!
+
+# Admin
+AUTHWAY_ADMIN_PASSWORD=authway0    # CHANGER EN PRODUCTION!
+
+# JWT (générer avec: openssl rand -base64 64)
+AUTHWAY_JWT_ACCESS_TOKEN_SECRET=your-secret-key
+AUTHWAY_JWT_REFRESH_TOKEN_SECRET=your-refresh-secret-key
 ```
 
-### 사용 예시
+**⚠️ Sécurité**: Voir [CONFIGURATION.md](CONFIGURATION.md) pour la configuration complète et les bonnes pratiques de sécurité.
 
-```tsx
-import { AuthProvider, useAuth } from '@authway/react'
+---
 
-function App() {
-  return (
-    <AuthProvider
-      authwayUrl="http://localhost:8080"
-      clientId="your-client-id"
-      redirectUri="http://localhost:3000/callback"
-    >
-      <YourApp />
-    </AuthProvider>
-  )
-}
+## 🧪 Tests
 
-function LoginButton() {
-  const { login, isAuthenticated, user } = useAuth()
+```bash
+# Backend tests
+cd src/server
+go test ./...
 
-  if (isAuthenticated) {
-    return <div>Welcome, {user?.name}</div>
-  }
+# Frontend tests (Admin Dashboard)
+cd packages/web/admin-dashboard
+npm test
 
-  return <button onClick={login}>로그인</button>
-}
+# Frontend tests (Login UI)
+cd packages/web/login-ui
+npm test
+
+# Integration tests
+cd scripts
+go run test_integration.go
+```
+
+Voir [TESTING-GUIDE.md](TESTING-GUIDE.md) pour plus de détails.
+
+---
+
+## 🚢 Déploiement Production
+
+### Checklist Sécurité
+
+- [ ] Changer **TOUS** les mots de passe et secrets par défaut
+- [ ] Générer des secrets JWT uniques (64+ caractères)
+- [ ] Activer SSL pour PostgreSQL (`ssl_mode=require`)
+- [ ] Utiliser HTTPS pour toutes les URLs
+- [ ] Configurer CORS pour les domaines de production uniquement
+- [ ] Configurer un service SMTP de production
+- [ ] Activer les backups automatiques de la base de données
+
+### Déploiement Docker
+
+```bash
+# 1. Copier et configurer .env.production
+cp .env.production.example .env.production
+nano .env.production  # Éditer avec vos valeurs
+
+# 2. Démarrer en production
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+Voir [DOCKER-GUIDE.md](DOCKER-GUIDE.md) et [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md) pour le guide complet.
+
+---
+
+## 🛠️ Développement
+
+### Setup Développement
+
+```bash
+# 1. Installer les dépendances
+cd src/server && go mod download
+cd packages/web/admin-dashboard && npm install
+cd packages/web/login-ui && npm install
+
+# 2. Démarrer l'infrastructure
+docker-compose -f docker-compose.dev.yml up -d postgres redis mailhog
+
+# 3. Démarrer le backend
+cd src/server && go run cmd/main.go
+
+# 4. Démarrer le frontend
+cd packages/web/admin-dashboard && npm run dev
+```
+
+### Conventions de Code
+
+- **Go**: `gofmt`, `go vet`, `golint`
+- **TypeScript**: ESLint, Prettier
+- **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, etc.)
+
+### Gestion des Versions
+
+```bash
+# Mettre à jour la version du projet
+.\scripts\update-version.ps1 -Version "0.2.0"
 ```
 
 ---
 
-## 기술 스택
+## 📦 Multi-Tenancy
 
-**Backend:**
-- Go 1.21+
-- Fiber (Web Framework)
-- GORM (ORM)
-- PostgreSQL 15
-- Redis 7
+Authway supporte deux modes d'opération:
 
-**Frontend:**
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS
-- shadcn/ui
+### Mode Multi-Tenant (Par défaut)
 
-**Infrastructure:**
-- Docker
-- Docker Compose
+Plusieurs tenants isolés dans une seule instance:
+
+```bash
+AUTHWAY_TENANT_SINGLE_TENANT_MODE=false
+```
+
+- Chaque tenant a ses propres utilisateurs et clients OAuth
+- Isolation complète au niveau de la base de données
+- API d'administration pour gérer les tenants
+
+### Mode Single-Tenant
+
+Un seul tenant dédié:
+
+```bash
+AUTHWAY_TENANT_SINGLE_TENANT_MODE=true
+AUTHWAY_TENANT_TENANT_NAME="My Company"
+AUTHWAY_TENANT_TENANT_SLUG="my-company"
+```
+
+- Simplicité de configuration
+- Pas de surcharge multi-tenant
+- Idéal pour les déploiements dédiés
+
+Voir [docs/architecture/multi-tenancy.md](docs/architecture/multi-tenancy.md) pour plus de détails.
 
 ---
 
-## 문서
+## 🤝 Contributing
 
-- [시작하기](./START-HERE.md) - 1분 빠른 시작
-- [Docker 가이드](./DOCKER-GUIDE.md) - 개발 환경 설정
-- [테스트 가이드](./TESTING-GUIDE.md) - 기능 테스트
-- [React SDK](./packages/sdk/react/README.md) - SDK 사용법
-- [프로덕션 배포](./PRODUCTION-DEPLOYMENT.md) - 배포 가이드
+Les contributions sont les bienvenues!
+
+1. Fork le projet
+2. Créer une branche feature (`git checkout -b feature/amazing-feature`)
+3. Commit les changements (`git commit -m 'feat: add amazing feature'`)
+4. Push la branche (`git push origin feature/amazing-feature`)
+5. Ouvrir une Pull Request
+
+---
+
+## 📄 License
+
+MIT License - voir [LICENSE](LICENSE) pour plus de détails.
+
+---
+
+## 🙏 Remerciements
+
+- [Ory Hydra](https://www.ory.sh/hydra/) - OAuth 2.0 Server
+- [Fiber](https://gofiber.io/) - Go Web Framework
+- [React](https://react.dev/) - UI Library
+- [PostgreSQL](https://www.postgresql.org/) - Database
+- [Redis](https://redis.io/) - Caching & Sessions
+
+---
+
+## 📞 Support
+
+- 📖 **Documentation**: Voir les fichiers dans `docs/`
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/authway/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/authway/discussions)
+
+---
+
+**Fait avec ❤️ par l'équipe Authway**

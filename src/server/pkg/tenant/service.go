@@ -23,7 +23,7 @@ func (s *Service) CreateTenant(req CreateTenantRequest) (*Tenant, error) {
 	// Check if slug already exists
 	var existing Tenant
 	if err := s.db.Where("slug = ?", req.Slug).First(&existing).Error; err == nil {
-		return nil, fmt.Errorf("tenant with slug '%s' already exists", req.Slug)
+		return nil, ErrDuplicateSlug
 	}
 
 	tenant := &Tenant{
@@ -48,7 +48,7 @@ func (s *Service) GetTenantBySlug(slug string) (*Tenant, error) {
 	var tenant Tenant
 	if err := s.db.Where("slug = ? AND deleted_at IS NULL", slug).First(&tenant).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("tenant not found: %s", slug)
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
@@ -60,7 +60,7 @@ func (s *Service) GetTenantByID(id uuid.UUID) (*Tenant, error) {
 	var tenant Tenant
 	if err := s.db.Where("id = ? AND deleted_at IS NULL", id).First(&tenant).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("tenant not found: %s", id)
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
@@ -85,7 +85,7 @@ func (s *Service) UpdateTenant(id uuid.UUID, req UpdateTenantRequest) (*Tenant, 
 
 	// Prevent updating default tenant slug or deletion
 	if tenant.IsDefaultTenant() && req.Active != nil && !*req.Active {
-		return nil, errors.New("cannot deactivate default tenant")
+		return nil, ErrCannotDeactivateDefault
 	}
 
 	// Update fields
@@ -124,25 +124,25 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 
 	// Prevent deleting default tenant
 	if tenant.IsDefaultTenant() {
-		return errors.New("cannot delete default tenant")
+		return ErrCannotDeleteDefault
 	}
 
-	// Check if tenant has users
+	// Check if tenant has active (non-deleted) users
 	var userCount int64
-	if err := s.db.Table("users").Where("tenant_id = ?", id).Count(&userCount).Error; err != nil {
+	if err := s.db.Table("users").Where("tenant_id = ? AND deleted_at IS NULL", id).Count(&userCount).Error; err != nil {
 		return fmt.Errorf("failed to check user count: %w", err)
 	}
 	if userCount > 0 {
-		return fmt.Errorf("cannot delete tenant with %d existing users", userCount)
+		return ErrHasUsers
 	}
 
-	// Check if tenant has clients
+	// Check if tenant has active (non-deleted) clients
 	var clientCount int64
-	if err := s.db.Table("clients").Where("tenant_id = ?", id).Count(&clientCount).Error; err != nil {
+	if err := s.db.Table("clients").Where("tenant_id = ? AND deleted_at IS NULL", id).Count(&clientCount).Error; err != nil {
 		return fmt.Errorf("failed to check client count: %w", err)
 	}
 	if clientCount > 0 {
-		return fmt.Errorf("cannot delete tenant with %d existing clients", clientCount)
+		return ErrHasClients
 	}
 
 	// Soft delete
@@ -161,13 +161,30 @@ func (s *Service) GetDefaultTenant() (*Tenant, error) {
 // EnsureDefaultTenant ensures the default tenant exists
 func (s *Service) EnsureDefaultTenant() error {
 	var tenant Tenant
-	err := s.db.Where("id = ?", DefaultTenantID).First(&tenant).Error
+
+	// Check by ID first (including soft-deleted)
+	err := s.db.Unscoped().Where("id = ?", DefaultTenantID).First(&tenant).Error
 	if err == nil {
-		// Default tenant exists
+		// Default tenant exists (active or soft-deleted)
+		if tenant.DeletedAt.Valid {
+			// Restore soft-deleted default tenant
+			return s.db.Model(&tenant).Update("deleted_at", nil).Error
+		}
 		return nil
 	}
 
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	// Check by slug (in case ID is different but slug exists)
+	err = s.db.Unscoped().Where("slug = ?", "default").First(&tenant).Error
+	if err == nil {
+		// Tenant with slug 'default' exists, just return (don't create duplicate)
+		if tenant.DeletedAt.Valid {
+			return s.db.Model(&tenant).Update("deleted_at", nil).Error
+		}
+		return nil
+	}
+
+	// Both checks failed with non-RecordNotFound error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return fmt.Errorf("failed to check default tenant: %w", err)
 	}
 

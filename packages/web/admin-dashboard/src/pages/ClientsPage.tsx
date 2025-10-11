@@ -3,5 +3,524 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import toast from 'react-hot-toast'
 import { clientsApi, Client } from '@/lib/api'
-import {\n  PlusIcon,\n  KeyIcon,\n  EyeIcon,\n  EyeSlashIcon,\n  ClipboardDocumentIcon,\n  PencilIcon,\n  TrashIcon,\n  CheckCircleIcon,\n  XCircleIcon,\n} from '@heroicons/react/24/outline'\n\n// 클라이언트 생성 폼 스키마\nconst createClientSchema = z.object({\n  name: z.string().min(1, '클라이언트 이름은 필수입니다'),\n  description: z.string().optional(),\n  website: z.string().url('올바른 URL을 입력해주세요').optional().or(z.literal('')),\n  redirect_uris: z.string().min(1, '최소 하나의 Redirect URI가 필요합니다'),\n  grant_types: z.array(z.string()).min(1, '최소 하나의 Grant Type을 선택해주세요'),\n  scopes: z.array(z.string()).min(1, '최소 하나의 Scope를 선택해주세요'),\n  public: z.boolean(),\n})\n\ntype CreateClientFormData = z.infer<typeof createClientSchema>\n\nconst availableGrantTypes = [\n  { value: 'authorization_code', label: 'Authorization Code' },\n  { value: 'client_credentials', label: 'Client Credentials' },\n  { value: 'refresh_token', label: 'Refresh Token' },\n]\n\nconst availableScopes = [\n  { value: 'openid', label: 'OpenID Connect' },\n  { value: 'profile', label: 'Profile' },\n  { value: 'email', label: 'Email' },\n  { value: 'offline_access', label: 'Offline Access' },\n]\n\nconst ClientsPage: React.FC = () => {\n  const [showCreateModal, setShowCreateModal] = useState(false)\n  const [showSecrets, setShowSecrets] = useState<{ [key: string]: boolean }>({})\n  const queryClient = useQueryClient()\n\n  // 클라이언트 목록 조회\n  const { data: clientsData, isLoading, error, refetch } = useQuery({\n    queryKey: ['clients'],\n    queryFn: () => clientsApi.list(),\n  })\n\n  // 클라이언트 생성 폼\n  const {\n    register,\n    handleSubmit,\n    formState: { errors },\n    reset,\n    watch,\n  } = useForm<CreateClientFormData>({\n    resolver: zodResolver(createClientSchema),\n    defaultValues: {\n      grant_types: ['authorization_code'],\n      scopes: ['openid'],\n      public: false,\n    },\n  })\n\n  const watchedGrantTypes = watch('grant_types')\n  const watchedScopes = watch('scopes')\n\n  // 클라이언트 생성 뮤테이션\n  const createClientMutation = useMutation({\n    mutationFn: (data: CreateClientFormData) => {\n      const redirectUris = data.redirect_uris\n        .split('\\n')\n        .map(uri => uri.trim())\n        .filter(uri => uri.length > 0)\n\n      return clientsApi.create({\n        name: data.name,\n        description: data.description,\n        website: data.website || undefined,\n        redirect_uris: redirectUris,\n        grant_types: data.grant_types,\n        scopes: data.scopes,\n        public: data.public,\n      })\n    },\n    onSuccess: () => {\n      queryClient.invalidateQueries({ queryKey: ['clients'] })\n      setShowCreateModal(false)\n      reset()\n    },\n  })\n\n  // 클라이언트 삭제 뮤테이션\n  const deleteClientMutation = useMutation({\n    mutationFn: (clientId: string) => clientsApi.delete(clientId),\n    onSuccess: () => {\n      queryClient.invalidateQueries({ queryKey: ['clients'] })\n    },\n  })\n\n  // 시크릿 재생성 뮤테이션\n  const regenerateSecretMutation = useMutation({\n    mutationFn: (clientId: string) => clientsApi.regenerateSecret(clientId),\n    onSuccess: () => {\n      queryClient.invalidateQueries({ queryKey: ['clients'] })\n    },\n  })\n\n  const clients = clientsData?.data.clients || []\n\n  const toggleSecretVisibility = (clientId: string) => {\n    setShowSecrets(prev => ({\n      ...prev,\n      [clientId]: !prev[clientId],\n    }))\n  }\n\n  const copyToClipboard = (text: string) => {\n    navigator.clipboard.writeText(text)\n    // TODO: 토스트 메시지 표시\n  }\n\n  const handleDelete = (client: Client) => {\n    if (confirm(`정말로 \"${client.name}\" 클라이언트를 삭제하시겠습니까?`)) {\n      deleteClientMutation.mutate(client.id)\n    }\n  }\n\n  const handleRegenerateSecret = (client: Client) => {\n    if (confirm(`정말로 \"${client.name}\" 클라이언트의 시크릿을 재생성하시겠습니까?`)) {\n      regenerateSecretMutation.mutate(client.id)\n    }\n  }\n\n  const onSubmit = (data: CreateClientFormData) => {\n    createClientMutation.mutate(data)\n  }\n\n  if (isLoading) {\n    return (\n      <div className=\"flex items-center justify-center h-64\">\n        <div className=\"animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600\"></div>\n      </div>\n    )\n  }\n\n  if (error) {\n    return (\n      <div className=\"text-center py-12\">\n        <p className=\"text-red-600\">클라이언트 목록을 불러오는데 실패했습니다.</p>\n        <button\n          onClick={() => refetch()}\n          className=\"mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700\"\n        >\n          다시 시도\n        </button>\n      </div>\n    )\n  }\n\n  return (\n    <div className=\"space-y-6\">\n      {/* 헤더 */}\n      <div className=\"sm:flex sm:items-center sm:justify-between\">\n        <div>\n          <h1 className=\"text-2xl font-bold text-gray-900\">OAuth 클라이언트 관리</h1>\n          <p className=\"mt-2 text-sm text-gray-700\">\n            총 {clients.length}개의 OAuth 클라이언트가 등록되어 있습니다.\n          </p>\n        </div>\n        <div className=\"mt-4 sm:mt-0\">\n          <button\n            onClick={() => setShowCreateModal(true)}\n            className=\"inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500\"\n          >\n            <PlusIcon className=\"-ml-1 mr-2 h-5 w-5\" />\n            새 클라이언트 생성\n          </button>\n        </div>\n      </div>\n\n      {/* 클라이언트 목록 */}\n      <div className=\"bg-white shadow overflow-hidden sm:rounded-lg\">\n        {clients.length === 0 ? (\n          <div className=\"text-center py-12\">\n            <KeyIcon className=\"mx-auto h-12 w-12 text-gray-400\" />\n            <h3 className=\"mt-2 text-sm font-medium text-gray-900\">클라이언트가 없습니다</h3>\n            <p className=\"mt-1 text-sm text-gray-500\">\n              새 OAuth 클라이언트를 생성하여 시작하세요.\n            </p>\n            <div className=\"mt-6\">\n              <button\n                onClick={() => setShowCreateModal(true)}\n                className=\"inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700\"\n              >\n                <PlusIcon className=\"-ml-1 mr-2 h-5 w-5\" />\n                새 클라이언트 생성\n              </button>\n            </div>\n          </div>\n        ) : (\n          <div className=\"divide-y divide-gray-200\">\n            {clients.map((client: Client) => (\n              <div key={client.id} className=\"p-6\">\n                <div className=\"flex items-start justify-between\">\n                  <div className=\"flex-1\">\n                    <div className=\"flex items-center\">\n                      <h3 className=\"text-lg font-medium text-gray-900\">{client.name}</h3>\n                      <span\n                        className={`ml-3 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${\n                          client.active\n                            ? 'bg-green-100 text-green-800'\n                            : 'bg-red-100 text-red-800'\n                        }`}\n                      >\n                        {client.active ? '활성' : '비활성'}\n                      </span>\n                      {client.public && (\n                        <span className=\"ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800\">\n                          Public\n                        </span>\n                      )}\n                    </div>\n                    {client.description && (\n                      <p className=\"mt-1 text-sm text-gray-600\">{client.description}</p>\n                    )}\n                    <div className=\"mt-4 grid grid-cols-1 md:grid-cols-2 gap-4\">\n                      <div>\n                        <dt className=\"text-xs font-medium text-gray-500 uppercase tracking-wider\">\n                          Client ID\n                        </dt>\n                        <dd className=\"mt-1 text-sm text-gray-900 font-mono flex items-center\">\n                          {client.client_id}\n                          <button\n                            onClick={() => copyToClipboard(client.client_id)}\n                            className=\"ml-2 text-gray-400 hover:text-gray-600\"\n                          >\n                            <ClipboardDocumentIcon className=\"h-4 w-4\" />\n                          </button>\n                        </dd>\n                      </div>\n                      {!client.public && (\n                        <div>\n                          <dt className=\"text-xs font-medium text-gray-500 uppercase tracking-wider\">\n                            Client Secret\n                          </dt>\n                          <dd className=\"mt-1 text-sm text-gray-900 font-mono flex items-center\">\n                            {showSecrets[client.id] ? (\n                              <span>{'*'.repeat(32)}</span>\n                            ) : (\n                              <span>{'*'.repeat(32)}</span>\n                            )}\n                            <button\n                              onClick={() => toggleSecretVisibility(client.id)}\n                              className=\"ml-2 text-gray-400 hover:text-gray-600\"\n                            >\n                              {showSecrets[client.id] ? (\n                                <EyeSlashIcon className=\"h-4 w-4\" />\n                              ) : (\n                                <EyeIcon className=\"h-4 w-4\" />\n                              )}\n                            </button>\n                            <button\n                              onClick={() => handleRegenerateSecret(client)}\n                              className=\"ml-2 text-orange-400 hover:text-orange-600\"\n                              title=\"시크릿 재생성\"\n                            >\n                              <KeyIcon className=\"h-4 w-4\" />\n                            </button>\n                          </dd>\n                        </div>\n                      )}\n                    </div>\n                    <div className=\"mt-4\">\n                      <dt className=\"text-xs font-medium text-gray-500 uppercase tracking-wider\">\n                        Redirect URIs\n                      </dt>\n                      <dd className=\"mt-1\">\n                        {client.redirect_uris.map((uri, index) => (\n                          <span\n                            key={index}\n                            className=\"inline-block mr-2 mb-1 px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded\"\n                          >\n                            {uri}\n                          </span>\n                        ))}\n                      </dd>\n                    </div>\n                    <div className=\"mt-4 grid grid-cols-1 md:grid-cols-2 gap-4\">\n                      <div>\n                        <dt className=\"text-xs font-medium text-gray-500 uppercase tracking-wider\">\n                          Grant Types\n                        </dt>\n                        <dd className=\"mt-1\">\n                          {client.grant_types.map((type, index) => (\n                            <span\n                              key={index}\n                              className=\"inline-block mr-2 mb-1 px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded\"\n                            >\n                              {type}\n                            </span>\n                          ))}\n                        </dd>\n                      </div>\n                      <div>\n                        <dt className=\"text-xs font-medium text-gray-500 uppercase tracking-wider\">\n                          Scopes\n                        </dt>\n                        <dd className=\"mt-1\">\n                          {client.scopes.map((scope, index) => (\n                            <span\n                              key={index}\n                              className=\"inline-block mr-2 mb-1 px-2 py-1 text-xs bg-green-100 text-green-800 rounded\"\n                            >\n                              {scope}\n                            </span>\n                          ))}\n                        </dd>\n                      </div>\n                    </div>\n                  </div>\n                  <div className=\"flex items-center space-x-2\">\n                    <button\n                      onClick={() => handleDelete(client)}\n                      className=\"text-red-600 hover:text-red-900\"\n                      title=\"삭제\"\n                    >\n                      <TrashIcon className=\"h-5 w-5\" />\n                    </button>\n                  </div>\n                </div>\n              </div>\n            ))}\n          </div>\n        )}\n      </div>\n\n      {/* 클라이언트 생성 모달 */}\n      {showCreateModal && (\n        <div className=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50\">\n          <div className=\"relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white\">\n            <div className=\"mt-3\">\n              <div className=\"flex items-center justify-between mb-4\">\n                <h3 className=\"text-lg font-medium text-gray-900\">새 OAuth 클라이언트 생성</h3>\n                <button\n                  onClick={() => setShowCreateModal(false)}\n                  className=\"text-gray-400 hover:text-gray-600\"\n                >\n                  <XCircleIcon className=\"h-6 w-6\" />\n                </button>\n              </div>\n              \n              <form onSubmit={handleSubmit(onSubmit)} className=\"space-y-4\">\n                {/* 기본 정보 */}\n                <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                  <div>\n                    <label className=\"block text-sm font-medium text-gray-700\">\n                      클라이언트 이름 *\n                    </label>\n                    <input\n                      {...register('name')}\n                      type=\"text\"\n                      className=\"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500\"\n                      placeholder=\"My Application\"\n                    />\n                    {errors.name && (\n                      <p className=\"mt-1 text-sm text-red-600\">{errors.name.message}</p>\n                    )}\n                  </div>\n                  <div>\n                    <label className=\"block text-sm font-medium text-gray-700\">\n                      웹사이트 URL\n                    </label>\n                    <input\n                      {...register('website')}\n                      type=\"url\"\n                      className=\"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500\"\n                      placeholder=\"https://example.com\"\n                    />\n                    {errors.website && (\n                      <p className=\"mt-1 text-sm text-red-600\">{errors.website.message}</p>\n                    )}\n                  </div>\n                </div>\n\n                <div>\n                  <label className=\"block text-sm font-medium text-gray-700\">\n                    설명\n                  </label>\n                  <textarea\n                    {...register('description')}\n                    rows={2}\n                    className=\"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500\"\n                    placeholder=\"클라이언트에 대한 설명을 입력하세요\"\n                  />\n                </div>\n\n                {/* Redirect URIs */}\n                <div>\n                  <label className=\"block text-sm font-medium text-gray-700\">\n                    Redirect URIs *\n                  </label>\n                  <textarea\n                    {...register('redirect_uris')}\n                    rows={3}\n                    className=\"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500\"\n                    placeholder={`http://localhost:3000/callback\\nhttps://example.com/callback`}\n                  />\n                  <p className=\"mt-1 text-sm text-gray-500\">\n                    각 URI를 새 줄에 입력하세요.\n                  </p>\n                  {errors.redirect_uris && (\n                    <p className=\"mt-1 text-sm text-red-600\">{errors.redirect_uris.message}</p>\n                  )}\n                </div>\n\n                {/* Grant Types */}\n                <div>\n                  <label className=\"block text-sm font-medium text-gray-700 mb-2\">\n                    Grant Types *\n                  </label>\n                  <div className=\"space-y-2\">\n                    {availableGrantTypes.map((grantType) => (\n                      <label key={grantType.value} className=\"flex items-center\">\n                        <input\n                          {...register('grant_types')}\n                          type=\"checkbox\"\n                          value={grantType.value}\n                          className=\"h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded\"\n                        />\n                        <span className=\"ml-2 text-sm text-gray-700\">{grantType.label}</span>\n                      </label>\n                    ))}\n                  </div>\n                  {errors.grant_types && (\n                    <p className=\"mt-1 text-sm text-red-600\">{errors.grant_types.message}</p>\n                  )}\n                </div>\n\n                {/* Scopes */}\n                <div>\n                  <label className=\"block text-sm font-medium text-gray-700 mb-2\">\n                    Scopes *\n                  </label>\n                  <div className=\"space-y-2\">\n                    {availableScopes.map((scope) => (\n                      <label key={scope.value} className=\"flex items-center\">\n                        <input\n                          {...register('scopes')}\n                          type=\"checkbox\"\n                          value={scope.value}\n                          className=\"h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded\"\n                        />\n                        <span className=\"ml-2 text-sm text-gray-700\">{scope.label}</span>\n                      </label>\n                    ))}\n                  </div>\n                  {errors.scopes && (\n                    <p className=\"mt-1 text-sm text-red-600\">{errors.scopes.message}</p>\n                  )}\n                </div>\n\n                {/* Public Client */}\n                <div>\n                  <label className=\"flex items-center\">\n                    <input\n                      {...register('public')}\n                      type=\"checkbox\"\n                      className=\"h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded\"\n                    />\n                    <span className=\"ml-2 text-sm text-gray-700\">\n                      Public Client (Client Secret 없음)\n                    </span>\n                  </label>\n                  <p className=\"mt-1 text-sm text-gray-500\">\n                    SPA나 모바일 앱처럼 Client Secret을 안전하게 보관할 수 없는 경우 선택하세요.\n                  </p>\n                </div>\n\n                {/* 버튼 */}\n                <div className=\"flex justify-end space-x-3 pt-4\">\n                  <button\n                    type=\"button\"\n                    onClick={() => setShowCreateModal(false)}\n                    className=\"px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50\"\n                  >\n                    취소\n                  </button>\n                  <button\n                    type=\"submit\"\n                    disabled={createClientMutation.isPending}\n                    className=\"px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50\"\n                  >\n                    {createClientMutation.isPending ? '생성 중...' : '생성'}\n                  </button>\n                </div>\n              </form>\n            </div>\n          </div>\n        </div>\n      )}\n    </div>\n  )\n}\n\nexport default ClientsPage
+import {
+  PlusIcon,
+  KeyIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ClipboardDocumentIcon,
+  PencilIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+} from '@heroicons/react/24/outline'
+
+// 클라이언트 생성 폼 스키마
+const createClientSchema = z.object({
+  name: z.string().min(1, '클라이언트 이름은 필수입니다'),
+  description: z.string().optional(),
+  website: z.string().url('올바른 URL을 입력해주세요').optional().or(z.literal('')),
+  redirect_uris: z.string().min(1, '최소 하나의 Redirect URI가 필요합니다'),
+  grant_types: z.array(z.string()).min(1, '최소 하나의 Grant Type을 선택해주세요'),
+  scopes: z.array(z.string()).min(1, '최소 하나의 Scope를 선택해주세요'),
+  public: z.boolean(),
+})
+
+type CreateClientFormData = z.infer<typeof createClientSchema>
+
+const availableGrantTypes = [
+  { value: 'authorization_code', label: 'Authorization Code' },
+  { value: 'client_credentials', label: 'Client Credentials' },
+  { value: 'refresh_token', label: 'Refresh Token' },
+]
+
+const availableScopes = [
+  { value: 'openid', label: 'OpenID Connect' },
+  { value: 'profile', label: 'Profile' },
+  { value: 'email', label: 'Email' },
+  { value: 'offline_access', label: 'Offline Access' },
+]
+
+const ClientsPage: React.FC = () => {
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showSecrets, setShowSecrets] = useState<{ [key: string]: boolean }>({})
+  const queryClient = useQueryClient()
+
+  // 클라이언트 목록 조회
+  const { data: clientsData, isLoading, error, refetch } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => clientsApi.list(),
+  })
+
+  // 클라이언트 생성 폼
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    watch,
+  } = useForm<CreateClientFormData>({
+    resolver: zodResolver(createClientSchema),
+    defaultValues: {
+      grant_types: ['authorization_code'],
+      scopes: ['openid'],
+      public: false,
+    },
+  })
+
+  const watchedGrantTypes = watch('grant_types')
+  const watchedScopes = watch('scopes')
+
+  // 클라이언트 생성 뮤테이션
+  const createClientMutation = useMutation({
+    mutationFn: (data: CreateClientFormData) => {
+      const redirectUris = data.redirect_uris
+        .split('\n')
+        .map(uri => uri.trim())
+        .filter(uri => uri.length > 0)
+
+      return clientsApi.create({
+        name: data.name,
+        description: data.description,
+        website: data.website || undefined,
+        redirect_uris: redirectUris,
+        grant_types: data.grant_types,
+        scopes: data.scopes,
+        public: data.public,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      setShowCreateModal(false)
+      reset()
+      toast.success('클라이언트가 생성되었습니다')
+    },
+    onError: () => {
+      toast.error('클라이언트 생성에 실패했습니다')
+    },
+  })
+
+  // 클라이언트 삭제 뮤테이션
+  const deleteClientMutation = useMutation({
+    mutationFn: (clientId: string) => clientsApi.delete(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      toast.success('클라이언트가 삭제되었습니다')
+    },
+    onError: () => {
+      toast.error('클라이언트 삭제에 실패했습니다')
+    },
+  })
+
+  // 시크릿 재생성 뮤테이션
+  const regenerateSecretMutation = useMutation({
+    mutationFn: (clientId: string) => clientsApi.regenerateSecret(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      toast.success('Client Secret이 재생성되었습니다')
+    },
+    onError: () => {
+      toast.error('Client Secret 재생성에 실패했습니다')
+    },
+  })
+
+  const clients = clientsData?.data.clients || []
+
+  const toggleSecretVisibility = (clientId: string) => {
+    setShowSecrets(prev => ({
+      ...prev,
+      [clientId]: !prev[clientId],
+    }))
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success('클립보드에 복사되었습니다')
+  }
+
+  const handleDelete = (client: Client) => {
+    if (confirm(`정말로 "${client.name}" 클라이언트를 삭제하시겠습니까?`)) {
+      deleteClientMutation.mutate(client.id)
+    }
+  }
+
+  const handleRegenerateSecret = (client: Client) => {
+    if (confirm(`정말로 "${client.name}" 클라이언트의 시크릿을 재생성하시겠습니까?`)) {
+      regenerateSecretMutation.mutate(client.id)
+    }
+  }
+
+  const onSubmit = (data: CreateClientFormData) => {
+    createClientMutation.mutate(data)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600">클라이언트 목록을 불러오는데 실패했습니다.</p>
+        <button
+          onClick={() => refetch()}
+          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        >
+          다시 시도
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div className="sm:flex sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">OAuth 클라이언트 관리</h1>
+          <p className="mt-2 text-sm text-gray-700">
+            총 {clients.length}개의 OAuth 클라이언트가 등록되어 있습니다.
+          </p>
+        </div>
+        <div className="mt-4 sm:mt-0">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
+            새 클라이언트 생성
+          </button>
+        </div>
+      </div>
+
+      {/* 클라이언트 목록 */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        {clients.length === 0 ? (
+          <div className="text-center py-12">
+            <KeyIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">클라이언트가 없습니다</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              새 OAuth 클라이언트를 생성하여 시작하세요.
+            </p>
+            <div className="mt-6">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
+                새 클라이언트 생성
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {clients.map((client: Client) => (
+              <div key={client.id} className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center">
+                      <h3 className="text-lg font-medium text-gray-900">{client.name}</h3>
+                      <span
+                        className={`ml-3 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          client.active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {client.active ? '활성' : '비활성'}
+                      </span>
+                      {client.public && (
+                        <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          Public
+                        </span>
+                      )}
+                    </div>
+                    {client.description && (
+                      <p className="mt-1 text-sm text-gray-600">{client.description}</p>
+                    )}
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Client ID
+                        </dt>
+                        <dd className="mt-1 text-sm text-gray-900 font-mono flex items-center">
+                          {client.client_id}
+                          <button
+                            onClick={() => copyToClipboard(client.client_id)}
+                            className="ml-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <ClipboardDocumentIcon className="h-4 w-4" />
+                          </button>
+                        </dd>
+                      </div>
+                      {!client.public && (
+                        <div>
+                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Client Secret
+                          </dt>
+                          <dd className="mt-1 text-sm text-gray-900 font-mono flex items-center">
+                            {showSecrets[client.id] ? (
+                              <span>{'*'.repeat(32)}</span>
+                            ) : (
+                              <span>{'*'.repeat(32)}</span>
+                            )}
+                            <button
+                              onClick={() => toggleSecretVisibility(client.id)}
+                              className="ml-2 text-gray-400 hover:text-gray-600"
+                            >
+                              {showSecrets[client.id] ? (
+                                <EyeSlashIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleRegenerateSecret(client)}
+                              className="ml-2 text-orange-400 hover:text-orange-600"
+                              title="시크릿 재생성"
+                            >
+                              <KeyIcon className="h-4 w-4" />
+                            </button>
+                          </dd>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Redirect URIs
+                      </dt>
+                      <dd className="mt-1">
+                        {client.redirect_uris.map((uri, index) => (
+                          <span
+                            key={index}
+                            className="inline-block mr-2 mb-1 px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded"
+                          >
+                            {uri}
+                          </span>
+                        ))}
+                      </dd>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Grant Types
+                        </dt>
+                        <dd className="mt-1">
+                          {client.grant_types.map((type, index) => (
+                            <span
+                              key={index}
+                              className="inline-block mr-2 mb-1 px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded"
+                            >
+                              {type}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Scopes
+                        </dt>
+                        <dd className="mt-1">
+                          {client.scopes.map((scope, index) => (
+                            <span
+                              key={index}
+                              className="inline-block mr-2 mb-1 px-2 py-1 text-xs bg-green-100 text-green-800 rounded"
+                            >
+                              {scope}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleDelete(client)}
+                      className="text-red-600 hover:text-red-900"
+                      title="삭제"
+                    >
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 클라이언트 생성 모달 */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">새 OAuth 클라이언트 생성</h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircleIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                {/* 기본 정보 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      클라이언트 이름 *
+                    </label>
+                    <input
+                      {...register('name')}
+                      type="text"
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="My Application"
+                    />
+                    {errors.name && (
+                      <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      웹사이트 URL
+                    </label>
+                    <input
+                      {...register('website')}
+                      type="url"
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="https://example.com"
+                    />
+                    {errors.website && (
+                      <p className="mt-1 text-sm text-red-600">{errors.website.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    설명
+                  </label>
+                  <textarea
+                    {...register('description')}
+                    rows={2}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="클라이언트에 대한 설명을 입력하세요"
+                  />
+                </div>
+
+                {/* Redirect URIs */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Redirect URIs *
+                  </label>
+                  <textarea
+                    {...register('redirect_uris')}
+                    rows={3}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder={`http://localhost:3000/callback\nhttps://example.com/callback`}
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    각 URI를 새 줄에 입력하세요.
+                  </p>
+                  {errors.redirect_uris && (
+                    <p className="mt-1 text-sm text-red-600">{errors.redirect_uris.message}</p>
+                  )}
+                </div>
+
+                {/* Grant Types */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Grant Types *
+                  </label>
+                  <div className="space-y-2">
+                    {availableGrantTypes.map((grantType) => (
+                      <label key={grantType.value} className="flex items-center">
+                        <input
+                          {...register('grant_types')}
+                          type="checkbox"
+                          value={grantType.value}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{grantType.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.grant_types && (
+                    <p className="mt-1 text-sm text-red-600">{errors.grant_types.message}</p>
+                  )}
+                </div>
+
+                {/* Scopes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Scopes *
+                  </label>
+                  <div className="space-y-2">
+                    {availableScopes.map((scope) => (
+                      <label key={scope.value} className="flex items-center">
+                        <input
+                          {...register('scopes')}
+                          type="checkbox"
+                          value={scope.value}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{scope.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.scopes && (
+                    <p className="mt-1 text-sm text-red-600">{errors.scopes.message}</p>
+                  )}
+                </div>
+
+                {/* Public Client */}
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      {...register('public')}
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      Public Client (Client Secret 없음)
+                    </span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    SPA나 모바일 앱처럼 Client Secret을 안전하게 보관할 수 없는 경우 선택하세요.
+                  </p>
+                </div>
+
+                {/* 버튼 */}
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createClientMutation.isPending}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {createClientMutation.isPending ? '생성 중...' : '생성'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default ClientsPage

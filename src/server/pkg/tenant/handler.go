@@ -1,18 +1,25 @@
 package tenant
 
 import (
+	"errors"
+
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for tenant operations
 type Handler struct {
-	service *Service
+	service  *Service
+	validate *validator.Validate
 }
 
 // NewHandler creates a new tenant handler
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, validate *validator.Validate) *Handler {
+	return &Handler{
+		service:  service,
+		validate: validate,
+	}
 }
 
 // RegisterRoutes registers tenant routes
@@ -40,18 +47,24 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Add validation
-	// if err := validate.Struct(req); err != nil {
-	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-	// 		"error": "Validation failed",
-	// 		"details": err.Error(),
-	// 	})
-	// }
+	// Validate request
+	if err := h.validate.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Validation failed",
+			"details": err.Error(),
+		})
+	}
 
 	tenant, err := h.service.CreateTenant(req)
 	if err != nil {
+		// Handle specific errors with appropriate status codes
+		if errors.Is(err, ErrDuplicateSlug) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "A tenant with this slug already exists",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to create tenant",
 		})
 	}
 
@@ -116,10 +129,29 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 		})
 	}
 
+	// Validate request
+	if err := h.validate.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "Validation failed",
+			"details": err.Error(),
+		})
+	}
+
 	tenant, err := h.service.UpdateTenant(id, req)
 	if err != nil {
+		// Handle specific errors with appropriate status codes
+		if errors.Is(err, ErrNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Tenant not found",
+			})
+		}
+		if errors.Is(err, ErrCannotDeactivateDefault) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Cannot deactivate the default tenant",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to update tenant",
 		})
 	}
 
@@ -138,8 +170,29 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 	}
 
 	if err := h.service.DeleteTenant(id); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
+		// Handle specific errors with appropriate status codes
+		if errors.Is(err, ErrNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Tenant not found",
+			})
+		}
+		if errors.Is(err, ErrCannotDeleteDefault) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Cannot delete the default tenant",
+			})
+		}
+		if errors.Is(err, ErrHasUsers) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "Cannot delete tenant with existing users",
+			})
+		}
+		if errors.Is(err, ErrHasClients) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "Cannot delete tenant with existing clients",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete tenant",
 		})
 	}
 

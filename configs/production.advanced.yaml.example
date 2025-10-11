@@ -1,0 +1,170 @@
+# Production Configuration for Authway
+server:
+  port: 8080
+  host: "0.0.0.0"
+  environment: "production"
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 120s
+  max_header_bytes: 1048576  # 1MB
+  graceful_shutdown: 30s
+
+database:
+  driver: "postgres"
+  host: "postgres"
+  port: 5432
+  database: "authway"
+  username: "authway"
+  password_env: "DATABASE_PASSWORD"
+  max_open_connections: 25
+  max_idle_connections: 5
+  connection_max_lifetime: 300s
+  connection_max_idle_time: 300s
+  ssl_mode: "require"
+
+redis:
+  host: "redis"
+  port: 6379
+  password_env: "REDIS_PASSWORD"
+  database: 0
+  max_retries: 3
+  pool_size: 10
+  pool_timeout: 30s
+  idle_timeout: 300s
+  idle_check_frequency: 60s
+
+hydra:
+  admin_url: "http://hydra:4445"
+  public_url: "http://hydra:4444"
+  client_id: "authway-backend"
+  client_secret_env: "HYDRA_CLIENT_SECRET"
+
+security:
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 10
+    cleanup_interval: 300s
+
+  cors:
+    allowed_origins:
+      - "https://your-domain.com"
+      - "https://admin.your-domain.com"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+      - "X-Requested-With"
+      - "X-Admin-Request"
+    expose_headers:
+      - "X-Total-Count"
+      - "X-Rate-Limit-Remaining"
+    allow_credentials: true
+    max_age: 86400  # 24 hours
+
+  jwt:
+    access_token_duration: 900s    # 15 minutes
+    refresh_token_duration: 2592000s  # 30 days
+    issuer: "authway"
+    signing_method: "RS256"
+    public_key_path: "/app/keys/jwt_public.pem"
+    private_key_path: "/app/keys/jwt_private.pem"
+
+  password:
+    min_length: 8
+    max_length: 128
+    require_uppercase: true
+    require_lowercase: true
+    require_numbers: true
+    require_special_chars: true
+    bcrypt_cost: 12
+
+  session:
+    secure: true
+    http_only: true
+    same_site: "strict"
+    max_age: 86400  # 24 hours
+    domain: ".your-domain.com"
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  disable_caller: false
+  disable_stacktrace: false
+
+  fields:
+    service: "authway"
+    version: "1.0.0"
+    environment: "production"
+
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
+  health_check:
+    enabled: true
+    port: 8081
+    path: "/health"
+
+  profiling:
+    enabled: false  # Disable in production
+
+tracing:
+  enabled: true
+  service_name: "authway"
+  jaeger_endpoint: "http://jaeger:14268/api/traces"
+  sample_rate: 0.1  # 10% sampling
+
+features:
+  google_oauth:
+    enabled: true
+    client_id_env: "GOOGLE_CLIENT_ID"
+    client_secret_env: "GOOGLE_CLIENT_SECRET"
+    scopes:
+      - "openid"
+      - "profile"
+      - "email"
+
+  email_verification:
+    enabled: true
+    smtp_host: "smtp.your-domain.com"
+    smtp_port: 587
+    smtp_username_env: "SMTP_USERNAME"
+    smtp_password_env: "SMTP_PASSWORD"
+    from_address: "noreply@your-domain.com"
+    from_name: "Authway"
+
+  password_reset:
+    enabled: true
+    token_expiry: 3600s  # 1 hour
+
+  account_lockout:
+    enabled: true
+    max_failed_attempts: 5
+    lockout_duration: 1800s  # 30 minutes
+
+  audit_logging:
+    enabled: true
+    retention_days: 365
+
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 30
+
+cache:
+  user_cache:
+    ttl: 300s  # 5 minutes
+    size: 1000
+
+  session_cache:
+    ttl: 3600s  # 1 hour
+    size: 10000

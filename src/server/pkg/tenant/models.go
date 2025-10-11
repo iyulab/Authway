@@ -1,6 +1,9 @@
 package tenant
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +33,25 @@ type TenantSettings struct {
 	PasswordMinLength        int      `json:"password_min_length"`
 	SessionTimeout           int      `json:"session_timeout"` // in minutes
 	AllowedDomains           []string `json:"allowed_domains"`
+}
+
+// Scan implements sql.Scanner for TenantSettings (JSONB support)
+func (s *TenantSettings) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to unmarshal JSONB value")
+	}
+
+	return json.Unmarshal(bytes, s)
+}
+
+// Value implements driver.Valuer for TenantSettings (JSONB support)
+func (s TenantSettings) Value() (driver.Value, error) {
+	return json.Marshal(s)
 }
 
 // TableName specifies the table name for Tenant model

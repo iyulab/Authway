@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -107,6 +108,12 @@ type AdminConfig struct {
 }
 
 func Load() (*Config, error) {
+	// Load .env file if it exists (silently ignore if not found)
+	// Try multiple locations
+	_ = godotenv.Load("../../.env")  // From project root
+	_ = godotenv.Load(".env")        // From current directory
+	_ = godotenv.Load()              // Default location
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -134,13 +141,58 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	return &config, nil
+}
+
+// Validate checks if required configuration values are set
+func (c *Config) Validate() error {
+	var errors []string
+
+	// Required: Database connection
+	if c.Database.Host == "" {
+		errors = append(errors, "database.host is required")
+	}
+	if c.Database.User == "" {
+		errors = append(errors, "database.user is required")
+	}
+	if c.Database.Name == "" {
+		errors = append(errors, "database.name is required")
+	}
+
+	// Warn about insecure JWT secrets in production
+	if c.App.Environment == "production" {
+		if c.JWT.AccessTokenSecret == "your-secret-key-change-in-production" {
+			errors = append(errors, "CRITICAL: jwt.access_token_secret must be changed in production")
+		}
+		if c.JWT.RefreshTokenSecret == "your-refresh-secret-key-change-in-production" {
+			errors = append(errors, "CRITICAL: jwt.refresh_token_secret must be changed in production")
+		}
+		if c.Admin.Password == "" || c.Admin.Password == "admin123" {
+			errors = append(errors, "CRITICAL: admin.password must be set to a strong password in production")
+		}
+	}
+
+	// Warn about missing admin password in all environments
+	if c.Admin.Password == "" {
+		errors = append(errors, "WARNING: admin.password is not set - admin console will be inaccessible")
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "; "))
+	}
+
+	return nil
 }
 
 func setDefaults() {
 	// App defaults
 	viper.SetDefault("app.name", "Authway")
-	viper.SetDefault("app.version", "1.0.0")
+	viper.SetDefault("app.version", "0.1.0")
 	viper.SetDefault("app.environment", "development")
 	viper.SetDefault("app.port", "8080")
 	viper.SetDefault("app.base_url", "http://localhost:8080")
@@ -198,7 +250,7 @@ func setDefaults() {
 	viper.SetDefault("tenant.tenant_name", "")
 	viper.SetDefault("tenant.tenant_slug", "")
 
-	// Admin defaults
+	// Admin defaults (use strong password in production)
 	viper.SetDefault("admin.api_key", "")
-	viper.SetDefault("admin.password", "")
+	viper.SetDefault("admin.password", "admin123") // Default for development only
 }

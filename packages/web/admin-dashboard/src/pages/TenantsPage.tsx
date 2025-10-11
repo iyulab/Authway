@@ -14,7 +14,7 @@ const TenantsPage: React.FC = () => {
   })
 
   // Fetch tenants
-  const { data, isLoading, error } = useQuery({
+  const { data: tenants, isLoading, error } = useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
       const response = await tenantsApi.list()
@@ -55,7 +55,7 @@ const TenantsPage: React.FC = () => {
   // Toggle active mutation
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      active ? tenantsApi.deactivate(id) : tenantsApi.activate(id),
+      tenantsApi.update(id, { active: !active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
     },
@@ -116,7 +116,7 @@ const TenantsPage: React.FC = () => {
         <div className="sm:flex-auto">
           <h1 className="text-2xl font-semibold text-gray-900">테넌트 관리</h1>
           <p className="mt-2 text-sm text-gray-700">
-            시스템의 모든 테넌트를 관리합니다. 총 {data?.total || 0}개의 테넌트가 있습니다.
+            시스템의 모든 테넌트를 관리합니다. 총 {tenants?.length || 0}개의 테넌트가 있습니다.
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
@@ -147,7 +147,7 @@ const TenantsPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {data?.tenants.map((tenant) => (
+                  {tenants?.map((tenant) => (
                     <tr key={tenant.id}>
                       <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">
                         {tenant.name}
