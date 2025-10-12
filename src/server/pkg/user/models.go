@@ -10,7 +10,7 @@ import (
 // User represents a user in the system
 // Users are isolated by tenant - same email can exist in different tenants
 type User struct {
-	ID            uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	ID            uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID      uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index:idx_users_tenant_email"`
 	Email         string         `json:"email" gorm:"not null;index:idx_users_tenant_email;index"`
 	PasswordHash  string         `json:"-" gorm:"not null"`

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.ServiceName}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, {{.ServiceColor}} 0%, #ff8e8e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .service-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: {{.ServiceColor}};
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: {{.ServiceColor}};
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .user-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+        .user-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            border: 4px solid {{.ServiceColor}};
+        }
+        .user-name {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .user-email {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            margin-left: 10px;
+        }
+        .feature-list {
+            text-align: left;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .feature-list h3 {
+            color: {{.ServiceColor}};
+            margin-bottom: 15px;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="service-icon">🍎</div>
+        <h1>{{.ServiceName}}</h1>
+        <p class="subtitle">Authway Sample Service</p>
+
+        {{if .LoggedIn}}
+        <div class="user-card">
+            {{if .User.UserInfo.Picture}}
+            <img src="{{.User.UserInfo.Picture}}" alt="Avatar" class="user-avatar">
+            {{else}}
+            <div class="user-avatar" style="background: {{.ServiceColor}}; display: flex; align-items: center; justify-content: center; font-size: 3em; color: white;">
+                {{index .User.UserInfo.Name 0}}
+            </div>
+            {{end}}
+            <div class="user-name">{{.User.UserInfo.Name}}</div>
+            <div class="user-email">{{.User.UserInfo.Email}}</div>
+            <a href="/profile" class="btn">View Profile</a>
+            <a href="/logout" class="btn btn-secondary">Logout</a>
+        </div>
+        {{else}}
+        <div class="feature-list">
+            <h3>✨ Features to Test:</h3>
+            <ul>
+                <li>✅ OAuth 2.0 Authentication</li>
+                <li>✅ Single Sign-On (SSO)</li>
+                <li>✅ Multi-Tenant Support</li>
+                <li>✅ User Profile Access</li>
+                <li>✅ Secure Token Management</li>
+            </ul>
+        </div>
+        <a href="/login" class="btn">Login with Authway</a>
+        {{end}}
+    </div>
+</body>
+</html>

@@ -14,7 +14,7 @@ import (
 // Each tenant has independent users and applications
 // SSO is automatic within a tenant, isolated between tenants
 type Tenant struct {
-	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	Name        string         `json:"name" gorm:"not null"`
 	Slug        string         `json:"slug" gorm:"uniqueIndex;not null"`
 	Description string         `json:"description"`

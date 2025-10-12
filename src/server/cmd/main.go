@@ -47,12 +47,9 @@ func main() {
 		zapLogger.Fatal("Failed to connect to database", zap.Error(err))
 	}
 
-	// Auto-migrate models
-	if err := database.Migrate(db, &tenant.Tenant{}, &user.User{}, &client.Client{}, &email.EmailVerification{}, &email.PasswordReset{}, &admin.AdminSession{}); err != nil {
-		zapLogger.Warn("Failed to migrate database (may already be migrated)", zap.Error(err))
-	} else {
-		zapLogger.Info("Database migration completed successfully")
-	}
+	// NOTE: Database migrations are handled by scripts/migrate.go during startup
+	// GORM AutoMigrate is disabled to prevent conflicts with SQL migrations
+	// If you need to add new tables, update scripts/migrations/*.sql files
 
 	// Initialize Tenant Service
 	tenantService := tenant.NewService(db)
@@ -130,7 +127,7 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,http://localhost:8080", // Default allowed origins
+		AllowOrigins:     "http://localhost:3000,http://localhost:3001,http://localhost:8080", // Allow Login UI (3001)
 		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token",
 		AllowCredentials: true,

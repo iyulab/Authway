@@ -8,7 +8,7 @@ import (
 
 // AdminSession represents an admin console session
 type AdminSession struct {
-	ID        uuid.UUID `json:"id" gorm:"type:uuid;primary_key"`
+	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	Token     string    `json:"-" gorm:"unique;not null"`
 	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
 	CreatedAt time.Time `json:"created_at"`

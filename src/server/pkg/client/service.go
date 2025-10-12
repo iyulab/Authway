@@ -51,9 +51,23 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		return nil, nil, fmt.Errorf("tenant not found or inactive")
 	}
 
-	// Generate client ID and secret
-	clientID := s.generateClientID()
-	clientSecret := s.generateClientSecret()
+	// Use provided credentials or generate new ones
+	var clientID, clientSecret string
+	if req.ClientID != "" && req.ClientSecret != "" {
+		// Use fixed credentials provided in request
+		clientID = req.ClientID
+		clientSecret = req.ClientSecret
+		s.logger.Info("Using provided client credentials",
+			zap.String("client_id", clientID),
+			zap.String("tenant_id", tenantID.String()))
+	} else {
+		// Generate random credentials
+		clientID = s.generateClientID()
+		clientSecret = s.generateClientSecret()
+		s.logger.Info("Generated new client credentials",
+			zap.String("client_id", clientID),
+			zap.String("tenant_id", tenantID.String()))
+	}
 
 	client := &Client{
 		ID:           uuid.New(),

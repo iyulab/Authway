@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - {{.ServiceName}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, {{.ServiceColor}} 0%, #ff8e8e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .service-icon {
+            font-size: 60px;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: {{.ServiceColor}};
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            color: #666;
+        }
+        .profile-section {
+            margin: 30px 0;
+        }
+        .profile-section h2 {
+            color: {{.ServiceColor}};
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        .info-grid {
+            display: grid;
+            gap: 15px;
+        }
+        .info-item {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #666;
+        }
+        .info-value {
+            color: #333;
+            word-break: break-all;
+        }
+        .badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: {{.ServiceColor}};
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 5px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .actions {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .token-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #333;
+            word-break: break-all;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div class="service-icon">🍫</div>
+                <h1>User Profile</h1>
+                <p class="subtitle">{{.ServiceName}}</p>
+            </div>
+
+            <div class="profile-section">
+                <h2>👤 User Information</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Name:</span>
+                        <span class="info-value">{{.User.UserInfo.Name}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Email:</span>
+                        <span class="info-value">{{.User.UserInfo.Email}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Email Verified:</span>
+                        <span class="info-value">
+                            {{if .User.UserInfo.EmailVerified}}
+                            <span class="badge badge-success">✓ Verified</span>
+                            {{else}}
+                            <span class="badge badge-warning">⚠ Not Verified</span>
+                            {{end}}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">User ID:</span>
+                        <span class="info-value">{{.User.UserInfo.Sub}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-section">
+                <h2>🔐 Session Information</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Token Expires:</span>
+                        <span class="info-value">{{.User.ExpiresAt.Format "2006-01-02 15:04:05"}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Access Token:</span>
+                        <div class="token-display">{{.User.AccessToken}}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <a href="/" class="btn">Back to Home</a>
+                <a href="/logout" class="btn btn-secondary">Logout</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

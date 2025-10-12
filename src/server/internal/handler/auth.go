@@ -37,16 +37,22 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 	// Get login request from Hydra
 	loginReq, err := h.hydraClient.GetLoginRequest(challenge)
 	if err != nil {
+		// Log the detailed error
+		c.Context().Logger().Printf("ERROR: Failed to get login request from Hydra: %v", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to get login request",
+			"details": err.Error(),
 		})
 	}
 
 	// Get client information to check tenant
+	c.Context().Logger().Printf("DEBUG: Looking for client_id: %s", loginReq.Client.ClientID)
 	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
 	if err != nil {
+		c.Context().Logger().Printf("ERROR: Failed to get client information for client_id=%s: %v", loginReq.Client.ClientID, err)
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get client information",
+			"error":   "Failed to get client information",
+			"details": err.Error(),
 		})
 	}
 

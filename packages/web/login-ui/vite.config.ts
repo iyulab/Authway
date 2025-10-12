@@ -13,5 +13,6 @@ export default defineConfig({
   server: {
     port: 3001,
     host: true,
+    strictPort: true, // Fail if port is already in use
   },
 })

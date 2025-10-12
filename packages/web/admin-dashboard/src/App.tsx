@@ -7,6 +7,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import TenantsPage from '@/pages/TenantsPage'
 import ClientsPage from '@/pages/ClientsPage'
 import SettingsPage from '@/pages/SettingsPage'
+import DocsPage from '@/pages/DocsPage'
 
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -32,6 +33,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -4,64 +4,66 @@
 Write-Host "🚀 Starting Authway Development Environment..." -ForegroundColor Cyan
 Write-Host ""
 
-# Clean up any existing Authway processes on required ports
-Write-Host "🧹 Checking for existing Authway processes..." -ForegroundColor Yellow
-$ports = @(3000, 3001, 3002, 8080)
-$killedProcesses = 0
-$projectPath = $PSScriptRoot
+# Function to kill process on specific port
+function Kill-PortProcess {
+    param([int]$Port)
 
-foreach ($port in $ports) {
-    try {
-        $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-        if ($connections) {
-            foreach ($conn in $connections) {
-                $processId = $conn.OwningProcess
-                $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-                if ($process) {
-                    # Check if this is an Authway process
-                    $isAuthwayProcess = $false
-
-                    try {
-                        $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-                        if ($processInfo -and $processInfo.CommandLine) {
-                            $commandLine = $processInfo.CommandLine
-                            # Check if command line contains Authway project path
-                            if ($commandLine -match [regex]::Escape($projectPath) -or
-                                $commandLine -match "authway" -or
-                                $commandLine -match "admin-dashboard") {
-                                $isAuthwayProcess = $true
-                            }
-                        }
-                    } catch {
-                        # If we can't get command line, check process name and ask user
-                        if ($process.ProcessName -eq "node" -or $process.ProcessName -eq "go" -or $process.ProcessName -match "main") {
-                            Write-Host "  ⚠️  Found $($process.ProcessName) (PID: $processId) on port $port" -ForegroundColor Yellow
-                            Write-Host "     Cannot verify if this is an Authway process." -ForegroundColor Yellow
-                            $response = Read-Host "     Stop this process? (y/N)"
-                            if ($response -eq "y" -or $response -eq "Y") {
-                                $isAuthwayProcess = $true
-                            }
-                        }
-                    }
-
-                    if ($isAuthwayProcess) {
-                        Write-Host "  Stopping Authway $($process.ProcessName) (PID: $processId) on port $port" -ForegroundColor Gray
-                        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                        $killedProcesses++
-                    }
-                }
+    $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($connections) {
+        foreach ($conn in $connections) {
+            $processId = $conn.OwningProcess
+            $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            if ($process) {
+                Write-Host "  Killing $($process.ProcessName) (PID: $processId) on port $Port" -ForegroundColor Gray
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                return $true
             }
         }
-    } catch {
-        # Silently continue if port not in use
+    }
+    return $false
+}
+
+# Function to ensure port is free
+function Ensure-PortFree {
+    param([int]$Port, [string]$ServiceName)
+
+    $maxAttempts = 5
+    $attempt = 0
+
+    while ($attempt -lt $maxAttempts) {
+        $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        if (-not $conn) {
+            Write-Host "✓ Port $Port is free for $ServiceName" -ForegroundColor Green
+            return $true
+        }
+
+        Write-Host "⚠️  Port $Port is still in use, attempting to free it... (Attempt $($attempt + 1)/$maxAttempts)" -ForegroundColor Yellow
+        Kill-PortProcess -Port $Port
+        Start-Sleep -Seconds 1
+        $attempt++
+    }
+
+    Write-Host "❌ Failed to free port $Port for $ServiceName after $maxAttempts attempts" -ForegroundColor Red
+    return $false
+}
+
+# Clean up any existing processes on required ports
+Write-Host "🧹 Cleaning up ports for Authway services..." -ForegroundColor Yellow
+$ports = @(3000, 3001, 8080, 9001, 9002, 9003)
+$killedProcesses = 0
+
+foreach ($port in $ports) {
+    if (Kill-PortProcess -Port $port) {
+        $killedProcesses++
     }
 }
 
 if ($killedProcesses -gt 0) {
-    Write-Host "✓ Cleaned up $killedProcesses Authway process(es)" -ForegroundColor Green
+    Write-Host "✓ Cleaned up $killedProcesses process(es)" -ForegroundColor Green
+    Write-Host "⏳ Waiting for ports to be released..." -ForegroundColor Yellow
     Start-Sleep -Seconds 2
 } else {
-    Write-Host "✓ No existing Authway processes to clean up" -ForegroundColor Green
+    Write-Host "✓ All ports are already free" -ForegroundColor Green
 }
 
 Write-Host ""
@@ -82,9 +84,17 @@ try {
 
 Write-Host ""
 
-# Start infrastructure (PostgreSQL, Redis, MailHog)
-Write-Host "🐘 Starting infrastructure (PostgreSQL, Redis, MailHog)..." -ForegroundColor Yellow
+# Start infrastructure (PostgreSQL, Redis, MailHog, Ory Hydra)
+Write-Host "🐘 Starting infrastructure (PostgreSQL, Redis, MailHog, Ory Hydra)..." -ForegroundColor Yellow
 docker-compose -f docker-compose.dev.yml up -d postgres redis mailhog
+
+# Wait for PostgreSQL before starting Hydra migration
+Write-Host "⏳ Waiting for PostgreSQL before Hydra migration..." -ForegroundColor Yellow
+Start-Sleep -Seconds 3
+
+# Start Ory Hydra (migration will run first due to depends_on)
+Write-Host "🌊 Starting Ory Hydra OAuth Server..." -ForegroundColor Yellow
+docker-compose -f docker-compose.dev.yml up -d hydra-migrate hydra
 
 # Wait for PostgreSQL to be healthy
 Write-Host "⏳ Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
@@ -126,6 +136,10 @@ Write-Host ""
 
 # Start backend server in new terminal
 Write-Host "🔧 Starting backend server in new terminal..." -ForegroundColor Yellow
+if (-not (Ensure-PortFree -Port 8080 -ServiceName "Backend API")) {
+    Write-Host "❌ Cannot start backend - port 8080 is in use" -ForegroundColor Red
+    exit 1
+}
 $backendPath = Join-Path $PSScriptRoot "src\server"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host '🔧 Authway Backend Server' -ForegroundColor Cyan; Write-Host ''; go run cmd/main.go"
 
@@ -133,6 +147,10 @@ Start-Sleep -Seconds 2
 
 # Start frontend in new terminal
 Write-Host "🎨 Starting frontend in new terminal..." -ForegroundColor Yellow
+if (-not (Ensure-PortFree -Port 3000 -ServiceName "Admin Dashboard")) {
+    Write-Host "❌ Cannot start Admin Dashboard - port 3000 is in use" -ForegroundColor Red
+    exit 1
+}
 $frontendPath = Join-Path $PSScriptRoot "packages\web\admin-dashboard"
 
 # Check if node_modules exists
@@ -145,17 +163,40 @@ if (-not (Test-Path "$frontendPath\node_modules")) {
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$frontendPath'; Write-Host '🎨 Authway Admin Dashboard' -ForegroundColor Cyan; Write-Host ''; npm run dev"
 
+Start-Sleep -Seconds 2
+
+# Start Login UI in new terminal
+Write-Host "🔐 Starting Login UI in new terminal..." -ForegroundColor Yellow
+if (-not (Ensure-PortFree -Port 3001 -ServiceName "Login UI")) {
+    Write-Host "❌ Cannot start Login UI - port 3001 is in use" -ForegroundColor Red
+    exit 1
+}
+$loginUiPath = Join-Path $PSScriptRoot "packages\web\login-ui"
+
+# Check if node_modules exists
+if (-not (Test-Path "$loginUiPath\node_modules")) {
+    Write-Host "📦 Installing Login UI dependencies (first time)..." -ForegroundColor Yellow
+    Push-Location $loginUiPath
+    npm install
+    Pop-Location
+}
+
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$loginUiPath'; Write-Host '🔐 Authway Login UI' -ForegroundColor Cyan; Write-Host ''; npm run dev"
+
 Write-Host ""
 Write-Host "✅ Development environment started successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📌 Access URLs:" -ForegroundColor Cyan
 Write-Host "   Admin Dashboard:  http://localhost:3000" -ForegroundColor White
+Write-Host "   Login UI:         http://localhost:3001" -ForegroundColor White
 Write-Host "   Backend API:      http://localhost:8080" -ForegroundColor White
 Write-Host "   MailHog UI:       http://localhost:8025" -ForegroundColor White
 Write-Host ""
 Write-Host "📝 Services:" -ForegroundColor Cyan
 Write-Host "   PostgreSQL:       localhost:5432" -ForegroundColor White
 Write-Host "   Redis:            localhost:6379" -ForegroundColor White
+Write-Host "   Ory Hydra:        http://localhost:4444 (Public)" -ForegroundColor White
+Write-Host "                     http://localhost:4445 (Admin)" -ForegroundColor White
 Write-Host ""
 Write-Host "💡 Tip: Use stop-dev.ps1 to stop all services" -ForegroundColor Yellow
 Write-Host ""

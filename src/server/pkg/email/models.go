@@ -9,7 +9,7 @@ import (
 
 // EmailVerification represents an email verification token
 type EmailVerification struct {
-	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID    uuid.UUID      `json:"user_id" gorm:"type:uuid;index;not null"`
 	Token     string         `json:"token" gorm:"uniqueIndex;not null"`
 	ExpiresAt time.Time      `json:"expires_at" gorm:"not null"`
@@ -41,7 +41,7 @@ func (e *EmailVerification) IsExpired() bool {
 
 // PasswordReset represents a password reset token
 type PasswordReset struct {
-	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID    uuid.UUID      `json:"user_id" gorm:"type:uuid;index;not null"`
 	Token     string         `json:"token" gorm:"uniqueIndex;not null"`
 	ExpiresAt time.Time      `json:"expires_at" gorm:"not null"`

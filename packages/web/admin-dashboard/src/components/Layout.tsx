@@ -7,6 +7,7 @@ import {
   BuildingOfficeIcon,
   CogIcon,
   KeyIcon,
+  BookOpenIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
 
@@ -18,6 +19,7 @@ const navigation = [
   { name: '대시보드', href: '/dashboard', icon: HomeIcon },
   { name: '테넌트 관리', href: '/tenants', icon: BuildingOfficeIcon },
   { name: '앱(클라이언트) 관리', href: '/clients', icon: KeyIcon },
+  { name: '개발자 가이드', href: '/docs', icon: BookOpenIcon },
   { name: '설정', href: '/settings', icon: CogIcon },
 ]
 

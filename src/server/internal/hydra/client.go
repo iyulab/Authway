@@ -169,17 +169,21 @@ type LoginResponse struct {
 }
 
 func (c *Client) GetLoginRequest(challenge string) (*LoginRequest, error) {
-	resp, err := c.client.Get(
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/login?challenge=%s", c.AdminURL, challenge),
-	)
+	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/login?challenge=%s", c.AdminURL, challenge)
+	resp, err := c.client.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to request Hydra at %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("hydra returned status %d: %s", resp.StatusCode, string(body))
+	}
+
 	var loginReq LoginRequest
 	if err := json.NewDecoder(resp.Body).Decode(&loginReq); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode login request: %w", err)
 	}
 
 	return &loginReq, nil

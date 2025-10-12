@@ -41,7 +41,7 @@ services:
     image: oryd/hydra:v2.2.0
     container_name: authway-hydra-migrate
     environment:
-      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
+      DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"
     command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
     volumes:
       - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
@@ -55,11 +55,11 @@ services:
     image: oryd/hydra:v2.2.0
     container_name: authway-hydra
     environment:
-      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
-      URLS_SELF_ISSUER: http://localhost:4444
-      URLS_CONSENT: http://localhost:8080/consent
-      URLS_LOGIN: http://localhost:8080/login
-      URLS_LOGOUT: http://localhost:8080/logout
+      DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"
+      URLS_SELF_ISSUER: "http://localhost:4444"
+      URLS_CONSENT: "http://localhost:8080/consent"
+      URLS_LOGIN: "http://localhost:8080/login"
+      URLS_LOGOUT: "http://localhost:8080/logout"
       SERVE_COOKIES_SECURE: false
       SERVE_PUBLIC_CORS_ENABLED: true
       SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "*"
@@ -92,8 +92,8 @@ services:
       AUTHWAY_DATABASE_NAME: authway
       AUTHWAY_REDIS_HOST: redis
       AUTHWAY_REDIS_PORT: 6379
-      AUTHWAY_HYDRA_PUBLIC_URL: http://hydra:4444
-      AUTHWAY_HYDRA_ADMIN_URL: http://hydra:4445
+      AUTHWAY_HYDRA_PUBLIC_URL: "http://hydra:4444"
+      AUTHWAY_HYDRA_ADMIN_URL: "http://hydra:4445"
     ports:
       - "8080:8080"
     depends_on:
@@ -117,8 +117,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: authway-admin
     environment:
-      VITE_API_URL: http://localhost:8080
-      VITE_HYDRA_PUBLIC_URL: http://localhost:4444
+      VITE_API_URL: "http://localhost:8080"
+      VITE_HYDRA_PUBLIC_URL: "http://localhost:4444"
     ports:
       - "3000:3000"
     volumes:
@@ -134,8 +134,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: authway-login
     environment:
-      VITE_API_URL: http://localhost:8080
-      VITE_HYDRA_PUBLIC_URL: http://localhost:4444
+      VITE_API_URL: "http://localhost:8080"
+      VITE_HYDRA_PUBLIC_URL: "http://localhost:4444"
     ports:
       - "3001:3001"
     volumes:

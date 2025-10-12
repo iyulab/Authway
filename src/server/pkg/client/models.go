@@ -11,7 +11,7 @@ import (
 // Client represents an OAuth 2.0 client application
 // Each client belongs to one tenant
 type Client struct {
-	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primary_key"`
+	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID     uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	ClientID     string         `json:"client_id" gorm:"uniqueIndex;not null"`
 	ClientSecret string         `json:"-" gorm:"not null"`
@@ -26,15 +26,15 @@ type Client struct {
 	Active       bool           `json:"active" gorm:"default:true"`
 
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
-	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"default:false"`
-	GoogleClientID     *string `json:"-" gorm:"null"`
-	GoogleClientSecret *string `json:"-" gorm:"null"`
-	GoogleRedirectURI  *string `json:"google_redirect_uri" gorm:"null"`
+	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`
+	GoogleClientID     *string `json:"-" gorm:"column:google_client_id;null"`
+	GoogleClientSecret *string `json:"-" gorm:"column:google_client_secret;null"`
+	GoogleRedirectURI  *string `json:"google_redirect_uri" gorm:"column:google_redirect_uri;null"`
 
 	// Client-specific GitHub OAuth (optional)
-	GithubOAuthEnabled bool    `json:"github_oauth_enabled" gorm:"default:false"`
-	GithubClientID     *string `json:"-" gorm:"null"`
-	GithubClientSecret *string `json:"-" gorm:"null"`
+	GithubOAuthEnabled bool    `json:"github_oauth_enabled" gorm:"column:github_oauth_enabled;default:false"`
+	GithubClientID     *string `json:"-" gorm:"column:github_client_id;null"`
+	GithubClientSecret *string `json:"-" gorm:"column:github_client_secret;null"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -102,6 +102,8 @@ func (c *Client) ToPublic() PublicClient {
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
 	TenantID     string   `json:"tenant_id" validate:"required,uuid"` // Required!
+	ClientID     string   `json:"client_id"`                           // Optional: if provided, use fixed client_id
+	ClientSecret string   `json:"client_secret"`                       // Optional: if provided, use fixed client_secret
 	Name         string   `json:"name" validate:"required"`
 	Description  string   `json:"description"`
 	Website      string   `json:"website" validate:"omitempty,url"`
