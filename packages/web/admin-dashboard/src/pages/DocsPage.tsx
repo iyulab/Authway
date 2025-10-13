@@ -245,6 +245,60 @@ const IntegrationTab: React.FC<{ copyToClipboard: (text: string, label: string) 
         <p className="mt-2 text-gray-600">언어별 OAuth 2.0 통합 예제</p>
       </div>
 
+      {/* 종합 통합 가이드 링크 */}
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-6">
+        <div className="flex items-start space-x-4">
+          <BookOpenIcon className="h-8 w-8 text-green-600 flex-shrink-0 mt-1" />
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              📚 종합 통합 가이드 (Comprehensive Integration Guide)
+            </h3>
+            <p className="text-gray-700 mb-3">
+              실제 프로덕션 환경에서의 통합 경험을 바탕으로 작성된 종합 가이드입니다.
+              모범 사례, 일반적인 문제와 해결책, 프로덕션 체크리스트를 포함합니다.
+            </p>
+            <div className="bg-white/70 rounded p-4 mb-3">
+              <h4 className="font-semibold text-gray-900 mb-2">포함 내용:</h4>
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700">
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  서버 측 State 관리 (SameSite 이슈 해결)
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  HTTP 431 에러 방지
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  CORS 이슈 해결 방법
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  세션 관리 베스트 프랙티스
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  개발자 친화적 오류 메시지
+                </li>
+                <li className="flex items-center">
+                  <CheckCircleIcon className="h-4 w-4 text-green-600 mr-2" />
+                  프로덕션 체크리스트
+                </li>
+              </ul>
+            </div>
+            <a
+              href="https://github.com/yourusername/authway/blob/main/docs/INTEGRATION_GUIDE.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+            >
+              <BookOpenIcon className="h-5 w-5 mr-2" />
+              통합 가이드 전체 보기
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* 언어 선택 */}
       <div className="flex space-x-2 border-b border-gray-200">
         {[

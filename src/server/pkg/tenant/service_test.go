@@ -223,7 +223,7 @@ func TestService_List(t *testing.T) {
 		},
 		{
 			name:          "paginated results - second page",
-			limit:          2,
+			limit:         2,
 			offset:        2,
 			expectedLen:   2,
 			expectedTotal: 5,

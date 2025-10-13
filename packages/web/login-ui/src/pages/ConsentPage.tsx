@@ -20,8 +20,7 @@ interface ConsentPageInfo {
   requested_scope: string[]
   user: {
     email: string
-    first_name: string
-    last_name: string
+    name: string
   }
 }
 
@@ -205,7 +204,7 @@ const ConsentPage: React.FC = () => {
           </h2>
           <div className="mt-4 text-center">
             <p className="text-sm text-gray-600">
-              안녕하세요, <span className="font-medium">{consentInfo.user.first_name ? `${consentInfo.user.first_name} ${consentInfo.user.last_name}` : consentInfo.user.email}</span>님
+              안녕하세요, <span className="font-medium">{consentInfo.user.name || consentInfo.user.email}</span>님
             </p>
             <p className="text-sm text-gray-600 mt-2">
               <span className="font-medium">{consentInfo.client_name}</span>에서 다음 권한을 요청하고 있습니다.

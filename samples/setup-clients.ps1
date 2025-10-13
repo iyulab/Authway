@@ -14,13 +14,14 @@ try
     $tenantsResponse = Invoke-WebRequest -Uri "$AUTHWAY_API/api/v1/tenants" -Method GET -UseBasicParsing -ErrorAction Stop
     $tenantsData = $tenantsResponse.Content | ConvertFrom-Json
 
-    if ($tenantsData.data.Count -eq 0)
+    # API returns array directly, not wrapped in {data: [...]}
+    if ($tenantsData.Count -eq 0)
     {
         Write-Host "❌ No tenant found. Please create a tenant first." -ForegroundColor Red
         exit 1
     }
 
-    $TENANT_ID = $tenantsData.data[0].id
+    $TENANT_ID = $tenantsData[0].id
     Write-Host "✓ Using tenant ID: $TENANT_ID" -ForegroundColor Green
 }
 catch
@@ -56,7 +57,7 @@ $services = @(
         ClientSecret = "chocolate-service-secret"
         RedirectURI = "http://localhost:9003/callback"
         Icon = "🍫"
-        Color = "Brown"
+        Color = "DarkYellow"
     }
 )
 

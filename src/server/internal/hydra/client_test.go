@@ -11,12 +11,12 @@ import (
 
 func TestClient_RevokeUserSessions(t *testing.T) {
 	tests := []struct {
-		name           string
-		subject        string
-		loginStatus    int
-		consentStatus  int
-		expectError    bool
-		errorContains  string
+		name          string
+		subject       string
+		loginStatus   int
+		consentStatus int
+		expectError   bool
+		errorContains string
 	}{
 		{
 			name:          "successful session revocation",
@@ -33,20 +33,20 @@ func TestClient_RevokeUserSessions(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			name:           "login session revocation fails with 500",
-			subject:        "user-789",
-			loginStatus:    http.StatusInternalServerError,
-			consentStatus:  http.StatusNoContent,
-			expectError:    true,
-			errorContains:  "failed to revoke login sessions",
+			name:          "login session revocation fails with 500",
+			subject:       "user-789",
+			loginStatus:   http.StatusInternalServerError,
+			consentStatus: http.StatusNoContent,
+			expectError:   true,
+			errorContains: "failed to revoke login sessions",
 		},
 		{
-			name:           "consent session revocation fails with 500",
-			subject:        "user-999",
-			loginStatus:    http.StatusNoContent,
-			consentStatus:  http.StatusInternalServerError,
-			expectError:    true,
-			errorContains:  "failed to revoke consent sessions",
+			name:          "consent session revocation fails with 500",
+			subject:       "user-999",
+			loginStatus:   http.StatusNoContent,
+			consentStatus: http.StatusInternalServerError,
+			expectError:   true,
+			errorContains: "failed to revoke consent sessions",
 		},
 	}
 

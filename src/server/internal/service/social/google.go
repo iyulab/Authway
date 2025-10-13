@@ -120,6 +120,12 @@ func (g *GoogleService) GetAuthURLForClient(state string, clientID string) strin
 		}
 	}
 
+	// Debug log to verify Google OAuth config
+	g.logger.Info("Building Google OAuth URL",
+		zap.String("google_client_id", oauthConfig.ClientID),
+		zap.String("redirect_url", oauthConfig.RedirectURL),
+		zap.String("oauth_client_id", clientID))
+
 	baseURL := "https://accounts.google.com/o/oauth2/v2/auth"
 	params := url.Values{}
 	params.Add("client_id", oauthConfig.ClientID)

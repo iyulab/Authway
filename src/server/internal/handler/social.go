@@ -3,9 +3,9 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"net/http"
-	"strings"
+	"sync"
+	"time"
 
 	"authway/src/server/internal/hydra"
 	"authway/src/server/internal/service/social"
@@ -13,6 +13,30 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
+
+// oauthStateData stores OAuth state information server-side to avoid large URLs
+type oauthStateData struct {
+	LoginChallenge string
+	ClientID       string
+	CreatedAt      time.Time
+}
+
+// oauthStateStore is a thread-safe in-memory store for OAuth state data
+// Using sync.Map for concurrent access safety
+// In production, use Redis or similar distributed cache
+var oauthStateStore sync.Map
+
+// cleanExpiredStates removes OAuth states older than 15 minutes
+func cleanExpiredStates() {
+	now := time.Now()
+	oauthStateStore.Range(func(key, value interface{}) bool {
+		data := value.(*oauthStateData)
+		if now.Sub(data.CreatedAt) > 15*time.Minute {
+			oauthStateStore.Delete(key)
+		}
+		return true // continue iteration
+	})
+}
 
 type SocialHandler struct {
 	googleService *social.GoogleService
@@ -38,16 +62,21 @@ func NewSocialHandler(
 // GoogleLogin initiates Google OAuth flow
 func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 	// Get login challenge from query parameters
-	loginChallenge := c.Query("login_challenge")
-	if loginChallenge == "" {
+	// IMPORTANT: Make copies of query strings because Fiber reuses internal buffers
+	loginChallengeRaw := c.Query("login_challenge")
+	if loginChallengeRaw == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "missing_login_challenge",
-			"error_description": "login_challenge parameter is required",
+			"error_description": "login_challenge parameter is required for OAuth flow",
+			"hint":              "Include login_challenge in the URL: /auth/google/login?login_challenge=XXX&client_id=YYY",
+			"example":           "http://localhost:8080/auth/google/login?login_challenge=abc123&client_id=my-client",
 		})
 	}
+	loginChallenge := string([]byte(loginChallengeRaw)) // Create immutable copy
 
 	// Get client_id from query parameters (optional for hybrid OAuth)
-	clientID := c.Query("client_id")
+	clientIDRaw := c.Query("client_id")
+	clientID := string([]byte(clientIDRaw)) // Create immutable copy
 
 	// Generate state parameter for CSRF protection
 	stateBytes := make([]byte, 32)
@@ -60,14 +89,41 @@ func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 	}
 	state := base64.URLEncoding.EncodeToString(stateBytes)
 
-	// Store login challenge and client_id in session/cache with state as key
-	// In production, use Redis or similar for state storage
-	// For now, we'll include it in the state parameter (base64 encoded)
-	stateData := fmt.Sprintf("%s:%s:%s", state, loginChallenge, clientID)
-	encodedState := base64.URLEncoding.EncodeToString([]byte(stateData))
+	// Store login challenge and client_id server-side to avoid large URLs
+	// This prevents HTTP 431 errors with long Hydra login_challenge values
+	// Create a new struct to avoid any reference issues
+	stateInfo := &oauthStateData{
+		LoginChallenge: loginChallenge,
+		ClientID:       clientID,
+		CreatedAt:      time.Now(),
+	}
+
+	// Store in thread-safe sync.Map
+	oauthStateStore.Store(state, stateInfo)
+
+	// Debug: log what we're storing
+	s.logger.Info("Stored OAuth state",
+		zap.String("state", state),
+		zap.String("stored_client_id", stateInfo.ClientID),
+		zap.String("stored_challenge_prefix", stateInfo.LoginChallenge[:min(20, len(stateInfo.LoginChallenge))]),
+		zap.Int("challenge_length", len(stateInfo.LoginChallenge)))
+
+	// Immediately verify what was stored
+	verifyValue, verifyFound := oauthStateStore.Load(state)
+	if verifyFound {
+		verifyData := verifyValue.(*oauthStateData)
+		s.logger.Info("Verification: Immediately after storage",
+			zap.String("verify_client_id", verifyData.ClientID),
+			zap.String("verify_challenge_prefix", verifyData.LoginChallenge[:min(20, len(verifyData.LoginChallenge))]),
+			zap.Bool("matches_stored", verifyData.ClientID == stateInfo.ClientID))
+	}
+
+	// Clean up expired states (synchronous, lightweight operation)
+	cleanExpiredStates()
 
 	// Get Google authorization URL (client-specific or central)
-	authURL := s.googleService.GetAuthURLForClient(encodedState, clientID)
+	// Now using just the short state value instead of encoding all data
+	authURL := s.googleService.GetAuthURLForClient(state, clientID)
 
 	// Set state cookie for additional security
 	c.Cookie(&fiber.Cookie{
@@ -89,9 +145,15 @@ func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 
 // GoogleCallback handles the Google OAuth callback
 func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
-	code := c.Query("code")
-	encodedState := c.Query("state")
-	errorParam := c.Query("error")
+	// IMPORTANT: Make copies of query strings because Fiber reuses internal buffers
+	code := string([]byte(c.Query("code")))
+	state := string([]byte(c.Query("state")))
+	errorParam := string([]byte(c.Query("error")))
+
+	// Debug: log what parameters we received
+	s.logger.Info("GoogleCallback received",
+		zap.String("state", state),
+		zap.Int("code_length", len(code)))
 
 	// Check for OAuth error
 	if errorParam != "" {
@@ -103,50 +165,72 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 	}
 
 	// Validate required parameters
-	if code == "" || encodedState == "" {
+	if code == "" || state == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
 			"error_description": "Missing required parameters",
 		})
 	}
 
-	// Decode state to extract original state, login challenge, and client_id
-	stateData, err := base64.URLEncoding.DecodeString(encodedState)
-	if err != nil {
-		s.logger.Error("Failed to decode state parameter", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "Invalid state parameter",
-		})
-	}
-
-	stateParts := strings.Split(string(stateData), ":")
-	// Extract state, login challenge, and client_id (format: "state:login_challenge:client_id")
-	var originalState, loginChallenge, clientID string
-	if len(stateParts) >= 2 {
-		originalState = stateParts[0]
-		loginChallenge = stateParts[1]
-		if len(stateParts) >= 3 {
-			clientID = stateParts[2]
-		}
-	} else {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "Malformed state parameter",
-		})
-	}
-
 	// Verify state against cookie (CSRF protection)
-	stateCookie := c.Cookies("oauth_state")
-	if stateCookie != originalState {
+	// IMPORTANT: Make copy of cookie value because Fiber reuses internal buffers
+	stateCookie := string([]byte(c.Cookies("oauth_state")))
+	if stateCookie != state {
 		s.logger.Warn("State mismatch",
 			zap.String("cookie_state", stateCookie),
-			zap.String("param_state", originalState))
+			zap.String("param_state", state))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "state_mismatch",
 			"error_description": "State parameter does not match",
 		})
 	}
+
+	// Debug: Check all keys in the map before retrieval
+	keyCount := 0
+	oauthStateStore.Range(func(key, value interface{}) bool {
+		keyCount++
+		keyStr := key.(string)
+		data := value.(*oauthStateData)
+		s.logger.Info("Map contains entry",
+			zap.String("map_key", keyStr[:min(20, len(keyStr))]),
+			zap.String("map_client_id", data.ClientID),
+			zap.String("map_challenge_prefix", data.LoginChallenge[:min(20, len(data.LoginChallenge))]),
+			zap.Bool("is_target_key", keyStr == state))
+		return true
+	})
+	s.logger.Info("Total keys in map", zap.Int("key_count", keyCount))
+
+	// Retrieve stored state data from server-side storage
+	value, found := oauthStateStore.Load(state)
+	if !found {
+		s.logger.Warn("State not found in storage", zap.String("state", state))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_state",
+			"error_description": "OAuth state not found or expired",
+			"hint":              "The OAuth state parameter has expired (15 min timeout) or was already used. Please restart the login flow.",
+			"possible_causes": []string{
+				"State expired after 15 minutes",
+				"State was already used (duplicate callback)",
+				"Server restarted and in-memory state was cleared",
+			},
+			"solution": "Return to your application and click login again",
+		})
+	}
+
+	// Type assert the retrieved value
+	stateData := value.(*oauthStateData)
+	loginChallenge := stateData.LoginChallenge
+	retrievedClientID := stateData.ClientID
+
+	// Debug: log what we retrieved
+	s.logger.Info("Retrieved OAuth state",
+		zap.String("state", state),
+		zap.String("retrieved_client_id", retrievedClientID),
+		zap.String("retrieved_challenge_prefix", loginChallenge[:min(20, len(loginChallenge))]),
+		zap.Int("challenge_length", len(loginChallenge)))
+
+	// Clean up used state from storage
+	oauthStateStore.Delete(state)
 
 	// Clear the state cookie
 	c.Cookie(&fiber.Cookie{
@@ -158,14 +242,26 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 	})
 
 	// Process Google OAuth callback (client-specific or central)
-	authUser, err := s.googleService.HandleCallbackForClient(c.Context(), code, originalState, clientID)
+	authUser, err := s.googleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("Google OAuth callback failed",
 			zap.Error(err),
-			zap.String("client_id", clientID))
+			zap.String("client_id", retrievedClientID))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Google OAuth callback",
+			"details":           err.Error(),
+			"hint":              "Verify Google OAuth configuration. Check client_id, client_secret, and redirect_uri in your environment variables.",
+			"debug": fiber.Map{
+				"client_id": retrievedClientID,
+				"has_code":  len(code) > 0,
+			},
+			"possible_causes": []string{
+				"Invalid Google OAuth credentials (CLIENT_ID or CLIENT_SECRET)",
+				"Incorrect redirect_uri configuration",
+				"Google API quota exceeded",
+				"User denied permission",
+			},
 		})
 	}
 
@@ -177,29 +273,51 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 
 	// Accept the Hydra login request
 	acceptLoginRequest := &hydra.AcceptLoginRequest{
-		Subject:     authUser.Email,
+		Subject:     authUser.ID.String(), // Use user ID as subject (consistent with regular login)
 		Remember:    true,
 		RememberFor: 3600, // 1 hour
 		Context: map[string]interface{}{
-			"user_id":  authUser.ID.String(),
-			"provider": "google",
-			"email":    authUser.Email,
+			"user_id":   authUser.ID.String(),
+			"provider":  "google",
+			"email":     authUser.Email,
+			"tenant_id": authUser.TenantID.String(),
 		},
 	}
 
+	s.logger.Info("Sending AcceptLoginRequest to Hydra",
+		zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]),
+		zap.String("subject", authUser.ID.String()),
+		zap.String("email", authUser.Email),
+		zap.String("tenant_id", authUser.TenantID.String()))
+
 	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
 	if err != nil {
-		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
+		s.logger.Error("Failed to accept Hydra login request",
+			zap.Error(err),
+			zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "hydra_login_failed",
 			"error_description": "Failed to complete OAuth login with Hydra",
+			"details":           err.Error(),
+			"hint":              "Verify Hydra is accessible and the login_challenge is still valid",
+			"debug": fiber.Map{
+				"hydra_admin_url": s.hydraClient.AdminURL,
+				"challenge":       loginChallenge[:min(50, len(loginChallenge))] + "...",
+				"user_id":         authUser.ID.String(),
+			},
+			"possible_causes": []string{
+				"Hydra admin API is not accessible",
+				"Login challenge expired or already used",
+				"Network connectivity issue",
+			},
 		})
 	}
 
 	s.logger.Info("Google OAuth login successful",
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email),
-		zap.String("provider", "google"))
+		zap.String("provider", "google"),
+		zap.String("redirect_to", acceptResp.RedirectTo))
 
 	// Redirect to Hydra consent flow
 	return c.Redirect(acceptResp.RedirectTo, http.StatusFound)
@@ -208,7 +326,8 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 // GetGoogleAuthURL returns the Google OAuth URL for frontend use
 func (s *SocialHandler) GetGoogleAuthURL(c *fiber.Ctx) error {
 	// Get client_id from query parameters (optional for hybrid OAuth)
-	clientID := c.Query("client_id")
+	// IMPORTANT: Make copy of query string because Fiber reuses internal buffers
+	clientID := string([]byte(c.Query("client_id")))
 
 	// Generate state parameter
 	stateBytes := make([]byte, 32)

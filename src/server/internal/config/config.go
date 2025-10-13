@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -110,9 +111,26 @@ type AdminConfig struct {
 func Load() (*Config, error) {
 	// Load .env file if it exists (silently ignore if not found)
 	// Try multiple locations
-	_ = godotenv.Load("../../.env")  // From project root
-	_ = godotenv.Load(".env")        // From current directory
-	_ = godotenv.Load()              // Default location
+	envLoaded := false
+	if err := godotenv.Load("../../.env"); err == nil {
+		fmt.Println("✓ Loaded .env from ../../.env")
+		envLoaded = true
+	}
+	if !envLoaded {
+		if err := godotenv.Load(".env"); err == nil {
+			fmt.Println("✓ Loaded .env from .env")
+			envLoaded = true
+		}
+	}
+	if !envLoaded {
+		if err := godotenv.Load(); err == nil {
+			fmt.Println("✓ Loaded .env from default location")
+			envLoaded = true
+		}
+	}
+	if !envLoaded {
+		fmt.Println("⚠ No .env file found, using environment variables only")
+	}
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -140,6 +158,38 @@ func Load() (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
+
+	// Manual override for Google OAuth config (Viper AutomaticEnv doesn't work well with nested structs)
+	if clientID := os.Getenv("AUTHWAY_GOOGLE_CLIENT_ID"); clientID != "" {
+		config.Google.ClientID = clientID
+	}
+	if clientSecret := os.Getenv("AUTHWAY_GOOGLE_CLIENT_SECRET"); clientSecret != "" {
+		config.Google.ClientSecret = clientSecret
+	}
+	if redirectURL := os.Getenv("AUTHWAY_GOOGLE_REDIRECT_URL"); redirectURL != "" {
+		config.Google.RedirectURL = redirectURL
+	}
+	if enabled := os.Getenv("AUTHWAY_GOOGLE_ENABLED"); enabled != "" {
+		config.Google.Enabled = (enabled == "true")
+	}
+
+	// Manual override for GitHub OAuth config
+	if clientID := os.Getenv("AUTHWAY_GITHUB_CLIENT_ID"); clientID != "" {
+		config.GitHub.ClientID = clientID
+	}
+	if clientSecret := os.Getenv("AUTHWAY_GITHUB_CLIENT_SECRET"); clientSecret != "" {
+		config.GitHub.ClientSecret = clientSecret
+	}
+	if redirectURL := os.Getenv("AUTHWAY_GITHUB_REDIRECT_URL"); redirectURL != "" {
+		config.GitHub.RedirectURL = redirectURL
+	}
+	if enabled := os.Getenv("AUTHWAY_GITHUB_ENABLED"); enabled != "" {
+		config.GitHub.Enabled = (enabled == "true")
+	}
+
+	// Debug: Print Google OAuth config
+	fmt.Printf("🔍 Google OAuth Config: ClientID=%s, Enabled=%v, RedirectURL=%s\n",
+		config.Google.ClientID, config.Google.Enabled, config.Google.RedirectURL)
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {

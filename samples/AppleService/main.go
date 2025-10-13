@@ -22,6 +22,8 @@ var (
 	oauthConfig *shared.OAuthConfig
 	sessions    = make(map[string]*shared.Session) // Simple in-memory session storage
 	templates   *template.Template
+	// OAuth state storage - maps state value to creation time
+	oauthStates = make(map[string]time.Time)
 )
 
 func main() {
@@ -82,43 +84,64 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store state in cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		MaxAge:   300, // 5 minutes
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	log.Printf("🔑 Generated OAuth state: %s (len=%d)", state, len(state))
+
+	// Store state in server memory (not cookie, to avoid SameSite issues in local development)
+	// In production, use Redis or similar distributed storage
+	oauthStates[state] = time.Now()
+
+	// Clean up expired states (older than 5 minutes)
+	cleanExpiredStates()
 
 	// Redirect to authorization URL
 	authURL := oauthConfig.GetAuthURL(state)
+	log.Printf("🔗 Redirecting to: %s", authURL)
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
+// cleanExpiredStates removes OAuth states older than 5 minutes
+func cleanExpiredStates() {
+	now := time.Now()
+	for state, createdAt := range oauthStates {
+		if now.Sub(createdAt) > 5*time.Minute {
+			delete(oauthStates, state)
+		}
+	}
+}
+
 func handleCallback(w http.ResponseWriter, r *http.Request) {
-	// Verify state
-	stateCookie, err := r.Cookie("oauth_state")
-	if err != nil {
-		http.Error(w, "State cookie not found", http.StatusBadRequest)
+	// Get state from URL
+	state := r.URL.Query().Get("state")
+	if state == "" {
+		log.Printf("❌ State parameter missing")
+		http.Error(w, "State parameter missing", http.StatusBadRequest)
 		return
 	}
 
-	state := r.URL.Query().Get("state")
-	if state != stateCookie.Value {
+	// Verify state exists in server memory
+	createdAt, exists := oauthStates[state]
+	if !exists {
+		log.Printf("❌ State not found in server storage: %s", state)
 		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
 		return
 	}
 
-	// Clear state cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "oauth_state",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
+	// Check if state has expired (5 minutes)
+	if time.Since(createdAt) > 5*time.Minute {
+		log.Printf("❌ State expired: %s (age: %v)", state, time.Since(createdAt))
+		delete(oauthStates, state)
+		http.Error(w, "State parameter expired", http.StatusBadRequest)
+		return
+	}
+
+	// Debug logging
+	log.Printf("🔍 OAuth Callback State Validation:")
+	log.Printf("   URL state:     %s (len=%d)", state, len(state))
+	log.Printf("   Server state:  exists=%v, age=%v", exists, time.Since(createdAt))
+	log.Printf("   ✅ State validated successfully")
+
+	// Remove used state (one-time use)
+	delete(oauthStates, state)
 
 	// Get authorization code
 	code := r.URL.Query().Get("code")

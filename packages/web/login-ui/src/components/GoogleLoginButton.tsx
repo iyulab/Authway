@@ -38,7 +38,8 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         params.append('client_id', clientId)
       }
 
-      const googleAuthUrl = `/auth/google/login?${params.toString()}`
+      // Use backend API URL instead of relative path
+      const googleAuthUrl = `${import.meta.env.VITE_API_URL}/auth/google/login?${params.toString()}`
       window.location.href = googleAuthUrl
 
     } catch (error) {

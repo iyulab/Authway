@@ -25,14 +25,14 @@ func NewClient(adminURL string) *Client {
 
 // OAuth2 Client Management
 type OAuth2Client struct {
-	ClientID      string   `json:"client_id"`
-	ClientName    string   `json:"client_name"`
-	ClientSecret  string   `json:"client_secret,omitempty"`
-	RedirectUris  []string `json:"redirect_uris"`
-	GrantTypes    []string `json:"grant_types"`
-	ResponseTypes []string `json:"response_types"`
-	Scope         string   `json:"scope"`
-	Public        bool     `json:"token_endpoint_auth_method"`
+	ClientID                string   `json:"client_id"`
+	ClientName              string   `json:"client_name"`
+	ClientSecret            string   `json:"client_secret,omitempty"`
+	RedirectUris            []string `json:"redirect_uris"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	Scope                   string   `json:"scope"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
 func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error) {
@@ -160,8 +160,8 @@ type AcceptLoginRequest struct {
 	Subject     string                 `json:"subject"`
 	Remember    bool                   `json:"remember"`
 	RememberFor int                    `json:"remember_for"`
-	ACR         string                 `json:"acr"`
-	Context     map[string]interface{} `json:"context"`
+	ACR         string                 `json:"acr,omitempty"`
+	Context     map[string]interface{} `json:"context,omitempty"`
 }
 
 type LoginResponse struct {
@@ -195,6 +195,10 @@ func (c *Client) AcceptLoginRequest(challenge string, body *AcceptLoginRequest) 
 		return nil, err
 	}
 
+	// Debug: log the request
+	fmt.Printf("🔍 Hydra AcceptLoginRequest body: %s\n", string(data))
+	fmt.Printf("🔍 Hydra AcceptLoginRequest challenge (first 50 chars): %.50s\n", challenge)
+
 	req, err := http.NewRequest(
 		http.MethodPut,
 		fmt.Sprintf("%s/admin/oauth2/auth/requests/login/accept?challenge=%s", c.AdminURL, challenge),
@@ -211,9 +215,24 @@ func (c *Client) AcceptLoginRequest(challenge string, body *AcceptLoginRequest) 
 	}
 	defer resp.Body.Close()
 
+	// Read response body for proper error handling
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Debug: log the response
+	fmt.Printf("🔍 Hydra AcceptLoginRequest response status: %d\n", resp.StatusCode)
+	fmt.Printf("🔍 Hydra AcceptLoginRequest response body: %s\n", string(bodyBytes))
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hydra accept login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &loginResp); err != nil {
+		return nil, fmt.Errorf("failed to decode login response: %w, body: %s", err, string(bodyBytes))
 	}
 
 	return &loginResp, nil
@@ -246,9 +265,20 @@ func (c *Client) RejectLoginRequest(challenge string, error_code, error_descript
 	}
 	defer resp.Body.Close()
 
+	// Read response body for proper error handling
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hydra reject login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &loginResp); err != nil {
+		return nil, fmt.Errorf("failed to decode login response: %w, body: %s", err, string(bodyBytes))
 	}
 
 	return &loginResp, nil
@@ -268,12 +298,16 @@ type ConsentRequest struct {
 }
 
 type AcceptConsentRequest struct {
-	GrantScope    []string               `json:"grant_scope"`
-	GrantAudience []string               `json:"grant_audience"`
-	Remember      bool                   `json:"remember"`
-	RememberFor   int                    `json:"remember_for"`
-	HandledAt     time.Time              `json:"handled_at"`
-	Session       map[string]interface{} `json:"session"`
+	GrantScope               []string        `json:"grant_scope"`
+	GrantAccessTokenAudience []string        `json:"grant_access_token_audience,omitempty"`
+	Remember                 bool            `json:"remember"`
+	RememberFor              int             `json:"remember_for"`
+	Session                  *ConsentSession `json:"session,omitempty"`
+}
+
+type ConsentSession struct {
+	AccessToken map[string]interface{} `json:"access_token,omitempty"`
+	IDToken     map[string]interface{} `json:"id_token,omitempty"`
 }
 
 func (c *Client) GetConsentRequest(challenge string) (*ConsentRequest, error) {
@@ -285,9 +319,20 @@ func (c *Client) GetConsentRequest(challenge string) (*ConsentRequest, error) {
 	}
 	defer resp.Body.Close()
 
+	// Read response body for proper error handling
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hydra get consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var consentReq ConsentRequest
-	if err := json.NewDecoder(resp.Body).Decode(&consentReq); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &consentReq); err != nil {
+		return nil, fmt.Errorf("failed to decode consent request: %w, body: %s", err, string(bodyBytes))
 	}
 
 	return &consentReq, nil
@@ -298,6 +343,9 @@ func (c *Client) AcceptConsentRequest(challenge string, body *AcceptConsentReque
 	if err != nil {
 		return nil, err
 	}
+
+	// Debug: log the request body
+	fmt.Printf("🔍 Hydra AcceptConsentRequest body: %s\n", string(data))
 
 	req, err := http.NewRequest(
 		http.MethodPut,
@@ -315,9 +363,23 @@ func (c *Client) AcceptConsentRequest(challenge string, body *AcceptConsentReque
 	}
 	defer resp.Body.Close()
 
+	// Read response body for proper error handling
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Debug: log the response
+	fmt.Printf("🔍 Hydra response status: %d, body: %s\n", resp.StatusCode, string(bodyBytes))
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hydra accept consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var consentResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&consentResp); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &consentResp); err != nil {
+		return nil, fmt.Errorf("failed to decode consent response: %w, body: %s", err, string(bodyBytes))
 	}
 
 	return &consentResp, nil
@@ -350,9 +412,20 @@ func (c *Client) RejectConsentRequest(challenge string, error_code, error_descri
 	}
 	defer resp.Body.Close()
 
+	// Read response body for proper error handling
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("hydra reject consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var consentResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&consentResp); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &consentResp); err != nil {
+		return nil, fmt.Errorf("failed to decode consent response: %w, body: %s", err, string(bodyBytes))
 	}
 
 	return &consentResp, nil

@@ -143,6 +143,143 @@ if (-not (Ensure-PortFree -Port 8080 -ServiceName "Backend API")) {
 $backendPath = Join-Path $PSScriptRoot "src\server"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host '🔧 Authway Backend Server' -ForegroundColor Cyan; Write-Host ''; go run cmd/main.go"
 
+# Wait for backend port to be listening
+Write-Host "⏳ Waiting for backend (port 8080) to start..." -ForegroundColor Yellow
+$maxAttempts = 20
+$attempt = 0
+$backendReady = $false
+
+while ($attempt -lt $maxAttempts) {
+    $attempt++
+
+    # Check if port 8080 is listening
+    $portCheck = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+    if ($portCheck) {
+        Write-Host "✓ Backend port is listening (took ~$attempt seconds)" -ForegroundColor Green
+        $backendReady = $true
+        # Give it 1 more second to fully initialize
+        Start-Sleep -Seconds 1
+        break
+    }
+
+    Write-Host "  [$attempt/$maxAttempts] Waiting..." -ForegroundColor Gray
+    Start-Sleep -Seconds 1
+}
+
+if (-not $backendReady) {
+    Write-Host ""
+    Write-Host "⚠️  Backend did not start after $maxAttempts seconds" -ForegroundColor Yellow
+    Write-Host "   Check the backend terminal window for errors" -ForegroundColor Gray
+    Write-Host "   Skipping client registration (you can run .\samples\setup-clients.ps1 manually)" -ForegroundColor Gray
+}
+Write-Host ""
+
+# Register sample OAuth clients
+if ($backendReady) {
+    Write-Host "🔧 Registering sample OAuth clients..." -ForegroundColor Yellow
+
+    # Fetch tenant ID
+    try {
+        $tenantsResponse = Invoke-WebRequest -Uri "http://localhost:8080/api/v1/tenants" -Method GET -UseBasicParsing -ErrorAction Stop
+        $tenantsData = $tenantsResponse.Content | ConvertFrom-Json
+
+        # API returns array directly, not wrapped in {data: [...]}
+        if ($tenantsData.Count -eq 0) {
+            Write-Host "  ⚠️  No tenant found, skipping client registration" -ForegroundColor Yellow
+        } else {
+            $TENANT_ID = $tenantsData[0].id
+            Write-Host "  ✓ Found tenant: $TENANT_ID" -ForegroundColor Green
+
+            # Sample services configuration
+            $services = @(
+                @{
+                    Name = "AppleService"
+                    ClientID = "apple-service-client"
+                    ClientSecret = "apple-service-secret"
+                    RedirectURI = "http://localhost:9001/callback"
+                    Icon = "🍎"
+                },
+                @{
+                    Name = "BananaService"
+                    ClientID = "banana-service-client"
+                    ClientSecret = "banana-service-secret"
+                    RedirectURI = "http://localhost:9002/callback"
+                    Icon = "🍌"
+                },
+                @{
+                    Name = "ChocolateService"
+                    ClientID = "chocolate-service-client"
+                    ClientSecret = "chocolate-service-secret"
+                    RedirectURI = "http://localhost:9003/callback"
+                    Icon = "🍫"
+                }
+            )
+
+            # Register each service
+            foreach ($service in $services) {
+                Write-Host "  $($service.Icon) $($service.Name)..." -NoNewline
+
+                # Register in Authway database
+                $clientData = @{
+                    tenant_id = $TENANT_ID
+                    client_id = $service.ClientID
+                    client_secret = $service.ClientSecret
+                    name = $service.Name
+                    description = "Sample service for testing Authway OAuth 2.0 integration"
+                    redirect_uris = @($service.RedirectURI)
+                    grant_types = @("authorization_code", "refresh_token")
+                    scopes = @("openid", "profile", "email")
+                    public = $false
+                }
+                $jsonData = $clientData | ConvertTo-Json
+
+                try {
+                    $response = Invoke-WebRequest -Uri "http://localhost:8080/api/v1/clients" -Method POST -ContentType "application/json" -Body $jsonData -UseBasicParsing -ErrorAction Stop
+                    Write-Host " ✓ Authway" -NoNewline -ForegroundColor Green
+                } catch {
+                    if ($_.Exception.Message -match "409" -or $_.Exception.Message -match "already exists") {
+                        Write-Host " ✓ Authway(exists)" -NoNewline -ForegroundColor Yellow
+                    } else {
+                        Write-Host " ✗ Authway" -NoNewline -ForegroundColor Red
+                    }
+                }
+
+                # Register in Hydra
+                $hydraData = @{
+                    client_id = $service.ClientID
+                    client_secret = $service.ClientSecret
+                    client_name = $service.Name
+                    grant_types = @("authorization_code", "refresh_token")
+                    response_types = @("code")
+                    redirect_uris = @($service.RedirectURI)
+                    scope = "openid profile email"
+                }
+                $hydraJson = $hydraData | ConvertTo-Json
+
+                try {
+                    $hydraResponse = Invoke-WebRequest -Uri "http://localhost:4445/admin/clients" -Method POST -ContentType "application/json" -Body $hydraJson -UseBasicParsing -ErrorAction Stop
+                    Write-Host " ✓ Hydra" -ForegroundColor Green
+                } catch {
+                    if ($_.Exception.Message -match "already exists") {
+                        Write-Host " ✓ Hydra(exists)" -ForegroundColor Yellow
+                    } else {
+                        Write-Host " ✗ Hydra" -ForegroundColor Red
+                    }
+                }
+            }
+
+            Write-Host "  ✓ Client registration complete!" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  ⚠️  Failed to register clients: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "     You can manually run: .\samples\setup-clients.ps1" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "⚠️  Backend not ready, skipping client registration" -ForegroundColor Yellow
+    Write-Host "   You can manually run later: .\samples\setup-clients.ps1" -ForegroundColor Gray
+}
+Write-Host ""
+
 Start-Sleep -Seconds 2
 
 # Start frontend in new terminal

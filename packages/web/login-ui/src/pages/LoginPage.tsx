@@ -65,6 +65,17 @@ const LoginPage: React.FC = () => {
     fetch(`${import.meta.env.VITE_API_URL}/login?login_challenge=${challenge}`)
       .then(res => res.json())
       .then(data => {
+        // Handle SSO auto-login or session cleared - both need redirect
+        if (data.redirect_to) {
+          if (data.sso) {
+            console.log('SSO auto-login, redirecting to:', data.redirect_to)
+          } else if (data.session_cleared) {
+            console.log('Session cleared, redirecting to:', data.redirect_to)
+          }
+          window.location.href = data.redirect_to
+          return
+        }
+
         if (data.error) {
           setError(data.error)
         } else {

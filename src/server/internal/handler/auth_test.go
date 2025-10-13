@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"authway/src/server/internal/hydra"
+	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -83,6 +85,56 @@ func (m *MockUserService) UpdateLastLogin(id uuid.UUID) error {
 	return args.Error(0)
 }
 
+// Mock client service
+type MockClientService struct {
+	mock.Mock
+}
+
+func (m *MockClientService) Create(tenantID uuid.UUID, req *client.CreateClientRequest) (*client.Client, error) {
+	args := m.Called(tenantID, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*client.Client), args.Error(1)
+}
+
+func (m *MockClientService) GetByID(id uuid.UUID) (*client.Client, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*client.Client), args.Error(1)
+}
+
+func (m *MockClientService) GetByClientID(clientID string) (*client.Client, error) {
+	args := m.Called(clientID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*client.Client), args.Error(1)
+}
+
+func (m *MockClientService) Update(id uuid.UUID, req *client.UpdateClientRequest) (*client.Client, error) {
+	args := m.Called(id, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*client.Client), args.Error(1)
+}
+
+func (m *MockClientService) Delete(id uuid.UUID) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *MockClientService) List(tenantID uuid.UUID, limit, offset int) ([]*client.Client, int64, error) {
+	args := m.Called(tenantID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*client.Client), args.Get(1).(int64), args.Error(2)
+}
+
 // Mock hydra client
 type MockHydraClient struct {
 	mock.Mock
@@ -140,7 +192,7 @@ func TestNewAuthHandler(t *testing.T) {
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
 
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, mockUserService, handler.userService)
@@ -151,7 +203,7 @@ func TestAuthHandler_LoginPage(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Get("/login", handler.LoginPage)
 
@@ -257,7 +309,7 @@ func TestAuthHandler_Login(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Post("/login", handler.Login)
 
@@ -443,7 +495,7 @@ func TestAuthHandler_ConsentPage(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Get("/consent", handler.ConsentPage)
 
@@ -566,7 +618,7 @@ func TestAuthHandler_Consent(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Post("/consent", handler.Consent)
 
@@ -665,7 +717,7 @@ func TestAuthHandler_RejectConsent(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Post("/consent/reject", handler.RejectConsent)
 
@@ -741,7 +793,7 @@ func TestAuthHandler_Register(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Post("/register", handler.Register)
 
@@ -873,7 +925,7 @@ func TestAuthHandler_Profile(t *testing.T) {
 	app := fiber.New()
 	mockUserService := &MockUserService{}
 	mockHydraClient := &MockHydraClient{}
-	handler := NewAuthHandler(mockUserService, mockHydraClient)
+	handler := NewAuthHandler(mockUserService, &MockClientService{}, mockHydraClient, zap.NewNop())
 
 	app.Get("/profile/:id", handler.Profile)
 

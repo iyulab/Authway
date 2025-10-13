@@ -16,9 +16,9 @@ import (
 	"authway/src/server/pkg/admin"
 	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/email"
+	adminMiddleware "authway/src/server/pkg/middleware"
 	"authway/src/server/pkg/tenant"
 	"authway/src/server/pkg/user"
-	adminMiddleware "authway/src/server/pkg/middleware"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -145,7 +145,7 @@ func main() {
 	})
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, clientService, hydraClient)
+	authHandler := handler.NewAuthHandler(userService, clientService, hydraClient, zapLogger)
 	socialHandler := handler.NewSocialHandler(googleService, userService, hydraClient, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)

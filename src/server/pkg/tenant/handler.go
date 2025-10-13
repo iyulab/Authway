@@ -30,11 +30,11 @@ func (h *Handler) RegisterRoutes(app *fiber.App, adminMiddleware fiber.Handler) 
 	// Apply admin middleware to all routes
 	api.Use(adminMiddleware)
 
-	api.Post("/", h.CreateTenant)       // POST /api/v1/tenants
-	api.Get("/", h.ListTenants)         // GET /api/v1/tenants
-	api.Get("/:id", h.GetTenant)        // GET /api/v1/tenants/:id
-	api.Put("/:id", h.UpdateTenant)     // PUT /api/v1/tenants/:id
-	api.Delete("/:id", h.DeleteTenant)  // DELETE /api/v1/tenants/:id
+	api.Post("/", h.CreateTenant)      // POST /api/v1/tenants
+	api.Get("/", h.ListTenants)        // GET /api/v1/tenants
+	api.Get("/:id", h.GetTenant)       // GET /api/v1/tenants/:id
+	api.Put("/:id", h.UpdateTenant)    // PUT /api/v1/tenants/:id
+	api.Delete("/:id", h.DeleteTenant) // DELETE /api/v1/tenants/:id
 }
 
 // CreateTenant creates a new tenant

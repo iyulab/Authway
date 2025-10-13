@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -24,6 +25,77 @@ type OAuthConfig struct {
 	TokenURL     string
 	UserInfoURL  string
 	Scopes       []string
+}
+
+// StateStore provides server-side OAuth state management
+// IMPORTANT: Use server-side state storage instead of cookies to avoid SameSite issues
+// In production, replace with Redis or similar distributed storage
+type StateStore struct {
+	mu     sync.RWMutex
+	states map[string]*StateData
+}
+
+// StateData holds OAuth state information with expiration
+type StateData struct {
+	Value     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Metadata  map[string]string // Store login_challenge, client_id, etc.
+}
+
+// NewStateStore creates a new server-side state store
+func NewStateStore() *StateStore {
+	return &StateStore{
+		states: make(map[string]*StateData),
+	}
+}
+
+// Store saves state data with automatic expiration (default: 15 minutes)
+func (s *StateStore) Store(state string, metadata map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	s.states[state] = &StateData{
+		Value:     state,
+		CreatedAt: now,
+		ExpiresAt: now.Add(15 * time.Minute),
+		Metadata:  metadata,
+	}
+}
+
+// Retrieve fetches and deletes state data (one-time use)
+func (s *StateStore) Retrieve(state string) (*StateData, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, exists := s.states[state]
+	if !exists {
+		return nil, false
+	}
+
+	// Check expiration
+	if time.Now().After(data.ExpiresAt) {
+		delete(s.states, state)
+		return nil, false
+	}
+
+	// One-time use: delete after retrieval
+	delete(s.states, state)
+	return data, true
+}
+
+// CleanExpired removes expired states (call periodically)
+func (s *StateStore) CleanExpired() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	for key, data := range s.states {
+		if now.After(data.ExpiresAt) {
+			delete(s.states, key)
+		}
+	}
 }
 
 // UserInfo represents user profile information

@@ -14,17 +14,17 @@ import (
 // Each tenant has independent users and applications
 // SSO is automatic within a tenant, isolated between tenants
 type Tenant struct {
-	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
-	Name        string         `json:"name" gorm:"not null"`
-	Slug        string         `json:"slug" gorm:"uniqueIndex;not null"`
-	Description string         `json:"description"`
-	Settings    TenantSettings `json:"settings" gorm:"type:jsonb"`
-	Logo        string         `json:"logo"`
-	PrimaryColor string        `json:"primary_color" gorm:"default:#4F46E5"`
-	Active      bool           `json:"active" gorm:"default:true"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
+	Name         string         `json:"name" gorm:"not null"`
+	Slug         string         `json:"slug" gorm:"uniqueIndex;not null"`
+	Description  string         `json:"description"`
+	Settings     TenantSettings `json:"settings" gorm:"type:jsonb"`
+	Logo         string         `json:"logo"`
+	PrimaryColor string         `json:"primary_color" gorm:"default:#4F46E5"`
+	Active       bool           `json:"active" gorm:"default:true"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 // TenantSettings contains tenant-specific configuration
@@ -78,15 +78,15 @@ func (t *Tenant) BeforeCreate(tx *gorm.DB) error {
 
 // PublicTenant returns tenant data safe for public consumption
 type PublicTenant struct {
-	ID           uuid.UUID      `json:"id"`
-	Name         string         `json:"name"`
-	Slug         string         `json:"slug"`
-	Description  string         `json:"description"`
-	Logo         string         `json:"logo"`
-	PrimaryColor string         `json:"primary_color"`
-	Active       bool           `json:"active"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID           uuid.UUID `json:"id"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug"`
+	Description  string    `json:"description"`
+	Logo         string    `json:"logo"`
+	PrimaryColor string    `json:"primary_color"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ToPublic converts Tenant to PublicTenant

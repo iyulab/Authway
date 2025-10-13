@@ -102,8 +102,8 @@ func (c *Client) ToPublic() PublicClient {
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
 	TenantID     string   `json:"tenant_id" validate:"required,uuid"` // Required!
-	ClientID     string   `json:"client_id"`                           // Optional: if provided, use fixed client_id
-	ClientSecret string   `json:"client_secret"`                       // Optional: if provided, use fixed client_secret
+	ClientID     string   `json:"client_id"`                          // Optional: if provided, use fixed client_id
+	ClientSecret string   `json:"client_secret"`                      // Optional: if provided, use fixed client_secret
 	Name         string   `json:"name" validate:"required"`
 	Description  string   `json:"description"`
 	Website      string   `json:"website" validate:"omitempty,url"`
