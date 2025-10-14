@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 
 	"authway/src/server/internal/config"
@@ -9,11 +10,20 @@ import (
 )
 
 func ConnectRedis(cfg config.RedisConfig) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password: cfg.Password,
 		DB:       cfg.DB,
-	})
+	}
+
+	// Enable TLS for Azure Redis
+	if cfg.TLSEnabled {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
 
 	// Test connection
 	ctx := context.Background()

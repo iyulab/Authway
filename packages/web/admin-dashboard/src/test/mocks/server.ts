@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { rest } from 'msw'
+import { http, HttpResponse } from 'msw'
 
 // Mock data
 const mockUser = {
@@ -58,154 +58,149 @@ const mockClients = [
 
 export const handlers = [
   // Auth endpoints
-  rest.post('http://localhost:8080/auth/login', (req, res, ctx) => {
-    return res(
-      ctx.json({
-        user: mockUser,
-        tokens: {
-          access_token: 'mock-admin-token'
-        }
-      })
-    )
+  http.post('http://localhost:8080/auth/login', () => {
+    return HttpResponse.json({
+      user: mockUser,
+      tokens: {
+        access_token: 'mock-admin-token'
+      }
+    })
   }),
 
-  rest.get('http://localhost:8080/profile/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.get('http://localhost:8080/profile/:id', ({ params }) => {
+    const { id } = params
     const user = mockUsers.find(u => u.id === id)
     if (user) {
-      return res(ctx.json(user))
+      return HttpResponse.json(user)
     }
-    return res(ctx.status(404), ctx.json({ error: 'User not found' }))
+    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
   }),
 
   // Users API
-  rest.get('http://localhost:8080/api/users', (req, res, ctx) => {
-    const limit = parseInt(req.url.searchParams.get('limit') || '10')
-    const offset = parseInt(req.url.searchParams.get('offset') || '0')
+  http.get('http://localhost:8080/api/users', ({ request }) => {
+    const url = new URL(request.url)
+    const limit = parseInt(url.searchParams.get('limit') || '10')
+    const offset = parseInt(url.searchParams.get('offset') || '0')
 
     const paginatedUsers = mockUsers.slice(offset, offset + limit)
 
-    return res(
-      ctx.json({
-        users: paginatedUsers,
-        total: mockUsers.length,
-        limit,
-        offset
-      })
-    )
+    return HttpResponse.json({
+      users: paginatedUsers,
+      total: mockUsers.length,
+      limit,
+      offset
+    })
   }),
 
-  rest.get('http://localhost:8080/api/users/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.get('http://localhost:8080/api/users/:id', ({ params }) => {
+    const { id } = params
     const user = mockUsers.find(u => u.id === id)
     if (user) {
-      return res(ctx.json({ user }))
+      return HttpResponse.json({ user })
     }
-    return res(ctx.status(404), ctx.json({ error: 'User not found' }))
+    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
   }),
 
-  rest.put('http://localhost:8080/api/users/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.put('http://localhost:8080/api/users/:id', async ({ params, request }) => {
+    const { id } = params
+    const body = await request.json()
     const userIndex = mockUsers.findIndex(u => u.id === id)
     if (userIndex !== -1) {
-      mockUsers[userIndex] = { ...mockUsers[userIndex], ...req.body }
-      return res(ctx.json({ message: 'User updated', user: mockUsers[userIndex] }))
+      mockUsers[userIndex] = { ...mockUsers[userIndex], ...body }
+      return HttpResponse.json({ message: 'User updated', user: mockUsers[userIndex] })
     }
-    return res(ctx.status(404), ctx.json({ error: 'User not found' }))
+    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
   }),
 
-  rest.delete('http://localhost:8080/api/users/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.delete('http://localhost:8080/api/users/:id', ({ params }) => {
+    const { id } = params
     const userIndex = mockUsers.findIndex(u => u.id === id)
     if (userIndex !== -1) {
       mockUsers.splice(userIndex, 1)
-      return res(ctx.json({ message: 'User deleted' }))
+      return HttpResponse.json({ message: 'User deleted' })
     }
-    return res(ctx.status(404), ctx.json({ error: 'User not found' }))
+    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
   }),
 
   // Clients API
-  rest.get('http://localhost:8080/api/clients', (req, res, ctx) => {
-    const limit = parseInt(req.url.searchParams.get('limit') || '10')
-    const offset = parseInt(req.url.searchParams.get('offset') || '0')
+  http.get('http://localhost:8080/api/clients', ({ request }) => {
+    const url = new URL(request.url)
+    const limit = parseInt(url.searchParams.get('limit') || '10')
+    const offset = parseInt(url.searchParams.get('offset') || '0')
 
     const paginatedClients = mockClients.slice(offset, offset + limit)
 
-    return res(
-      ctx.json({
-        clients: paginatedClients,
-        total: mockClients.length,
-        limit,
-        offset
-      })
-    )
+    return HttpResponse.json({
+      clients: paginatedClients,
+      total: mockClients.length,
+      limit,
+      offset
+    })
   }),
 
-  rest.get('http://localhost:8080/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.get('http://localhost:8080/api/clients/:id', ({ params }) => {
+    const { id } = params
     const client = mockClients.find(c => c.id === id)
     if (client) {
-      return res(ctx.json({ client }))
+      return HttpResponse.json({ client })
     }
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }))
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
   }),
 
-  rest.post('http://localhost:8080/api/clients', (req, res, ctx) => {
+  http.post('http://localhost:8080/api/clients', async ({ request }) => {
+    const body = await request.json()
     const newClient = {
       id: String(mockClients.length + 1),
       client_id: `client-${Date.now()}`,
-      ...req.body,
+      ...body,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
     mockClients.push(newClient)
-    return res(
-      ctx.json({
-        message: 'Client created',
-        client: newClient,
-        credentials: {
-          client_id: newClient.client_id,
-          client_secret: 'mock-secret'
-        }
-      })
-    )
+    return HttpResponse.json({
+      message: 'Client created',
+      client: newClient,
+      credentials: {
+        client_id: newClient.client_id,
+        client_secret: 'mock-secret'
+      }
+    })
   }),
 
-  rest.put('http://localhost:8080/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.put('http://localhost:8080/api/clients/:id', async ({ params, request }) => {
+    const { id } = params
+    const body = await request.json()
     const clientIndex = mockClients.findIndex(c => c.id === id)
     if (clientIndex !== -1) {
-      mockClients[clientIndex] = { ...mockClients[clientIndex], ...req.body }
-      return res(ctx.json({ message: 'Client updated', client: mockClients[clientIndex] }))
+      mockClients[clientIndex] = { ...mockClients[clientIndex], ...body }
+      return HttpResponse.json({ message: 'Client updated', client: mockClients[clientIndex] })
     }
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }))
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
   }),
 
-  rest.delete('http://localhost:8080/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params
+  http.delete('http://localhost:8080/api/clients/:id', ({ params }) => {
+    const { id } = params
     const clientIndex = mockClients.findIndex(c => c.id === id)
     if (clientIndex !== -1) {
       mockClients.splice(clientIndex, 1)
-      return res(ctx.json({ message: 'Client deleted' }))
+      return HttpResponse.json({ message: 'Client deleted' })
     }
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }))
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
   }),
 
-  rest.post('http://localhost:8080/api/clients/:id/regenerate-secret', (req, res, ctx) => {
-    const { id } = req.params
+  http.post('http://localhost:8080/api/clients/:id/regenerate-secret', ({ params }) => {
+    const { id } = params
     const client = mockClients.find(c => c.id === id)
     if (client) {
-      return res(
-        ctx.json({
-          message: 'Client secret regenerated',
-          credentials: {
-            client_id: client.client_id,
-            client_secret: `new-secret-${Date.now()}`
-          }
-        })
-      )
+      return HttpResponse.json({
+        message: 'Client secret regenerated',
+        credentials: {
+          client_id: client.client_id,
+          client_secret: `new-secret-${Date.now()}`
+        }
+      })
     }
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }))
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
   })
 ]
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"authway/src/server/internal/config"
@@ -127,7 +128,7 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,http://localhost:3001,http://localhost:8080", // Allow Login UI (3001)
+		AllowOrigins:     strings.Join(cfg.CORS.AllowedOrigins, ","),
 		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token",
 		AllowCredentials: true,

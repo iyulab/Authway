@@ -1,7 +1,7 @@
 # Authway Backend - Multi-stage Production Dockerfile
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install dependencies for building with CGO (required for SQLite tests)
 RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev

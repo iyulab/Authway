@@ -1,5 +1,4 @@
 import React from 'react'
-import { useAuthStore } from '@/stores/auth'
 import {
   CogIcon,
   ServerIcon,
@@ -8,7 +7,14 @@ import {
 } from '@heroicons/react/24/outline'
 
 const SettingsPage: React.FC = () => {
-  const { user } = useAuthStore()
+  // TODO: Fetch user data from API
+  const user = {
+    first_name: 'Admin',
+    last_name: 'User',
+    email: 'admin@authway.com',
+    email_verified: true,
+    active: true
+  }
 
   const settingSections = [
     {

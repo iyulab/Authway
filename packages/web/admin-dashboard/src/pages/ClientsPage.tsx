@@ -11,9 +11,7 @@ import {
   EyeIcon,
   EyeSlashIcon,
   ClipboardDocumentIcon,
-  PencilIcon,
   TrashIcon,
-  CheckCircleIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline'
 
@@ -60,7 +58,6 @@ const ClientsPage: React.FC = () => {
     handleSubmit,
     formState: { errors },
     reset,
-    watch,
   } = useForm<CreateClientFormData>({
     resolver: zodResolver(createClientSchema),
     defaultValues: {
@@ -69,9 +66,6 @@ const ClientsPage: React.FC = () => {
       public: false,
     },
   })
-
-  const watchedGrantTypes = watch('grant_types')
-  const watchedScopes = watch('scopes')
 
   // 클라이언트 생성 뮤테이션
   const createClientMutation = useMutation({

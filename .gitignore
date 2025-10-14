@@ -186,3 +186,4 @@ redis_data/
 
 # Documentation artifacts
 claudedocs/
+deployments/

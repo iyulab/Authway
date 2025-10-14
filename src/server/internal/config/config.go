@@ -42,10 +42,11 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	Password   string `mapstructure:"password"`
+	DB         int    `mapstructure:"db"`
+	TLSEnabled bool   `mapstructure:"tls_enabled"`
 }
 
 type JWTConfig struct {
@@ -260,6 +261,7 @@ func setDefaults() {
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("redis.tls_enabled", false)
 
 	// JWT defaults
 	viper.SetDefault("jwt.access_token_secret", "your-secret-key-change-in-production")
