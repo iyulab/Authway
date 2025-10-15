@@ -34,13 +34,28 @@ func min(a, b int) int {
 	return b
 }
 
-// Login flow handler
+// LoginPageRequest for POST request body
+type LoginPageRequest struct {
+	LoginChallenge string `json:"login_challenge"`
+}
+
+// Login flow handler - supports both GET and POST
 func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
 	challenge := c.Query("login_challenge")
+
+	// If not in query, try POST body
+	if challenge == "" && c.Method() == "POST" {
+		var req LoginPageRequest
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.LoginChallenge
+		}
+	}
+
 	if challenge == "" {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "login_challenge parameter is required",
-			"hint":  "The login_challenge parameter must be included in the URL query string. This parameter is provided by Ory Hydra in the OAuth 2.0 authorization flow.",
+			"hint":  "The login_challenge parameter must be included in the URL query string or POST body. This parameter is provided by Ory Hydra in the OAuth 2.0 authorization flow.",
 			"docs":  "https://www.ory.sh/docs/hydra/guides/login",
 		})
 	}

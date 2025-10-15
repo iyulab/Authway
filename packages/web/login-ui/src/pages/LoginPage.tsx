@@ -62,7 +62,21 @@ const LoginPage: React.FC = () => {
       return
     }
 
-    fetch(`${import.meta.env.VITE_API_URL}/login?login_challenge=${challenge}`)
+    // Use POST if challenge is long (>1500 chars) to avoid HTTP 431 errors
+    const usePost = challenge.length > 1500
+    const fetchOptions = usePost
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login_challenge: challenge })
+        }
+      : { method: 'GET' }
+
+    const url = usePost
+      ? `${import.meta.env.VITE_API_URL}/login`
+      : `${import.meta.env.VITE_API_URL}/login?login_challenge=${challenge}`
+
+    fetch(url, fetchOptions)
       .then(res => res.json())
       .then(data => {
         // Handle SSO auto-login or session cleared - both need redirect
