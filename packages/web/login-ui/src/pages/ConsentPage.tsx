@@ -61,7 +61,16 @@ const ConsentPage: React.FC = () => {
       return
     }
 
-    fetch(`${import.meta.env.VITE_API_URL}/consent?consent_challenge=${challenge}`)
+    // Use POST to avoid HTTP 431 with long consent_challenge
+    fetch(`${import.meta.env.VITE_API_URL}/consent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        consent_challenge: challenge,
+      }),
+    })
       .then(res => res.json())
       .then(data => {
         if (data.error) {
@@ -84,7 +93,7 @@ const ConsentPage: React.FC = () => {
   // Accept consent mutation
   const acceptMutation = useMutation({
     mutationFn: async (): Promise<ConsentResponse> => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/consent`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/consent/accept`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,9 +125,15 @@ const ConsentPage: React.FC = () => {
   const rejectMutation = useMutation({
     mutationFn: async (): Promise<ConsentResponse> => {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/consent/reject?consent_challenge=${challenge}`,
+        `${import.meta.env.VITE_API_URL}/consent/reject`,
         {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            consent_challenge: challenge,
+          }),
         }
       )
 
