@@ -59,24 +59,46 @@ func NewSocialHandler(
 	}
 }
 
+// GoogleLoginRequest for POST request body
+type GoogleLoginRequest struct {
+	LoginChallenge string `json:"login_challenge"`
+	ClientID       string `json:"client_id"`
+}
+
 // GoogleLogin initiates Google OAuth flow
 func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
-	// Get login challenge from query parameters
-	// IMPORTANT: Make copies of query strings because Fiber reuses internal buffers
-	loginChallengeRaw := c.Query("login_challenge")
-	if loginChallengeRaw == "" {
+	var loginChallenge, clientID string
+
+	// Support both GET and POST methods to avoid HTTP 431 errors with long login_challenge
+	if c.Method() == "POST" {
+		// POST method: get parameters from body
+		var req GoogleLoginRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":             "invalid_request_body",
+				"error_description": "Failed to parse request body",
+			})
+		}
+		loginChallenge = req.LoginChallenge
+		clientID = req.ClientID
+	} else {
+		// GET method: get parameters from query string
+		// IMPORTANT: Make copies of query strings because Fiber reuses internal buffers
+		loginChallengeRaw := c.Query("login_challenge")
+		clientIDRaw := c.Query("client_id")
+		loginChallenge = string([]byte(loginChallengeRaw))
+		clientID = string([]byte(clientIDRaw))
+	}
+
+	// Validate login_challenge
+	if loginChallenge == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "missing_login_challenge",
 			"error_description": "login_challenge parameter is required for OAuth flow",
-			"hint":              "Include login_challenge in the URL: /auth/google/login?login_challenge=XXX&client_id=YYY",
-			"example":           "http://localhost:8080/auth/google/login?login_challenge=abc123&client_id=my-client",
+			"hint":              "Include login_challenge in the URL or POST body",
+			"example":           "POST /auth/google/login with body: {\"login_challenge\":\"...\",\"client_id\":\"...\"}",
 		})
 	}
-	loginChallenge := string([]byte(loginChallengeRaw)) // Create immutable copy
-
-	// Get client_id from query parameters (optional for hybrid OAuth)
-	clientIDRaw := c.Query("client_id")
-	clientID := string([]byte(clientIDRaw)) // Create immutable copy
 
 	// Generate state parameter for CSRF protection
 	stateBytes := make([]byte, 32)
@@ -140,6 +162,16 @@ func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 		zap.String("client_id", clientID),
 		zap.String("login_challenge", loginChallenge))
 
+	// For POST requests from fetch API, return JSON with redirect URL
+	// (Cannot use HTTP redirect due to CORS with cross-origin OAuth providers)
+	if c.Method() == "POST" {
+		return c.JSON(fiber.Map{
+			"redirect_url": authURL,
+			"state":        state,
+		})
+	}
+
+	// For GET requests (backward compatibility), use HTTP redirect
 	return c.Redirect(authURL, http.StatusTemporaryRedirect)
 }
 
@@ -319,7 +351,9 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		zap.String("provider", "google"),
 		zap.String("redirect_to", acceptResp.RedirectTo))
 
-	// Redirect to Hydra consent flow
+	// Hydra's AcceptLoginRequest returns a redirect_to URL that contains a login_verifier
+	// This URL should be redirected to (browser → Hydra → consent page)
+	// Hydra will then redirect to the consent page with the consent_challenge parameter
 	return c.Redirect(acceptResp.RedirectTo, http.StatusFound)
 }
 
