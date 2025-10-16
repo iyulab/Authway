@@ -51,6 +51,7 @@ export interface User {
 
 export interface Client {
   id: string
+  tenant_id: string
   client_id: string
   name: string
   description?: string
@@ -129,6 +130,7 @@ export const clientsApi = {
     api.get<{ client: Client }>(`/api/v1/clients/${id}`),
 
   create: (data: {
+    tenant_id: string
     name: string
     description?: string
     website?: string
@@ -151,17 +153,14 @@ export const clientsApi = {
 }
 
 // Tenants API
+// Note: Admin API Key authentication is currently disabled in development mode
+// When AUTHWAY_ADMIN_API_KEY is set in backend, update VITE_ADMIN_API_KEY in .env.production
 export const tenantsApi = {
   list: (params?: { limit?: number; offset?: number }) =>
-    api.get<Tenant[]>('/api/v1/tenants', {
-      params,
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
+    api.get<Tenant[]>('/api/v1/tenants', { params }),
 
   get: (id: string) =>
-    api.get<Tenant>(`/api/v1/tenants/${id}`, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
+    api.get<Tenant>(`/api/v1/tenants/${id}`),
 
   create: (data: {
     name: string
@@ -169,17 +168,11 @@ export const tenantsApi = {
     description?: string
     settings?: Record<string, any>
   }) =>
-    api.post<Tenant>('/api/v1/tenants', data, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
+    api.post<Tenant>('/api/v1/tenants', data),
 
   update: (id: string, data: Partial<Tenant>) =>
-    api.put<Tenant>(`/api/v1/tenants/${id}`, data, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
+    api.put<Tenant>(`/api/v1/tenants/${id}`, data),
 
   delete: (id: string) =>
-    api.delete<void>(`/api/v1/tenants/${id}`, {
-      headers: { 'X-Admin-API-Key': import.meta.env.VITE_ADMIN_API_KEY || '' }
-    }),
+    api.delete<void>(`/api/v1/tenants/${id}`),
 }

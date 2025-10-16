@@ -1,0 +1,108 @@
+@model ProfileViewModel
+@{
+    ViewData["Title"] = "Profile";
+}
+
+<div class="container">
+    <h1 class="mb-4">👤 User Profile</h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Authentication Information</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">Username:</dt>
+                <dd class="col-sm-9">@Model.UserName</dd>
+
+                <dt class="col-sm-3">Authenticated:</dt>
+                <dd class="col-sm-9">
+                    @if (Model.IsAuthenticated)
+                    {
+                        <span class="badge bg-success">Yes</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger">No</span>
+                    }
+                </dd>
+
+                <dt class="col-sm-3">Authentication Type:</dt>
+                <dd class="col-sm-9">@Model.AuthenticationType</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">User Claims</h5>
+        </div>
+        <div class="card-body">
+            @if (Model.Claims.Any())
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Claim Type</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var claim in Model.Claims)
+                        {
+                            <tr>
+                                <td><code>@claim.Key</code></td>
+                                <td>@claim.Value</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No claims available.</p>
+            }
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Access Tokens</h5>
+        </div>
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(Model.AccessToken))
+            {
+                <div class="mb-3">
+                    <label class="form-label"><strong>Access Token:</strong></label>
+                    <textarea class="form-control font-monospace" rows="3" readonly>@Model.AccessToken</textarea>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(Model.IdToken))
+            {
+                <div class="mb-3">
+                    <label class="form-label"><strong>ID Token:</strong></label>
+                    <textarea class="form-control font-monospace" rows="3" readonly>@Model.IdToken</textarea>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(Model.RefreshToken))
+            {
+                <div class="mb-3">
+                    <label class="form-label"><strong>Refresh Token:</strong></label>
+                    <textarea class="form-control font-monospace" rows="2" readonly>@Model.RefreshToken</textarea>
+                </div>
+            }
+
+            @if (string.IsNullOrEmpty(Model.AccessToken) && string.IsNullOrEmpty(Model.IdToken))
+            {
+                <p class="text-muted">No tokens available.</p>
+            }
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Back to Home</a>
+        <a class="btn btn-outline-danger ms-2" asp-controller="Home" asp-action="Logout">Logout</a>
+    </div>
+</div>

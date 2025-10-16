@@ -107,7 +107,7 @@ func (t *Tenant) ToPublic() PublicTenant {
 // CreateTenantRequest represents the request to create a new tenant
 type CreateTenantRequest struct {
 	Name         string         `json:"name" validate:"required,min=2,max=255"`
-	Slug         string         `json:"slug" validate:"required,min=2,max=100,alphanum"`
+	Slug         string         `json:"slug" validate:"required,min=2,max=100"`
 	Description  string         `json:"description" validate:"max=1000"`
 	Settings     TenantSettings `json:"settings"`
 	Logo         string         `json:"logo" validate:"omitempty,url"`

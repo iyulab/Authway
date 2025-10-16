@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"authway/src/server/internal/hydra"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -24,14 +25,16 @@ type Service interface {
 }
 
 type service struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db          *gorm.DB
+	logger      *zap.Logger
+	hydraClient *hydra.Client
 }
 
-func NewService(db *gorm.DB, logger *zap.Logger) Service {
+func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) Service {
 	return &service{
-		db:     db,
-		logger: logger,
+		db:          db,
+		logger:      logger,
+		hydraClient: hydraClient,
 	}
 }
 
@@ -115,12 +118,40 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		return nil, nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
+	// Register client in Hydra
+	hydraClient := &hydra.OAuth2Client{
+		ClientID:                clientID,
+		ClientSecret:            clientSecret,
+		ClientName:              client.Name,
+		RedirectUris:            client.RedirectURIs,
+		GrantTypes:              client.GrantTypes,
+		ResponseTypes:           []string{"code"}, // Default to authorization code flow
+		Scope:                   strings.Join(client.Scopes, " "),
+		TokenEndpointAuthMethod: "client_secret_post",
+	}
+
+	// DEBUG: Log Hydra Client AdminURL before making request
+	s.logger.Info("🔍 DEBUG: About to call Hydra CreateOAuth2Client",
+		zap.String("hydra_admin_url", s.hydraClient.AdminURL),
+		zap.String("client_id", clientID))
+
+	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
+	if err != nil {
+		// Rollback database creation if Hydra registration fails
+		s.db.Delete(client)
+		s.logger.Error("Failed to register client in Hydra, rolled back database",
+			zap.Error(err),
+			zap.String("client_id", clientID),
+			zap.String("tenant_id", tenantID.String()))
+		return nil, nil, fmt.Errorf("failed to register client in Hydra: %w", err)
+	}
+
 	credentials := &ClientCredentials{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 	}
 
-	s.logger.Info("Client created successfully",
+	s.logger.Info("Client created successfully in database and Hydra",
 		zap.String("id", client.ID.String()),
 		zap.String("client_id", clientID),
 		zap.String("name", client.Name),
@@ -205,11 +236,47 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		return nil, fmt.Errorf("failed to update client: %w", err)
 	}
 
-	s.logger.Info("Client updated successfully", zap.String("id", client.ID.String()))
+	// Update client in Hydra
+	hydraUpdate := &hydra.OAuth2Client{
+		ClientID:                client.ClientID,
+		ClientSecret:            client.ClientSecret,
+		ClientName:              client.Name,
+		RedirectUris:            client.RedirectURIs,
+		GrantTypes:              client.GrantTypes,
+		ResponseTypes:           []string{"code"},
+		Scope:                   strings.Join(client.Scopes, " "),
+		TokenEndpointAuthMethod: "client_secret_post",
+	}
+
+	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
+	if errHydra != nil {
+		s.logger.Warn("Failed to update client in Hydra (database updated)",
+			zap.Error(errHydra),
+			zap.String("client_id", client.ClientID))
+		// Don't rollback database - Hydra update is best-effort
+	}
+
+	s.logger.Info("Client updated successfully in database and Hydra", zap.String("id", client.ID.String()))
 	return &client, nil
 }
 
 func (s *service) Delete(id uuid.UUID) error {
+	// Get client first to retrieve client_id for Hydra deletion
+	client, err := s.GetByID(id)
+	if err != nil {
+		return err
+	}
+
+	// Delete from Hydra first
+	err = s.hydraClient.DeleteOAuth2Client(client.ClientID)
+	if err != nil {
+		s.logger.Warn("Failed to delete client from Hydra (proceeding with database deletion)",
+			zap.Error(err),
+			zap.String("client_id", client.ClientID))
+		// Continue with database deletion even if Hydra deletion fails
+	}
+
+	// Delete from database
 	result := s.db.Delete(&Client{}, id)
 	if result.Error != nil {
 		s.logger.Error("Failed to delete client", zap.Error(result.Error), zap.String("id", id.String()))
@@ -220,7 +287,7 @@ func (s *service) Delete(id uuid.UUID) error {
 		return fmt.Errorf("client not found")
 	}
 
-	s.logger.Info("Client deleted successfully", zap.String("id", id.String()))
+	s.logger.Info("Client deleted successfully from database and Hydra", zap.String("id", id.String()))
 	return nil
 }
 
@@ -278,12 +345,32 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, error) {
 		return nil, fmt.Errorf("failed to regenerate client secret: %w", err)
 	}
 
+	// Update secret in Hydra
+	hydraUpdate := &hydra.OAuth2Client{
+		ClientID:                client.ClientID,
+		ClientSecret:            newSecret,
+		ClientName:              client.Name,
+		RedirectUris:            client.RedirectURIs,
+		GrantTypes:              client.GrantTypes,
+		ResponseTypes:           []string{"code"},
+		Scope:                   strings.Join(client.Scopes, " "),
+		TokenEndpointAuthMethod: "client_secret_post",
+	}
+
+	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
+	if errHydra != nil {
+		s.logger.Warn("Failed to update client secret in Hydra (database updated)",
+			zap.Error(errHydra),
+			zap.String("client_id", client.ClientID))
+		// Don't rollback - database update is primary
+	}
+
 	credentials := &ClientCredentials{
 		ClientID:     client.ClientID,
 		ClientSecret: newSecret,
 	}
 
-	s.logger.Info("Client secret regenerated successfully", zap.String("id", client.ID.String()))
+	s.logger.Info("Client secret regenerated successfully in database and Hydra", zap.String("id", client.ID.String()))
 	return credentials, nil
 }
 

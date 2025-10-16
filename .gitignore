@@ -185,5 +185,8 @@ postgres_data/
 redis_data/
 
 # Documentation artifacts
+.claude/
 claudedocs/
 deployments/
+
+.playwright-mcp/

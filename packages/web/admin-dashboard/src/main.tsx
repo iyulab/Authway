@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
+import { initializeAppInsights } from './utils/appInsights'
+
+// Initialize Application Insights (optional)
+initializeAppInsights()
 
 // Create a client
 const queryClient = new QueryClient({

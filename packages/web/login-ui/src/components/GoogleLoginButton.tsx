@@ -13,12 +13,14 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
   className = '',
   clientId,
 }) => {
+  // Force cache invalidation - 2025-10-16
   const [isLoading, setIsLoading] = useState(false)
 
   const handleGoogleLogin = async () => {
     if (disabled || isLoading) return
 
     setIsLoading(true)
+    console.log('[GoogleLogin] Button clicked - starting OAuth flow')
 
     try {
       // Get the current URL parameters to extract login_challenge
@@ -29,18 +31,34 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      // Redirect to Google OAuth with login_challenge and optional client_id
-      const params = new URLSearchParams({
-        login_challenge: loginChallenge,
+      console.log('[GoogleLogin] Using POST method to avoid HTTP 431')
+
+      // Use POST to avoid HTTP 431 errors with long login_challenge
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/google/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          login_challenge: loginChallenge,
+          client_id: clientId || '',
+        }),
+        credentials: 'include', // Required for cross-origin cookies (oauth_state)
       })
 
-      if (clientId) {
-        params.append('client_id', clientId)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Google login failed')
       }
 
-      // Use backend API URL instead of relative path
-      const googleAuthUrl = `${import.meta.env.VITE_API_URL}/auth/google/login?${params.toString()}`
-      window.location.href = googleAuthUrl
+      // Get the redirect URL from JSON response
+      const data = await response.json()
+      if (data.redirect_url) {
+        console.log('[GoogleLogin] Redirecting to Google OAuth')
+        window.location.href = data.redirect_url
+      } else {
+        throw new Error('No redirect URL in response')
+      }
 
     } catch (error) {
       console.error('Google login error:', error)

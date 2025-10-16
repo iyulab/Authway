@@ -33,6 +33,11 @@ const TenantsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
       setIsCreateModalOpen(false)
       setFormData({ name: '', slug: '', description: '' })
+      alert('테넌트가 생성되었습니다.')
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || '테넌트 생성에 실패했습니다.'
+      alert(`테넌트 생성 실패: ${errorMessage}`)
     },
   })
 
@@ -44,6 +49,11 @@ const TenantsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
       setIsEditModalOpen(false)
       setSelectedTenant(null)
+      alert('테넌트가 수정되었습니다.')
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || '테넌트 수정에 실패했습니다.'
+      alert(`테넌트 수정 실패: ${errorMessage}`)
     },
   })
 
@@ -52,6 +62,16 @@ const TenantsPage: React.FC = () => {
     mutationFn: (id: string) => tenantsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      alert('테넌트가 삭제되었습니다.')
+    },
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        alert('기본 테넌트는 삭제할 수 없습니다.')
+      } else if (error.response?.status === 409) {
+        alert('사용자 또는 클라이언트가 있는 테넌트는 삭제할 수 없습니다.')
+      } else {
+        alert('테넌트 삭제에 실패했습니다.')
+      }
     },
   })
 
@@ -61,6 +81,13 @@ const TenantsPage: React.FC = () => {
       tenantsApi.update(id, { active: !active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
+    },
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        alert('기본 테넌트는 비활성화할 수 없습니다.')
+      } else {
+        alert('테넌트 상태 변경에 실패했습니다.')
+      }
     },
   })
 
@@ -88,12 +115,30 @@ const TenantsPage: React.FC = () => {
   }
 
   const handleDelete = (tenant: Tenant) => {
-    if (window.confirm(`정말로 "${tenant.name}" 테넌트를 삭제하시겠습니까?`)) {
+    console.log('Delete button clicked for tenant:', tenant)
+
+    // Default tenant cannot be deleted
+    if (tenant.slug === 'default') {
+      alert('기본 테넌트는 삭제할 수 없습니다.')
+      return
+    }
+
+    const confirmed = window.confirm(`정말로 "${tenant.name}" 테넌트를 삭제하시겠습니까?`)
+    console.log('User confirmed deletion:', confirmed)
+
+    if (confirmed) {
+      console.log('Calling deleteMutation.mutate with id:', tenant.id)
       deleteMutation.mutate(tenant.id)
     }
   }
 
   const handleToggleActive = (tenant: Tenant) => {
+    // Default tenant cannot be deactivated
+    if (tenant.slug === 'default' && tenant.active) {
+      alert('기본 테넌트는 비활성화할 수 없습니다.')
+      return
+    }
+
     toggleActiveMutation.mutate({ id: tenant.id, active: tenant.active })
   }
 
@@ -184,14 +229,23 @@ const TenantsPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => handleToggleActive(tenant)}
-                          className="text-yellow-600 hover:text-yellow-900 mr-4"
+                          disabled={tenant.slug === 'default' && tenant.active}
+                          className={`mr-4 ${
+                            tenant.slug === 'default' && tenant.active
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-yellow-600 hover:text-yellow-900'
+                          }`}
                         >
                           {tenant.active ? '비활성화' : '활성화'}
                         </button>
                         <button
                           onClick={() => handleDelete(tenant)}
-                          className="text-red-600 hover:text-red-900"
                           disabled={tenant.slug === 'default'}
+                          className={
+                            tenant.slug === 'default'
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-900'
+                          }
                         >
                           삭제
                         </button>

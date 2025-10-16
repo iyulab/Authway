@@ -1,0 +1,61 @@
+@{
+    ViewData["Title"] = "Home";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome to Authway Sample</h1>
+    <p class="lead">ASP.NET Core application with Authway OAuth2/OIDC authentication</p>
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <div class="alert alert-success mt-4" role="alert">
+            <h4 class="alert-heading">✅ You are logged in!</h4>
+            <p>Welcome, <strong>@User.Identity.Name</strong>!</p>
+            <hr>
+            <p class="mb-0">
+                <a class="btn btn-primary" asp-controller="Home" asp-action="Profile">View Profile</a>
+                <a class="btn btn-outline-secondary ms-2" asp-controller="Home" asp-action="Logout">Logout</a>
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info mt-4" role="alert">
+            <h4 class="alert-heading">🔐 Authentication Demo</h4>
+            <p>This application demonstrates OAuth2/OpenID Connect authentication using Authway.</p>
+            <hr>
+            <p class="mb-0">
+                <a class="btn btn-primary btn-lg" asp-controller="Home" asp-action="Login">
+                    Login with Authway
+                </a>
+            </p>
+        </div>
+    }
+
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🔐 Secure Authentication</h5>
+                    <p class="card-text">OAuth2 and OpenID Connect authentication with PKCE for enhanced security.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">👤 User Profile</h5>
+                    <p class="card-text">Access user information and claims from the authentication provider.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🚀 Easy Integration</h5>
+                    <p class="card-text">Simple configuration with ASP.NET Core authentication middleware.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

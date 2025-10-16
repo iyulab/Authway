@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Authway Backend API 배포 스크립트
 # ============================================================
 # Docker 이미지를 빌드하고 Azure Container Apps에 배포합니다.
@@ -36,7 +36,7 @@ Push-Location $ScriptRoot
 try {
     if (-not $SkipBuild) {
         # Docker 이미지 이름
-        $ImageName = "$Registry.azurecr.io/authway-backend:$ImageTag"
+        $ImageName = "$Registry.azurecr.io/authway-api:$ImageTag"
 
         if ($UseAzureBuild) {
             # Azure Container Registry에서 빌드
@@ -47,7 +47,7 @@ try {
             az acr build `
                 --registry $Registry `
                 --resource-group $ResourceGroup `
-                --image "authway-backend:$ImageTag" `
+                --image "authway-api:$ImageTag" `
                 --file Dockerfile `
                 .
 
@@ -60,7 +60,7 @@ try {
             Write-Host "🔨 Docker 이미지 빌드 중..." -ForegroundColor Yellow
             Write-Host "  이미지: $ImageName" -ForegroundColor Gray
 
-            docker build -t "authway-backend:$ImageTag" -f Dockerfile .
+            docker build -t "authway-api:$ImageTag" -f Dockerfile .
             if ($LASTEXITCODE -ne 0) {
                 throw "Docker 빌드 실패"
             }
@@ -68,7 +68,7 @@ try {
             # 이미지 태깅
             Write-Host ""
             Write-Host "🏷️  이미지 태깅 중..." -ForegroundColor Yellow
-            docker tag "authway-backend:$ImageTag" $ImageName
+            docker tag "authway-api:$ImageTag" $ImageName
             if ($LASTEXITCODE -ne 0) {
                 throw "Docker 태깅 실패"
             }
@@ -93,7 +93,7 @@ try {
         Write-Host "✓ 이미지 빌드 및 푸시 완료" -ForegroundColor Green
     } else {
         Write-Host "⏭️  이미지 빌드 건너뜀 (--SkipBuild)" -ForegroundColor Yellow
-        $ImageName = "$Registry.azurecr.io/authway-backend:$ImageTag"
+        $ImageName = "$Registry.azurecr.io/authway-api:$ImageTag"
     }
 
     # Container App 업데이트

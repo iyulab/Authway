@@ -41,12 +41,17 @@ func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error)
 		return nil, err
 	}
 
+	// DEBUG: Log the AdminURL and full URL being used
+	fullURL := fmt.Sprintf("%s/admin/clients", c.AdminURL)
+	fmt.Printf("🔍 DEBUG Hydra Client: AdminURL='%s', FullURL='%s'\n", c.AdminURL, fullURL)
+
 	resp, err := c.client.Post(
-		fmt.Sprintf("%s/admin/clients", c.AdminURL),
+		fullURL,
 		"application/json",
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
+		fmt.Printf("❌ DEBUG Hydra Client: POST request failed with error: %v\n", err)
 		return nil, err
 	}
 	defer resp.Body.Close()

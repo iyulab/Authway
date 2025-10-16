@@ -3,6 +3,7 @@ package service
 import (
 	// "authway/src/server/internal/config"  // Currently unused
 	// "authway/src/server/pkg/auth"         // Package not yet implemented
+	"authway/src/server/internal/hydra"
 	"authway/src/server/pkg/client"
 	// "authway/src/server/pkg/token"       // Package not yet implemented
 	"authway/src/server/pkg/user"
@@ -25,8 +26,8 @@ func NewUserService(db *gorm.DB, logger *zap.Logger) user.Service {
 }
 
 // NewClientService creates a new client service
-func NewClientService(db *gorm.DB, logger *zap.Logger) client.Service {
-	return client.NewService(db, logger)
+func NewClientService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) client.Service {
+	return client.NewService(db, logger, hydraClient)
 }
 
 // NewTokenService creates a new token service - Package not yet implemented

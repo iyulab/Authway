@@ -112,7 +112,7 @@ const LoginPage: React.FC = () => {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData): Promise<LoginResponse> => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/login`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/authenticate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

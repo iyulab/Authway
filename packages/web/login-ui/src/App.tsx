@@ -7,6 +7,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResendVerificationPage from './pages/ResendVerificationPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import ErrorPage from './pages/ErrorPage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/resend-verification" element={<ResendVerificationPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/error" element={<ErrorPage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
     </div>

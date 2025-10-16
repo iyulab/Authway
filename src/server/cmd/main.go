@@ -14,6 +14,7 @@ import (
 	"authway/src/server/internal/middleware"
 	"authway/src/server/internal/service"
 	"authway/src/server/internal/service/social"
+	"authway/src/server/internal/telemetry"
 	"authway/src/server/pkg/admin"
 	"authway/src/server/pkg/client"
 	"authway/src/server/pkg/email"
@@ -97,7 +98,7 @@ func main() {
 
 	// Initialize services
 	userService := user.NewService(db, zapLogger)
-	clientService := client.NewService(db, zapLogger)
+	clientService := client.NewService(db, zapLogger, hydraClient)
 	googleService := social.NewGoogleService(&cfg.Google, userService, clientService, zapLogger)
 
 	// Initialize email services
@@ -119,6 +120,10 @@ func main() {
 		ClientService: clientService,
 	}
 
+	// Initialize Application Insights telemetry client (optional)
+	telemetryClient := telemetry.NewClient(&cfg.ApplicationInsights, zapLogger)
+	defer telemetryClient.Flush()
+
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		ErrorHandler: middleware.ErrorHandler,
@@ -130,10 +135,11 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     strings.Join(cfg.CORS.AllowedOrigins, ","),
 		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token,Request-Id,Traceparent,Tracestate",
 		AllowCredentials: true,
 	}))
 	app.Use(middleware.RequestLogger(zapLogger))
+	app.Use(telemetry.RequestTracking(telemetryClient, zapLogger))
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -153,9 +159,11 @@ func main() {
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
-	app.Post("/login", authHandler.Login)
+	app.Post("/login", authHandler.LoginPage) // Support POST for long login_challenge
+	app.Post("/authenticate", authHandler.Login) // Actual login submission
 	app.Get("/consent", authHandler.ConsentPage)
-	app.Post("/consent", authHandler.Consent)
+	app.Post("/consent", authHandler.ConsentPage) // Support POST for long consent_challenge (from auto-submit form)
+	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission
 	app.Post("/consent/reject", authHandler.RejectConsent)
 
 	// User registration
@@ -163,6 +171,7 @@ func main() {
 
 	// Social login routes
 	app.Get("/auth/google/login", socialHandler.GoogleLogin)
+	app.Post("/auth/google/login", socialHandler.GoogleLogin) // Support POST for long login_challenge
 	app.Get("/auth/google/callback", socialHandler.GoogleCallback)
 	app.Get("/auth/google/url", socialHandler.GetGoogleAuthURL)
 
@@ -184,6 +193,7 @@ func main() {
 	v1.Put("/clients/:id", clientHandler.Update)
 	v1.Delete("/clients/:id", clientHandler.Delete)
 	v1.Get("/clients", clientHandler.List)
+	v1.Post("/clients/:id/regenerate-secret", clientHandler.RegenerateSecret)
 
 	// Client Google OAuth configuration routes
 	v1.Put("/clients/:id/google-oauth", clientHandler.UpdateGoogleOAuth)

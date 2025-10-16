@@ -1,15 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { clientsApi, Client } from '@/lib/api'
+import { clientsApi, tenantsApi, Client, Tenant } from '@/lib/api'
 import {
   PlusIcon,
   KeyIcon,
-  EyeIcon,
-  EyeSlashIcon,
   ClipboardDocumentIcon,
   TrashIcon,
   XCircleIcon,
@@ -43,8 +41,16 @@ const availableScopes = [
 
 const ClientsPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showSecrets, setShowSecrets] = useState<{ [key: string]: boolean }>({})
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [currentCredentials, setCurrentCredentials] = useState<{ client_id: string; client_secret: string } | null>(null)
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('')
   const queryClient = useQueryClient()
+
+  // 테넌트 목록 조회
+  const { data: tenants, isLoading: tenantsLoading } = useQuery({
+    queryKey: ['tenants'],
+    queryFn: () => tenantsApi.list(),
+  })
 
   // 클라이언트 목록 조회
   const { data: clientsData, isLoading, error, refetch } = useQuery({
@@ -70,12 +76,17 @@ const ClientsPage: React.FC = () => {
   // 클라이언트 생성 뮤테이션
   const createClientMutation = useMutation({
     mutationFn: (data: CreateClientFormData) => {
+      if (!selectedTenantId) {
+        throw new Error('테넌트를 선택해주세요')
+      }
+
       const redirectUris = data.redirect_uris
         .split('\n')
         .map(uri => uri.trim())
         .filter(uri => uri.length > 0)
 
       return clientsApi.create({
+        tenant_id: selectedTenantId,
         name: data.name,
         description: data.description,
         website: data.website || undefined,
@@ -85,14 +96,18 @@ const ClientsPage: React.FC = () => {
         public: data.public,
       })
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['clients'] })
       setShowCreateModal(false)
       reset()
+      // credentials 모달 표시
+      setCurrentCredentials(response.data.credentials)
+      setShowCredentialsModal(true)
       toast.success('클라이언트가 생성되었습니다')
     },
-    onError: () => {
-      toast.error('클라이언트 생성에 실패했습니다')
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || '클라이언트 생성에 실패했습니다'
+      toast.error(`클라이언트 생성 실패: ${errorMessage}`)
     },
   })
 
@@ -103,31 +118,65 @@ const ClientsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] })
       toast.success('클라이언트가 삭제되었습니다')
     },
-    onError: () => {
-      toast.error('클라이언트 삭제에 실패했습니다')
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        toast.error('클라이언트를 삭제할 권한이 없습니다')
+      } else if (error.response?.status === 409) {
+        toast.error('활성 세션이 있는 클라이언트는 삭제할 수 없습니다')
+      } else {
+        const errorMessage = error.response?.data?.error || error.response?.data?.details || '클라이언트 삭제에 실패했습니다'
+        toast.error(`클라이언트 삭제 실패: ${errorMessage}`)
+      }
     },
   })
 
   // 시크릿 재생성 뮤테이션
   const regenerateSecretMutation = useMutation({
     mutationFn: (clientId: string) => clientsApi.regenerateSecret(clientId),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['clients'] })
+      // credentials 모달 표시
+      setCurrentCredentials(response.data.credentials)
+      setShowCredentialsModal(true)
       toast.success('Client Secret이 재생성되었습니다')
     },
-    onError: () => {
-      toast.error('Client Secret 재생성에 실패했습니다')
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        toast.error('Client Secret을 재생성할 권한이 없습니다')
+      } else if (error.response?.status === 400) {
+        toast.error('Public 클라이언트는 Client Secret이 없습니다')
+      } else {
+        const errorMessage = error.response?.data?.error || error.response?.data?.details || 'Client Secret 재생성에 실패했습니다'
+        toast.error(`Client Secret 재생성 실패: ${errorMessage}`)
+      }
     },
   })
 
   const clients = clientsData?.data.clients || []
 
-  const toggleSecretVisibility = (clientId: string) => {
-    setShowSecrets(prev => ({
-      ...prev,
-      [clientId]: !prev[clientId],
-    }))
-  }
+  // 테넌트 맵 생성 (ID -> Tenant)
+  const tenantMap = useMemo(() => {
+    const map = new Map<string, Tenant>()
+    if (tenants) {
+      tenants.data.forEach((tenant: Tenant) => {
+        map.set(tenant.id, tenant)
+      })
+    }
+    return map
+  }, [tenants])
+
+  // 필터링된 클라이언트 목록
+  const filteredClients = useMemo(() => {
+    if (!selectedTenantId) return clients
+    return clients.filter(client => client.tenant_id === selectedTenantId)
+  }, [clients, selectedTenantId])
+
+  // 선택된 테넌트가 없으면 첫 번째 테넌트 자동 선택
+  React.useEffect(() => {
+    if (tenants && tenants.data.length > 0 && !selectedTenantId) {
+      setSelectedTenantId(tenants.data[0].id)
+    }
+  }, [tenants, selectedTenantId])
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -175,27 +224,54 @@ const ClientsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">OAuth 클라이언트 관리</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            총 {clients.length}개의 OAuth 클라이언트가 등록되어 있습니다.
-          </p>
+      <div className="space-y-4">
+        <div className="sm:flex sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">OAuth 클라이언트 관리</h1>
+            <p className="mt-2 text-sm text-gray-700">
+              총 {filteredClients.length}개의 OAuth 클라이언트가 등록되어 있습니다.
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              disabled={!selectedTenantId}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
+              새 클라이언트 생성
+            </button>
+          </div>
         </div>
-        <div className="mt-4 sm:mt-0">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+
+        {/* 테넌트 선택 */}
+        <div className="flex items-center space-x-4">
+          <label htmlFor="tenant-select" className="text-sm font-medium text-gray-700">
+            테넌트:
+          </label>
+          <select
+            id="tenant-select"
+            value={selectedTenantId}
+            onChange={(e) => setSelectedTenantId(e.target.value)}
+            className="block w-64 rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            disabled={tenantsLoading}
           >
-            <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
-            새 클라이언트 생성
-          </button>
+            {tenantsLoading ? (
+              <option>로딩 중...</option>
+            ) : (
+              tenants?.data.map((tenant: Tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name} ({tenant.slug})
+                </option>
+              ))
+            )}
+          </select>
         </div>
       </div>
 
       {/* 클라이언트 목록 */}
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        {clients.length === 0 ? (
+        {filteredClients.length === 0 ? (
           <div className="text-center py-12">
             <KeyIcon className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">클라이언트가 없습니다</h3>
@@ -205,7 +281,8 @@ const ClientsPage: React.FC = () => {
             <div className="mt-6">
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                disabled={!selectedTenantId}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
                 새 클라이언트 생성
@@ -214,7 +291,7 @@ const ClientsPage: React.FC = () => {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {clients.map((client: Client) => (
+            {filteredClients.map((client: Client) => (
               <div key={client.id} className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -234,6 +311,10 @@ const ClientsPage: React.FC = () => {
                           Public
                         </span>
                       )}
+                    </div>
+                    <div className="mt-1 flex items-center text-sm text-gray-500">
+                      <span className="font-medium">테넌트:</span>
+                      <span className="ml-2">{tenantMap.get(client.tenant_id)?.name || client.tenant_id}</span>
                     </div>
                     {client.description && (
                       <p className="mt-1 text-sm text-gray-600">{client.description}</p>
@@ -259,29 +340,18 @@ const ClientsPage: React.FC = () => {
                             Client Secret
                           </dt>
                           <dd className="mt-1 text-sm text-gray-900 font-mono flex items-center">
-                            {showSecrets[client.id] ? (
-                              <span>{'*'.repeat(32)}</span>
-                            ) : (
-                              <span>{'*'.repeat(32)}</span>
-                            )}
-                            <button
-                              onClick={() => toggleSecretVisibility(client.id)}
-                              className="ml-2 text-gray-400 hover:text-gray-600"
-                            >
-                              {showSecrets[client.id] ? (
-                                <EyeSlashIcon className="h-4 w-4" />
-                              ) : (
-                                <EyeIcon className="h-4 w-4" />
-                              )}
-                            </button>
+                            <span>{'*'.repeat(32)}</span>
                             <button
                               onClick={() => handleRegenerateSecret(client)}
-                              className="ml-2 text-orange-400 hover:text-orange-600"
+                              className="ml-2 text-orange-500 hover:text-orange-700"
                               title="시크릿 재생성"
                             >
                               <KeyIcon className="h-4 w-4" />
                             </button>
                           </dd>
+                          <p className="mt-1 text-xs text-gray-500">
+                            보안을 위해 시크릿은 생성/재생성 시에만 표시됩니다
+                          </p>
                         </div>
                       )}
                     </div>
@@ -509,6 +579,100 @@ const ClientsPage: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credentials 표시 모달 */}
+      {showCredentialsModal && currentCredentials && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">클라이언트 인증 정보</h3>
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false)
+                    setCurrentCredentials(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircleIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      <strong>보안 경고:</strong> Client Secret은 이 화면에서 단 한 번만 표시됩니다.
+                      지금 안전한 곳에 저장하세요. 분실 시 재생성이 필요합니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client ID
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={currentCredentials.client_id}
+                      readOnly
+                      className="flex-1 font-mono text-sm border-gray-300 rounded-md bg-gray-50"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(currentCredentials.client_id)}
+                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                      title="복사"
+                    >
+                      <ClipboardDocumentIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Secret
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={currentCredentials.client_secret}
+                      readOnly
+                      className="flex-1 font-mono text-sm border-gray-300 rounded-md bg-gray-50"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(currentCredentials.client_secret)}
+                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                      title="복사"
+                    >
+                      <ClipboardDocumentIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false)
+                    setCurrentCredentials(null)
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                >
+                  확인
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,20 @@
 import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 
 const HomePage = () => {
   const navigate = useNavigate()
+
+  // Production 환경에서는 홈페이지를 표시하지 않고 /login으로 리디렉션
+  useEffect(() => {
+    if (import.meta.env.PROD) {
+      navigate('/login', { replace: true })
+    }
+  }, [navigate])
+
+  // Development 환경에서만 홈페이지 표시
+  if (import.meta.env.PROD) {
+    return null
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">

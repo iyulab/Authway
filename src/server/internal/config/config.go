@@ -10,18 +10,19 @@ import (
 )
 
 type Config struct {
-	App      AppConfig         `mapstructure:"app"`
-	Database DatabaseConfig    `mapstructure:"database"`
-	Redis    RedisConfig       `mapstructure:"redis"`
-	JWT      JWTConfig         `mapstructure:"jwt"`
-	OAuth    OAuthConfig       `mapstructure:"oauth"`
-	Hydra    HydraConfig       `mapstructure:"hydra"`
-	CORS     CORSConfig        `mapstructure:"cors"`
-	Email    EmailConfig       `mapstructure:"email"`
-	Google   GoogleOAuthConfig `mapstructure:"google"`
-	GitHub   GitHubOAuthConfig `mapstructure:"github"`
-	Tenant   TenantConfig      `mapstructure:"tenant"`
-	Admin    AdminConfig       `mapstructure:"admin"`
+	App                 AppConfig                 `mapstructure:"app"`
+	Database            DatabaseConfig            `mapstructure:"database"`
+	Redis               RedisConfig               `mapstructure:"redis"`
+	JWT                 JWTConfig                 `mapstructure:"jwt"`
+	OAuth               OAuthConfig               `mapstructure:"oauth"`
+	Hydra               HydraConfig               `mapstructure:"hydra"`
+	CORS                CORSConfig                `mapstructure:"cors"`
+	Email               EmailConfig               `mapstructure:"email"`
+	Google              GoogleOAuthConfig         `mapstructure:"google"`
+	GitHub              GitHubOAuthConfig         `mapstructure:"github"`
+	Tenant              TenantConfig              `mapstructure:"tenant"`
+	Admin               AdminConfig               `mapstructure:"admin"`
+	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`
 }
 
 type AppConfig struct {
@@ -109,6 +110,11 @@ type AdminConfig struct {
 	Password string `mapstructure:"password"`
 }
 
+type ApplicationInsightsConfig struct {
+	ConnectionString string `mapstructure:"connection_string"`
+	Enabled          bool   `mapstructure:"enabled"`
+}
+
 func Load() (*Config, error) {
 	// Load .env file if it exists (silently ignore if not found)
 	// Try multiple locations
@@ -188,9 +194,28 @@ func Load() (*Config, error) {
 		config.GitHub.Enabled = (enabled == "true")
 	}
 
-	// Debug: Print Google OAuth config
+	// Manual override for Hydra config (Viper AutomaticEnv doesn't work well with nested structs)
+	if adminURL := os.Getenv("AUTHWAY_HYDRA_ADMIN_URL"); adminURL != "" {
+		config.Hydra.AdminURL = adminURL
+	}
+	if publicURL := os.Getenv("AUTHWAY_HYDRA_PUBLIC_URL"); publicURL != "" {
+		config.Hydra.PublicURL = publicURL
+	}
+
+	// Manual override for Application Insights config
+	if connectionString := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_CONNECTION_STRING"); connectionString != "" {
+		config.ApplicationInsights.ConnectionString = connectionString
+		config.ApplicationInsights.Enabled = true
+	}
+	if enabled := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_ENABLED"); enabled != "" {
+		config.ApplicationInsights.Enabled = (enabled == "true")
+	}
+
+	// Debug: Print configuration
 	fmt.Printf("🔍 Google OAuth Config: ClientID=%s, Enabled=%v, RedirectURL=%s\n",
 		config.Google.ClientID, config.Google.Enabled, config.Google.RedirectURL)
+	fmt.Printf("🔍 Hydra Config: AdminURL=%s, PublicURL=%s\n",
+		config.Hydra.AdminURL, config.Hydra.PublicURL)
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
@@ -305,4 +330,8 @@ func setDefaults() {
 	// Admin defaults (use strong password in production)
 	viper.SetDefault("admin.api_key", "")
 	viper.SetDefault("admin.password", "admin123") // Default for development only
+
+	// Application Insights defaults (completely optional)
+	viper.SetDefault("applicationinsights.enabled", false)
+	viper.SetDefault("applicationinsights.connection_string", "")
 }

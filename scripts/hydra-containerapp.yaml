@@ -1,0 +1,53 @@
+properties:
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: true
+      targetPort: 8080
+      transport: auto
+      allowInsecure: false
+    registries:
+    - server: authwayacr.azurecr.io
+      username: authwayacr
+      passwordSecretRef: authwayacrazurecrio-authwayacr
+  template:
+    containers:
+    - image: authwayacr.azurecr.io/hydra-nginx:latest
+      name: nginx-proxy
+      resources:
+        cpu: 0.25
+        memory: 0.5Gi
+    - image: oryd/hydra:v2.2
+      name: authway-hydra
+      resources:
+        cpu: 0.25
+        memory: 0.5Gi
+      command:
+        - /bin/sh
+      args:
+        - -c
+        - hydra migrate sql --yes $DSN && hydra serve all
+      env:
+      - name: DSN
+        value: "postgres://authwayadmin:dldbfoqAuthway0@authway-postgres.postgres.database.azure.com:5432/authway?sslmode=require"
+      - name: SECRETS_SYSTEM
+        value: "b2ea992899147b0d712ddff895c00c54ced6c2b16628892aebba6e88ce3dbd5d"
+      - name: URLS_SELF_ISSUER
+        value: "https://authway-hydra.lemonfield-03f5fb88.koreacentral.azurecontainerapps.io"
+      - name: URLS_CONSENT
+        value: "https://auth.iyulab.com/consent"
+      - name: URLS_LOGIN
+        value: "https://auth.iyulab.com/login"
+      - name: URLS_ERROR
+        value: "https://auth.iyulab.com/error"
+      - name: OAUTH2_EXPOSE_INTERNAL_ERRORS
+        value: "true"
+      - name: LOG_LEVEL
+        value: "info"
+      - name: SERVE_PUBLIC_PORT
+        value: "4444"
+      - name: SERVE_ADMIN_PORT
+        value: "4445"
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

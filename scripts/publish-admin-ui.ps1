@@ -21,7 +21,8 @@ $EnvFile = Join-Path $ScriptDir ".env"
 if (Test-Path $EnvFile) {
     Write-Host "📄 .env 파일 로드 중..." -ForegroundColor Gray
     Get-Content $EnvFile | ForEach-Object {
-        if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
+        $pattern = '^([^#=]+)=(.*)$'
+        if ($_ -match $pattern) {
             $name = $matches[1].Trim()
             $value = $matches[2].Trim()
             # 따옴표 제거

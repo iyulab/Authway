@@ -270,13 +270,29 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	})
 }
 
-// Consent flow handler
+// ConsentPageRequest for POST request body
+type ConsentPageRequest struct {
+	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
+}
+
+// Consent flow handler - supports both GET and POST
 func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
 	challenge := c.Query("consent_challenge")
+
+	// If not in query, try POST body (supports both JSON and form-urlencoded)
+	if challenge == "" && c.Method() == "POST" {
+		var req ConsentPageRequest
+		// BodyParser supports both JSON and form-urlencoded automatically
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.ConsentChallenge
+		}
+	}
+
 	if challenge == "" {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "consent_challenge parameter is required",
-			"hint":  "The consent_challenge parameter must be included in the URL query string. This parameter is provided by Ory Hydra after successful login.",
+			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body. This parameter is provided by Ory Hydra after successful login.",
 			"docs":  "https://www.ory.sh/docs/hydra/guides/consent",
 		})
 	}
@@ -419,11 +435,27 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 	})
 }
 
+// RejectConsentRequest for POST request body
+type RejectConsentRequest struct {
+	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
+}
+
 func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
 	challenge := c.Query("consent_challenge")
+
+	// If not in query, try POST body (supports both JSON and form-urlencoded)
+	if challenge == "" && c.Method() == "POST" {
+		var req RejectConsentRequest
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.ConsentChallenge
+		}
+	}
+
 	if challenge == "" {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "consent_challenge parameter is required",
+			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body",
 		})
 	}
 
