@@ -351,10 +351,34 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		zap.String("provider", "google"),
 		zap.String("redirect_to", acceptResp.RedirectTo))
 
-	// Hydra's AcceptLoginRequest returns a redirect_to URL that contains a login_verifier
-	// This URL should be redirected to (browser → Hydra → consent page)
-	// Hydra will then redirect to the consent page with the consent_challenge parameter
-	return c.Redirect(acceptResp.RedirectTo, http.StatusFound)
+	// Return HTML page with JavaScript redirect to ensure proper browser navigation
+	// This is more reliable than HTTP 302 redirect for cross-origin OAuth flows
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting...</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <div style="text-align: center; padding: 50px; font-family: sans-serif;">
+        <div style="font-size: 18px; color: #666; margin-bottom: 20px;">로그인 처리 중...</div>
+        <div style="width: 40px; height: 40px; margin: 0 auto; border: 4px solid #f3f3f3; border-top: 4px solid #4F46E5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    </div>
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        // Redirect to Hydra's OAuth endpoint with login_verifier
+        window.location.href = "` + acceptResp.RedirectTo + `";
+    </script>
+</body>
+</html>`
+
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return c.SendString(html)
 }
 
 // GetGoogleAuthURL returns the Google OAuth URL for frontend use
