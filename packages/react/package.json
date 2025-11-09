@@ -1,0 +1,77 @@
+{
+  "name": "@authway/react",
+  "version": "0.1.1",
+  "description": "React integration for Authway authentication - Hooks, Context, and HOCs for OAuth 2.0 / OIDC",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./ssr": {
+      "types": "./dist/ssr/index.d.ts",
+      "import": "./dist/ssr/index.mjs",
+      "require": "./dist/ssr/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@authway/client": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.1.2",
+    "@types/react": "^18.2.47",
+    "@types/react-dom": "^18.2.18",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "keywords": [
+    "authway",
+    "react",
+    "authentication",
+    "hooks",
+    "oauth",
+    "oauth2",
+    "oidc",
+    "context",
+    "hoc",
+    "auth",
+    "jwt",
+    "pkce"
+  ],
+  "author": "Authway Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iyulab/authway.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/iyulab/authway#readme",
+  "bugs": {
+    "url": "https://github.com/iyulab/authway/issues"
+  }
+}

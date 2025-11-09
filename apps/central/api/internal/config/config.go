@@ -1,0 +1,423 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	App                 AppConfig                 `mapstructure:"app"`
+	Database            DatabaseConfig            `mapstructure:"database"`
+	Redis               RedisConfig               `mapstructure:"redis"`
+	JWT                 JWTConfig                 `mapstructure:"jwt"`
+	OAuth               OAuthConfig               `mapstructure:"oauth"`
+	Hydra               HydraConfig               `mapstructure:"hydra"`
+	CORS                CORSConfig                `mapstructure:"cors"`
+	Email               EmailConfig               `mapstructure:"email"`
+	Google              GoogleOAuthConfig         `mapstructure:"google"`
+	GitHub              GitHubOAuthConfig         `mapstructure:"github"`
+	Tenant              TenantConfig              `mapstructure:"tenant"`
+	Admin               AdminConfig               `mapstructure:"admin"`
+	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`
+}
+
+type AppConfig struct {
+	Name        string `mapstructure:"name"`
+	Version     string `mapstructure:"version"`
+	Environment string `mapstructure:"environment"`
+	Port        string `mapstructure:"port"`
+	BaseURL     string `mapstructure:"base_url"`
+}
+
+type DatabaseConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
+	SSLMode  string `mapstructure:"ssl_mode"`
+}
+
+type RedisConfig struct {
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	Password   string `mapstructure:"password"`
+	DB         int    `mapstructure:"db"`
+	TLSEnabled bool   `mapstructure:"tls_enabled"`
+}
+
+type JWTConfig struct {
+	AccessTokenSecret  string `mapstructure:"access_token_secret"`
+	RefreshTokenSecret string `mapstructure:"refresh_token_secret"`
+	AccessTokenExpiry  string `mapstructure:"access_token_expiry"`
+	RefreshTokenExpiry string `mapstructure:"refresh_token_expiry"`
+	Issuer             string `mapstructure:"issuer"`
+	PrivateKeyPath     string `mapstructure:"private_key_path"`
+	PublicKeyPath      string `mapstructure:"public_key_path"`
+}
+
+type OAuthConfig struct {
+	AuthorizeCodeExpiry string   `mapstructure:"authorize_code_expiry"`
+	AllowedGrantTypes   []string `mapstructure:"allowed_grant_types"`
+	AllowedScopes       []string `mapstructure:"allowed_scopes"`
+	RequirePKCE         bool     `mapstructure:"require_pkce"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
+type HydraConfig struct {
+	AdminURL  string `mapstructure:"admin_url"`
+	PublicURL string `mapstructure:"public_url"`
+}
+
+type EmailConfig struct {
+	SMTPHost     string `mapstructure:"smtp_host"`
+	SMTPPort     int    `mapstructure:"smtp_port"`
+	SMTPUser     string `mapstructure:"smtp_user"`
+	SMTPPassword string `mapstructure:"smtp_password"`
+	FromEmail    string `mapstructure:"from_email"`
+	FromName     string `mapstructure:"from_name"`
+}
+
+type GoogleOAuthConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+type GitHubOAuthConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+type TenantConfig struct {
+	SingleTenantMode bool   `mapstructure:"single_tenant_mode"`
+	TenantName       string `mapstructure:"tenant_name"`
+	TenantSlug       string `mapstructure:"tenant_slug"`
+}
+
+type AdminConfig struct {
+	APIKey         string `mapstructure:"api_key"`
+	Password       string `mapstructure:"password"`
+	InternalAPIKey string `mapstructure:"internal_api_key"`
+}
+
+type ApplicationInsightsConfig struct {
+	ConnectionString string `mapstructure:"connection_string"`
+	Enabled          bool   `mapstructure:"enabled"`
+}
+
+func Load() (*Config, error) {
+	// Load .env file if it exists (silently ignore if not found)
+	// Try multiple locations
+	envLoaded := false
+	if err := godotenv.Load("../../.env"); err == nil {
+		fmt.Println("✓ Loaded .env from ../../.env")
+		envLoaded = true
+	}
+	if !envLoaded {
+		if err := godotenv.Load(".env"); err == nil {
+			fmt.Println("✓ Loaded .env from .env")
+			envLoaded = true
+		}
+	}
+	if !envLoaded {
+		if err := godotenv.Load(); err == nil {
+			fmt.Println("✓ Loaded .env from default location")
+			envLoaded = true
+		}
+	}
+	if !envLoaded {
+		fmt.Println("⚠ No .env file found, using environment variables only")
+	}
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("./configs")
+	viper.AddConfigPath("/etc/authway")
+
+	// Set environment variable prefix
+	viper.SetEnvPrefix("AUTHWAY")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	// Set defaults
+	setDefaults()
+
+	// Read config file
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+		// Config file not found, continue with environment variables and defaults
+	}
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Manual override for Google OAuth config (Viper AutomaticEnv doesn't work well with nested structs)
+	if clientID := os.Getenv("AUTHWAY_GOOGLE_CLIENT_ID"); clientID != "" {
+		config.Google.ClientID = clientID
+	}
+	if clientSecret := os.Getenv("AUTHWAY_GOOGLE_CLIENT_SECRET"); clientSecret != "" {
+		config.Google.ClientSecret = clientSecret
+	}
+	if redirectURL := os.Getenv("AUTHWAY_GOOGLE_REDIRECT_URL"); redirectURL != "" {
+		config.Google.RedirectURL = redirectURL
+	}
+	if enabled := os.Getenv("AUTHWAY_GOOGLE_ENABLED"); enabled != "" {
+		config.Google.Enabled = (enabled == "true")
+	}
+
+	// Manual override for GitHub OAuth config
+	if clientID := os.Getenv("AUTHWAY_GITHUB_CLIENT_ID"); clientID != "" {
+		config.GitHub.ClientID = clientID
+	}
+	if clientSecret := os.Getenv("AUTHWAY_GITHUB_CLIENT_SECRET"); clientSecret != "" {
+		config.GitHub.ClientSecret = clientSecret
+	}
+	if redirectURL := os.Getenv("AUTHWAY_GITHUB_REDIRECT_URL"); redirectURL != "" {
+		config.GitHub.RedirectURL = redirectURL
+	}
+	if enabled := os.Getenv("AUTHWAY_GITHUB_ENABLED"); enabled != "" {
+		config.GitHub.Enabled = (enabled == "true")
+	}
+
+	// Manual override for Hydra config (Viper AutomaticEnv doesn't work well with nested structs)
+	if adminURL := os.Getenv("AUTHWAY_HYDRA_ADMIN_URL"); adminURL != "" {
+		config.Hydra.AdminURL = adminURL
+	}
+	if publicURL := os.Getenv("AUTHWAY_HYDRA_PUBLIC_URL"); publicURL != "" {
+		config.Hydra.PublicURL = publicURL
+	}
+
+	// Manual override for Database config (Viper AutomaticEnv doesn't always work well)
+	if host := os.Getenv("AUTHWAY_DATABASE_HOST"); host != "" {
+		config.Database.Host = host
+	}
+	if port := os.Getenv("AUTHWAY_DATABASE_PORT"); port != "" {
+		if portInt, err := strconv.Atoi(port); err == nil {
+			config.Database.Port = portInt
+		}
+	}
+	if user := os.Getenv("AUTHWAY_DATABASE_USER"); user != "" {
+		config.Database.User = user
+	}
+	if password := os.Getenv("AUTHWAY_DATABASE_PASSWORD"); password != "" {
+		config.Database.Password = password
+	}
+	if name := os.Getenv("AUTHWAY_DATABASE_NAME"); name != "" {
+		config.Database.Name = name
+	}
+	if sslMode := os.Getenv("AUTHWAY_DATABASE_SSL_MODE"); sslMode != "" {
+		config.Database.SSLMode = sslMode
+	}
+
+	// Manual override for Redis config
+	if host := os.Getenv("AUTHWAY_REDIS_HOST"); host != "" {
+		config.Redis.Host = host
+	}
+	if port := os.Getenv("AUTHWAY_REDIS_PORT"); port != "" {
+		if portInt, err := strconv.Atoi(port); err == nil {
+			config.Redis.Port = portInt
+		}
+	}
+	if password := os.Getenv("AUTHWAY_REDIS_PASSWORD"); password != "" {
+		config.Redis.Password = password
+	}
+	if db := os.Getenv("AUTHWAY_REDIS_DB"); db != "" {
+		if dbInt, err := strconv.Atoi(db); err == nil {
+			config.Redis.DB = dbInt
+		}
+	}
+	if tlsEnabled := os.Getenv("AUTHWAY_REDIS_TLS_ENABLED"); tlsEnabled != "" {
+		config.Redis.TLSEnabled = (tlsEnabled == "true")
+	}
+
+	// Manual override for Admin config
+	if internalAPIKey := os.Getenv("AUTHWAY_ADMIN_INTERNAL_API_KEY"); internalAPIKey != "" {
+		config.Admin.InternalAPIKey = internalAPIKey
+	}
+	if adminPassword := os.Getenv("AUTHWAY_ADMIN_PASSWORD"); adminPassword != "" {
+		config.Admin.Password = adminPassword
+	}
+	if adminAPIKey := os.Getenv("AUTHWAY_ADMIN_API_KEY"); adminAPIKey != "" {
+		config.Admin.APIKey = adminAPIKey
+	}
+
+	// Manual override for Application Insights config
+	if connectionString := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_CONNECTION_STRING"); connectionString != "" {
+		config.ApplicationInsights.ConnectionString = connectionString
+		config.ApplicationInsights.Enabled = true
+	}
+	if enabled := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_ENABLED"); enabled != "" {
+		config.ApplicationInsights.Enabled = (enabled == "true")
+	}
+
+	// Manual override for CORS allowed origins (parse comma-separated string)
+	if allowedOrigins := os.Getenv("AUTHWAY_CORS_ALLOWED_ORIGINS"); allowedOrigins != "" {
+		config.CORS.AllowedOrigins = strings.Split(allowedOrigins, ",")
+		// Trim spaces from each origin
+		for i := range config.CORS.AllowedOrigins {
+			config.CORS.AllowedOrigins[i] = strings.TrimSpace(config.CORS.AllowedOrigins[i])
+		}
+	}
+
+	// Manual override for OAuth allowed grant types
+	if grantTypes := os.Getenv("AUTHWAY_OAUTH_ALLOWED_GRANT_TYPES"); grantTypes != "" {
+		config.OAuth.AllowedGrantTypes = strings.Split(grantTypes, ",")
+		for i := range config.OAuth.AllowedGrantTypes {
+			config.OAuth.AllowedGrantTypes[i] = strings.TrimSpace(config.OAuth.AllowedGrantTypes[i])
+		}
+	}
+
+	// Manual override for OAuth allowed scopes
+	if scopes := os.Getenv("AUTHWAY_OAUTH_ALLOWED_SCOPES"); scopes != "" {
+		config.OAuth.AllowedScopes = strings.Split(scopes, ",")
+		for i := range config.OAuth.AllowedScopes {
+			config.OAuth.AllowedScopes[i] = strings.TrimSpace(config.OAuth.AllowedScopes[i])
+		}
+	}
+
+	// Debug: Print configuration
+	fmt.Printf("🔍 Database Config: Host=%s, Port=%d, User=%s, Name=%s\n",
+		config.Database.Host, config.Database.Port, config.Database.User, config.Database.Name)
+	fmt.Printf("🔍 Redis Config: Host=%s, Port=%d\n",
+		config.Redis.Host, config.Redis.Port)
+	fmt.Printf("🔍 Google OAuth Config: ClientID=%s, Enabled=%v, RedirectURL=%s\n",
+		config.Google.ClientID, config.Google.Enabled, config.Google.RedirectURL)
+	fmt.Printf("🔍 Hydra Config: AdminURL=%s, PublicURL=%s\n",
+		config.Hydra.AdminURL, config.Hydra.PublicURL)
+	fmt.Printf("🔍 CORS Config: AllowedOrigins=%v\n", config.CORS.AllowedOrigins)
+
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+// Validate checks if required configuration values are set
+func (c *Config) Validate() error {
+	var errors []string
+
+	// Required: Database connection
+	if c.Database.Host == "" {
+		errors = append(errors, "database.host is required")
+	}
+	if c.Database.User == "" {
+		errors = append(errors, "database.user is required")
+	}
+	if c.Database.Name == "" {
+		errors = append(errors, "database.name is required")
+	}
+
+	// Warn about insecure JWT secrets in production
+	if c.App.Environment == "production" {
+		if c.JWT.AccessTokenSecret == "your-secret-key-change-in-production" {
+			errors = append(errors, "CRITICAL: jwt.access_token_secret must be changed in production")
+		}
+		if c.JWT.RefreshTokenSecret == "your-refresh-secret-key-change-in-production" {
+			errors = append(errors, "CRITICAL: jwt.refresh_token_secret must be changed in production")
+		}
+		if c.Admin.Password == "" || c.Admin.Password == "admin123" {
+			errors = append(errors, "CRITICAL: admin.password must be set to a strong password in production")
+		}
+	}
+
+	// Warn about missing admin password in all environments
+	if c.Admin.Password == "" {
+		errors = append(errors, "WARNING: admin.password is not set - admin console will be inaccessible")
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+func setDefaults() {
+	// App defaults
+	viper.SetDefault("app.name", "Authway")
+	viper.SetDefault("app.version", "0.1.0")
+	viper.SetDefault("app.environment", "development")
+	viper.SetDefault("app.port", "8080")
+	viper.SetDefault("app.base_url", "http://localhost:8080")
+
+	// Database defaults
+	viper.SetDefault("database.host", "localhost")
+	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.user", "authway")
+	viper.SetDefault("database.password", "authway")
+	viper.SetDefault("database.name", "authway")
+	viper.SetDefault("database.ssl_mode", "disable")
+
+	// Redis defaults
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("redis.tls_enabled", false)
+
+	// JWT defaults
+	viper.SetDefault("jwt.access_token_secret", "your-secret-key-change-in-production")
+	viper.SetDefault("jwt.refresh_token_secret", "your-refresh-secret-key-change-in-production")
+	viper.SetDefault("jwt.access_token_expiry", "15m")
+	viper.SetDefault("jwt.refresh_token_expiry", "7d")
+	viper.SetDefault("jwt.issuer", "authway")
+
+	// OAuth defaults
+	viper.SetDefault("oauth.authorize_code_expiry", "10m")
+	viper.SetDefault("oauth.allowed_grant_types", []string{"authorization_code", "refresh_token"})
+	viper.SetDefault("oauth.allowed_scopes", []string{"openid", "profile", "email"})
+	viper.SetDefault("oauth.require_pkce", true)
+
+	// Hydra defaults
+	viper.SetDefault("hydra.admin_url", "http://localhost:4445")
+	viper.SetDefault("hydra.public_url", "http://localhost:4444")
+
+	// CORS defaults
+	viper.SetDefault("cors.allowed_origins", []string{"http://localhost:3000", "http://localhost:3001"})
+
+	// Email defaults
+	viper.SetDefault("email.smtp_host", "localhost")
+	viper.SetDefault("email.smtp_port", 587)
+	viper.SetDefault("email.from_email", "noreply@authway.in")
+	viper.SetDefault("email.from_name", "Authway")
+
+	// Google OAuth defaults
+	viper.SetDefault("google.enabled", false)
+	viper.SetDefault("google.redirect_url", "http://localhost:8080/auth/google/callback")
+
+	// GitHub OAuth defaults
+	viper.SetDefault("github.enabled", false)
+	viper.SetDefault("github.redirect_url", "http://localhost:8080/auth/github/callback")
+
+	// Tenant defaults
+	viper.SetDefault("tenant.single_tenant_mode", false)
+	viper.SetDefault("tenant.tenant_name", "")
+	viper.SetDefault("tenant.tenant_slug", "")
+
+	// Admin defaults (use strong password in production)
+	viper.SetDefault("admin.api_key", "")
+	viper.SetDefault("admin.password", "admin123") // Default for development only
+
+	// Application Insights defaults (completely optional)
+	viper.SetDefault("applicationinsights.enabled", false)
+	viper.SetDefault("applicationinsights.connection_string", "")
+}

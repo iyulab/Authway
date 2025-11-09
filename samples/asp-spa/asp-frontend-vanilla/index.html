@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authway SPA Sample</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>🔐 Authway SPA Sample (Vanilla JS)</h1>
+        <p>ASP.NET Backend + Vite Frontend with OAuth2 PKCE + oauth4webapi</p>
+      </header>
+
+      <div id="auth-section">
+        <div id="login-view" style="display: none;">
+          <div class="login-options">
+            <button id="popup-login-btn" class="primary-btn">🪟 Popup Login</button>
+            <button id="redirect-login-btn" class="secondary-btn">↗️ Redirect Login</button>
+          </div>
+        </div>
+
+        <div id="user-view" style="display: none;">
+          <div id="user-header">
+            <div id="user-basic-info"></div>
+            <button id="logout-btn">Logout</button>
+          </div>
+
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="profile">👤 Profile</button>
+            <button class="tab-btn" data-tab="claims">🎭 Dynamic Claims</button>
+            <button class="tab-btn" data-tab="tokens">🎫 Token Viewer</button>
+            <button class="tab-btn" data-tab="api">🔌 API Test</button>
+          </div>
+
+          <div id="profile-tab" class="tab-content active">
+            <h2>User Profile</h2>
+            <div id="profile-details"></div>
+          </div>
+
+          <div id="claims-tab" class="tab-content">
+            <h2>Dynamic Claims Management</h2>
+            <p class="info-text">Manage runtime user claims via Authway Central API</p>
+
+            <div class="claims-actions">
+              <button id="load-claims-btn">Load Claims</button>
+              <button id="add-claim-btn">+ Add Claim</button>
+            </div>
+
+            <div id="add-claim-form" style="display: none;">
+              <input type="text" id="claim-key-input" placeholder="Claim key (e.g., role)" />
+              <input type="text" id="claim-value-input" placeholder="Claim value (e.g., admin)" />
+              <button id="save-claim-btn">Save</button>
+              <button id="cancel-claim-btn">Cancel</button>
+            </div>
+
+            <div id="claims-list"></div>
+          </div>
+
+          <div id="tokens-tab" class="tab-content">
+            <h2>Token Information</h2>
+            <div id="token-details"></div>
+          </div>
+
+          <div id="api-tab" class="tab-content">
+            <h2>API Tests</h2>
+
+            <div class="api-test">
+              <h3>Public Endpoint (No Auth)</h3>
+              <button id="test-public-btn">Test /api/public</button>
+              <pre id="public-result"></pre>
+            </div>
+
+            <div class="api-test">
+              <h3>Protected Endpoint (Auth Required)</h3>
+              <button id="test-protected-btn">Test /api/protected</button>
+              <pre id="protected-result"></pre>
+            </div>
+
+            <div class="api-test">
+              <h3>User Profile</h3>
+              <button id="test-me-btn">Test /api/me</button>
+              <pre id="me-result"></pre>
+            </div>
+
+            <div class="api-test">
+              <h3>Weather Data</h3>
+              <button id="test-weather-btn">Test /api/weather</button>
+              <pre id="weather-result"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        <p>Backend: <code>http://localhost:5222</code> | Frontend: <code>http://localhost:5174</code></p>
+        <p>Features: Popup Login 🪟 | Dynamic Claims 🎭 | Token Management 🎫 | Protected APIs 🔌</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,174 @@
+@{
+    ViewData["Title"] = "Home";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome to Authway Sample</h1>
+    <p class="lead">ASP.NET Core application with Authway OAuth2/OIDC authentication</p>
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <div class="alert alert-success mt-4" role="alert">
+            <h4 class="alert-heading">✅ You are logged in!</h4>
+            <p>Welcome, <strong>@User.Identity.Name</strong>!</p>
+            <hr>
+            <p class="mb-0">
+                <a class="btn btn-primary" asp-controller="Home" asp-action="Profile">View Profile</a>
+                <a class="btn btn-outline-secondary ms-2" asp-controller="Home" asp-action="Logout">Logout</a>
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info mt-4" role="alert">
+            <h4 class="alert-heading">🔐 Authentication Demo</h4>
+            <p>This application demonstrates OAuth2/OpenID Connect authentication using Authway.</p>
+            <hr>
+            <div class="d-flex gap-2 flex-wrap justify-content-center mb-0">
+                <a class="btn btn-primary btn-lg" asp-controller="Home" asp-action="Login">
+                    🔄 Redirect Login
+                </a>
+                <button class="btn btn-secondary btn-lg" id="popupLoginBtn">
+                    🪟 Popup Login
+                </button>
+            </div>
+            <div id="loginStatus" class="mt-3"></div>
+        </div>
+    }
+
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🔐 Secure Authentication</h5>
+                    <p class="card-text">OAuth2 and OpenID Connect authentication with PKCE for enhanced security.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">👤 User Profile</h5>
+                    <p class="card-text">Access user information and claims from the authentication provider.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">🚀 Easy Integration</h5>
+                    <p class="card-text">Simple configuration with ASP.NET Core authentication middleware.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('popupLoginBtn')?.addEventListener('click', async function() {
+        const statusDiv = document.getElementById('loginStatus');
+        const btn = this;
+
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '🔄 Opening popup...';
+            statusDiv.innerHTML = '<div class="alert alert-info">Opening authentication popup...</div>';
+
+            // Build authorization URL with popup parameter
+            const authUrl = '@Url.Action("Login", "Home", new { popup = true })';
+
+            // Open popup
+            const popup = window.open(
+                authUrl,
+                'authway-login',
+                'width=500,height=700,scrollbars=yes,location=no,toolbar=no,menubar=no,status=no'
+            );
+
+            if (!popup) {
+                throw new Error('Popup was blocked. Please allow popups for this site.');
+            }
+
+            // Wait for popup to complete
+            const result = await new Promise((resolve, reject) => {
+                let timeoutId;
+                let intervalId;
+
+                const cleanup = () => {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    if (intervalId) clearInterval(intervalId);
+                    window.removeEventListener('message', messageHandler);
+                };
+
+                const messageHandler = (event) => {
+                    // Security: Verify origin
+                    const isLocalhost = event.origin.includes('localhost') || event.origin.includes('127.0.0.1');
+                    const isConfiguredOrigin = event.origin === window.location.origin;
+
+                    if (!isLocalhost && !isConfiguredOrigin) {
+                        return;
+                    }
+
+                    if (event.data && event.data.type === 'authway-callback') {
+                        cleanup();
+                        try {
+                            popup.close();
+                        } catch (err) {
+                            // Ignore
+                        }
+
+                        const { success, error, error_description } = event.data;
+
+                        if (error) {
+                            reject(new Error(error_description || error));
+                        } else if (success) {
+                            // Authentication completed successfully via popup
+                            resolve({ success: true });
+                        } else {
+                            reject(new Error('Authentication failed'));
+                        }
+                    }
+                };
+
+                window.addEventListener('message', messageHandler);
+
+                // Timeout after 5 minutes
+                timeoutId = setTimeout(() => {
+                    cleanup();
+                    try {
+                        popup.close();
+                    } catch (err) {
+                        // Ignore
+                    }
+                    reject(new Error('Login timeout'));
+                }, 300000);
+
+                // Check if popup is closed
+                intervalId = setInterval(() => {
+                    try {
+                        if (popup.closed) {
+                            cleanup();
+                            reject(new Error('Popup was closed by user'));
+                        }
+                    } catch (err) {
+                        // COOP policy blocks popup.closed access
+                    }
+                }, 1000);
+            });
+
+            // Success! Reload the page to show authenticated state
+            statusDiv.innerHTML = '<div class="alert alert-success">✅ Login successful! Reloading...</div>';
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Popup login failed:', error);
+            statusDiv.innerHTML = `<div class="alert alert-danger">❌ Login failed: ${error.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '🪟 Popup Login';
+        }
+    });
+</script>
+}
+

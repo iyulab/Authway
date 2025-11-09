@@ -1,0 +1,46 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/assets/*", "/*.{css,scss,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot}"]
+  },
+  "routes": [
+    {
+      "route": "/tenants",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/tenants/*",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/users",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/users/*",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/clients",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/clients/*",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/settings",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/login",
+      "rewrite": "/index.html"
+    }
+  ],
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html",
+      "statusCode": 200
+    }
+  }
+}

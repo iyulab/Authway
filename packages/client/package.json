@@ -1,0 +1,64 @@
+{
+  "name": "@authway/client",
+  "version": "0.1.1",
+  "description": "Framework-agnostic authentication client for Authway - OAuth 2.0 / OIDC with PKCE, DPoP, and multi-tenant support",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "authway",
+    "oauth",
+    "oauth2",
+    "oidc",
+    "openid",
+    "authentication",
+    "pkce",
+    "dpop",
+    "multi-tenant",
+    "jwt",
+    "auth",
+    "sso",
+    "account-linking"
+  ],
+  "author": "Authway Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iyulab/authway.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/iyulab/authway#readme",
+  "bugs": {
+    "url": "https://github.com/iyulab/authway/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "sideEffects": false
+}

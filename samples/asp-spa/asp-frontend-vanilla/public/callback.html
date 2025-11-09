@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OAuth Callback</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 4px solid white;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      margin: 20px auto;
+    }
+    .error-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <p>Processing authentication...</p>
+    <div id="error-container"></div>
+  </div>
+
+  <script>
+    (function() {
+      try {
+        // Parse URL parameters
+        const params = new URLSearchParams(window.location.search);
+        const hash = new URLSearchParams(window.location.hash.substring(1));
+
+        // Extract OAuth response parameters
+        const code = params.get('code') || hash.get('code');
+        const state = params.get('state') || hash.get('state');
+        const error = params.get('error') || hash.get('error');
+        const errorDescription = params.get('error_description') || hash.get('error_description');
+
+        // Prepare message for parent window
+        const message = {
+          type: 'oauth-callback',
+          code,
+          state,
+          error,
+          errorDescription
+        };
+
+        // If there's an error, display it
+        if (error) {
+          const errorContainer = document.getElementById('error-container');
+          errorContainer.innerHTML = `
+            <div class="error">
+              <div class="error-title">❌ Authentication Error</div>
+              <div><strong>Error:</strong> ${error}</div>
+              ${errorDescription ? `<div><strong>Description:</strong> ${errorDescription}</div>` : ''}
+            </div>
+          `;
+          document.querySelector('.spinner').style.display = 'none';
+          document.querySelector('p').textContent = 'Authentication failed';
+        }
+
+        // Send message to opener window
+        if (window.opener) {
+          window.opener.postMessage(message, window.location.origin);
+
+          // Close popup after short delay
+          setTimeout(() => {
+            window.close();
+          }, error ? 3000 : 500);
+        } else {
+          // No opener window (direct navigation)
+          document.querySelector('.spinner').style.display = 'none';
+          document.querySelector('p').textContent = 'This page should be opened in a popup window';
+        }
+      } catch (err) {
+        console.error('Callback error:', err);
+        const errorContainer = document.getElementById('error-container');
+        errorContainer.innerHTML = `
+          <div class="error">
+            <div class="error-title">❌ Processing Error</div>
+            <div>${err.message}</div>
+          </div>
+        `;
+        document.querySelector('.spinner').style.display = 'none';
+        document.querySelector('p').textContent = 'Error processing callback';
+      }
+    })();
+  </script>
+</body>
+</html>

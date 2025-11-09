@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: authway-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-authway}
+      POSTGRES_USER: ${POSTGRES_USER:-authway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-authway} -d ${POSTGRES_DB:-authway}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+    restart: always
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: authway-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Please set REDIS_PASSWORD}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authway-network
+    restart: always
+
+  # Authway Backend API
+  authway-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: authway-api
+    environment:
+      # App
+      AUTHWAY_APP_NAME: ${APP_NAME:-Authway}
+      AUTHWAY_APP_VERSION: ${APP_VERSION:-1.0.0}
+      AUTHWAY_APP_ENVIRONMENT: production
+      AUTHWAY_APP_PORT: 8080
+      AUTHWAY_APP_BASE_URL: ${APP_BASE_URL:?Please set APP_BASE_URL}
+
+      # Database
+      AUTHWAY_DATABASE_HOST: postgres
+      AUTHWAY_DATABASE_PORT: 5432
+      AUTHWAY_DATABASE_USER: ${POSTGRES_USER:-authway}
+      AUTHWAY_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD}
+      AUTHWAY_DATABASE_NAME: ${POSTGRES_DB:-authway}
+      AUTHWAY_DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-require}
+
+      # Redis
+      AUTHWAY_REDIS_HOST: redis
+      AUTHWAY_REDIS_PORT: 6379
+      AUTHWAY_REDIS_PASSWORD: ${REDIS_PASSWORD:?Please set REDIS_PASSWORD}
+      AUTHWAY_REDIS_DB: 0
+
+      # JWT
+      AUTHWAY_JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:?Please set JWT_ACCESS_TOKEN_SECRET}
+      AUTHWAY_JWT_REFRESH_TOKEN_SECRET: ${JWT_REFRESH_TOKEN_SECRET:?Please set JWT_REFRESH_TOKEN_SECRET}
+      AUTHWAY_JWT_ACCESS_TOKEN_EXPIRY: ${JWT_ACCESS_TOKEN_EXPIRY:-15m}
+      AUTHWAY_JWT_REFRESH_TOKEN_EXPIRY: ${JWT_REFRESH_TOKEN_EXPIRY:-7d}
+      AUTHWAY_JWT_ISSUER: ${JWT_ISSUER:-authway}
+
+      # OAuth
+      AUTHWAY_OAUTH_AUTHORIZE_CODE_EXPIRY: ${OAUTH_AUTHORIZE_CODE_EXPIRY:-10m}
+      AUTHWAY_OAUTH_ALLOWED_GRANT_TYPES: ${OAUTH_ALLOWED_GRANT_TYPES:-authorization_code,refresh_token}
+      AUTHWAY_OAUTH_ALLOWED_SCOPES: ${OAUTH_ALLOWED_SCOPES:-openid,profile,email}
+      AUTHWAY_OAUTH_REQUIRE_PKCE: ${OAUTH_REQUIRE_PKCE:-true}
+
+      # CORS
+      AUTHWAY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Please set CORS_ALLOWED_ORIGINS}
+
+      # Email (SMTP)
+      AUTHWAY_EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:?Please set EMAIL_SMTP_HOST}
+      AUTHWAY_EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-587}
+      AUTHWAY_EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:?Please set EMAIL_SMTP_USER}
+      AUTHWAY_EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:?Please set EMAIL_SMTP_PASSWORD}
+      AUTHWAY_EMAIL_FROM_EMAIL: ${EMAIL_FROM_EMAIL:-noreply@authway.in}
+      AUTHWAY_EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Authway}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - authway-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Login UI (React + Vite) - Production Build
+  login-ui:
+    build:
+      context: ./packages/web/login-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Please set VITE_API_URL}
+    container_name: authway-login-ui
+    ports:
+      - "${LOGIN_UI_PORT:-3001}:80"
+    networks:
+      - authway-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # Admin Dashboard (React + Vite) - Production Build
+  admin-dashboard:
+    build:
+      context: ./packages/web/admin-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Please set VITE_API_URL}
+    container_name: authway-admin-dashboard
+    ports:
+      - "${ADMIN_DASHBOARD_PORT:-3000}:80"
+    networks:
+      - authway-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # Nginx Reverse Proxy (Optional - for SSL/TLS termination)
+  nginx:
+    image: nginx:alpine
+    container_name: authway-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - authway-api
+      - login-ui
+      - admin-dashboard
+    networks:
+      - authway-network
+    restart: always
+    profiles:
+      - with-nginx
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_cache:
+    driver: local
+
+networks:
+  authway-network:
+    driver: bridge

@@ -1,0 +1,54 @@
+# Dockerignore for Auth API (apps/branding/auth-api)
+# This file should be used with Dockerfile.auth-api
+
+# Ignore development files
+.git
+.gitignore
+.env*
+*.md
+!README.md
+
+# Ignore build artifacts
+node_modules
+dist
+build
+*.log
+*.tmp
+
+# Ignore IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Ignore test files
+*_test.go
+test/
+tools/
+
+# Ignore Docker files
+Dockerfile*
+docker-compose*
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+vendor/
+
+# Ignore all apps except auth-api
+apps/central/
+apps/branding/auth-ui/
+
+# Ignore scripts
+scripts/
+
+# Ignore root level files not needed
+go.mod
+go.sum

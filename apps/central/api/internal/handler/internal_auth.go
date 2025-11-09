@@ -1,0 +1,167 @@
+package handler
+
+import (
+	"net/http"
+
+	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/user"
+
+	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
+)
+
+type InternalAuthHandler struct {
+	userService   user.Service
+	clientService client.Service
+	logger        *zap.Logger
+}
+
+func NewInternalAuthHandler(
+	userService user.Service,
+	clientService client.Service,
+	logger *zap.Logger,
+) *InternalAuthHandler {
+	return &InternalAuthHandler{
+		userService:   userService,
+		clientService: clientService,
+		logger:        logger,
+	}
+}
+
+// AuthenticateGoogleUserRequest represents the request from Auth Backend
+type AuthenticateGoogleUserRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	GoogleID string `json:"google_id"`
+	Picture  string `json:"picture"`
+	ClientID string `json:"client_id"`
+}
+
+// AuthenticateGoogleUserResponse represents the response to Auth Backend
+type AuthenticateGoogleUserResponse struct {
+	UserID   string `json:"user_id"`
+	TenantID string `json:"tenant_id"`
+	Email    string `json:"email"`
+}
+
+// AuthenticateGoogleUser handles internal Google authentication from Auth Backend
+func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
+	var req AuthenticateGoogleUserRequest
+	if err := c.BodyParser(&req); err != nil {
+		h.logger.Error("Failed to parse request", zap.Error(err))
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.Email == "" || req.GoogleID == "" || req.ClientID == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"error": "email, google_id, and client_id are required",
+		})
+	}
+
+	h.logger.Info("Processing internal Google authentication",
+		zap.String("email", req.Email),
+		zap.String("client_id", req.ClientID))
+
+	// Get client to determine tenant
+	oauthClient, err := h.clientService.GetByClientID(req.ClientID)
+	if err != nil {
+		h.logger.Error("Failed to get client for tenant determination",
+			zap.Error(err),
+			zap.String("client_id", req.ClientID))
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid client_id",
+		})
+	}
+
+	clientTenantID := oauthClient.TenantID
+
+	// Check if user already exists in this tenant
+	existingUser, err := h.userService.GetByEmailAndTenant(clientTenantID, req.Email)
+	if err == nil {
+		// User exists, update Google-specific fields
+		existingUser.GoogleID = &req.GoogleID
+		existingUser.Picture = &req.Picture
+		existingUser.EmailVerified = true // Google verified
+
+		updateReq := &user.UpdateUserRequest{
+			AvatarURL: req.Picture,
+		}
+		if _, err := h.userService.Update(existingUser.ID, updateReq); err != nil {
+			h.logger.Error("Failed to update existing user",
+				zap.Error(err),
+				zap.String("user_id", existingUser.ID.String()))
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to update user",
+			})
+		}
+
+		// Update last login
+		if err := h.userService.UpdateLastLogin(existingUser.ID); err != nil {
+			h.logger.Warn("Failed to update last login",
+				zap.Error(err),
+				zap.String("user_id", existingUser.ID.String()))
+			// Continue despite error
+		}
+
+		h.logger.Info("Updated existing user with Google account",
+			zap.String("user_id", existingUser.ID.String()),
+			zap.String("email", existingUser.Email),
+			zap.String("tenant_id", clientTenantID.String()))
+
+		return c.JSON(AuthenticateGoogleUserResponse{
+			UserID:   existingUser.ID.String(),
+			TenantID: clientTenantID.String(),
+			Email:    existingUser.Email,
+		})
+	}
+
+	// User doesn't exist, create new user
+	h.logger.Info("Creating new user from Google account",
+		zap.String("email", req.Email),
+		zap.String("tenant_id", clientTenantID.String()))
+
+	createReq := &user.CreateUserRequest{
+		Email:    req.Email,
+		Password: "", // Social login users don't need a password
+		Name:     req.Name,
+	}
+
+	newUser, err := h.userService.Create(clientTenantID, createReq)
+	if err != nil {
+		h.logger.Error("Failed to create new user from Google",
+			zap.Error(err),
+			zap.String("email", req.Email))
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create user",
+		})
+	}
+
+	// Update Google-specific fields
+	newUser.GoogleID = &req.GoogleID
+	newUser.Picture = &req.Picture
+	newUser.EmailVerified = true
+
+	updateReq := &user.UpdateUserRequest{
+		AvatarURL: req.Picture,
+	}
+	if _, err := h.userService.Update(newUser.ID, updateReq); err != nil {
+		h.logger.Warn("Failed to update new user with Google fields",
+			zap.Error(err),
+			zap.String("user_id", newUser.ID.String()))
+		// Continue despite error
+	}
+
+	h.logger.Info("Created new user from Google account",
+		zap.String("user_id", newUser.ID.String()),
+		zap.String("email", newUser.Email),
+		zap.String("tenant_id", clientTenantID.String()))
+
+	return c.JSON(AuthenticateGoogleUserResponse{
+		UserID:   newUser.ID.String(),
+		TenantID: clientTenantID.String(),
+		Email:    newUser.Email,
+	})
+}

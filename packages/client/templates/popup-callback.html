@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Complete - Authway</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 400px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .message {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .sub-message {
+            font-size: 1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.9);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .close-button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .close-button:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .debug-info {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            display: none;
+        }
+
+        .debug-info.visible {
+            display: block;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 1.5rem;
+            }
+
+            .message {
+                font-size: 1.25rem;
+            }
+
+            .sub-message {
+                font-size: 0.875rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo" id="logo">
+            <span>🔐</span>
+        </div>
+        <div class="spinner" id="spinner"></div>
+        <div class="message" id="message">Authentication Successful</div>
+        <div class="sub-message" id="subMessage">This window will close automatically...</div>
+        <div class="error-message" id="errorMessage" style="display: none;"></div>
+        <button class="close-button" id="closeButton" style="display: none;" onclick="closeWindow()">Close Window</button>
+        <div class="debug-info" id="debugInfo"></div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // Debug mode - enable with ?debug=1 in URL
+            const DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
+
+            // DOM elements
+            const spinner = document.getElementById('spinner');
+            const message = document.getElementById('message');
+            const subMessage = document.getElementById('subMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const closeButton = document.getElementById('closeButton');
+            const debugInfo = document.getElementById('debugInfo');
+
+            // Debug logging
+            function log(msg, data) {
+                console.log('[Authway PopupCallback] ' + msg, data || '');
+                if (DEBUG) {
+                    const time = new Date().toISOString().split('T')[1];
+                    debugInfo.innerHTML += time + ' - ' + msg + (data ? ': ' + JSON.stringify(data) : '') + '<br>';
+                    debugInfo.classList.add('visible');
+                }
+            }
+
+            // Show error to user
+            function showError(errorMsg, details) {
+                log('Error occurred', { error: errorMsg, details: details });
+                spinner.style.display = 'none';
+                message.textContent = 'Authentication Error';
+                subMessage.textContent = errorMsg;
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = details || 'Please close this window and try again.';
+                closeButton.style.display = 'inline-block';
+            }
+
+            // Close window
+            window.closeWindow = function() {
+                log('Closing window via button click');
+                window.close();
+            };
+
+            // Start
+            log('Popup callback page loaded');
+            log('Location', {
+                href: window.location.href,
+                origin: window.location.origin,
+                search: window.location.search
+            });
+
+            // Check if running in popup
+            if (!window.opener) {
+                log('ERROR: window.opener is null');
+                showError(
+                    'Invalid Window Context',
+                    'This page must be opened in a popup window. Please ensure popups are enabled and try again.'
+                );
+                return;
+            }
+
+            log('window.opener exists', { origin: window.opener.origin });
+
+            // Extract OAuth callback parameters
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            const state = params.get('state');
+            const error = params.get('error');
+            const errorDescription = params.get('error_description');
+
+            log('OAuth parameters extracted', {
+                hasCode: !!code,
+                hasState: !!state,
+                hasError: !!error,
+                errorDescription: errorDescription
+            });
+
+            // Check for OAuth errors
+            if (error) {
+                log('OAuth error detected', { error, errorDescription });
+                showError(
+                    'Authentication Failed',
+                    errorDescription || error
+                );
+
+                // Still send message to parent with error
+                try {
+                    const errorMsg = {
+                        type: 'authway-callback',
+                        code: null,
+                        state: state,
+                        error: error,
+                        error_description: errorDescription
+                    };
+                    window.opener.postMessage(errorMsg, window.opener.origin);
+                    log('Error message sent to opener');
+                } catch (e) {
+                    log('Failed to send error message', e);
+                }
+
+                return;
+            }
+
+            // Validate required parameters
+            if (!code || !state) {
+                log('ERROR: Missing required parameters', { hasCode: !!code, hasState: !!state });
+                showError(
+                    'Invalid Callback',
+                    'Missing required authentication parameters (code or state).'
+                );
+                return;
+            }
+
+            // Prepare message for parent window
+            const message = {
+                type: 'authway-callback',
+                code: code,
+                state: state,
+                error: null,
+                error_description: null
+            };
+
+            log('Preparing to send message to opener', {
+                type: message.type,
+                hasCode: !!message.code,
+                hasState: !!message.state,
+                targetOrigin: window.opener.origin
+            });
+
+            try {
+                // Send message to parent window
+                // Security: window.opener.origin ensures message only goes to parent
+                window.opener.postMessage(message, window.opener.origin);
+                log('Message successfully sent to opener');
+            } catch (e) {
+                log('ERROR: Failed to send postMessage', e);
+                showError(
+                    'Communication Error',
+                    'Failed to send authentication result to parent window: ' + e.message
+                );
+                return;
+            }
+
+            // Schedule window close
+            log('Scheduling window close in 500ms');
+            setTimeout(function() {
+                log('Attempting to close window');
+                try {
+                    window.close();
+                    log('window.close() called');
+                } catch (e) {
+                    log('ERROR: Failed to close window', e);
+                    // If close fails, show manual close button
+                    spinner.style.display = 'none';
+                    message.textContent = 'Authentication Complete';
+                    subMessage.textContent = 'Please close this window manually';
+                    closeButton.style.display = 'inline-block';
+                }
+            }, 500);
+
+            // Fallback: Show manual close button after 2 seconds if window didn't close
+            setTimeout(function() {
+                if (!window.closed) {
+                    log('Window did not close automatically, showing manual close button');
+                    spinner.style.display = 'none';
+                    subMessage.textContent = 'If this window doesn\'t close, please close it manually';
+                    closeButton.style.display = 'inline-block';
+                }
+            }, 2000);
+
+        })();
+    </script>
+</body>
+</html>

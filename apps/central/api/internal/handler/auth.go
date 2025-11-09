@@ -1,0 +1,1196 @@
+package handler
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/claims"
+	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/user"
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type AuthHandler struct {
+	userService   user.Service
+	clientService client.Service
+	claimsService claims.Service
+	hydraClient   *hydra.Client
+	logger        *zap.Logger
+}
+
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, hydraClient *hydra.Client, logger *zap.Logger) *AuthHandler {
+	return &AuthHandler{
+		userService:   userService,
+		clientService: clientService,
+		claimsService: claimsService,
+		hydraClient:   hydraClient,
+		logger:        logger,
+	}
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// LoginPageRequest for POST request body
+type LoginPageRequest struct {
+	LoginChallenge string `json:"login_challenge"`
+}
+
+// Login flow handler - supports both GET and POST
+func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
+	challenge := c.Query("login_challenge")
+
+	// If not in query, try POST body
+	if challenge == "" && c.Method() == "POST" {
+		var req LoginPageRequest
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.LoginChallenge
+		}
+	}
+
+	if challenge == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "login_challenge parameter is required",
+			"hint":  "The login_challenge parameter must be included in the URL query string or POST body. This parameter is provided by Ory Hydra in the OAuth 2.0 authorization flow.",
+			"docs":  "https://www.ory.sh/docs/hydra/guides/login",
+		})
+	}
+
+	// Get login request from Hydra
+	h.logger.Info("Getting login request from Hydra", zap.String("challenge", challenge))
+	loginReq, err := h.hydraClient.GetLoginRequest(challenge)
+	if err != nil {
+		h.logger.Error("Failed to get login request from Hydra",
+			zap.String("challenge", challenge),
+			zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get login request from Hydra",
+			"details": err.Error(),
+			"hint":    "Verify that Ory Hydra is running and accessible. Check the HYDRA_ADMIN_URL environment variable.",
+			"debug": fiber.Map{
+				"hydra_admin_url": h.hydraClient.AdminURL,
+				"challenge":       challenge[:min(50, len(challenge))] + "...",
+			},
+		})
+	}
+
+	// Get client information to check tenant
+	h.logger.Info("Looking for client", zap.String("client_id", loginReq.Client.ClientID))
+	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
+	if err != nil {
+		h.logger.Error("Failed to get client information",
+			zap.String("client_id", loginReq.Client.ClientID),
+			zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "OAuth client not registered in Authway",
+			"details": err.Error(),
+			"hint":    "Register this OAuth client in Authway Admin Console before using it. Each client must be associated with a tenant.",
+			"solution": fiber.Map{
+				"step_1": "Go to Admin Console: http://localhost:3000",
+				"step_2": "Navigate to Clients section",
+				"step_3": "Register client with client_id: " + loginReq.Client.ClientID,
+			},
+			"client_id": loginReq.Client.ClientID,
+		})
+	}
+
+	// SSO Check: If user is already authenticated, verify tenant match
+	if loginReq.Skip && loginReq.Subject != "" {
+		userID, err := uuid.Parse(loginReq.Subject)
+		if err != nil {
+			// Invalid user ID format - revoke sessions and force fresh login
+			h.logger.Warn("Invalid user ID in skip request, revoking sessions",
+				zap.String("subject", loginReq.Subject),
+				zap.Error(err))
+			// Revoke all sessions for this subject
+			if revokeErr := h.hydraClient.RevokeUserSessions(loginReq.Subject); revokeErr != nil {
+				h.logger.Error("Failed to revoke user sessions", zap.Error(revokeErr))
+			}
+			// Reject with login_required to show login form without propagating error to OAuth client
+			resp, rejectErr := h.hydraClient.RejectLoginRequest(challenge, "login_required", "Please login again")
+			if rejectErr != nil {
+				return c.Status(500).JSON(fiber.Map{
+					"error": "Failed to reject login request",
+				})
+			}
+			// Return JSON response with redirect_to for frontend to handle
+			return c.JSON(fiber.Map{
+				"redirect_to":     resp.RedirectTo,
+				"session_cleared": true,
+			})
+		}
+
+		// Get user to check tenant
+		authenticatedUser, err := h.userService.GetByID(userID)
+		if err != nil {
+			// User not found - revoke sessions and force fresh login
+			h.logger.Warn("User not found in skip request, revoking sessions",
+				zap.String("user_id", userID.String()),
+				zap.Error(err))
+			// Revoke all sessions for this subject
+			if revokeErr := h.hydraClient.RevokeUserSessions(userID.String()); revokeErr != nil {
+				h.logger.Error("Failed to revoke user sessions", zap.Error(revokeErr))
+			}
+			// Reject with login_required to show login form without propagating error to OAuth client
+			resp, rejectErr := h.hydraClient.RejectLoginRequest(challenge, "login_required", "Please login again")
+			if rejectErr != nil {
+				return c.Status(500).JSON(fiber.Map{
+					"error": "Failed to reject login request",
+				})
+			}
+			// Return JSON response with redirect_to for frontend to handle
+			return c.JSON(fiber.Map{
+				"redirect_to":     resp.RedirectTo,
+				"session_cleared": true,
+			})
+		}
+
+		// Compare tenant_id for SSO eligibility
+		if authenticatedUser.TenantID == requestedClient.TenantID {
+			// Same tenant → SSO automatic approval
+			h.logger.Info("SSO approved - same tenant",
+				zap.String("user_id", authenticatedUser.ID.String()),
+				zap.String("tenant_id", authenticatedUser.TenantID.String()))
+
+			// Get and store claims for SSO login
+			userClaims, err := h.claimsService.GetClaimsForLogin(c.Context(), authenticatedUser.ID, authenticatedUser.TenantID, challenge)
+			if err != nil {
+				h.logger.Warn("Failed to get claims for SSO login",
+					zap.String("user_id", authenticatedUser.ID.String()),
+					zap.Error(err))
+				// Continue without claims
+				userClaims = nil
+			}
+
+			acceptBody := &hydra.AcceptLoginRequest{
+				Subject:     loginReq.Subject,
+				Remember:    true,
+				RememberFor: 3600,
+				Context: map[string]interface{}{
+					"email":     authenticatedUser.Email,
+					"name":      authenticatedUser.Name,
+					"tenant_id": authenticatedUser.TenantID.String(),
+					"sso":       true, // Mark this as SSO auto-login for consent detection
+				},
+			}
+
+			h.logger.Info("SSO login with claims",
+				zap.String("user_id", authenticatedUser.ID.String()),
+				zap.Int("claims_count", len(userClaims)))
+
+			resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
+			if err != nil {
+				return c.Status(500).JSON(fiber.Map{
+					"error": "Failed to accept login request",
+				})
+			}
+
+			// Return JSON response for SSO auto-login
+			return c.JSON(fiber.Map{
+				"redirect_to": resp.RedirectTo,
+				"sso":         true,
+			})
+		}
+		// Different tenant → Force re-authentication by showing login form
+		h.logger.Info("Different tenant - forcing re-authentication",
+			zap.String("user_tenant_id", authenticatedUser.TenantID.String()),
+			zap.String("client_tenant_id", requestedClient.TenantID.String()))
+	}
+
+	// Render login form with challenge
+	return c.JSON(fiber.Map{
+		"challenge":       challenge,
+		"client_name":     loginReq.Client.ClientName,
+		"requested_scope": loginReq.RequestedScope,
+		"tenant_id":       requestedClient.TenantID.String(),
+		"client": fiber.Map{
+			"client_id": loginReq.Client.ClientID,
+		},
+	})
+}
+
+type LoginRequest struct {
+	Challenge string `json:"challenge"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	Remember  bool   `json:"remember"`
+}
+
+func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	var req LoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get login request from Hydra
+	_, err := h.hydraClient.GetLoginRequest(req.Challenge)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get login request",
+		})
+	}
+
+	// Authenticate user
+	user, err := h.userService.GetByEmail(req.Email)
+	if err != nil {
+		// Reject login request
+		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		return c.JSON(fiber.Map{
+			"error":       "Invalid email or password",
+			"redirect_to": resp.RedirectTo,
+		})
+	}
+
+	// Verify password
+	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		// Reject login request
+		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		return c.JSON(fiber.Map{
+			"error":       "Invalid email or password",
+			"redirect_to": resp.RedirectTo,
+		})
+	}
+
+	// Get and store claims for this login session
+	userClaims, err := h.claimsService.GetClaimsForLogin(c.Context(), user.ID, user.TenantID, req.Challenge)
+	if err != nil {
+		h.logger.Warn("Failed to get claims for login",
+			zap.String("user_id", user.ID.String()),
+			zap.Error(err))
+		// Continue without claims
+		userClaims = nil
+	}
+
+	// Accept login request
+	rememberFor := 0
+	if req.Remember {
+		rememberFor = 3600 // 1 hour
+	}
+
+	acceptBody := &hydra.AcceptLoginRequest{
+		Subject:     user.ID.String(),
+		Remember:    req.Remember,
+		RememberFor: rememberFor,
+		Context: map[string]interface{}{
+			"email":     user.Email,
+			"name":      user.Name,
+			"tenant_id": user.TenantID.String(),
+		},
+	}
+
+	h.logger.Info("Accepting login request",
+		zap.String("user_id", user.ID.String()),
+		zap.Int("claims_count", len(userClaims)))
+
+	resp, err := h.hydraClient.AcceptLoginRequest(req.Challenge, acceptBody)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to accept login request",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"redirect_to": resp.RedirectTo,
+	})
+}
+
+// ConsentPageRequest for POST request body
+type ConsentPageRequest struct {
+	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
+}
+
+// Consent flow handler - supports both GET and POST
+func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
+	challenge := c.Query("consent_challenge")
+
+	// If not in query, try POST body (supports both JSON and form-urlencoded)
+	if challenge == "" && c.Method() == "POST" {
+		var req ConsentPageRequest
+		// BodyParser supports both JSON and form-urlencoded automatically
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.ConsentChallenge
+		}
+	}
+
+	if challenge == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "consent_challenge parameter is required",
+			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body. This parameter is provided by Ory Hydra after successful login.",
+			"docs":  "https://www.ory.sh/docs/hydra/guides/consent",
+		})
+	}
+
+	// Get consent request from Hydra
+	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get consent request from Hydra",
+			"details": err.Error(),
+			"hint":    "Verify that Ory Hydra is running and the consent_challenge is valid. The challenge may have expired or been used already.",
+			"debug": fiber.Map{
+				"hydra_admin_url": h.hydraClient.AdminURL,
+				"challenge":       challenge[:min(50, len(challenge))] + "...",
+			},
+		})
+	}
+
+	// Get user information first
+	userID, err := uuid.Parse(consentReq.Subject)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Invalid user ID"})
+	}
+	user, err := h.userService.GetByID(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	// Get claims for this consent flow
+	loginChallenge := consentReq.LoginChallenge
+	userName := ""
+	if user.Name != nil {
+		userName = *user.Name
+	}
+	userInfo := &claims.UserInfo{
+		Email:    user.Email,
+		Name:     userName,
+		TenantID: user.TenantID,
+	}
+	userClaims, err := h.claimsService.GetClaimsForConsent(c.Context(), loginChallenge, userID, user.TenantID, userInfo)
+	if err != nil {
+		h.logger.Warn("Failed to get claims for consent", zap.Error(err))
+		userClaims = make(claims.ClaimMap)
+	}
+
+	// Check source of claims to determine if this is a claims update scenario
+	claimsSource, _ := userClaims["_source"].(string)
+	isClaimsUpdate := claimsSource == "pending" || claimsSource == "login_challenge"
+
+	// Remove internal _source field before sending to Hydra
+	delete(userClaims, "_source")
+
+	// Check if this is a silent (prompt=none) authentication
+	// Hydra may not set Skip=true for prompt=none, but we should still auto-accept
+	isSilentAuth := false
+	if consentReq.Context != nil {
+		if prompt, exists := consentReq.Context["prompt"]; exists && prompt == "none" {
+			isSilentAuth = true
+		}
+	}
+
+	// Check if this consent request came from SSO auto-login
+	// SSO auto-login should not require user consent again
+	isSSOLogin := false
+	if consentReq.Context != nil {
+		if sso, exists := consentReq.Context["sso"]; exists {
+			if ssoVal, ok := sso.(bool); ok && ssoVal {
+				isSSOLogin = true
+			}
+		}
+	}
+
+	// Auto-accept consent if:
+	// 1. Client has skip_consent=true (from Hydra)
+	// 2. Claims update scenario (workspace switch, etc.)
+	// 3. Silent authentication (prompt=none)
+	// 4. SSO auto-login (user already authenticated, should not show consent again)
+	shouldAutoAccept := consentReq.Skip || isClaimsUpdate || isSilentAuth || isSSOLogin
+
+	if shouldAutoAccept {
+		h.logger.Info("Auto-accepting consent",
+			zap.String("client_id", consentReq.Client.ClientID),
+			zap.String("claims_source", claimsSource),
+			zap.Bool("skip_consent", consentReq.Skip),
+			zap.Bool("is_claims_update", isClaimsUpdate),
+			zap.Bool("is_silent_auth", isSilentAuth),
+			zap.Bool("is_sso_login", isSSOLogin),
+			zap.String("challenge", challenge[:min(50, len(challenge))]+"..."),
+			zap.Any("updated_claims", userClaims))
+
+		// Auto-accept consent
+		acceptRequest := &hydra.AcceptConsentRequest{
+			GrantScope:               consentReq.RequestedScope,
+			GrantAccessTokenAudience: consentReq.RequestedAudience,
+			Remember:                 true,
+			RememberFor:              3600,
+			Session: &hydra.ConsentSession{
+				AccessToken: userClaims,
+				IDToken:     userClaims,
+			},
+		}
+
+		redirectTo, err := h.hydraClient.AcceptConsentRequest(challenge, acceptRequest)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to auto-accept consent"})
+		}
+
+		// Return redirect_to as JSON for frontend to handle
+		return c.JSON(fiber.Map{
+			"redirect_to":   redirectTo.RedirectTo,
+			"auto_accepted": true,
+		})
+	}
+
+	// Show consent page (only if client doesn't have skip_consent=true)
+	h.logger.Info("Showing consent page",
+		zap.String("client_id", consentReq.Client.ClientID),
+		zap.String("claims_source", claimsSource),
+		zap.Bool("skip", consentReq.Skip))
+
+	return c.JSON(fiber.Map{
+		"challenge":       challenge,
+		"client_name":     consentReq.Client.ClientName,
+		"requested_scope": consentReq.RequestedScope,
+		"user": fiber.Map{
+			"email": user.Email,
+			"name":  user.Name,
+		},
+	})
+}
+
+type ConsentRequest struct {
+	Challenge   string   `json:"challenge"`
+	GrantScope  []string `json:"grant_scope"`
+	Remember    bool     `json:"remember"`
+	RememberFor int      `json:"remember_for"`
+}
+
+func (h *AuthHandler) Consent(c *fiber.Ctx) error {
+	var req ConsentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get consent request from Hydra
+	consentReq, err := h.hydraClient.GetConsentRequest(req.Challenge)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get consent request",
+		})
+	}
+
+	// Get user information for session
+	userID, err := uuid.Parse(consentReq.Subject)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+	user, err := h.userService.GetByID(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get user information",
+		})
+	}
+
+	// Get claims for this consent flow (with fallback to pending/db claims if login_challenge mismatch)
+	loginChallenge := consentReq.LoginChallenge
+	userName := ""
+	if user.Name != nil {
+		userName = *user.Name
+	}
+	userInfoForClaims := &claims.UserInfo{
+		Email:    user.Email,
+		Name:     userName,
+		TenantID: user.TenantID,
+	}
+	userClaims, err := h.claimsService.GetClaimsForConsent(c.Context(), loginChallenge, userID, user.TenantID, userInfoForClaims)
+	if err != nil {
+		h.logger.Warn("Failed to get claims for consent",
+			zap.String("login_challenge", loginChallenge),
+			zap.String("user_id", userID.String()),
+			zap.Error(err))
+		// Continue without additional claims
+		userClaims = make(claims.ClaimMap)
+	}
+
+	// Build session data with base claims + user claims
+	accessTokenClaims := map[string]interface{}{
+		"email":     user.Email,
+		"name":      user.Name,
+		"tenant_id": user.TenantID.String(),
+	}
+
+	idTokenClaims := map[string]interface{}{
+		"email":          user.Email,
+		"name":           user.Name,
+		"email_verified": user.EmailVerified,
+		"tenant_id":      user.TenantID.String(),
+	}
+
+	// Merge user claims into both access token and ID token
+	for key, value := range userClaims {
+		accessTokenClaims[key] = value
+		idTokenClaims[key] = value
+	}
+
+	// Accept consent request
+	acceptBody := &hydra.AcceptConsentRequest{
+		GrantScope:               req.GrantScope,
+		GrantAccessTokenAudience: consentReq.RequestedAudience,
+		Remember:                 req.Remember,
+		RememberFor:              req.RememberFor,
+		Session: &hydra.ConsentSession{
+			AccessToken: accessTokenClaims,
+			IDToken:     idTokenClaims,
+		},
+	}
+
+	// Log detailed consent request data
+	h.logger.Info("Sending consent accept to Hydra",
+		zap.String("challenge", req.Challenge),
+		zap.Strings("grant_scope", req.GrantScope),
+		zap.Strings("grant_access_token_audience", consentReq.RequestedAudience),
+		zap.Bool("remember", req.Remember),
+		zap.Int("remember_for", req.RememberFor),
+		zap.String("user_id", user.ID.String()),
+		zap.String("tenant_id", user.TenantID.String()))
+
+	resp, err := h.hydraClient.AcceptConsentRequest(req.Challenge, acceptBody)
+	if err != nil {
+		h.logger.Error("Failed to accept consent request",
+			zap.Error(err),
+			zap.String("challenge", req.Challenge))
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to accept consent request",
+		})
+	}
+
+	h.logger.Info("Consent accepted, redirecting",
+		zap.String("redirect_to", resp.RedirectTo),
+		zap.String("user_id", user.ID.String()))
+
+	return c.JSON(fiber.Map{
+		"redirect_to": resp.RedirectTo,
+	})
+}
+
+// RejectConsentRequest for POST request body
+type RejectConsentRequest struct {
+	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
+}
+
+func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
+	// Try to get challenge from query parameter first (GET)
+	challenge := c.Query("consent_challenge")
+
+	// If not in query, try POST body (supports both JSON and form-urlencoded)
+	if challenge == "" && c.Method() == "POST" {
+		var req RejectConsentRequest
+		if err := c.BodyParser(&req); err == nil {
+			challenge = req.ConsentChallenge
+		}
+	}
+
+	if challenge == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "consent_challenge parameter is required",
+			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body",
+		})
+	}
+
+	resp, err := h.hydraClient.RejectConsentRequest(challenge, "access_denied", "User denied consent")
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to reject consent request",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"redirect_to": resp.RedirectTo,
+	})
+}
+
+// LogoutPage handles logout flow - auto-accept since skip_logout_consent is true
+func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
+	challenge := c.Query("logout_challenge")
+
+	if challenge == "" {
+		h.logger.Warn("Logout request without challenge")
+		return c.Status(400).JSON(fiber.Map{
+			"error": "logout_challenge parameter is required",
+			"guide": "This endpoint should be called by Hydra with a logout_challenge parameter",
+		})
+	}
+
+	// Get logout request from Hydra
+	logoutReq, err := h.hydraClient.GetLogoutRequest(challenge)
+	if err != nil {
+		h.logger.Error("Failed to get logout request from Hydra",
+			zap.String("challenge", challenge),
+			zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to get logout request",
+			"guide":   "Hydra might be unavailable or the challenge may have expired. Try logging out again.",
+			"details": err.Error(),
+		})
+	}
+
+	h.logger.Info("Processing logout request",
+		zap.String("subject", logoutReq.Subject),
+		zap.String("challenge", challenge))
+
+	// Auto-accept logout (skip_logout_consent is true)
+	resp, err := h.hydraClient.AcceptLogoutRequest(challenge)
+	if err != nil {
+		h.logger.Error("Failed to accept logout request",
+			zap.String("challenge", challenge),
+			zap.String("subject", logoutReq.Subject),
+			zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Failed to accept logout request",
+			"guide":   "Hydra logout acceptance failed. Try again or contact support.",
+			"details": err.Error(),
+		})
+	}
+
+	h.logger.Info("Logout accepted - redirecting",
+		zap.String("subject", logoutReq.Subject),
+		zap.String("redirect_to", resp.RedirectTo))
+
+	// Redirect to Hydra's logout endpoint (which will then redirect to post_logout_redirect_uri)
+	return c.Redirect(resp.RedirectTo)
+}
+
+// LogoutRequest for direct logout API
+type LogoutRequest struct {
+	IDToken               string `json:"id_token"`                 // Optional: ID token to extract subject
+	Subject               string `json:"subject"`                  // Optional: Direct subject/user ID
+	PostLogoutRedirectURI string `json:"post_logout_redirect_uri"` // Optional: Where to redirect after logout
+	State                 string `json:"state"`                    // Optional: State parameter for redirect
+}
+
+// LogoutResponse for logout API response
+type LogoutResponse struct {
+	Success     bool   `json:"success"`
+	Message     string `json:"message"`
+	RedirectURL string `json:"redirect_url,omitempty"` // URL to redirect to (if post_logout_redirect_uri provided)
+}
+
+// Logout handles direct logout API - revokes all sessions for a user
+// Supports two modes:
+// 1. Direct session revocation (Option 1): Immediately revokes sessions via Hydra Admin API
+// 2. OIDC flow redirect (Option 2): Returns OIDC logout URL for standard flow
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	var req LogoutRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"success": false,
+			"error":   "Invalid request body",
+			"guide":   "Send JSON with 'id_token' or 'subject' field",
+		})
+	}
+
+	// Extract subject from ID token or use provided subject
+	subject := req.Subject
+	if subject == "" && req.IDToken != "" {
+		// Parse ID token to get subject (simplified - in production, verify signature)
+		claims, err := parseJWTClaims(req.IDToken)
+		if err != nil {
+			h.logger.Warn("Failed to parse ID token",
+				zap.Error(err))
+			return c.Status(400).JSON(fiber.Map{
+				"success": false,
+				"error":   "Invalid ID token",
+				"guide":   "Provide a valid JWT ID token or use 'subject' field directly",
+			})
+		}
+		subject = claims["sub"].(string)
+	}
+
+	if subject == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"success": false,
+			"error":   "Subject or ID token required",
+			"guide":   "Provide either 'id_token' or 'subject' in the request body",
+		})
+	}
+
+	// Option 1: Direct session revocation via Hydra Admin API
+	// This immediately revokes all OAuth2 sessions for the user
+	err := h.hydraClient.RevokeUserSessions(subject)
+	if err != nil {
+		h.logger.Error("Failed to revoke user sessions",
+			zap.String("subject", subject),
+			zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"success": false,
+			"error":   "Failed to revoke sessions",
+			"guide":   "This could be a temporary Hydra connection issue. Try again or use OIDC logout flow.",
+			"details": err.Error(),
+		})
+	}
+
+	h.logger.Info("User sessions revoked successfully",
+		zap.String("subject", subject))
+
+	response := LogoutResponse{
+		Success: true,
+		Message: "Logout successful - all sessions revoked",
+	}
+
+	// If post_logout_redirect_uri is provided, include it in response
+	if req.PostLogoutRedirectURI != "" {
+		redirectURL := req.PostLogoutRedirectURI
+		if req.State != "" {
+			redirectURL += "?state=" + req.State
+		}
+		response.RedirectURL = redirectURL
+	}
+
+	return c.JSON(response)
+}
+
+// parseJWTClaims parses JWT token and returns claims (without signature verification)
+// WARNING: This is for demonstration. In production, verify signature!
+func parseJWTClaims(token string) (map[string]interface{}, error) {
+	// Simple JWT parsing without verification (for ID token subject extraction)
+	// In production, use a proper JWT library with signature verification
+	parts := splitToken(token)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWT format")
+	}
+
+	// Decode payload (base64url)
+	payload, err := base64URLDecode(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode payload: %w", err)
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("failed to parse claims: %w", err)
+	}
+
+	return claims, nil
+}
+
+func splitToken(token string) []string {
+	parts := make([]string, 0, 3)
+	start := 0
+	for i := 0; i < len(token); i++ {
+		if token[i] == '.' {
+			parts = append(parts, token[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, token[start:])
+	return parts
+}
+
+func base64URLDecode(s string) ([]byte, error) {
+	// Add padding if needed
+	switch len(s) % 4 {
+	case 2:
+		s += "=="
+	case 3:
+		s += "="
+	}
+	// Replace URL-safe characters
+	s = strings.Replace(s, "-", "+", -1)
+	s = strings.Replace(s, "_", "/", -1)
+	return base64.StdEncoding.DecodeString(s)
+}
+
+// EmbeddedLoginRequest for direct authentication (Auth0-style)
+type EmbeddedLoginRequest struct {
+	Email               string `json:"email"`
+	Password            string `json:"password"`
+	ClientID            string `json:"client_id"`
+	RedirectURI         string `json:"redirect_uri"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+	State               string `json:"state"`
+	Scope               string `json:"scope"`
+	Remember            bool   `json:"remember"`
+}
+
+// EmbeddedLoginResponse returns authorization code
+type EmbeddedLoginResponse struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+// LoginEmbedded handles embedded login flow (client provides credentials directly)
+func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
+	var req EmbeddedLoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.Email == "" || req.Password == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "email and password are required",
+		})
+	}
+	if req.ClientID == "" || req.RedirectURI == "" || req.CodeChallenge == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "client_id, redirect_uri, and code_challenge are required",
+		})
+	}
+
+	// Get client information
+	client, err := h.clientService.GetByClientID(req.ClientID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid client_id",
+		})
+	}
+
+	// Authenticate user
+	user, err := h.userService.GetByEmail(req.Email)
+	if err != nil || user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Invalid email or password",
+		})
+	}
+
+	// Check tenant match
+	if user.TenantID != client.TenantID {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "User and client belong to different tenants",
+		})
+	}
+
+	// Start OAuth flow with Hydra (server-side)
+	// Build authorization URL
+	scope := req.Scope
+	if scope == "" {
+		scope = "openid profile email"
+	}
+
+	authURL := fmt.Sprintf("%s/oauth2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s&code_challenge=%s&code_challenge_method=%s",
+		h.hydraClient.AdminURL, // Should use public URL, but we'll use admin for now
+		req.ClientID,
+		req.RedirectURI,
+		scope,
+		req.State,
+		req.CodeChallenge,
+		req.CodeChallengeMethod,
+	)
+
+	// Make request to Hydra to get login_challenge
+	resp, err := http.Get(authURL)
+	if err != nil {
+		h.logger.Error("Failed to start OAuth flow", zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to start OAuth flow",
+		})
+	}
+	defer resp.Body.Close()
+
+	// Check if redirected to login
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		h.logger.Error("Unexpected Hydra response",
+			zap.Int("status", resp.StatusCode),
+			zap.String("body", string(body)))
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to initiate OAuth flow",
+		})
+	}
+
+	// Extract login_challenge from redirect URL
+	// This is complex - need to parse Location header or response
+
+	// Alternative simpler approach: Return error for now
+	return c.Status(501).JSON(fiber.Map{
+		"error":   "Embedded login not yet fully implemented",
+		"message": "This feature requires additional Hydra integration. Use loginWithRedirect() for now.",
+	})
+}
+
+// Registration endpoint
+type RegisterRequest struct {
+	TenantID string `json:"tenant_id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+}
+
+func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	var req RegisterRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Validate input
+	if req.Email == "" || req.Password == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Email and password are required",
+		})
+	}
+
+	if req.TenantID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Tenant ID is required",
+		})
+	}
+
+	// Parse tenant ID
+	tenantID, err := uuid.Parse(req.TenantID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid tenant ID format",
+		})
+	}
+
+	// Create user request
+	createReq := &user.CreateUserRequest{
+		Email:    req.Email,
+		Password: req.Password,
+		Name:     req.Name,
+	}
+
+	createdUser, err := h.userService.Create(tenantID, createReq)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to create user",
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"id":        createdUser.ID,
+		"tenant_id": createdUser.TenantID,
+		"email":     createdUser.Email,
+		"name":      createdUser.Name,
+	})
+}
+
+// User profile endpoint
+func (h *AuthHandler) Profile(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	if userID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "User ID is required",
+		})
+	}
+
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid user ID format",
+		})
+	}
+	user, err := h.userService.GetByID(userUUID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"id":             user.ID,
+		"email":          user.Email,
+		"name":           user.Name,
+		"email_verified": user.EmailVerified,
+		"created_at":     user.CreatedAt,
+		"updated_at":     user.UpdatedAt,
+	})
+}
+
+// ProfileMe - Get current authenticated user's profile
+// Requires JWT middleware to be applied
+func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
+	// Get user ID from JWT context (set by JWT middleware)
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		h.logger.Error("user_id not found in context - JWT middleware not applied?")
+		return c.Status(500).JSON(fiber.Map{
+			"error": "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		h.logger.Error("user_id in context is not a UUID")
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Invalid user ID format in context",
+		})
+	}
+
+	// Get user from database
+	user, err := h.userService.GetByID(userID)
+	if err != nil {
+		h.logger.Error("Failed to get user by ID",
+			zap.String("user_id", userID.String()),
+			zap.Error(err))
+		return c.Status(404).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"id":             user.ID,
+		"email":          user.Email,
+		"name":           user.Name,
+		"email_verified": user.EmailVerified,
+		"created_at":     user.CreatedAt,
+		"updated_at":     user.UpdatedAt,
+	})
+}
+
+// PopupCallback - OAuth callback handler for popup mode
+// Returns HTML page that sends postMessage to parent window and closes popup
+// Used by @authway/client and @authway/react SDK popup login flows
+func (h *AuthHandler) PopupCallback(c *fiber.Ctx) error {
+	// Extract OAuth callback parameters
+	code := c.Query("code")
+	state := c.Query("state")
+	errorParam := c.Query("error")
+	errorDesc := c.Query("error_description")
+
+	h.logger.Info("Popup callback received",
+		zap.Bool("hasCode", code != ""),
+		zap.Bool("hasState", state != ""),
+		zap.Bool("hasError", errorParam != ""),
+	)
+
+	// Helper function to safely convert string to JSON string literal
+	toJSONString := func(s string) string {
+		if s == "" {
+			return "null"
+		}
+		// Escape special characters for JSON
+		s = strings.ReplaceAll(s, "\\", "\\\\")
+		s = strings.ReplaceAll(s, "\"", "\\\"")
+		s = strings.ReplaceAll(s, "\n", "\n")
+		s = strings.ReplaceAll(s, "\r", "\r")
+		s = strings.ReplaceAll(s, "\t", "\t")
+		return fmt.Sprintf("\"%s\"", s)
+	}
+
+	// Generate HTML with embedded JavaScript that sends postMessage
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Complete</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0%% { transform: rotate(0deg); }
+            100%% { transform: rotate(360deg); }
+        }
+        .message {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .sub-message {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <div class="message">Authentication Successful</div>
+        <div class="sub-message">This window will close automatically...</div>
+    </div>
+
+    <script>
+        (function() {
+            console.log('[Authway PopupCallback] Starting callback handling');
+
+            // Check if running in popup
+            if (!window.opener) {
+                console.error('[Authway PopupCallback] Not running in popup - window.opener is null');
+                document.querySelector('.message').textContent = 'Error: Not in Popup';
+                document.querySelector('.sub-message').textContent = 'This page must be opened in a popup window';
+                return;
+            }
+
+            // Prepare message for parent window
+            var message = {
+                type: 'authway-callback',
+                code: %s,
+                state: %s,
+                error: %s,
+                error_description: %s
+            };
+
+            console.log('[Authway PopupCallback] Sending message to opener:', {
+                type: message.type,
+                hasCode: message.code !== null,
+                hasState: message.state !== null,
+                hasError: message.error !== null,
+                origin: window.opener.origin
+            });
+
+            // Send message to parent window
+            // Security: window.opener.origin ensures message only goes to parent
+            window.opener.postMessage(message, window.opener.origin);
+
+            console.log('[Authway PopupCallback] Message sent, closing popup in 500ms');
+
+            // Close popup after small delay to ensure message delivery
+            setTimeout(function() {
+                window.close();
+            }, 500);
+        })();
+    </script>
+</body>
+</html>`,
+		toJSONString(code),
+		toJSONString(state),
+		toJSONString(errorParam),
+		toJSONString(errorDesc),
+	)
+
+	// Set content type and return HTML
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	// Prevent caching
+	c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Set("Pragma", "no-cache")
+	c.Set("Expires", "0")
+
+	return c.SendString(html)
+}

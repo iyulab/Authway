@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Authentication Callback</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h2>Authentication Complete</h2>
+    <p>Please wait...</p>
+  </div>
+
+  <script>
+    (function() {
+      try {
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+        const error_description = urlParams.get('error_description');
+
+        // Check if this is a popup by checking for window.opener
+        const isPopup = window.opener && !window.opener.closed;
+
+        if (error) {
+          if (isPopup) {
+            // Send error to parent window
+            window.opener.postMessage({
+              type: 'authway-callback',
+              error: error,
+              error_description: error_description
+            }, window.location.origin);
+            window.close();
+          } else {
+            // Redirect to error page
+            window.location.href = '/Home/Error?message=' + encodeURIComponent(error_description || error);
+          }
+        } else if (code && state) {
+          if (isPopup) {
+            // Redirect to signin-oidc to let ASP.NET handle the OAuth callback
+            // Add popup=true parameter so we can detect it after authentication
+            window.location.href = '/signin-oidc?' + window.location.search.substring(1) + '&popup=true';
+          } else {
+            // Normal redirect flow
+            window.location.href = '/signin-oidc?' + window.location.search.substring(1);
+          }
+        } else {
+          // Missing parameters, redirect to home
+          window.location.href = '/';
+        }
+      } catch (e) {
+        console.error('Callback error:', e);
+        // Fallback: redirect to main app
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      }
+    })();
+  </script>
+</body>
+</html>

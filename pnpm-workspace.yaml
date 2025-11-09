@@ -1,0 +1,6 @@
+packages:
+  - 'packages/*'
+  - 'packages/web/*'
+  - 'examples/*'
+  - 'samples/*'
+  - 'samples/*/asp-frontend'

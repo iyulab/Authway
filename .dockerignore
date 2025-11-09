@@ -1,0 +1,61 @@
+# Ignore development files
+.git
+.gitignore
+.env*
+*.md
+!README.md
+
+# Ignore build artifacts
+node_modules
+dist
+build
+*.log
+*.tmp
+
+# Ignore IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Ignore test files
+*_test.go
+test/
+tools/
+
+# Ignore Docker files
+Dockerfile*
+docker-compose*
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+vendor/
+
+# Ignore frontend packages during backend build
+packages/
+
+# Ignore apps not needed for Central API build
+apps/branding/
+
+# Ignore all node_modules in apps
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Specifically ignore admin frontend artifacts
+apps/central/admin/node_modules/
+apps/central/admin/.next/
+apps/central/admin/dist/
+apps/central/admin/build/
+
+# Ignore scripts
+scripts/

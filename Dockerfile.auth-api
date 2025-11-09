@@ -1,0 +1,59 @@
+# Authway Auth Backend - Production Dockerfile
+# This is a separate Dockerfile for auth-api because it's an independent Go module
+
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+# Install dependencies for building with CGO
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+
+# Set working directory to the auth-api module
+WORKDIR /app/auth-api
+
+# Copy auth-api specific go mod files
+COPY apps/branding/auth-api/go.mod apps/branding/auth-api/go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy auth-api source code
+COPY apps/branding/auth-api/ ./
+
+# Build the application with optimizations
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-w -s -X main.version=$(date +%Y%m%d-%H%M%S)" \
+    -o auth-api ./cmd
+
+# Production stage
+FROM alpine:latest AS production
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata curl
+
+# Create app user
+RUN adduser -D -s /bin/sh authway
+
+# Set working directory
+WORKDIR /home/authway
+
+# Copy binary from builder stage
+COPY --from=builder /app/auth-api/auth-api ./app
+
+# Copy static files if any
+COPY --from=builder /app/auth-api/static ./static
+
+# Create logs directory
+RUN mkdir -p logs && chown authway:authway logs
+
+# Switch to app user
+USER authway
+
+# Expose port
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Run the application
+CMD ["./app"]
