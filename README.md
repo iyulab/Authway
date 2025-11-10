@@ -2,7 +2,7 @@
 
 Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with JavaScript/TypeScript SDKs.
 
-[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/iyulab/authway)
+[![Version](https://img.shields.io/badge/version-0.1.4-blue.svg)](https://github.com/iyulab/authway)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **NPM Packages:**
@@ -20,8 +20,17 @@ Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with 
 - **Auto-Discovery** - Apps only need Auth Backend URL, rest is auto-discovered
 - **Dynamic Claims** - Runtime user claims management
 - **Multi-Tenancy** - Fully isolated tenant support
-- **Popup Login** - No-redirect authentication flow
+- **Popup Login** - No-redirect authentication flow with Google OAuth support (v0.1.4)
 - **TypeScript SDKs** - `@authway/client` and `@authway/react`
+
+### What's New in v0.1.4 (2025-11-10)
+
+- ✅ **Popup Mode with External OAuth Providers** - Google OAuth, GitHub, and other external providers now work seamlessly in popup mode
+- ✅ **COOP Compatibility** - Solved Cross-Origin-Opener-Policy blocking with sessionStorage persistence
+- 🔧 **SessionStorage + Hidden Iframe Pattern** - Robust cross-origin authentication flow
+- 📝 **Comprehensive Documentation** - Updated guides for popup authentication with external providers
+
+See [CHANGELOG.md](./CHANGELOG.md) for complete release notes.
 
 ## Quick Start
 
@@ -121,7 +130,9 @@ const user = await client.getUser()
 ## Documentation
 
 - **[Getting Started Guide](./docs/GETTING_STARTED.md)** - Complete setup and integration guide
+- **[Client Registration](./docs/CLIENT_REGISTRATION.md)** - OAuth 2.0 client setup for Public and Confidential clients
 - **[SDK Reference](./docs/SDK_REFERENCE.md)** - API documentation for both SDKs
+- **[Popup Login Guide](./docs/features/POPUP_LOGIN_GUIDE.md)** - Popup authentication with external OAuth providers
 - **[Samples](./samples/)** - Example applications
   - [React SDK Sample](./samples/react-sdk-sample/) - Full-featured React demo
   - [ASP.NET SPA Sample](./samples/asp-spa/) - Backend + Frontend (React & Vanilla JS)

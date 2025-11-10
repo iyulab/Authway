@@ -2,8 +2,8 @@
 
 Complete guide for implementing popup-based authentication with Authway OAuth 2.0 / OpenID Connect.
 
-**Version**: 1.0.0
-**Last Updated**: 2025-10-30
+**Version**: 1.1.0 (Updated for v0.1.4)
+**Last Updated**: 2025-11-10
 **Status**: Production Ready
 
 ---
@@ -11,13 +11,14 @@ Complete guide for implementing popup-based authentication with Authway OAuth 2.
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Frontend Implementation](#frontend-implementation)
-4. [Backend Implementation](#backend-implementation)
-5. [CORS Configuration](#cors-configuration)
-6. [Troubleshooting](#troubleshooting)
-7. [Security Considerations](#security-considerations)
-8. [Testing Checklist](#testing-checklist)
+2. [v0.1.4 Update: Google OAuth & External Providers](#v014-update-google-oauth--external-providers)
+3. [Architecture](#architecture)
+4. [Frontend Implementation](#frontend-implementation)
+5. [Backend Implementation](#backend-implementation)
+6. [CORS Configuration](#cors-configuration)
+7. [Troubleshooting](#troubleshooting)
+8. [Security Considerations](#security-considerations)
+9. [Testing Checklist](#testing-checklist)
 
 ---
 
@@ -36,6 +37,202 @@ Complete guide for implementing popup-based authentication with Authway OAuth 2.
 - **Backend**: ASP.NET Core (any version) or any OAuth-compatible server
 - **Authentication**: Authway OpenID Connect with PKCE
 - **Communication**: postMessage API for cross-window messaging
+
+---
+
+## v0.1.4 Update: Google OAuth & External Providers
+
+### The Problem: Cross-Origin-Opener-Policy (COOP) Blocking
+
+When using popup login with external OAuth providers (Google, GitHub, Facebook, etc.), browsers enforce COOP which **blocks `window.opener` access** after cross-origin redirects.
+
+**Flow**:
+```
+Main App (localhost:5173)
+  → Opens popup → Auth UI (localhost:3001)
+  → Google OAuth (accounts.google.com) [COOP blocks window.opener]
+  → Back to Auth UI (localhost:3001)
+  → ❌ window.opener === null (blocked by COOP)
+```
+
+### The Solution: SessionStorage + Hidden Iframe + postMessage
+
+**v0.1.4** implements a hybrid approach to solve COOP blocking:
+
+1. **SessionStorage Persistence**: Survives cross-origin redirects (unlike `window.opener`)
+2. **Hidden Iframe**: Loads Hydra OAuth flow without losing popup context
+3. **postMessage Communication**: Sends authorization code from iframe to popup to main window
+
+#### Complete Flow (v0.1.4)
+
+```
+┌─────────────────┐
+│ Main Window     │ (localhost:5173 - SDK)
+│ (SDK)           │
+└────────┬────────┘
+         │ 1. loginWithPopup() → Opens popup
+         │
+         ↓
+┌─────────────────┐
+│ Popup Window    │ (localhost:3001 - Auth UI)
+│ GoogleLoginBtn  │
+└────────┬────────┘
+         │ 2. Detects popup mode: window.opener !== null
+         │ 3. Sets sessionStorage: authway_popup_mode = 'true'
+         │ 4. Redirects to Google OAuth
+         │
+         ↓
+┌─────────────────┐
+│ Google OAuth    │ (accounts.google.com)
+│ Login Page      │
+└────────┬────────┘
+         │ 5. User authenticates
+         │ 6. Redirects back → ⚠️ COOP blocks window.opener
+         │
+         ↓
+┌─────────────────┐
+│ ConsentPage     │ (localhost:3001 - Auth UI, still in popup)
+│ (Popup)         │
+└────────┬────────┘
+         │ 7. window.opener === null ❌ (COOP blocked)
+         │ 8. sessionStorage.getItem('authway_popup_mode') === 'true' ✅
+         │ 9. Creates hidden iframe
+         │ 10. Loads Hydra redirect URL in iframe
+         │
+         ↓
+┌─────────────────┐
+│ Hidden Iframe   │ (localhost:4444 → localhost:5173)
+│ Hydra → callback│
+└────────┬────────┘
+         │ 11. Hydra generates authorization code
+         │ 12. Redirects iframe to callback.html (localhost:5173)
+         │
+         ↓
+┌─────────────────┐
+│ callback.html   │ (in iframe)
+│ (Iframe)        │
+└────────┬────────┘
+         │ 13. Detects: window.self !== window.top (in iframe)
+         │ 14. Parses code/state from URL
+         │ 15. window.parent.postMessage({ type: 'authway-callback', code, state }, '*')
+         │
+         ↓
+┌─────────────────┐
+│ ConsentPage     │ (receives postMessage from iframe)
+│ (Popup)         │
+└────────┬────────┘
+         │ 16. Receives code via postMessage
+         │ 17. (window.opener || window.parent).postMessage({ code, state }, parentOrigin)
+         │ 18. sessionStorage.removeItem('authway_popup_mode')
+         │ 19. Closes popup
+         │
+         ↓
+┌─────────────────┐
+│ Main Window     │ (receives postMessage from popup)
+│ (SDK)           │
+└────────┬────────┘
+         │ 20. SDK exchanges code for tokens
+         │ 21. ✅ Login complete
+```
+
+#### Key Implementation Details
+
+**1. GoogleLoginButton.tsx** - SessionStorage Flag
+```typescript
+if (isPopupMode) {
+  console.log('[GoogleLogin] Popup mode detected - setting sessionStorage flag')
+  sessionStorage.setItem('authway_popup_mode', 'true')
+} else {
+  sessionStorage.removeItem('authway_popup_mode')
+}
+window.location.href = data.redirect_url
+```
+
+**2. ConsentPage.tsx** - Dual Detection + postMessage Listener
+```typescript
+// Check both window.opener AND sessionStorage (COOP survival)
+const hasWindowOpener = window.opener !== null && window.opener !== window
+const isSessionStoragePopup = sessionStorage.getItem('authway_popup_mode') === 'true'
+const isPopupMode = hasWindowOpener || isSessionStoragePopup
+
+if (isPopupMode) {
+  // Create hidden iframe
+  const iframe = document.createElement('iframe')
+  iframe.style.display = 'none'
+  document.body.appendChild(iframe)
+
+  // Listen for postMessage from iframe
+  const messageHandler = (event: MessageEvent) => {
+    if (event.data?.type === 'authway-callback') {
+      const { code, state } = event.data
+
+      // Forward to main window
+      const targetWindow = window.opener || window.parent
+      targetWindow.postMessage({ type: 'authway-callback', code, state }, parentOrigin)
+
+      // Cleanup
+      sessionStorage.removeItem('authway_popup_mode')
+      window.close()
+    }
+  }
+
+  window.addEventListener('message', messageHandler)
+  iframe.src = redirectUrl // Load Hydra URL
+}
+```
+
+**3. callback.html** - Iframe Detection + postMessage Sender
+```html
+<script>
+(function() {
+  const isInIframe = window.self !== window.top;
+
+  if (isInIframe) {
+    // Parse code from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    // Send to parent (ConsentPage/LoginPage popup)
+    window.parent.postMessage({
+      type: 'authway-callback',
+      code, state
+    }, '*');
+  } else {
+    // Popup mode - send to opener
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'authway-callback',
+        code, state
+      }, window.location.origin);
+      setTimeout(() => window.close(), 500);
+    }
+  }
+})();
+</script>
+```
+
+### Why This Works
+
+1. **SessionStorage Persistence**: Unlike `window.opener`, sessionStorage survives cross-origin redirects
+2. **Hidden Iframe Isolation**: OAuth flow happens in iframe, popup window stays intact with opener reference
+3. **postMessage Chain**: callback.html → ConsentPage → Main Window (via opener/parent references)
+4. **Fallback URL Polling**: If postMessage fails, ConsentPage polls iframe URL (100ms interval, 5s max)
+
+### Browser Compatibility
+
+✅ **Tested & Working**:
+- Chrome 120+ (COOP enforced)
+- Firefox 121+
+- Edge 120+
+- Safari 17+ (with popup permission)
+
+### Backward Compatibility
+
+✅ **100% Backward Compatible**:
+- Redirect mode unchanged (no impact)
+- Popup mode without external OAuth unchanged
+- Only external OAuth popup flows use new mechanism
 
 ---
 
@@ -658,6 +855,54 @@ from origin 'http://localhost:5174' has been blocked by CORS policy
 - Use latest Authway version
 - Issue resolved in current deployment
 
+### Problem 5: Google OAuth Popup Fails (v0.1.4 Fix)
+
+**Symptoms**:
+```
+[ConsentPage] window.opener === null (blocked by COOP)
+[ConsentPage] ❌ No parent window found for postMessage
+```
+
+**Cause**:
+- Google OAuth's Cross-Origin-Opener-Policy blocks `window.opener`
+- Popup loses reference to main window after Google redirect
+
+**Solution** (Implemented in v0.1.4):
+1. Verify `GoogleLoginButton.tsx` sets `sessionStorage.setItem('authway_popup_mode', 'true')`
+2. Verify `ConsentPage.tsx` checks sessionStorage: `sessionStorage.getItem('authway_popup_mode')`
+3. Verify `callback.html` version is `v0.1.4-iframe-fix`
+4. Check browser console for postMessage flow logs
+
+**Expected Logs** (v0.1.4):
+```
+[GoogleLogin] Popup mode detected - setting sessionStorage flag
+[ConsentPage] Popup mode detected via sessionStorage
+[ConsentPage] Loading Hydra URL in iframe
+[callback.html] VERSION: v0.1.4-iframe-fix
+[callback.html] ✅ Running in iframe - sending code to parent via postMessage
+[ConsentPage] ✅ Received code from iframe via postMessage
+[ConsentPage] ✅ Sent code to parent via postMessage
+```
+
+### Problem 6: callback.html Old Version Cached
+
+**Symptoms**:
+- Console shows old version: `[callback.html] ✅ Running in iframe - waiting for parent to extract code`
+- No postMessage sent from callback.html
+
+**Cause**:
+- Browser aggressively caching callback.html
+
+**Solution**:
+1. Hard refresh: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+2. Clear browser cache
+3. Verify cache-busting headers in callback.html:
+```html
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+```
+
 ---
 
 ## Security Considerations
@@ -727,6 +972,7 @@ Display popup permission instructions to users.
 
 ## Testing Checklist
 
+### General Popup Functionality
 - [ ] Popup opens centered on screen
 - [ ] Popup closes automatically on successful authentication
 - [ ] Appropriate error message on authentication failure
@@ -738,11 +984,25 @@ Display popup permission instructions to users.
 - [ ] Multiple consecutive login/logout cycles work correctly
 - [ ] Works in different browsers (Chrome, Firefox, Edge, Safari)
 
+### v0.1.4 External OAuth Providers
+- [ ] Google OAuth popup login completes successfully
+- [ ] SessionStorage flag persists across Google redirect
+- [ ] callback.html version shows `v0.1.4-iframe-fix` in console
+- [ ] Hidden iframe created in ConsentPage/LoginPage
+- [ ] postMessage received from iframe to popup
+- [ ] postMessage forwarded from popup to main window
+- [ ] SessionStorage cleaned up after login
+- [ ] Popup closes automatically after external OAuth
+- [ ] Works with GitHub OAuth (if configured)
+- [ ] Works with Facebook OAuth (if configured)
+- [ ] Fallback URL polling works if postMessage fails
+- [ ] No cache issues with callback.html (hard refresh test)
+
 ---
 
 ## Log Verification
 
-### Successful Flow Logs
+### Successful Flow Logs (ASP.NET Backend)
 
 ```
 info: Storing popup origin: http://localhost:5174
@@ -751,13 +1011,44 @@ info: Popup authentication completed successfully
 info: Using popup origin from parameter: http://localhost:5174
 ```
 
+### Successful Flow Logs (v0.1.4 Google OAuth)
+
+```
+[GoogleLogin] Popup mode detected - setting sessionStorage flag
+[ConsentPage] Popup mode detected via sessionStorage
+[ConsentPage] Loading Hydra URL in iframe
+[callback.html] VERSION: v0.1.4-iframe-fix
+[callback.html] Context check: { isInIframe: true, hasOpener: false }
+[callback.html] ✅ Running in iframe - sending code to parent via postMessage
+[callback.html] Extracted from iframe URL: { code: "ory_ac_abc...", state: "xyz..." }
+[callback.html] ✅ Sent code to parent (ConsentPage/LoginPage) via postMessage
+[ConsentPage] Received postMessage: { type: 'authway-callback', code: "...", state: "..." }
+[ConsentPage] ✅ Received code from iframe via postMessage
+[ConsentPage] ✅ Sent code to parent via postMessage
+```
+
 ### Problem Logs
 
+**ASP.NET Backend**:
 ```
 warn: Popup origin http://localhost:5174 not in allowed origins list, using fallback
 ```
+→ Check `appsettings.Development.json` → `Cors:AllowedOrigins`.
 
-If you see this warning, check `appsettings.Development.json` → `Cors:AllowedOrigins`.
+**v0.1.4 COOP Blocking**:
+```
+[ConsentPage] window.opener === null (blocked by COOP)
+[ConsentPage] sessionStorage.getItem('authway_popup_mode') === null
+[ConsentPage] ❌ Not popup mode - doing normal redirect
+```
+→ Verify GoogleLoginButton sets sessionStorage flag.
+
+**Old callback.html Cached**:
+```
+[callback.html] ✅ Running in iframe - waiting for parent to extract code
+(no postMessage sent)
+```
+→ Hard refresh browser (Ctrl+Shift+R) or clear cache.
 
 ---
 

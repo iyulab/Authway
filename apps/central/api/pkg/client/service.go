@@ -55,16 +55,54 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	}
 
 	// Use provided credentials or generate new ones
+	// OAuth 2.0 RFC 6749 Section 2.1: Public clients cannot maintain credential confidentiality
 	var clientID, clientSecret string
-	if req.ClientID != "" && req.ClientSecret != "" {
-		// Use fixed credentials provided in request
-		clientID = req.ClientID
-		clientSecret = req.ClientSecret
-		s.logger.Info("Using provided client credentials",
-			zap.String("client_id", clientID),
-			zap.String("tenant_id", tenantID.String()))
 
-		// Check if client already exists with this client_id (including soft-deleted ones)
+	if req.Public {
+		// Public Client (SPA, Mobile) - client_secret not required
+		if req.ClientID != "" {
+			// Use provided client_id
+			clientID = req.ClientID
+			s.logger.Info("Using provided client_id for public client",
+				zap.String("client_id", clientID),
+				zap.String("tenant_id", tenantID.String()))
+		} else {
+			// Generate random client_id
+			clientID = s.generateClientID()
+			s.logger.Info("Generated client_id for public client",
+				zap.String("client_id", clientID),
+				zap.String("tenant_id", tenantID.String()))
+		}
+		clientSecret = "" // Public clients don't need secrets (use PKCE instead)
+
+	} else {
+		// Confidential Client (Backend) - both required or both generated
+		if req.ClientID != "" && req.ClientSecret != "" {
+			// Use provided credentials
+			clientID = req.ClientID
+			clientSecret = req.ClientSecret
+			s.logger.Info("Using provided credentials for confidential client",
+				zap.String("client_id", clientID),
+				zap.String("tenant_id", tenantID.String()))
+
+		} else if req.ClientID != "" || req.ClientSecret != "" {
+			// Partial credentials provided - error
+			return nil, nil, fmt.Errorf(
+				"confidential clients must provide both client_id and client_secret, or neither (got client_id='%s', client_secret='%s')",
+				req.ClientID, maskSecret(req.ClientSecret))
+
+		} else {
+			// Generate both credentials
+			clientID = s.generateClientID()
+			clientSecret = s.generateClientSecret()
+			s.logger.Info("Generated credentials for confidential client",
+				zap.String("client_id", clientID),
+				zap.String("tenant_id", tenantID.String()))
+		}
+	}
+
+	// Check if client already exists with this client_id (including soft-deleted ones)
+	if req.ClientID != "" {
 		var existingClient Client
 		err := s.db.Unscoped().Where("client_id = ?", clientID).First(&existingClient).Error
 		if err == nil {
@@ -98,7 +136,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 
 			credentials := &ClientCredentials{
 				ClientID:     existingClient.ClientID,
-				ClientSecret: clientSecret, // Return the provided secret
+				ClientSecret: clientSecret, // Return the secret (empty for public clients)
 			}
 
 			return &existingClient, credentials, nil
@@ -107,13 +145,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 			return nil, nil, fmt.Errorf("failed to check existing client: %w", err)
 		}
 		// Client doesn't exist, proceed with creation
-	} else {
-		// Generate random credentials
-		clientID = s.generateClientID()
-		clientSecret = s.generateClientSecret()
-		s.logger.Info("Generated new client credentials",
-			zap.String("client_id", clientID),
-			zap.String("tenant_id", tenantID.String()))
 	}
 
 	client := &Client{
@@ -476,4 +507,15 @@ func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client,
 	}
 
 	return clients, total, nil
+}
+
+// maskSecret masks a secret string for logging purposes
+func maskSecret(secret string) string {
+	if secret == "" {
+		return "(empty)"
+	}
+	if len(secret) <= 4 {
+		return "****"
+	}
+	return secret[:2] + "****" + secret[len(secret)-2:]
 }

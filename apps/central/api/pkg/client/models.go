@@ -101,17 +101,22 @@ func (c *Client) ToPublic() PublicClient {
 
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
-	TenantID     string   `json:"tenant_id" validate:"required,uuid"` // Required!
-	ClientID     string   `json:"client_id"`                          // Optional: if provided, use fixed client_id
-	ClientSecret string   `json:"client_secret"`                      // Optional: if provided, use fixed client_secret
-	Name         string   `json:"name" validate:"required"`
+	TenantID string `json:"tenant_id" validate:"required,uuid"` // Required
+	Name     string `json:"name" validate:"required"`
+	Public   bool   `json:"public"` // true: Public client (SPA, Mobile), false: Confidential client (Backend)
+
+	// Client Credentials:
+	// - Public clients: Only client_id is used (client_secret ignored/not required)
+	// - Confidential clients: Both client_id and client_secret must be provided together, or both omitted for auto-generation
+	ClientID     string `json:"client_id"`     // Optional: Custom client_id (for both public and confidential)
+	ClientSecret string `json:"client_secret"` // Optional: Required only for confidential clients (ignored for public clients)
+
 	Description  string   `json:"description"`
 	Website      string   `json:"website" validate:"omitempty,url"`
 	Logo         string   `json:"logo" validate:"omitempty,url"`
 	RedirectURIs []string `json:"redirect_uris" validate:"required,min=1,dive,url"`
 	GrantTypes   []string `json:"grant_types" validate:"required,min=1"`
 	Scopes       []string `json:"scopes" validate:"required,min=1"`
-	Public       bool     `json:"public"`
 
 	// Google OAuth Settings (optional)
 	GoogleOAuthEnabled bool   `json:"google_oauth_enabled"`

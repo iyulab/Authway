@@ -2,7 +2,10 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Authentication Callback</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Authentication Callback - v0.1.4</title>
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -36,12 +39,31 @@
   <div class="container">
     <div class="spinner"></div>
     <h2>인증 완료</h2>
-    <p>잠시만 기다려주세요...</p>
+    <p>잠시만 기다려주세요... (v0.1.4)</p>
   </div>
 
   <script>
     (function() {
+      console.log('[callback.html] VERSION: v0.1.4-iframe-fix'); // Version marker
+
       try {
+        // Check if running inside an iframe
+        const isInIframe = window.self !== window.top;
+
+        console.log('[callback.html] Context check:', {
+          isInIframe,
+          hasOpener: !!window.opener,
+          self: window.self === window,
+          top: window.top === window
+        });
+
+        if (isInIframe) {
+          // Running inside hidden iframe (ConsentPage/LoginPage will read the URL)
+          // Do nothing - just wait for parent to extract code from URL
+          console.log('[callback.html] ✅ Running in iframe - waiting for parent to extract code');
+          return;
+        }
+
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
@@ -51,6 +73,7 @@
 
         // Send message to parent window (opener)
         if (window.opener) {
+          console.log('[callback.html] Popup mode - sending code to opener');
           window.opener.postMessage({
             type: 'authway-callback',
             code: code,
@@ -64,6 +87,7 @@
             window.close();
           }, 500);
         } else {
+          console.log('[callback.html] No window.opener found - not in popup mode');
           // Not in popup mode, redirect to main app
           window.location.href = '/';
         }

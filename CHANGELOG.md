@@ -7,6 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.4] - 2025-11-10
+
+### Fixed
+- **Popup Login Mode with OAuth Providers**: Popup mode now works correctly with Google OAuth and other external providers
+- **Cross-Origin-Opener-Policy (COOP) Blocking**: Solved `window.opener` loss after Google OAuth redirect using sessionStorage
+- **Popup Window Closure**: Popup now closes automatically after successful authentication
+- **Authorization Code Extraction**: Code is extracted AFTER Hydra generates it, not before
+
+### Changed
+- **GoogleLoginButton.tsx**: Set sessionStorage flag when popup mode is detected
+- **ConsentPage.tsx**: Check both window.opener AND sessionStorage for popup mode detection; added postMessage listener to receive code from iframe
+- **LoginPage.tsx**: Check both window.opener AND sessionStorage for popup mode detection; added postMessage listener to receive code from iframe
+- **callback.html**: Modified to actively send postMessage when running in iframe (both asp-spa and react-sdk-sample versions)
+- **Popup Flow**: SessionStorage persists popup mode flag across cross-origin redirects
+
+### Technical Details
+- **Root Cause**: Google OAuth's Cross-Origin-Opener-Policy (COOP) blocks `window.opener` during cross-origin redirects
+- **Secondary Issue**: redirect_to is a Hydra URL that GENERATES the code, not a callback URL that HAS the code
+- **Solution**: SessionStorage + Hidden iframe + postMessage communication
+  1. GoogleLoginButton detects popup mode and sets `sessionStorage.setItem('authway_popup_mode', 'true')`
+  2. After Google OAuth redirect (which blocks window.opener), pages check sessionStorage
+  3. Create hidden iframe in popup window (ConsentPage/LoginPage)
+  4. Load Hydra redirect URL in iframe (popup stays intact)
+  5. callback.html detects it's in iframe and sends postMessage with code/state to parent
+  6. ConsentPage/LoginPage receives postMessage from iframe
+  7. Forward code/state via postMessage to main window (using window.opener || window.parent)
+  8. Clean up sessionStorage, iframe, event listeners, and close popup
+  9. Fallback: URL polling every 100ms if postMessage fails (max 5 seconds)
+- **Why SessionStorage**: Survives cross-origin redirects (unlike window.opener which COOP blocks)
+- **Pattern**: Hybrid approach - sessionStorage for state persistence + hidden iframe for OAuth flow
+- **Compatibility**: 100% backward compatible - redirect mode unchanged
+
+### How It Works
+```
+Before (v0.1.3): ❌
+LoginPage → Google OAuth (cross-origin) → ⚠️ COOP blocks window.opener
+→ ConsentPage: window.opener === null → ❌ popup mode NOT detected
+
+After (v0.1.4): ✅ SessionStorage + Hidden iframe
+GoogleLoginButton (3001) popup:
+  ↓ Detects popup mode: window.opener !== null
+  ↓ Sets sessionStorage.setItem('authway_popup_mode', 'true')
+  ↓ window.location.href = Google OAuth (cross-origin redirect)
+
+Google OAuth redirect → ⚠️ COOP blocks window.opener
+
+ConsentPage (3001) in popup:
+  ↓ window.opener === null (BLOCKED by COOP)
+  ↓ BUT sessionStorage.getItem('authway_popup_mode') === 'true' ✅
+  ↓ Popup mode detected via sessionStorage!
+  ↓ Create hidden iframe
+  ↓ iframe.src = Hydra URL (4444)
+  ↓ Hydra redirects iframe → callback.html (5173) with code
+  ↓ Read iframe.contentWindow.location.href
+  ↓ Extract code from iframe URL
+  ↓ (window.opener || window.parent).postMessage({code, state})
+  ↓ sessionStorage.removeItem('authway_popup_mode')
+  ↓ Close popup
+
+Main window (5173):
+  ↓ Receives postMessage with code
+  ✅ Exchange code for tokens
+```
+
+---
+
+## [0.1.3] - 2025-11-10
+
+### Fixed (Partial)
+- **Popup Mode Detection**: Login UI now detects popup mode and logs flow progression
+- **Developer Experience**: Added console logging for debugging popup authentication flow
+
+### Known Issues (Fixed in v0.1.4)
+- Popup mode detection worked but popup login still failed due to cross-origin redirect
+- `window.opener` was lost when redirecting from localhost:3001 to localhost:5173
+
+### Added
+- **Popup Mode Detection**: Added `window.opener` detection logic to 7 redirect points
+- **Flow Tracking**: Console logs show popup mode status at every navigation step
+
+### Changed
+- **GoogleLoginButton.tsx**: Added popup mode detection logging
+- **ConsentPage.tsx**: Added popup mode detection logging (3 locations)
+- **LoginPage.tsx**: Added popup mode detection logging (3 locations)
+
+### Technical Details
+- Detection only - did not solve the underlying cross-origin redirect problem
+- Required v0.1.4 for actual popup mode functionality
+
+---
+
+## [0.1.2] - 2025-11-10
+
+### Fixed
+- **OAuth 2.0 Compliance**: Public clients can now register without `client_secret`, following RFC 6749 Section 2.1
+- **Client Registration Logic**: Fixed silent failure when custom `client_id` was provided without `client_secret`
+- **Error Messages**: Added clear validation errors for confidential clients with partial credentials
+
+### Added
+- **Comprehensive Documentation**: New [Client Registration Guide](./docs/CLIENT_REGISTRATION.md) covering Public and Confidential clients
+- **Unit Tests**: Added extensive test coverage for public/confidential client creation scenarios
+- **Better Logging**: Enhanced error messages with masked secrets for security
+
+### Changed
+- **API Behavior**: Public clients now correctly ignore `client_secret` field (backward compatible)
+- **Confidential Clients**: Now require both `client_id` and `client_secret`, or neither (for auto-generation)
+- **Code Comments**: Updated `CreateClientRequest` documentation to reflect actual behavior
+
+### Security
+- **Public Client Security**: Removed requirement to store dummy secrets for public clients
+- **Secret Masking**: Added `maskSecret()` helper for safe logging of credentials
+
+---
+
 ## [0.1.1] - 2025-10-29
 
 ### Fixed

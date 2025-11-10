@@ -47,6 +47,7 @@ The comprehensive documentation is located in `/docs/README.md` with:
 4. [ASP-SPA Sample](samples/asp-spa/) - React + Backend example
 
 **Key Features**:
+- [Client Registration](docs/CLIENT_REGISTRATION.md) - Public vs Confidential clients
 - [Dynamic Claims](docs/features/DYNAMIC_CLAIMS.md) - Workspace switching
 - [Multi-Tenancy](docs/architecture/multi-tenancy.md) - Tenant isolation
 - [API Reference](docs/API_INTRODUCTION.md) - Complete endpoint docs
@@ -81,6 +82,7 @@ The comprehensive documentation is located in `/docs/README.md` with:
 ## 🔍 Search by Topic
 
 ### Authentication & OAuth
+- [Client Registration](docs/CLIENT_REGISTRATION.md)
 - [Integration Guide](docs/INTEGRATION_GUIDE.md)
 - [API Introduction](docs/API_INTRODUCTION.md)
 - [Quickstart Guides](docs/quickstart/)

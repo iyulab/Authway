@@ -7,12 +7,14 @@ export function ApiTester() {
   const [apiResponse, setApiResponse] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedEndpoint, setSelectedEndpoint] = useState('/api/test')
+  const [selectedEndpoint, setSelectedEndpoint] = useState('/api/protected')
 
   const endpoints = [
-    { path: '/api/test', method: 'GET', description: 'Test protected API endpoint' },
-    { path: '/health', method: 'GET', description: 'Health check endpoint' },
-    { path: '/api/v1/profile/me', method: 'GET', description: 'Get user profile from Authway' },
+    { path: '/health', method: 'GET', description: 'Health check endpoint (public)' },
+    { path: '/api/public', method: 'GET', description: 'Public API endpoint (no auth required)' },
+    { path: '/api/protected', method: 'GET', description: 'Protected API endpoint (auth required)' },
+    { path: '/api/me', method: 'GET', description: 'Get user profile (auth required)' },
+    { path: '/api/weather', method: 'GET', description: 'Get weather forecast (auth required)' },
   ]
 
   const testApi = async (endpoint: string, method: string = 'GET') => {

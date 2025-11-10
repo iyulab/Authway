@@ -53,13 +53,186 @@ const ConsentPage: React.FC = () => {
 
   const challenge = searchParams.get('consent_challenge')
 
+  // Helper function to handle popup mode redirect
+  const handlePopupRedirect = (redirectUrl: string) => {
+    // Check both window.opener AND sessionStorage (survives cross-origin redirects)
+    const hasWindowOpener = window.opener !== null && window.opener !== window
+    const isSessionStoragePopup = sessionStorage.getItem('authway_popup_mode') === 'true'
+    const isPopupMode = hasWindowOpener || isSessionStoragePopup
+
+    if (isPopupMode) {
+      console.log('[ConsentPage] Popup mode detected via', hasWindowOpener ? 'window.opener' : 'sessionStorage')
+      console.log('[ConsentPage] Popup mode - will follow Hydra redirect in hidden iframe')
+
+      try {
+        // Parse the redirect URL
+        const url = new URL(redirectUrl)
+
+        // Extract redirect_uri to get parent origin
+        const redirectUriParam = url.searchParams.get('redirect_uri') || url.searchParams.get('redirectUri')
+        let parentOrigin = '*'
+
+        if (redirectUriParam) {
+          try {
+            const redirectUriUrl = new URL(redirectUriParam)
+            parentOrigin = redirectUriUrl.origin
+            console.log('[ConsentPage] Parent origin:', parentOrigin)
+          } catch (e) {
+            console.warn('[ConsentPage] Failed to parse redirect_uri')
+          }
+        }
+
+        // Create hidden iframe to follow Hydra redirect
+        // This maintains the popup context while allowing Hydra to generate the code
+        const iframe = document.createElement('iframe')
+        iframe.style.display = 'none'
+        document.body.appendChild(iframe)
+
+        // Declare interval variable first for use in messageHandler
+        let checkCount = 0
+        const maxChecks = 50 // 5 seconds max
+        let checkInterval: ReturnType<typeof setInterval>
+
+        // Listen for postMessage from iframe (callback.html sends this)
+        const messageHandler = (event: MessageEvent) => {
+          console.log('[ConsentPage] Received postMessage:', event.data)
+
+          if (event.data?.type === 'authway-callback') {
+            console.log('[ConsentPage] ✅ Received code from iframe via postMessage')
+
+            const { code, state, error, error_description } = event.data
+
+            console.log('[ConsentPage] Extracted from postMessage:', {
+              code: code ? `${code.substring(0, 10)}...` : null,
+              state,
+              error
+            })
+
+            // Clean up
+            window.removeEventListener('message', messageHandler)
+            if (checkInterval) clearInterval(checkInterval)
+            document.body.removeChild(iframe)
+
+            // Send to parent window (main app)
+            const targetWindow = window.opener || window.parent
+            if (targetWindow && targetWindow !== window) {
+              targetWindow.postMessage({
+                type: 'authway-callback',
+                code,
+                state,
+                error,
+                error_description
+              }, parentOrigin)
+
+              console.log('[ConsentPage] ✅ Sent code to parent via postMessage')
+            } else {
+              console.error('[ConsentPage] ❌ No parent window found for postMessage')
+            }
+
+            // Clean up sessionStorage and close
+            sessionStorage.removeItem('authway_popup_mode')
+            setTimeout(() => window.close(), 500)
+          }
+        }
+
+        window.addEventListener('message', messageHandler)
+
+        // Fallback: Listen for the iframe to navigate to callback URL (in case postMessage fails)
+        checkInterval = setInterval(() => {
+          checkCount++
+          try {
+            // Check if iframe has navigated to callback URL
+            const iframeUrl = iframe.contentWindow?.location.href
+            if (iframeUrl && (iframeUrl.includes('/callback.html') || iframeUrl.includes('code='))) {
+              console.log('[ConsentPage] Iframe reached callback URL (fallback method)')
+              clearInterval(checkInterval)
+              window.removeEventListener('message', messageHandler)
+
+              // Extract code and state from iframe URL
+              const callbackUrl = new URL(iframeUrl)
+              const code = callbackUrl.searchParams.get('code')
+              const state = callbackUrl.searchParams.get('state')
+              const error = callbackUrl.searchParams.get('error')
+              const errorDescription = callbackUrl.searchParams.get('error_description')
+
+              console.log('[ConsentPage] Extracted from iframe:', {
+                code: code ? `${code.substring(0, 10)}...` : null,
+                state,
+                error
+              })
+
+              // Send to parent window
+              // Use window.opener if available, otherwise try window.parent (for iframe scenarios)
+              const targetWindow = window.opener || window.parent
+              if (targetWindow && targetWindow !== window) {
+                targetWindow.postMessage({
+                  type: 'authway-callback',
+                  code,
+                  state,
+                  error,
+                  error_description: errorDescription
+                }, parentOrigin)
+
+                console.log('[ConsentPage] ✅ Sent code to parent via postMessage')
+              } else {
+                console.error('[ConsentPage] ❌ No parent window found for postMessage')
+              }
+
+              // Clean up sessionStorage and close
+              sessionStorage.removeItem('authway_popup_mode')
+              document.body.removeChild(iframe)
+              setTimeout(() => window.close(), 500)
+            }
+          } catch (e) {
+            // Cross-origin iframe access will throw - this is expected
+            // Keep checking until we can access it (same-origin callback URL)
+          }
+
+          // Timeout after max checks
+          if (checkCount >= maxChecks) {
+            console.error('[ConsentPage] Timeout waiting for callback URL')
+            clearInterval(checkInterval)
+            window.removeEventListener('message', messageHandler)
+            document.body.removeChild(iframe)
+            // Fall back to normal redirect
+            window.location.href = redirectUrl
+          }
+        }, 100)
+
+        // Load Hydra URL in iframe
+        console.log('[ConsentPage] Loading Hydra URL in iframe')
+        iframe.src = redirectUrl
+
+        return true // Indicate that popup redirect was handled
+      } catch (err) {
+        console.error('[ConsentPage] Failed to handle popup redirect:', err)
+        return false
+      }
+    }
+
+    return false // Not in popup mode
+  }
+
   // Fetch consent challenge info
   useEffect(() => {
+    const hasWindowOpener = window.opener !== null && window.opener !== window
+    const hasSessionStorage = sessionStorage.getItem('authway_popup_mode') === 'true'
+
+    console.log('[ConsentPage] useEffect - checking popup mode:', {
+      hasOpener: window.opener !== null,
+      isSelfReference: window.opener === window,
+      hasSessionStorage,
+      isPopupMode: hasWindowOpener || hasSessionStorage,
+      detectionMethod: hasWindowOpener ? 'window.opener' : (hasSessionStorage ? 'sessionStorage' : 'none')
+    })
+
     if (!challenge) {
       setError('Consent challenge가 누락되었습니다.')
       setIsLoading(false)
       return
     }
+
+    console.log('[ConsentPage] Fetching consent info with challenge:', challenge.substring(0, 20) + '...')
 
     // Use POST to avoid HTTP 431 with long consent_challenge
     fetch(`${import.meta.env.VITE_API_URL}/consent`, {
@@ -79,7 +252,18 @@ const ConsentPage: React.FC = () => {
         } else if (data.redirect_to && data.auto_accepted) {
           // Auto-accepted by skip_consent - redirect immediately
           // Keep loading state to prevent rendering
-          window.location.href = data.redirect_to
+          console.log('[ConsentPage] Auto-accepted consent, redirecting...')
+          console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
+
+          // Handle popup mode redirect
+          console.log('[ConsentPage] Calling handlePopupRedirect...')
+          const popupHandled = handlePopupRedirect(data.redirect_to)
+          console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
+
+          // If not in popup mode or popup handling failed, do normal redirect
+          if (!popupHandled) {
+            window.location.href = data.redirect_to
+          }
         } else {
           setConsentInfo(data)
           // 기본적으로 모든 요청된 scope를 선택
@@ -114,7 +298,19 @@ const ConsentPage: React.FC = () => {
     },
     onSuccess: (data) => {
       if (data.redirect_to) {
-        window.location.href = data.redirect_to
+        console.log('[ConsentPage] Consent accepted, redirecting...')
+        console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
+
+        // Handle popup mode redirect
+        console.log('[ConsentPage] Calling handlePopupRedirect (accept)...')
+        const popupHandled = handlePopupRedirect(data.redirect_to)
+        console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
+
+        // If not in popup mode or popup handling failed, do normal redirect
+        if (!popupHandled) {
+          console.log('[ConsentPage] Not popup mode, doing normal redirect')
+          window.location.href = data.redirect_to
+        }
       } else if (data.error) {
         setError(data.error)
       }
@@ -145,7 +341,19 @@ const ConsentPage: React.FC = () => {
     },
     onSuccess: (data) => {
       if (data.redirect_to) {
-        window.location.href = data.redirect_to
+        console.log('[ConsentPage] Consent rejected, redirecting...')
+        console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
+
+        // Handle popup mode redirect
+        console.log('[ConsentPage] Calling handlePopupRedirect (reject)...')
+        const popupHandled = handlePopupRedirect(data.redirect_to)
+        console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
+
+        // If not in popup mode or popup handling failed, do normal redirect
+        if (!popupHandled) {
+          console.log('[ConsentPage] Not popup mode, doing normal redirect')
+          window.location.href = data.redirect_to
+        }
       } else if (data.error) {
         setError(data.error)
       }

@@ -1,5 +1,17 @@
 # Authway Documentation
 
+**Latest Version**: 0.1.4 (2025-11-10)
+
+## 🆕 What's New in v0.1.4
+
+- ✅ **Popup Mode with External OAuth Providers** - Google OAuth, GitHub, and other providers now work in popup mode
+- ✅ **COOP Compatibility** - Solved Cross-Origin-Opener-Policy blocking with sessionStorage + hidden iframe pattern
+- 📝 **Enhanced Documentation** - Updated [Popup Login Guide](./features/POPUP_LOGIN_GUIDE.md) with v0.1.4 implementation details
+
+See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
+
+---
+
 ## Quick Links
 
 - **[Getting Started Guide](./GETTING_STARTED.md)** - Setup, installation, and integration guide

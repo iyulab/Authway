@@ -2,6 +2,10 @@
 
 Complete guide to set up and integrate Authway authentication into your application.
 
+**Latest Version**: 0.1.4 (2025-11-10)
+
+> 🆕 **v0.1.4 Update**: Popup login now supports external OAuth providers (Google, GitHub, etc.) with COOP compatibility. See [Popup Login Guide](./features/POPUP_LOGIN_GUIDE.md#v014-update-google-oauth--external-providers) for details.
+
 ## Prerequisites
 
 - Node.js 18+ and pnpm 9+

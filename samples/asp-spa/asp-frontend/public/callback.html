@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Authentication Callback</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Authentication Callback - v0.1.4</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
@@ -46,30 +49,78 @@
   <div class="container">
     <div class="spinner"></div>
     <h2>Authentication Successful!</h2>
-    <p>Completing popup login...</p>
+    <p>Completing popup login... (v0.1.4)</p>
   </div>
 
   <script>
     /**
-     * Popup Callback Handler
+     * Popup Callback Handler (v0.1.4)
      *
      * This page is loaded in the popup window after OAuth redirect.
      * It sends the authorization code back to the parent window via postMessage,
      * allowing the SDK to complete authentication without Cross-Origin issues.
      */
     (function() {
+      console.log('[callback.html] VERSION: v0.1.4-iframe-fix');
+
       try {
+        // Check if running inside an iframe
+        const isInIframe = window.self !== window.top;
+
+        console.log('[callback.html] Context check:', {
+          isInIframe,
+          hasOpener: !!window.opener,
+          self: window.self === window,
+          top: window.top === window
+        });
+
+        if (isInIframe) {
+          // Running inside hidden iframe (ConsentPage/LoginPage iframe approach)
+          console.log('[callback.html] ✅ Running in iframe - sending code to parent via postMessage');
+
+          // Parse URL parameters
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          const state = urlParams.get('state');
+          const error = urlParams.get('error');
+          const error_description = urlParams.get('error_description');
+
+          console.log('[callback.html] Extracted from iframe URL:', {
+            code: code ? `${code.substring(0, 10)}...` : null,
+            state: state ? `${state.substring(0, 10)}...` : null,
+            error
+          });
+
+          // Send to parent window (ConsentPage/LoginPage)
+          // Use window.parent since we're in an iframe, not a popup
+          try {
+            window.parent.postMessage({
+              type: 'authway-callback',
+              code,
+              state,
+              error,
+              error_description
+            }, '*'); // Use '*' since parent should validate the message
+
+            console.log('[callback.html] ✅ Sent code to parent (ConsentPage/LoginPage) via postMessage');
+          } catch (e) {
+            console.error('[callback.html] Failed to send postMessage:', e);
+          }
+
+          return;
+        }
+
         // Check if this is running in a popup window
         if (!window.opener) {
-          console.error('No window.opener found - not in popup mode')
+          console.error('[callback.html] No window.opener found - not in popup mode')
           document.body.innerHTML = '<div class="container"><h2>⚠️ Error</h2><p>This page should be opened in a popup window</p></div>'
           return
         }
 
-        console.log('🔐 Popup Callback: Processing authentication...')
-        console.log('Full URL:', window.location.href)
-        console.log('Search params:', window.location.search)
-        console.log('Hash:', window.location.hash)
+        console.log('[callback.html] 🔐 Popup mode - processing authentication...')
+        console.log('[callback.html] Full URL:', window.location.href)
+        console.log('[callback.html] Search params:', window.location.search)
+        console.log('[callback.html] Hash:', window.location.hash)
 
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search)
@@ -78,7 +129,7 @@
         const error = urlParams.get('error')
         const error_description = urlParams.get('error_description')
 
-        console.log('Parsed params:', {
+        console.log('[callback.html] Parsed params:', {
           code: code ? `${code.substring(0, 10)}...` : null,
           state: state ? `${state.substring(0, 10)}...` : null,
           error,
@@ -95,7 +146,7 @@
           error_description: error_description
         }, window.location.origin)
 
-        console.log('✅ Sent callback URL to parent window')
+        console.log('[callback.html] ✅ Sent callback URL to parent window')
 
         // Close the popup after a short delay
         setTimeout(() => {

@@ -56,7 +56,21 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
       // Get the redirect URL from JSON response
       const data = await response.json()
       if (data.redirect_url) {
+        // Detect popup mode to maintain window.opener context
+        const isPopupMode = window.opener !== null && window.opener !== window
+
+        if (isPopupMode) {
+          console.log('[GoogleLogin] Popup mode detected - setting sessionStorage flag')
+          // Store popup mode in sessionStorage (survives cross-origin redirects)
+          sessionStorage.setItem('authway_popup_mode', 'true')
+        } else {
+          console.log('[GoogleLogin] Redirect mode - full page navigation')
+          sessionStorage.removeItem('authway_popup_mode')
+        }
+
         console.log('[GoogleLogin] Redirecting to Google OAuth')
+        // In both modes, redirect within current window (popup or main)
+        // This maintains window.opener in popup mode
         window.location.href = data.redirect_url
       } else {
         throw new Error('No redirect URL in response')
