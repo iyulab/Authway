@@ -26,7 +26,6 @@ import {
   verifyState,
   decodeToken,
   extractUser,
-  isTokenExpired,
   getTokenExpiration,
   createStorage,
   IStorage,
@@ -470,8 +469,11 @@ export class AuthwayClient {
    */
   async getAccessToken(options: GetTokenOptions = {}): Promise<string> {
     // Use cached token if valid
-    if (!options.ignoreCache && this.cache.accessToken) {
-      if (!isTokenExpired(this.cache.accessToken, this.config.leeway)) {
+    if (!options.ignoreCache && this.cache.accessToken && this.cache.expiresAt) {
+      // Check expiration using cached expiresAt (supports opaque tokens)
+      const now = Date.now()
+      const leewayMs = (this.config.leeway || 60) * 1000
+      if (this.cache.expiresAt > (now + leewayMs)) {
         return this.cache.accessToken
       }
     }
