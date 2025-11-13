@@ -57,19 +57,26 @@
           top: window.top === window
         });
 
-        if (isInIframe) {
-          // Running inside hidden iframe (ConsentPage/LoginPage will read the URL)
-          // Do nothing - just wait for parent to extract code from URL
-          console.log('[callback.html] ✅ Running in iframe - waiting for parent to extract code');
-          return;
-        }
-
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         const state = urlParams.get('state');
         const error = urlParams.get('error');
         const error_description = urlParams.get('error_description');
+
+        if (isInIframe) {
+          // Running inside hidden iframe (ConsentPage/LoginPage popup flow)
+          // Send postMessage to parent window (ConsentPage)
+          console.log('[callback.html] ✅ Running in iframe - sending postMessage to parent');
+          window.parent.postMessage({
+            type: 'authway-callback',
+            code: code,
+            state: state,
+            error: error,
+            error_description: error_description
+          }, '*'); // ConsentPage will validate origin
+          return;
+        }
 
         // Send message to parent window (opener)
         if (window.opener) {
