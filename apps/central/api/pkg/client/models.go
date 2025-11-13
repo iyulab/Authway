@@ -36,6 +36,10 @@ type Client struct {
 	GithubClientID     *string `json:"-" gorm:"column:github_client_id;null"`
 	GithubClientSecret *string `json:"-" gorm:"column:github_client_secret;null"`
 
+	// CORS Allowed Origins for dynamic CORS validation by reverse proxy
+	// Used to validate browser requests to /oauth2/token endpoint
+	AllowedOrigins pq.StringArray `json:"allowed_origins" gorm:"type:text[];column:allowed_origins;default:'{}'"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
@@ -69,6 +73,9 @@ type PublicClient struct {
 	GoogleRedirectURI  *string `json:"google_redirect_uri"`
 	GithubOAuthEnabled bool    `json:"github_oauth_enabled"`
 
+	// CORS Allowed Origins
+	AllowedOrigins []string `json:"allowed_origins"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -93,6 +100,9 @@ func (c *Client) ToPublic() PublicClient {
 		GoogleOAuthEnabled: c.GoogleOAuthEnabled,
 		GoogleRedirectURI:  c.GoogleRedirectURI,
 		GithubOAuthEnabled: c.GithubOAuthEnabled,
+
+		// CORS origins
+		AllowedOrigins: c.AllowedOrigins,
 
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
@@ -128,6 +138,11 @@ type CreateClientRequest struct {
 	GithubOAuthEnabled bool   `json:"github_oauth_enabled"`
 	GithubClientID     string `json:"github_client_id" validate:"required_with=GithubOAuthEnabled"`
 	GithubClientSecret string `json:"github_client_secret" validate:"required_with=GithubOAuthEnabled"`
+
+	// CORS Allowed Origins for browser-based OAuth flows
+	// Required for SPA clients using Authorization Code Flow with PKCE
+	// Example: ["https://app.example.com", "https://staging.example.com"]
+	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 }
 
 // UpdateClientRequest represents the request to update an OAuth client
@@ -147,6 +162,9 @@ type UpdateClientRequest struct {
 	GoogleClientID     *string `json:"google_client_id"`
 	GoogleClientSecret *string `json:"google_client_secret"`
 	GoogleRedirectURI  *string `json:"google_redirect_uri" validate:"omitempty,url"`
+
+	// CORS Allowed Origins
+	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 }
 
 // ClientCredentials represents client ID and secret

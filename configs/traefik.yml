@@ -1,0 +1,51 @@
+# Traefik Configuration for Authway CORS Proxy
+# Purpose: Dynamic CORS validation for OAuth 2.0 /token endpoint
+
+# Global Configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# API Configuration (for dashboard and monitoring)
+api:
+  dashboard: true
+  insecure: false
+
+# Entry Points
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# Certificate Resolvers (for production)
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@authway.in
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+# Providers
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+  docker:
+    exposedByDefault: false
+
+# Logging
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: keep

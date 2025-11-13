@@ -188,6 +188,11 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		}
 	}
 
+	// Set allowed origins for CORS validation
+	if len(req.AllowedOrigins) > 0 {
+		client.AllowedOrigins = req.AllowedOrigins
+	}
+
 	if err := s.db.Create(client).Error; err != nil {
 		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name), zap.String("tenant_id", tenantID.String()))
 		return nil, nil, fmt.Errorf("failed to create client: %w", err)
@@ -320,6 +325,11 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 	}
 	if req.GoogleRedirectURI != nil {
 		client.GoogleRedirectURI = req.GoogleRedirectURI
+	}
+
+	// Update allowed origins if provided
+	if len(req.AllowedOrigins) > 0 {
+		client.AllowedOrigins = req.AllowedOrigins
 	}
 
 	if err := s.db.Save(&client).Error; err != nil {
