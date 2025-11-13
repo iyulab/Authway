@@ -107,9 +107,25 @@ func (s *Service) sendEmail(to, subject, body string) error {
 	return nil
 }
 
-// renderVerificationTemplate renders email verification HTML template
-func (s *Service) renderVerificationTemplate(verificationLink string) string {
-	tmpl := `
+// renderEmailTemplate renders email HTML template (shared function)
+func renderEmailTemplate(templateType, link string) string {
+	var tmpl string
+
+	if templateType == "verification" {
+		tmpl = getVerificationTemplate()
+	} else if templateType == "reset" {
+		tmpl = getPasswordResetTemplate()
+	}
+
+	t := template.Must(template.New(templateType).Parse(tmpl))
+	var buf bytes.Buffer
+	t.Execute(&buf, map[string]string{"Link": link})
+	return buf.String()
+}
+
+// getVerificationTemplate returns verification email template
+func getVerificationTemplate() string {
+	return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -169,16 +185,11 @@ func (s *Service) renderVerificationTemplate(verificationLink string) string {
 </body>
 </html>
 `
-
-	t := template.Must(template.New("verification").Parse(tmpl))
-	var buf bytes.Buffer
-	t.Execute(&buf, map[string]string{"Link": verificationLink})
-	return buf.String()
 }
 
-// renderPasswordResetTemplate renders password reset HTML template
-func (s *Service) renderPasswordResetTemplate(resetLink string) string {
-	tmpl := `
+// getPasswordResetTemplate returns password reset email template
+func getPasswordResetTemplate() string {
+	return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -249,11 +260,16 @@ func (s *Service) renderPasswordResetTemplate(resetLink string) string {
 </body>
 </html>
 `
+}
 
-	t := template.Must(template.New("reset").Parse(tmpl))
-	var buf bytes.Buffer
-	t.Execute(&buf, map[string]string{"Link": resetLink})
-	return buf.String()
+// renderVerificationTemplate renders email verification HTML template
+func (s *Service) renderVerificationTemplate(verificationLink string) string {
+	return renderEmailTemplate("verification", verificationLink)
+}
+
+// renderPasswordResetTemplate renders password reset HTML template
+func (s *Service) renderPasswordResetTemplate(resetLink string) string {
+	return renderEmailTemplate("reset", resetLink)
 }
 
 // ValidateEmail performs basic email validation

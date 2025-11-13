@@ -14,7 +14,7 @@ import (
 // EmailHandler handles email verification and password reset requests
 type EmailHandler struct {
 	emailRepo   *email.Repository
-	emailSvc    *email.Service
+	emailSvc    email.EmailService
 	userSvc     user.Service
 	hydraClient *hydra.Client
 	validator   *validator.Validate
@@ -24,7 +24,7 @@ type EmailHandler struct {
 // NewEmailHandler creates a new email handler
 func NewEmailHandler(
 	emailRepo *email.Repository,
-	emailSvc *email.Service,
+	emailSvc email.EmailService,
 	userSvc user.Service,
 	hydraClient *hydra.Client,
 	validator *validator.Validate,

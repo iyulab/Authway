@@ -96,6 +96,7 @@ The comprehensive documentation is located in `/docs/README.md` with:
 - [Dynamic Claims](docs/features/DYNAMIC_CLAIMS.md)
 - [Auto Migration](docs/features/auto-migration.md)
 - [Claims Testing](docs/features/claims-testing-guide.md)
+- [Azure Email Service](docs/AZURE_EMAIL_MIGRATION.md) - Production email service migration guide
 
 ### Deployment & Operations
 - [Azure Deployment](docs/deployment/azure-architecture.md)

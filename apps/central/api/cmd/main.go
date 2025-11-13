@@ -111,16 +111,38 @@ func main() {
 	claimsHandler := claims.NewHandler(claimsService, zapLogger)
 
 	// Initialize email services
-	emailConfig := email.Config{
-		SMTPHost:     cfg.Email.SMTPHost,
-		SMTPPort:     fmt.Sprintf("%d", cfg.Email.SMTPPort),
-		SMTPUsername: cfg.Email.SMTPUser,
-		SMTPPassword: cfg.Email.SMTPPassword,
-		FromEmail:    cfg.Email.FromEmail,
-		FromName:     cfg.Email.FromName,
-		FrontendURL:  cfg.App.BaseURL,
+	var emailService email.EmailService
+
+	if cfg.Email.UseAzure {
+		// Use Azure Functions Email Service (Production)
+		zapLogger.Info("Using Azure Functions Email Service",
+			zap.String("baseURL", cfg.Email.AzureBaseURL))
+
+		azureConfig := email.AzureEmailConfig{
+			BaseURL:     cfg.Email.AzureBaseURL,
+			FunctionKey: cfg.Email.AzureFunctionKey,
+			FromEmail:   cfg.Email.FromEmail,
+			FromName:    cfg.Email.FromName,
+			FrontendURL: cfg.App.BaseURL,
+		}
+		emailService = email.NewAzureEmailService(azureConfig, zapLogger)
+	} else {
+		// Use traditional SMTP (Development/Fallback)
+		zapLogger.Info("Using traditional SMTP Email Service",
+			zap.String("smtpHost", cfg.Email.SMTPHost))
+
+		smtpConfig := email.Config{
+			SMTPHost:     cfg.Email.SMTPHost,
+			SMTPPort:     fmt.Sprintf("%d", cfg.Email.SMTPPort),
+			SMTPUsername: cfg.Email.SMTPUser,
+			SMTPPassword: cfg.Email.SMTPPassword,
+			FromEmail:    cfg.Email.FromEmail,
+			FromName:     cfg.Email.FromName,
+			FrontendURL:  cfg.App.BaseURL,
+		}
+		emailService = email.NewService(smtpConfig, zapLogger)
 	}
-	emailService := email.NewService(emailConfig, zapLogger)
+
 	emailRepo := email.NewRepository(db)
 
 	// Create services struct for handlers

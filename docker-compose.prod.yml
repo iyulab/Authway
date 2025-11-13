@@ -84,11 +84,19 @@ services:
       # CORS
       AUTHWAY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Please set CORS_ALLOWED_ORIGINS}
 
-      # Email (SMTP)
-      AUTHWAY_EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:?Please set EMAIL_SMTP_HOST}
+      # Email Service Configuration
+      # Azure Functions Email Service (Production - Recommended)
+      AUTHWAY_EMAIL_USE_AZURE: ${EMAIL_USE_AZURE:-true}
+      AUTHWAY_EMAIL_AZURE_BASE_URL: ${EMAIL_AZURE_BASE_URL:-iyulab-sendemail.azurewebsites.net}
+      AUTHWAY_EMAIL_AZURE_FUNCTION_KEY: ${EMAIL_AZURE_FUNCTION_KEY:?Please set EMAIL_AZURE_FUNCTION_KEY}
+
+      # Traditional SMTP (Fallback - Optional)
+      AUTHWAY_EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
       AUTHWAY_EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-587}
-      AUTHWAY_EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:?Please set EMAIL_SMTP_USER}
-      AUTHWAY_EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:?Please set EMAIL_SMTP_PASSWORD}
+      AUTHWAY_EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
+      AUTHWAY_EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+
+      # Common Email Settings
       AUTHWAY_EMAIL_FROM_EMAIL: ${EMAIL_FROM_EMAIL:-noreply@authway.in}
       AUTHWAY_EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Authway}
     ports:
