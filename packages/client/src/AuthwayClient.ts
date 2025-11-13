@@ -994,12 +994,26 @@ export class AuthwayClient {
     this.cache.idToken = result.idToken
     this.cache.refreshToken = result.refreshToken || null
     this.cache.user = result.user
-    this.cache.expiresAt = getTokenExpiration(result.accessToken)
+
+    // Calculate expiration from expires_in (supports both JWT and opaque tokens)
+    if (result.expiresIn) {
+      this.cache.expiresAt = Date.now() + (result.expiresIn * 1000)
+    } else {
+      // Fallback: Try to get expiration from access_token (JWT only)
+      try {
+        this.cache.expiresAt = getTokenExpiration(result.accessToken)
+      } catch {
+        // If token is opaque, set default expiration (1 hour)
+        console.warn('Cannot decode access_token, using default expiration')
+        this.cache.expiresAt = Date.now() + (3600 * 1000)
+      }
+    }
 
     // Persist to storage if using localStorage
     if (this.config.cacheLocation === 'localstorage') {
       this.storage.set('accessToken', result.accessToken)
       this.storage.set('idToken', result.idToken)
+      this.storage.set('expiresAt', this.cache.expiresAt.toString())
       if (result.refreshToken) {
         this.storage.set('refreshToken', result.refreshToken)
       }
@@ -1024,13 +1038,27 @@ export class AuthwayClient {
       const accessToken = this.storage.get('accessToken')
       const idToken = this.storage.get('idToken')
       const refreshToken = this.storage.get('refreshToken')
+      const expiresAt = this.storage.get('expiresAt')
 
       if (accessToken && idToken) {
         this.cache.accessToken = accessToken
         this.cache.idToken = idToken
         this.cache.refreshToken = refreshToken
         this.cache.user = extractUser(idToken)
-        this.cache.expiresAt = getTokenExpiration(accessToken)
+
+        // Load expiration time from storage (supports opaque tokens)
+        if (expiresAt) {
+          this.cache.expiresAt = parseInt(expiresAt, 10)
+        } else {
+          // Fallback: Try to decode token (JWT only)
+          try {
+            this.cache.expiresAt = getTokenExpiration(accessToken)
+          } catch {
+            // If token is opaque and no expiresAt stored, set default (1 hour)
+            console.warn('Cannot determine token expiration, using default')
+            this.cache.expiresAt = Date.now() + (3600 * 1000)
+          }
+        }
       }
     }
   }
