@@ -40,6 +40,13 @@ type Client struct {
 	// Used to validate browser requests to /oauth2/token endpoint
 	AllowedOrigins pq.StringArray `json:"allowed_origins" gorm:"type:text[];column:allowed_origins;default:'{}'"`
 
+	// Logout Redirect Policy Configuration
+	// Controls validation strictness for post_logout_redirect_uri parameter
+	PostLogoutRedirectURIs pq.StringArray `json:"post_logout_redirect_uris" gorm:"type:text[];column:post_logout_redirect_uris;default:'{}'"`
+	LogoutRedirectPolicy   string         `json:"logout_redirect_policy" gorm:"column:logout_redirect_policy;default:'strict'"` // strict, lenient, disabled
+	DefaultLogoutURI       *string        `json:"default_logout_uri" gorm:"column:default_logout_uri;null"`
+	AllowWildcardLogout    bool           `json:"allow_wildcard_logout" gorm:"column:allow_wildcard_logout;default:false"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
@@ -76,6 +83,12 @@ type PublicClient struct {
 	// CORS Allowed Origins
 	AllowedOrigins []string `json:"allowed_origins"`
 
+	// Logout Redirect Policy
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	LogoutRedirectPolicy   string   `json:"logout_redirect_policy"` // strict, lenient, disabled
+	DefaultLogoutURI       *string  `json:"default_logout_uri"`
+	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -103,6 +116,12 @@ func (c *Client) ToPublic() PublicClient {
 
 		// CORS origins
 		AllowedOrigins: c.AllowedOrigins,
+
+		// Logout policy
+		PostLogoutRedirectURIs: c.PostLogoutRedirectURIs,
+		LogoutRedirectPolicy:   c.LogoutRedirectPolicy,
+		DefaultLogoutURI:       c.DefaultLogoutURI,
+		AllowWildcardLogout:    c.AllowWildcardLogout,
 
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
@@ -143,6 +162,12 @@ type CreateClientRequest struct {
 	// Required for SPA clients using Authorization Code Flow with PKCE
 	// Example: ["https://app.example.com", "https://staging.example.com"]
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
+
+	// Logout Redirect Policy Configuration
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
+	LogoutRedirectPolicy   string   `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
+	DefaultLogoutURI       string   `json:"default_logout_uri" validate:"omitempty,url"`
+	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 }
 
 // UpdateClientRequest represents the request to update an OAuth client
@@ -165,6 +190,12 @@ type UpdateClientRequest struct {
 
 	// CORS Allowed Origins
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
+
+	// Logout Redirect Policy Configuration
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
+	LogoutRedirectPolicy   *string  `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
+	DefaultLogoutURI       *string  `json:"default_logout_uri" validate:"omitempty,url"`
+	AllowWildcardLogout    *bool    `json:"allow_wildcard_logout"`
 }
 
 // ClientCredentials represents client ID and secret

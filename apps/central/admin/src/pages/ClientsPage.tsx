@@ -21,6 +21,9 @@ const createClientSchema = z.object({
   website: z.string().url('올바른 URL을 입력해주세요').optional().or(z.literal('')),
   redirect_uris: z.string().min(1, '최소 하나의 Redirect URI가 필요합니다'),
   post_logout_redirect_uris: z.string().optional(),
+  logout_redirect_policy: z.enum(['strict', 'lenient', 'disabled']).optional(),
+  default_logout_uri: z.string().url('올바른 URL을 입력해주세요').optional().or(z.literal('')),
+  allow_wildcard_logout: z.boolean().optional(),
   grant_types: z.array(z.string()).min(1, '최소 하나의 Grant Type을 선택해주세요'),
   scopes: z.array(z.string()).min(1, '최소 하나의 Scope를 선택해주세요'),
   public: z.boolean(),
@@ -121,6 +124,9 @@ const ClientsPage: React.FC = () => {
         website: data.website || undefined,
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,
+        logout_redirect_policy: data.logout_redirect_policy || 'strict',
+        default_logout_uri: data.default_logout_uri || undefined,
+        allow_wildcard_logout: data.allow_wildcard_logout || false,
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
@@ -251,6 +257,9 @@ const ClientsPage: React.FC = () => {
     editSetValue('website', client.website || '')
     editSetValue('redirect_uris', client.redirect_uris.join('\n'))
     editSetValue('post_logout_redirect_uris', (client.post_logout_redirect_uris || []).join('\n'))
+    editSetValue('logout_redirect_policy', client.logout_redirect_policy || 'strict')
+    editSetValue('default_logout_uri', client.default_logout_uri || '')
+    editSetValue('allow_wildcard_logout', client.allow_wildcard_logout || false)
     editSetValue('grant_types', client.grant_types)
     editSetValue('scopes', client.scopes)
     editSetValue('public', client.public)
@@ -280,6 +289,9 @@ const ClientsPage: React.FC = () => {
         website: data.website || undefined,
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,
+        logout_redirect_policy: data.logout_redirect_policy || 'strict',
+        default_logout_uri: data.default_logout_uri || undefined,
+        allow_wildcard_logout: data.allow_wildcard_logout || false,
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
@@ -629,6 +641,65 @@ const ClientsPage: React.FC = () => {
                   )}
                 </div>
 
+                {/* Logout Redirect Policy */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Logout Redirect Policy
+                  </label>
+                  <select
+                    {...register('logout_redirect_policy')}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="strict">Strict (기본값) - URI 필수 + 검증</option>
+                    <option value="lenient">Lenient - URI 선택적 + 검증</option>
+                    <option value="disabled">Disabled - 검증 비활성화 (개발 환경만)</option>
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    <strong>Strict</strong>: 로그아웃 시 post_logout_redirect_uri 필수, whitelist 검증 수행 (프로덕션 권장)<br/>
+                    <strong>Lenient</strong>: URI 누락 시 default 사용, 제공 시 검증 수행 (개발/스테이징)<br/>
+                    <strong>Disabled</strong>: 검증 완전 비활성화 (로컬 개발만, 프로덕션 차단됨)
+                  </p>
+                  {errors.logout_redirect_policy && (
+                    <p className="mt-1 text-sm text-red-600">{errors.logout_redirect_policy.message}</p>
+                  )}
+                </div>
+
+                {/* Default Logout URI */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Default Logout URI (선택사항)
+                  </label>
+                  <input
+                    {...register('default_logout_uri')}
+                    type="url"
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="https://example.com"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Lenient 정책에서 post_logout_redirect_uri가 제공되지 않을 때 사용할 기본 URI
+                  </p>
+                  {errors.default_logout_uri && (
+                    <p className="mt-1 text-sm text-red-600">{errors.default_logout_uri.message}</p>
+                  )}
+                </div>
+
+                {/* Allow Wildcard Logout */}
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      {...register('allow_wildcard_logout')}
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      Wildcard 패턴 허용
+                    </span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Post-Logout Redirect URIs에 wildcard 패턴 사용 가능 (예: http://localhost:*, https://*.example.com)
+                  </p>
+                </div>
+
                 {/* Grant Types */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -908,6 +979,65 @@ const ClientsPage: React.FC = () => {
                   {editErrors.post_logout_redirect_uris && (
                     <p className="mt-1 text-sm text-red-600">{editErrors.post_logout_redirect_uris.message}</p>
                   )}
+                </div>
+
+                {/* Logout Redirect Policy */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Logout Redirect Policy
+                  </label>
+                  <select
+                    {...editRegister('logout_redirect_policy')}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="strict">Strict (기본값) - URI 필수 + 검증</option>
+                    <option value="lenient">Lenient - URI 선택적 + 검증</option>
+                    <option value="disabled">Disabled - 검증 비활성화 (개발 환경만)</option>
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    <strong>Strict</strong>: 로그아웃 시 post_logout_redirect_uri 필수, whitelist 검증 수행 (프로덕션 권장)<br/>
+                    <strong>Lenient</strong>: URI 누락 시 default 사용, 제공 시 검증 수행 (개발/스테이징)<br/>
+                    <strong>Disabled</strong>: 검증 완전 비활성화 (로컬 개발만, 프로덕션 차단됨)
+                  </p>
+                  {editErrors.logout_redirect_policy && (
+                    <p className="mt-1 text-sm text-red-600">{editErrors.logout_redirect_policy.message}</p>
+                  )}
+                </div>
+
+                {/* Default Logout URI */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Default Logout URI (선택사항)
+                  </label>
+                  <input
+                    {...editRegister('default_logout_uri')}
+                    type="url"
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="https://example.com"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Lenient 정책에서 post_logout_redirect_uri가 제공되지 않을 때 사용할 기본 URI
+                  </p>
+                  {editErrors.default_logout_uri && (
+                    <p className="mt-1 text-sm text-red-600">{editErrors.default_logout_uri.message}</p>
+                  )}
+                </div>
+
+                {/* Allow Wildcard Logout */}
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      {...editRegister('allow_wildcard_logout')}
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      Wildcard 패턴 허용
+                    </span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Post-Logout Redirect URIs에 wildcard 패턴 사용 가능 (예: http://localhost:*, https://*.example.com)
+                  </p>
                 </div>
 
                 {/* Grant Types */}

@@ -315,6 +315,10 @@ Creates a new OAuth 2.0 client.
 | `client_id` | string | ❌ | Custom client ID (optional) |
 | `client_secret` | string | ❌ | Required for confidential if `client_id` provided |
 | `redirect_uris` | string[] | ✅ | OAuth redirect URIs |
+| `post_logout_redirect_uris` | string[] | ❌ | Whitelisted URIs for post-logout redirection |
+| `logout_redirect_policy` | string | ❌ | Validation policy: `strict` (default), `lenient`, or `disabled` |
+| `default_logout_uri` | string (URL) | ❌ | Default URI for lenient policy when `post_logout_redirect_uri` is not provided |
+| `allow_wildcard_logout` | boolean | ❌ | Allow wildcard patterns in `post_logout_redirect_uris` (e.g., `http://localhost:*`) |
 | `grant_types` | string[] | ✅ | Allowed grant types |
 | `scopes` | string[] | ✅ | Allowed scopes |
 | `description` | string | ❌ | Client description |
@@ -344,6 +348,111 @@ Creates a new OAuth 2.0 client.
   "client_secret": "string"  // Empty for public clients
 }
 ```
+
+---
+
+## Logout Redirect Policy Configuration
+
+**Version**: 0.1.5+
+
+Authway provides configurable logout redirect URI validation through OpenID Connect RP-Initiated Logout with three policy levels.
+
+### Policy Levels
+
+| Policy | Description | Use Case |
+|--------|-------------|----------|
+| **Strict** (default) | `post_logout_redirect_uri` required and must be whitelisted | Production environments |
+| **Lenient** | `post_logout_redirect_uri` optional, validated if provided, uses default if omitted | Development/Staging |
+| **Disabled** | No validation (local development only, blocked in production) | Local development |
+
+### Configuration Example
+
+```bash
+curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "YOUR_TENANT_ID",
+    "name": "My Application",
+    "public": true,
+    "redirect_uris": ["http://localhost:3000/callback"],
+    "post_logout_redirect_uris": [
+      "http://localhost:3000/logout",
+      "http://localhost:*"
+    ],
+    "logout_redirect_policy": "lenient",
+    "default_logout_uri": "http://localhost:3000/logout",
+    "allow_wildcard_logout": true,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
+  }'
+```
+
+### Wildcard Pattern Support
+
+Enable `allow_wildcard_logout` to use wildcard patterns:
+
+**Port Wildcards:**
+```json
+"post_logout_redirect_uris": ["http://localhost:*"]
+```
+Matches: `http://localhost:3000`, `http://localhost:8080`, etc.
+
+**Subdomain Wildcards:**
+```json
+"post_logout_redirect_uris": ["https://*.example.com"]
+```
+Matches: `https://app.example.com`, `https://staging.example.com`, etc.
+
+### Policy Behavior
+
+**Strict Policy (Production):**
+```http
+# ✅ Success - URI provided and whitelisted
+GET /oauth2/sessions/logout?post_logout_redirect_uri=https://example.com/logout
+
+# ❌ Error - URI missing (required in strict mode)
+GET /oauth2/sessions/logout
+```
+
+**Lenient Policy (Development):**
+```http
+# ✅ Success - URI provided and whitelisted
+GET /oauth2/sessions/logout?post_logout_redirect_uri=http://localhost:3000/logout
+
+# ✅ Success - URI missing, uses default_logout_uri
+GET /oauth2/sessions/logout
+
+# ❌ Error - URI not whitelisted
+GET /oauth2/sessions/logout?post_logout_redirect_uri=http://malicious.com
+```
+
+**Disabled Policy (Local Only):**
+```http
+# ✅ Success - No validation (any URI accepted)
+GET /oauth2/sessions/logout?post_logout_redirect_uri=http://any-uri.com
+
+# Note: Automatically blocked when AUTHWAY_ENV=production
+```
+
+### Field Reference
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `post_logout_redirect_uris` | `string[]` | `[]` | Whitelisted URIs for post-logout redirection (OIDC RP-Initiated Logout) |
+| `logout_redirect_policy` | `string` | `"strict"` | Validation strictness: `strict`, `lenient`, or `disabled` |
+| `default_logout_uri` | `string` | `null` | Default URI for lenient policy when `post_logout_redirect_uri` is not provided |
+| `allow_wildcard_logout` | `boolean` | `false` | Allow wildcard patterns (e.g., `http://localhost:*`, `https://*.example.com`) |
+
+### Security Recommendations
+
+| Environment | Recommended Policy | Wildcard | Reasoning |
+|-------------|-------------------|----------|-----------|
+| **Production** | `strict` | No | Maximum security, explicit whitelist |
+| **Staging** | `lenient` | Optional | Flexibility with validation |
+| **Development** | `lenient` | Yes | Convenience with security |
+| **Local** | `disabled` | N/A | Maximum convenience (blocked in prod) |
+
+For complete documentation, see [LOGOUT_REDIRECT_POLICY.md](LOGOUT_REDIRECT_POLICY.md).
 
 ---
 

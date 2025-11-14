@@ -210,6 +210,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		ClientSecret:            clientSecret,
 		ClientName:              client.Name,
 		RedirectUris:            client.RedirectURIs,
+		PostLogoutRedirectUris:  client.PostLogoutRedirectURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"}, // Default to authorization code flow
 		Scope:                   strings.Join(client.Scopes, " "),
@@ -332,6 +333,20 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		client.AllowedOrigins = req.AllowedOrigins
 	}
 
+	// Logout redirect policy settings
+	if len(req.PostLogoutRedirectURIs) > 0 {
+		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	}
+	if req.LogoutRedirectPolicy != nil {
+		client.LogoutRedirectPolicy = *req.LogoutRedirectPolicy
+	}
+	if req.DefaultLogoutURI != nil {
+		client.DefaultLogoutURI = req.DefaultLogoutURI
+	}
+	if req.AllowWildcardLogout != nil {
+		client.AllowWildcardLogout = *req.AllowWildcardLogout
+	}
+
 	if err := s.db.Save(&client).Error; err != nil {
 		s.logger.Error("Failed to update client", zap.Error(err), zap.String("id", id.String()))
 		return nil, fmt.Errorf("failed to update client: %w", err)
@@ -349,6 +364,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		ClientSecret:            client.ClientSecret,
 		ClientName:              client.Name,
 		RedirectUris:            client.RedirectURIs,
+		PostLogoutRedirectUris:  client.PostLogoutRedirectURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"},
 		Scope:                   strings.Join(client.Scopes, " "),

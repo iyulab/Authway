@@ -410,28 +410,114 @@ sessionStorage.removeItem('code_verifier');
 
 ## ASP.NET JWT 통합
 
+### 올바른 아키텍처 이해
+
+**중요**: Authway는 **Frontend와 Backend가 다른 엔드포인트를 사용**합니다:
+
+| 구성요소 | 사용하는 엔드포인트 | 역할 |
+|---------|-----------------|------|
+| **Frontend** (SDK) | Auth Backend (`http://localhost:8081`) | 사용자 인증, 로그인 플로우 |
+| **Backend** (API) | Ory Hydra (`http://localhost:4444`) | JWT 토큰 검증 |
+
+```
+┌─────────────┐
+│  Frontend   │  @authway/react or @authway/client
+│   (SPA)     │  → Auth Backend (8081) for login
+└─────────────┘  → API Backend with Bearer token
+      │
+      ↓ Bearer {token}
+┌─────────────┐
+│  Backend    │  ASP.NET API
+│   (API)     │  → Hydra (4444) for JWT validation
+└─────────────┘
+```
+
 ### JWT Bearer 인증 설정
+
+**올바른 설정** - Hydra OAuth 엔드포인트 사용:
 
 ```csharp
 // Program.cs
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "http://localhost:4444";  // Hydra
-        options.Audience = "api";
-        options.RequireHttpsMetadata = false;  // 개발 환경에서만
-
-        options.TokenValidationParameters = new TokenValidationParameters
+        // ✅ Hydra OAuth 엔드포인트 사용 (NOT Auth Backend!)
+        var authority = builder.Configuration["Authway:Authority"];
+        if (!string.IsNullOrEmpty(authority))
         {
-            ValidateIssuer = true,
-            ValidIssuer = "http://localhost:4444",
-            ValidateAudience = true,     // 프로덕션 필수
-            ValidAudience = "api",
-            ValidateLifetime = true,      // 만료 검증
-            ValidateIssuerSigningKey = true  // 서명 검증
-        };
+            options.Authority = authority;  // http://localhost:4444 (개발) or https://oauth.authway.in (프로덕션)
+            options.Audience = builder.Configuration["Authway:Audience"] ?? "api";
+            options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = authority,  // http://localhost:4444 or https://oauth.authway.in
+                ValidateAudience = true,  // ✅ 프로덕션 필수
+                ValidAudience = builder.Configuration["Authway:Audience"] ?? "api",
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(5)
+            };
+        }
     });
 ```
+
+### appsettings 구성
+
+**appsettings.Development.json**:
+```json
+{
+  "Authway": {
+    "Authority": "http://localhost:4444",
+    "Authway": "http://localhost:8081",
+    "Audience": "api"
+  }
+}
+```
+
+**appsettings.Production.json**:
+```json
+{
+  "Authway": {
+    "Authority": "https://oauth.authway.in",
+    "Authway": "https://api.authway.in",
+    "Audience": "api"
+  }
+}
+```
+
+**설정 설명**:
+- `Authority`: **Hydra OAuth 엔드포인트** - JWT 토큰 검증용
+- `Authway`: **Auth Backend URL** - 프론트엔드 SDK 설정용 (참고용)
+- `Audience`: JWT 토큰의 `aud` claim 값 (기본값: `"api"`)
+
+### 흔한 실수와 해결
+
+#### ❌ 잘못된 설정 - Auth Backend를 Authority로 사용
+
+```csharp
+// ❌ 이렇게 하면 안 됩니다!
+options.Authority = "http://localhost:8081";  // Auth Backend (X)
+```
+
+**오류**:
+```
+IDX20803: Unable to obtain configuration from:
+'http://localhost:8081/.well-known/openid-configuration'
+```
+
+**이유**: Auth Backend (`8081`)는 프론트엔드 인증용이며 OIDC Discovery를 제공하지 않습니다.
+
+#### ✅ 올바른 설정 - Hydra를 Authority로 사용
+
+```csharp
+// ✅ 이것이 올바릅니다!
+options.Authority = "http://localhost:4444";  // Hydra (O)
+// 또는 프로덕션:
+options.Authority = "https://oauth.authway.in";  // Hydra Public URL (O)
+```
+
+**성공**: Hydra는 OIDC Discovery를 제공하며 JWT 토큰을 검증할 수 있습니다.
 
 ### CORS 설정
 
@@ -545,24 +631,27 @@ options.Events = new JwtBearerEvents
 
 1. **PKCE 사용**: Public client는 필수
 2. **oauth4webapi 검증 패턴**: `validateAuthResponse()` → `authorizationCodeGrantRequest()` → `processAuthorizationCodeResponse()`
-3. **Audience 검증**: 프로덕션에서 `ValidateAudience = true`
-4. **State 검증**: CSRF 공격 방지
-5. **Origin 검증**: postMessage 사용 시
-6. **HTTPS 사용**: 프로덕션 환경
+3. **올바른 Authority 설정**: 백엔드는 **Hydra OAuth 엔드포인트** 사용 (Auth Backend 아님!)
+4. **Audience 검증**: 프로덕션에서 `ValidateAudience = true`, Authorization URL에 `audience` 파라미터 추가
+5. **State 검증**: CSRF 공격 방지
+6. **Origin 검증**: postMessage 사용 시
+7. **HTTPS 사용**: 프로덕션 환경
 
 ### ⚠️ 하지 말아야 할 것
 
-1. **allowInsecureRequests 프로덕션 사용**: HTTP는 개발에서만
-2. **Audience 검증 비활성화**: 토큰 대체 공격 취약
-3. **State 파라미터 생략**: CSRF 공격 가능
-4. **토큰 localStorage 무분별 저장**: XSS 취약
-5. **oauth.None() 생략**: Public client 인증 실패
-6. **검증 없이 토큰 교환**: oauth4webapi 요구사항
+1. **Auth Backend를 Authority로 사용**: 백엔드는 Hydra (4444) 사용, Auth Backend (8081)는 프론트엔드용!
+2. **allowInsecureRequests 프로덕션 사용**: HTTP는 개발에서만
+3. **Audience 검증 비활성화**: 토큰 대체 공격 취약
+4. **State 파라미터 생략**: CSRF 공격 가능
+5. **토큰 localStorage 무분별 저장**: XSS 취약
+6. **oauth.None() 생략**: Public client 인증 실패
+7. **검증 없이 토큰 교환**: oauth4webapi 요구사항
 
 ### 🎓 학습 포인트
 
+- **Frontend vs Backend 엔드포인트 분리**: 프론트엔드는 Auth Backend (8081), 백엔드는 Hydra (4444)
 - **oauth4webapi는 명시적**: 각 단계 검증 필수
-- **Hydra audience는 화이트리스트**: 명시적 요청 필요
+- **Hydra audience는 화이트리스트**: Authorization URL에 명시적 `audience` 파라미터 필요
 - **ext 네임스페이스**: 클레임 충돌 방지
 - **GroupBy 패턴**: ASP.NET 중복 claims 처리
 - **세션 키 분리**: Popup/Redirect 충돌 방지

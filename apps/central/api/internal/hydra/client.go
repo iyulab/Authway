@@ -36,6 +36,7 @@ type OAuth2Client struct {
 	ClientName              string   `json:"client_name"`
 	ClientSecret            string   `json:"client_secret,omitempty"`
 	RedirectUris            []string `json:"redirect_uris"`
+	PostLogoutRedirectUris  []string `json:"post_logout_redirect_uris,omitempty"`
 	GrantTypes              []string `json:"grant_types"`
 	ResponseTypes           []string `json:"response_types"`
 	Scope                   string   `json:"scope"`

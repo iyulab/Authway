@@ -190,22 +190,62 @@ cd samples/your-sample
 
 ### Manual Registration
 
-Use Hydra CLI or API:
+Use Central API (recommended):
 
 ```bash
-# Create OAuth client
-curl -X POST http://localhost:4445/admin/clients \
+# Create OAuth client with logout policy
+curl -X POST http://localhost:8080/api/v1/clients \
   -H "Content-Type: application/json" \
   -d '{
+    "tenant_id": "YOUR_TENANT_ID",
     "client_id": "your-client-id",
-    "client_name": "Your App",
-    "grant_types": ["authorization_code", "refresh_token"],
-    "response_types": ["code"],
+    "name": "Your App",
+    "public": true,
     "redirect_uris": ["http://localhost:3000"],
-    "scope": "openid profile email",
-    "token_endpoint_auth_method": "none"
+    "post_logout_redirect_uris": ["http://localhost:3000/logout"],
+    "logout_redirect_policy": "lenient",
+    "default_logout_uri": "http://localhost:3000/logout",
+    "allow_wildcard_logout": false,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
   }'
 ```
+
+### Logout Policy Configuration
+
+**Version**: 0.1.5+
+
+Configure logout redirect URI validation per client:
+
+| Policy | Description | Use Case |
+|--------|-------------|----------|
+| **Strict** (default) | `post_logout_redirect_uri` required | Production |
+| **Lenient** | `post_logout_redirect_uri` optional | Development/Staging |
+| **Disabled** | No validation (local only) | Local development |
+
+**Example - Development Setup:**
+```bash
+curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "YOUR_TENANT_ID",
+    "name": "Dev App",
+    "public": true,
+    "redirect_uris": ["http://localhost:*"],
+    "post_logout_redirect_uris": ["http://localhost:*"],
+    "logout_redirect_policy": "lenient",
+    "default_logout_uri": "http://localhost:3000/logout",
+    "allow_wildcard_logout": true,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
+  }'
+```
+
+**Wildcard patterns** (when `allow_wildcard_logout: true`):
+- `http://localhost:*` - Matches any port
+- `https://*.example.com` - Matches any subdomain
+
+For detailed configuration, see [Logout Redirect Policy Guide](LOGOUT_REDIRECT_POLICY.md).
 
 ## Protected API Calls
 
@@ -223,20 +263,31 @@ const response = await fetch('https://api.example.com/protected', {
 
 ### ASP.NET Backend Setup
 
+**중요**: 백엔드는 **Hydra OAuth 엔드포인트**를 사용해야 합니다 (Auth Backend 아님!)
+
 ```csharp
 // Program.cs
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "http://localhost:4444";
-        options.Audience = "api";
-        options.TokenValidationParameters = new TokenValidationParameters
+        // ✅ Hydra OAuth 엔드포인트 사용 (JWT 토큰 검증용)
+        var authority = builder.Configuration["Authway:Authority"];
+        if (!string.IsNullOrEmpty(authority))
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true
-        };
+            options.Authority = authority;  // http://localhost:4444 (개발) or https://oauth.authway.in (프로덕션)
+            options.Audience = builder.Configuration["Authway:Audience"] ?? "api";
+            options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = authority,
+                ValidateAudience = true,  // 프로덕션 필수
+                ValidAudience = builder.Configuration["Authway:Audience"] ?? "api",
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(5)
+            };
+        }
     });
 
 // Protected endpoint
@@ -244,6 +295,26 @@ app.MapGet("/api/protected", [Authorize] () =>
 {
     return new { message = "This is protected" };
 });
+```
+
+**appsettings.json 구성**:
+```json
+{
+  "Authway": {
+    "Authority": "http://localhost:4444",
+    "Audience": "api"
+  }
+}
+```
+
+**프로덕션 (appsettings.Production.json)**:
+```json
+{
+  "Authway": {
+    "Authority": "https://oauth.authway.in",
+    "Audience": "api"
+  }
+}
 ```
 
 ## Common Issues
@@ -297,14 +368,45 @@ r.Use(cors.New(cors.Config{
 ## Architecture Overview
 
 ```
-Your App → Auth Backend (8081) → Central API (8080) → Hydra (4444/4445) → PostgreSQL
+┌─────────────────┐
+│  Frontend App   │  @authway/react or @authway/client
+│   (Browser)     │  → Auth Backend (8081) for login/authentication
+└────────┬────────┘
+         │ Bearer {access_token}
+         ▼
+┌─────────────────┐
+│  Backend API    │  ASP.NET, Node.js, etc.
+│  (Your Server)  │  → Hydra (4444) for JWT validation
+└────────┬────────┘
+         │
+         ▼
+    ┌─────────┐
+    │  Hydra  │  OAuth 2.0 Server (4444: public, 4445: admin)
+    └────┬────┘
+         │
+         ▼
+┌─────────────────┐         ┌──────────────┐
+│  Central API    │◄────────┤ Auth Backend │
+│    (8080)       │         │    (8081)    │
+└────────┬────────┘         └──────────────┘
+         │
+         ▼
+   ┌───────────┐
+   │PostgreSQL │
+   └───────────┘
 ```
 
 **Key Concepts**:
-- **Auth Backend** (8081): App entry point, provides config discovery
-- **Central API** (8080): Internal only, never exposed directly
-- **Hydra** (4444/4445): OAuth 2.0 server
-- **Auto-Discovery**: Apps only need Auth Backend URL, rest discovered via `/.well-known/authway-config`
+- **Frontend** → **Auth Backend** (8081): 사용자 인증, 로그인 플로우, SDK 설정
+- **Backend API** → **Hydra** (4444): JWT 토큰 검증, OIDC Discovery
+- **Central API** (8080): 내부 전용, 직접 노출 금지
+- **Auto-Discovery**: 프론트엔드는 Auth Backend URL만 필요, 나머지는 `/.well-known/authway-config`로 자동 발견
+
+**중요**: 프론트엔드와 백엔드는 **다른 엔드포인트를 사용**합니다:
+| 구성요소 | 엔드포인트 | 용도 |
+|---------|----------|------|
+| Frontend SDK | Auth Backend (8081) | 로그인, 토큰 획득 |
+| Backend API | Hydra (4444) | JWT 검증 |
 
 ## Support
 

@@ -130,8 +130,10 @@ const user = await client.getUser()
 ## Documentation
 
 - **[Getting Started Guide](./docs/GETTING_STARTED.md)** - Complete setup and integration guide
+- **[Backend Integration Guide](./docs/BACKEND_INTEGRATION_GUIDE.md)** - ASP.NET, Node.js, Go backend integration
 - **[Client Registration](./docs/CLIENT_REGISTRATION.md)** - OAuth 2.0 client setup for Public and Confidential clients
 - **[SDK Reference](./docs/SDK_REFERENCE.md)** - API documentation for both SDKs
+- **[OAuth Best Practices](./docs/features/OAUTH_JWT_BEST_PRACTICES.md)** - Security guidelines and common patterns
 - **[Popup Login Guide](./docs/features/POPUP_LOGIN_GUIDE.md)** - Popup authentication with external OAuth providers
 - **[Samples](./samples/)** - Example applications
   - [React SDK Sample](./samples/react-sdk-sample/) - Full-featured React demo
