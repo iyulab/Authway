@@ -1,27 +1,31 @@
 # Authway Documentation
 
-**Latest Version**: 0.1.4 (2025-11-10)
+**Latest Version**: 0.2.0 (2025-11-17)
 
-## 🆕 What's New in v0.1.4
+## 🆕 What's New in v0.2.0
 
-- ✅ **Popup Mode with External OAuth Providers** - Google OAuth, GitHub, and other providers now work in popup mode
-- ✅ **COOP Compatibility** - Solved Cross-Origin-Opener-Policy blocking with sessionStorage + hidden iframe pattern
-- 📝 **Enhanced Documentation** - Updated [Popup Login Guide](./features/POPUP_LOGIN_GUIDE.md) with v0.1.4 implementation details
+- ✅ **Intelligent Auto-Migration System** - Fast detection (1-2s) with PostgreSQL advisory locks
+- ✅ **Consolidated Documentation** - Reorganized into 7 core documents for easier navigation
+- ✅ **Enhanced Logout Policies** - Flexible redirect validation with whitelist and custom policies
+- 📝 **Updated Guides** - Comprehensive setup, features, deployment, and backend integration guides
 
 See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
 
 ---
 
-## Quick Links
+## Core Documentation
 
-- **[Getting Started Guide](./GETTING_STARTED.md)** - Setup, installation, and integration guide
-- **[SDK Reference](./SDK_REFERENCE.md)** - Complete API documentation for both SDKs
+### Getting Started
+- **[Setup Guide](./SETUP.md)** - Complete installation, configuration, and SDK integration
+- **[SDK Reference](./SDK_REFERENCE.md)** - Full API documentation for React and Vanilla JS SDKs
 
-## Feature Guides
+### Features & Integration
+- **[Features Guide](./FEATURES.md)** - Dynamic Claims, Popup Login, Logout Policies, OAuth/JWT Best Practices
+- **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
 
-- **[Dynamic Claims](./features/DYNAMIC_CLAIMS.md)** - Runtime user claims management
-- **[Popup Login](./features/POPUP_LOGIN_GUIDE.md)** - No-redirect authentication flow
-- **[OAuth & JWT Best Practices](./features/OAUTH_JWT_BEST_PRACTICES.md)** - Security guidelines and implementation patterns
+### Operations
+- **[Deployment Guide](./DEPLOYMENT.md)** - Azure, Docker, CORS, production checklist
+- **[Database Guide](./DATABASE.md)** - Schema, migrations, auto-migration system
 
 ## Samples
 

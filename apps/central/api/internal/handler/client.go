@@ -129,6 +129,25 @@ func (h *ClientHandler) Get(c *fiber.Ctx) error {
 	})
 }
 
+// GetByClientID handles getting a specific OAuth client by client_id (for internal use)
+func (h *ClientHandler) GetByClientID(c *fiber.Ctx) error {
+	clientID := c.Params("client_id")
+	if clientID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "client_id is required")
+	}
+
+	foundClient, err := h.services.ClientService.GetByClientID(clientID)
+	if err != nil {
+		h.logger.Error("Failed to get client by client_id", zap.Error(err), zap.String("client_id", clientID))
+		return fiber.NewError(fiber.StatusNotFound, "Client not found")
+	}
+
+	// Return full client including logout policy fields (for internal Auth API use)
+	return c.JSON(fiber.Map{
+		"client": foundClient.ToPublic(),
+	})
+}
+
 // Update handles updating OAuth client information
 func (h *ClientHandler) Update(c *fiber.Ctx) error {
 	idStr := c.Params("id")

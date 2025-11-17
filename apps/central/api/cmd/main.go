@@ -223,11 +223,6 @@ func main() {
 	app.Get("/auth/google/callback", socialHandler.GoogleCallback)
 	app.Get("/auth/google/url", socialHandler.GetGoogleAuthURL)
 
-	// Internal API routes (authenticated with X-API-Key)
-	internalAPI := app.Group("/internal")
-	internalAuth := middleware.InternalAPIAuth(cfg.Admin.InternalAPIKey, zapLogger)
-	internalAPI.Post("/auth/google", internalAuth, internalAuthHandler.AuthenticateGoogleUser)
-
 	// API routes
 	api := app.Group("/api")
 
@@ -236,6 +231,14 @@ func main() {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
+
+	// Internal API routes (authenticated with X-Internal-Key)
+	internalAPI := app.Group("/internal")
+	internalAuth := middleware.InternalAPIAuth(cfg.Admin.InternalAPIKey, zapLogger)
+	internalAPI.Post("/auth/google", internalAuth, internalAuthHandler.AuthenticateGoogleUser)
+
+	// Internal client lookup by client_id (for Auth API logout handler)
+	v1.Get("/clients/by-client-id/:client_id", internalAuth, clientHandler.GetByClientID)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)

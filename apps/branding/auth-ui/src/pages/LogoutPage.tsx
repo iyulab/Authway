@@ -36,28 +36,11 @@ const LogoutPage: React.FC = () => {
           window.location.href = data.redirect_to
         } else if (data.error) {
           console.error('Logout API error:', data.error)
-
-          // Immediately redirect back to the app - don't show error page
-          const referrer = document.referrer
-          if (referrer && referrer !== window.location.href) {
-            window.location.href = referrer
-          } else {
-            window.location.href = 'http://localhost:5000'
-          }
+          setError(`Logout failed: ${data.error_description || data.error}`)
         }
       } catch (err) {
         console.error('Logout error:', err)
-
-        // Immediately redirect back to the app - don't show error page
-        const referrer = document.referrer
-        if (referrer && referrer !== window.location.href && !referrer.includes('localhost:3001')) {
-          console.log('Redirecting to referrer:', referrer)
-          window.location.href = referrer
-        } else {
-          // Last resort: try common app URLs
-          console.log('No valid referrer, trying localhost:5000')
-          window.location.href = 'http://localhost:5000'
-        }
+        setError('Logout failed. Please close this window or return to your application.')
       }
     }
 

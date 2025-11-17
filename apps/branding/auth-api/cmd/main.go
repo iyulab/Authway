@@ -52,6 +52,7 @@ func main() {
 	consentHandler := handler.NewConsentHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	claimsHandler := handler.NewClaimsHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	profileHandler := handler.NewProfileHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
+	logoutHandler := handler.NewLogoutHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, cfg.Hydra.AdminURL, zapLogger)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -96,6 +97,9 @@ func main() {
 	app.Post("/consent", consentHandler.GetConsentInfo)
 	app.Post("/consent/accept", consentHandler.AcceptConsent)
 	app.Post("/consent/reject", consentHandler.RejectConsent)
+
+	// Logout endpoint
+	app.Get("/logout", logoutHandler.HandleLogout)
 
 	// Claims endpoints (proxy to Central API)
 	app.Get("/api/v1/claims", claimsHandler.GetClaims)

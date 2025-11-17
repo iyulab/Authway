@@ -433,6 +433,85 @@ func main() {
 
 ---
 
+## Logout Flow Integration
+
+### Frontend Logout Implementation
+
+```typescript
+// @authway/client
+await client.logout({
+  returnTo: 'https://yourdomain.com'  // Optional with lenient policy
+})
+
+// @authway/react
+const { logout } = useAuth()
+await logout({ returnTo: 'https://yourdomain.com' })
+```
+
+### Backend Logout Policy Configuration
+
+Authway v0.1.5+ supports configurable logout redirect validation:
+
+| Policy | Behavior | Recommended For |
+|--------|----------|----------------|
+| **Strict** | `post_logout_redirect_uri` required | Production |
+| **Lenient** | `post_logout_redirect_uri` optional | Development/Staging |
+| **Disabled** | No validation | Local development only |
+
+**Example Client Configuration**:
+```json
+{
+  "client_id": "your-client-id",
+  "post_logout_redirect_uris": [
+    "https://yourdomain.com",
+    "https://yourdomain.com/signout-callback"
+  ],
+  "logout_redirect_policy": "lenient",
+  "default_logout_uri": "https://yourdomain.com",
+  "allow_wildcard_logout": false
+}
+```
+
+**Development with Wildcards**:
+```json
+{
+  "post_logout_redirect_uris": [
+    "http://localhost:*",
+    "https://*.dev.example.com"
+  ],
+  "logout_redirect_policy": "lenient",
+  "default_logout_uri": "http://localhost:3000",
+  "allow_wildcard_logout": true
+}
+```
+
+### Backend Session Management
+
+While Authway handles OAuth logout, your backend may need additional cleanup:
+
+```csharp
+// ASP.NET
+app.MapPost("/api/auth/logout", async (HttpContext context) =>
+{
+    // Clear backend session/cookies if any
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+    return Results.Ok(new { message = "Logged out successfully" });
+});
+```
+
+```javascript
+// Node.js Express
+app.post('/api/auth/logout', (req, res) => {
+  // Clear session if using express-session
+  req.session.destroy()
+
+  res.json({ message: 'Logged out successfully' })
+})
+```
+
+---
+
 ## Common Issues & Solutions
 
 ### Issue 1: "Unable to obtain configuration from Auth Backend"

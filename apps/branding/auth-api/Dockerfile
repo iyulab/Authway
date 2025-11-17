@@ -4,11 +4,11 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 
 # Copy go mod files
-COPY apps/auth-backend/go.mod apps/auth-backend/go.sum ./
+COPY apps/branding/auth-api/go.mod apps/branding/auth-api/go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY apps/auth-backend/ ./
+COPY apps/branding/auth-api/ ./
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o auth-backend ./cmd/main.go
@@ -26,8 +26,8 @@ COPY --from=builder /app/auth-backend .
 # Create static directory
 RUN mkdir -p /root/static
 
-# Copy static files if they exist (will be empty initially)
-COPY apps/auth-backend/static/ ./static/ 2>/dev/null || :
+# Copy static files
+COPY apps/branding/auth-api/static/ ./static/
 
 EXPOSE 8080
 
