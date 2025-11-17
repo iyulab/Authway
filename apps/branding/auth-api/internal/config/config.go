@@ -18,6 +18,7 @@ type AppConfig struct {
 	Port        string
 	Environment string
 	StaticPath  string
+	LoginUIURL  string
 }
 
 type GoogleOAuthConfig struct {
@@ -45,6 +46,7 @@ func Load() (*Config, error) {
 			Port:        getEnv("PORT", "8081"),
 			Environment: getEnv("ENVIRONMENT", "development"),
 			StaticPath:  getEnv("STATIC_PATH", "./static"),
+			LoginUIURL:  getEnv("LOGIN_UI_URL", "http://localhost:3001"),
 		},
 		Google: GoogleOAuthConfig{
 			ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),

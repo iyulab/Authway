@@ -88,6 +88,20 @@ func main() {
 	// Config endpoint for clients
 	app.Get("/.well-known/authway-config", healthHandler.Config)
 
+	// Generic login endpoint - redirects to Login UI
+	app.Get("/login", func(c *fiber.Ctx) error {
+		loginChallenge := c.Query("login_challenge")
+		if loginChallenge == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "login_challenge query parameter is required",
+			})
+		}
+
+		// Redirect to Login UI with login_challenge
+		loginUIURL := fmt.Sprintf("%s/login?login_challenge=%s", cfg.App.LoginUIURL, loginChallenge)
+		return c.Redirect(loginUIURL, fiber.StatusFound)
+	})
+
 	// OAuth endpoints
 	app.Post("/auth/google/login", oauthHandler.GoogleLogin)
 	app.Get("/auth/google/login", oauthHandler.GoogleLoginGet)
