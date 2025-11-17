@@ -49,7 +49,7 @@ const ConsentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
-  const [rememberConsent, setRememberConsent] = useState(false)
+  const [rememberConsent, setRememberConsent] = useState(true) // Default to true for better UX
 
   const challenge = searchParams.get('consent_challenge')
 

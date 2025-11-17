@@ -329,8 +329,6 @@ func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, redirectURI string
 		zap.String("challenge", challenge),
 		zap.String("redirect_to", result.RedirectTo))
 
-	// Return redirect URL to frontend
-	return c.JSON(fiber.Map{
-		"redirect_to": result.RedirectTo,
-	})
+	// Redirect to Hydra logout completion URL
+	return c.Redirect(result.RedirectTo, fiber.StatusFound)
 }
