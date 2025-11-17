@@ -91,53 +91,115 @@ try {
 
 Write-Host ""
 
-# Start infrastructure (PostgreSQL, Redis, MailHog, Ory Hydra)
-Write-Host "🐘 Starting infrastructure (PostgreSQL, Redis, MailHog, Ory Hydra)..." -ForegroundColor Yellow
+# Start infrastructure services
+Write-Host ""
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "📦 Starting Infrastructure Services" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
+
+Write-Host "🐘 Starting PostgreSQL, Redis, and MailHog..." -ForegroundColor Yellow
 docker-compose -f docker-compose.dev.yml up -d postgres redis mailhog
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Failed to start infrastructure services" -ForegroundColor Red
+    exit 1
+}
+Write-Host "✓ Infrastructure services started" -ForegroundColor Green
+Write-Host ""
+
 # Wait for PostgreSQL before starting Hydra migration
-Write-Host "⏳ Waiting for PostgreSQL before Hydra migration..." -ForegroundColor Yellow
+Write-Host "⏳ Waiting for PostgreSQL to initialize..." -ForegroundColor Yellow
 Start-Sleep -Seconds 3
 
 # Start Ory Hydra (migration will run first due to depends_on)
 Write-Host "🌊 Starting Ory Hydra OAuth Server..." -ForegroundColor Yellow
 docker-compose -f docker-compose.dev.yml up -d hydra-migrate hydra
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Failed to start Ory Hydra" -ForegroundColor Red
+    exit 1
+}
+Write-Host "✓ Ory Hydra started" -ForegroundColor Green
+Write-Host ""
+
 # Wait for PostgreSQL to be healthy
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "🔍 Database Health Check" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
 Write-Host "⏳ Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
 $maxAttempts = 30
 $attempt = 0
 while ($attempt -lt $maxAttempts) {
     $postgresHealth = docker inspect --format='{{.State.Health.Status}}' authway-postgres 2>$null
     if ($postgresHealth -eq "healthy") {
-        Write-Host "✓ PostgreSQL is ready" -ForegroundColor Green
+        Write-Host "✓ PostgreSQL is healthy and ready" -ForegroundColor Green
         break
     }
     Start-Sleep -Seconds 1
     $attempt++
-    Write-Host "." -NoNewline
+    if ($attempt % 5 -eq 0) {
+        Write-Host "  [$attempt/$maxAttempts] PostgreSQL status: $postgresHealth" -ForegroundColor Gray
+    }
 }
 
 if ($attempt -ge $maxAttempts) {
     Write-Host ""
-    Write-Host "❌ PostgreSQL failed to start" -ForegroundColor Red
+    Write-Host "❌ PostgreSQL failed to start within $maxAttempts seconds" -ForegroundColor Red
+    Write-Host "   Check Docker logs: docker logs authway-postgres" -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host ""
-
-# Note: Database migrations are now handled automatically by the backend server
-Write-Host "ℹ️  Database migrations will run automatically when backend starts" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "🔄 Database Migration Strategy" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "💡 Authway uses automatic migrations:" -ForegroundColor Yellow
+Write-Host "   1. Backend detects database schema version" -ForegroundColor White
+Write-Host "   2. Applies pending migrations automatically on startup" -ForegroundColor White
+Write-Host "   3. Logs migration progress to backend console" -ForegroundColor White
+Write-Host ""
+Write-Host "✅ No manual migration required - migrations run with backend startup" -ForegroundColor Green
 Write-Host ""
 
 # Start backend server in new terminal
-Write-Host "🔧 Starting backend server in new terminal..." -ForegroundColor Yellow
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "🔧 Starting Backend Server" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
 if (-not (Ensure-PortFree -Port 8080 -ServiceName "Backend API")) {
     Write-Host "❌ Cannot start backend - port 8080 is in use" -ForegroundColor Red
     exit 1
 }
 $backendPath = Join-Path $PSScriptRoot "apps\central\api"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host '🔧 Authway Backend Server' -ForegroundColor Cyan; Write-Host ''; go run cmd/main.go"
+Write-Host "📂 Backend path: $backendPath" -ForegroundColor Gray
+Write-Host "🔄 Auto-migration: Enabled (runs on startup)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "🚀 Launching backend server in new window..." -ForegroundColor Yellow
+Write-Host "   Watch the backend window for migration logs" -ForegroundColor Gray
+Write-Host ""
+$backendCommand = @"
+`$Host.UI.RawUI.WindowTitle = 'Authway Backend Server'
+Write-Host ''
+Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
+Write-Host '🔧 Authway Backend Server - Development Mode' -ForegroundColor Cyan
+Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
+Write-Host ''
+Write-Host '📌 Configuration:' -ForegroundColor Yellow
+Write-Host '   API Port: 8080' -ForegroundColor Gray
+Write-Host '   PostgreSQL: localhost:5432' -ForegroundColor Gray
+Write-Host '   Redis: localhost:6379' -ForegroundColor Gray
+Write-Host '   Auto-Migration: Enabled' -ForegroundColor Gray
+Write-Host ''
+Write-Host '🔄 Database migrations will run automatically on startup' -ForegroundColor Yellow
+Write-Host '   Look for migration logs below...' -ForegroundColor Gray
+Write-Host ''
+cd '$backendPath'
+go run cmd/main.go
+"@
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCommand
 
 # Wait for backend port to be listening
 Write-Host "⏳ Waiting for backend (port 8080) to start..." -ForegroundColor Yellow
@@ -242,20 +304,45 @@ $authBackendPath = Join-Path $PSScriptRoot "apps\branding\auth-api"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$authBackendPath'; Write-Host '🔑 Authway Auth Backend' -ForegroundColor Cyan; Write-Host ''; go run cmd/main.go"
 
 Write-Host ""
-Write-Host "✅ Development environment started successfully!" -ForegroundColor Green
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
+Write-Host "✨ Development Environment is Running!" -ForegroundColor Green
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
 Write-Host ""
-Write-Host "📌 Access URLs:" -ForegroundColor Cyan
+Write-Host "🌐 Application Endpoints:" -ForegroundColor Cyan
 Write-Host "   Admin Dashboard:  http://localhost:3000" -ForegroundColor White
 Write-Host "   Login UI:         http://localhost:3001" -ForegroundColor White
 Write-Host "   Backend API:      http://localhost:8080" -ForegroundColor White
 Write-Host "   Auth Backend:     http://localhost:8081" -ForegroundColor White
-Write-Host "   MailHog UI:       http://localhost:8025" -ForegroundColor White
+Write-Host "   MailHog UI:       http://localhost:8025 (Email Testing)" -ForegroundColor White
 Write-Host ""
-Write-Host "📝 Services:" -ForegroundColor Cyan
-Write-Host "   PostgreSQL:       localhost:5432" -ForegroundColor White
-Write-Host "   Redis:            localhost:6379" -ForegroundColor White
-Write-Host "   Ory Hydra:        http://localhost:4444 (Public)" -ForegroundColor White
-Write-Host "                     http://localhost:4445 (Admin)" -ForegroundColor White
+Write-Host "📦 Infrastructure Services:" -ForegroundColor Cyan
+Write-Host "   PostgreSQL:       localhost:5432 (Database)" -ForegroundColor White
+Write-Host "   Redis:            localhost:6379 (Cache/Sessions)" -ForegroundColor White
+Write-Host "   Ory Hydra:        http://localhost:4444 (Public API)" -ForegroundColor White
+Write-Host "                     http://localhost:4445 (Admin API)" -ForegroundColor White
 Write-Host ""
-Write-Host "💡 Tip: Use stop-dev.ps1 to stop all services" -ForegroundColor Yellow
+Write-Host "🔄 Database Migration Status:" -ForegroundColor Cyan
+Write-Host "   Automatic:        Enabled (runs on backend startup)" -ForegroundColor White
+Write-Host "   Location:         Backend Server window" -ForegroundColor White
+Write-Host "   Check logs:       Watch backend window for migration progress" -ForegroundColor Gray
+Write-Host ""
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "📝 Management Commands:" -ForegroundColor Yellow
+Write-Host "   Stop all services:    .\stop-dev.ps1" -ForegroundColor Gray
+Write-Host "   View DB migrations:   Check backend server window" -ForegroundColor Gray
+Write-Host "   Docker logs:          docker-compose -f docker-compose.dev.yml logs -f" -ForegroundColor Gray
+Write-Host "   Manual migration:     .\scripts\deploy\run-migration.ps1" -ForegroundColor Gray
+Write-Host ""
+Write-Host "💡 Tips:" -ForegroundColor Yellow
+Write-Host "   - All services are running in separate windows" -ForegroundColor Gray
+Write-Host "   - Database migrations run automatically on backend startup" -ForegroundColor Gray
+Write-Host "   - Close windows or press Ctrl+C to stop services" -ForegroundColor Gray
+Write-Host "   - Docker containers will keep running after closing windows" -ForegroundColor Gray
+Write-Host "   - Use stop-dev.ps1 to stop all services including Docker" -ForegroundColor Gray
+Write-Host ""
+Write-Host "🎯 Quick Start:" -ForegroundColor Yellow
+Write-Host "   1. Open browser: http://localhost:3000 (Admin Dashboard)" -ForegroundColor Gray
+Write-Host "   2. Check API: http://localhost:8080/health" -ForegroundColor Gray
+Write-Host "   3. View backend logs for migration status" -ForegroundColor Gray
 Write-Host ""
