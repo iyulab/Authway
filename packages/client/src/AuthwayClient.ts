@@ -128,7 +128,17 @@ export class AuthwayClient {
       oauthServerUrl = oauthServerUrl.replace(/:(8080|8081)/, ':4444')
     }
 
-    const redirectUri = config.redirectUri || (typeof window !== 'undefined' ? window.location.origin : '')
+    let redirectUri = config.redirectUri
+    if (!redirectUri && typeof window !== 'undefined') {
+      redirectUri = window.location.origin
+    }
+    if (!redirectUri) {
+      console.warn(
+        '⚠️ Authway: No redirectUri configured and window.location.origin not available.\n' +
+        'Users may land on auth server after login/logout. Set redirectUri in config.'
+      )
+      redirectUri = ''
+    }
 
     // Configuration info logging
     if (centralApiUrl.includes(':8081')) {
@@ -922,10 +932,20 @@ export class AuthwayClient {
   // ==========================================
 
   private buildAuthorizationUrl(pkce: PKCEChallenge, options: RedirectLoginOptions): string {
+    // Determine redirect URI with fallback
+    let redirectUri = options.redirectUri || this.config.redirectUri
+    if (!redirectUri && typeof window !== 'undefined') {
+      redirectUri = window.location.origin
+      console.warn(
+        '⚠️ Authway: No redirectUri configured for login. Using window.location.origin.\n' +
+        'To fix: Set redirectUri in AuthwayConfig or pass redirectUri in login options.'
+      )
+    }
+
     const params = {
       client_id: this.config.clientId,
       response_type: 'code',
-      redirect_uri: options.redirectUri || this.config.redirectUri,
+      redirect_uri: redirectUri,
       scope: this.config.scope,
       state: pkce.state,
       nonce: pkce.nonce,
@@ -949,8 +969,26 @@ export class AuthwayClient {
       params.id_token_hint = idToken
     }
 
-    if (options.returnTo) {
-      params.post_logout_redirect_uri = options.returnTo
+    // Use returnTo if provided, otherwise default to redirectUri (client's origin)
+    // This ensures users return to the app home instead of an error page
+    const postLogoutUri = options.returnTo || this.config.redirectUri
+    if (postLogoutUri) {
+      params.post_logout_redirect_uri = postLogoutUri
+    } else {
+      // Fallback to window.location.origin to prevent user landing on auth server
+      const fallbackUri = typeof window !== 'undefined' ? window.location.origin : ''
+      if (fallbackUri) {
+        params.post_logout_redirect_uri = fallbackUri
+        console.warn(
+          '⚠️ Authway: No redirectUri configured. Using window.location.origin as logout redirect.\n' +
+          'To fix: Set redirectUri in AuthwayConfig or pass returnTo in logout options.'
+        )
+      } else {
+        console.error(
+          '❌ Authway: No redirect URI available for logout. User may land on auth server.\n' +
+          'To fix: Configure redirectUri in AuthwayConfig or call logout({ returnTo: "your-url" })'
+        )
+      }
     }
 
     if (options.federated) {

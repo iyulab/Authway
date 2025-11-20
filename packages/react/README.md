@@ -132,6 +132,19 @@ const {
 } = useAuth()
 ```
 
+#### logout 옵션
+
+```tsx
+// 기본 로그아웃 (OAuth 서버 세션 종료 + 리다이렉트)
+logout({ returnTo: window.location.origin })
+
+// 로컬 전용 로그아웃 (토큰만 삭제, 서버 세션 유지)
+logout({ localOnly: true })
+
+// Federated 로그아웃 (소셜 로그인 세션도 종료)
+logout({ federated: true, returnTo: window.location.origin })
+```
+
 **사용 예시**:
 
 ```tsx
@@ -242,6 +255,52 @@ import { ProtectedRoute } from '@authway/react'
 ```
 
 ## 고급 사용법
+
+### React Query와 함께 사용하기
+
+React Query (TanStack Query)를 사용하는 앱에서는 logout 전에 쿼리 캐시를 정리해야 합니다.
+그렇지 않으면 logout 후에도 보호된 API를 재호출하여 에러가 발생할 수 있습니다.
+
+```tsx
+import { useAuth } from '@authway/react'
+import { useQueryClient } from '@tanstack/react-query'
+
+function LogoutButton() {
+  const { logout } = useAuth()
+  const queryClient = useQueryClient()
+
+  const handleLogout = () => {
+    // 1. 모든 쿼리 취소 및 캐시 정리 (중요!)
+    queryClient.cancelQueries()
+    queryClient.clear()
+
+    // 2. Authway 로그아웃
+    logout({ returnTo: window.location.origin })
+  }
+
+  return <button onClick={handleLogout}>로그아웃</button>
+}
+```
+
+**참고**: `queryClient.clear()`를 호출하지 않으면, logout 후에도 React Query가 보호된 API를 재호출하여 `SyntaxError: Unexpected token '<'` 에러가 발생할 수 있습니다.
+
+### 백엔드 세션과 함께 로그아웃
+
+백엔드에 별도의 세션이 있는 경우:
+
+```tsx
+const handleLogout = async () => {
+  // 1. React Query 캐시 정리
+  queryClient.cancelQueries()
+  queryClient.clear()
+
+  // 2. 백엔드 세션 정리
+  await fetch('/api/auth/logout', { method: 'POST' })
+
+  // 3. Authway 로그아웃
+  logout({ returnTo: window.location.origin })
+}
+```
 
 ### 팝업 로그인
 

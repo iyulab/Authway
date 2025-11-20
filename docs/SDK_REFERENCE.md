@@ -152,15 +152,43 @@ Returns `null` if not authenticated or token expired.
 Log out user and clear tokens.
 
 ```typescript
-await client.logout(options?: LogoutOptions): Promise<void>
+client.logout(options?: LogoutOptions): void
 ```
 
 **Parameters**:
 
 ```typescript
 interface LogoutOptions {
-  returnTo?: string  // URL to redirect after logout
+  returnTo?: string   // URL to redirect after logout
+  localOnly?: boolean // Clear local tokens only (no server logout)
+  federated?: boolean // Also logout from social providers
 }
+```
+
+**Examples**:
+
+```typescript
+// Standard logout (redirects to client's origin by default)
+client.logout()
+
+// Logout with custom return URL
+client.logout({ returnTo: 'https://myapp.com/goodbye' })
+
+// Local-only logout (tokens cleared, no server redirect)
+client.logout({ localOnly: true })
+
+// Federated logout (also clears social provider sessions)
+client.logout({ federated: true })
+```
+
+**Note**: If `returnTo` is not specified, the SDK automatically uses the configured `redirectUri` (typically `window.location.origin`), ensuring users return to the app's home page instead of an error page.
+
+**Important**: When using React Query or similar data fetching libraries, clear the cache before calling logout to prevent errors:
+
+```typescript
+queryClient.cancelQueries()
+queryClient.clear()
+client.logout({ returnTo: window.location.origin })
 ```
 
 ---
