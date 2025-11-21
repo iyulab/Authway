@@ -48,6 +48,21 @@ export async function http<T = any>(url: string, options: HttpOptions = {}): Pro
       return await response.json()
     }
 
+    // Detect HTML response (likely auth redirect after logout)
+    if (contentType?.includes('text/html')) {
+      console.warn(
+        '⚠️ Authway: Received HTML response instead of JSON.\n' +
+        'This usually happens when React Query refetches cached queries after logout.\n\n' +
+        '💡 Solution: Clear React Query cache BEFORE calling logout():\n\n' +
+        '  const handleLogout = () => {\n' +
+        '    queryClient.cancelQueries()\n' +
+        '    queryClient.clear()\n' +
+        '    logout({ returnTo: window.location.origin })\n' +
+        '  }\n\n' +
+        '📚 See: @authway/react README > "React Query와 함께 사용"'
+      )
+    }
+
     return await response.text() as any
   } catch (error: any) {
     clearTimeout(timeoutId)
@@ -58,6 +73,21 @@ export async function http<T = any>(url: string, options: HttpOptions = {}): Pro
 
     if (error instanceof ApiError) {
       throw error
+    }
+
+    // Detect JSON parse error on HTML content
+    if (error.message?.includes('Unexpected token') && error.message?.includes('<')) {
+      console.warn(
+        '⚠️ Authway: JSON parse error on HTML response.\n' +
+        'This usually happens when React Query refetches cached queries after logout.\n\n' +
+        '💡 Solution: Clear React Query cache BEFORE calling logout():\n\n' +
+        '  const handleLogout = () => {\n' +
+        '    queryClient.cancelQueries()\n' +
+        '    queryClient.clear()\n' +
+        '    logout({ returnTo: window.location.origin })\n' +
+        '  }\n\n' +
+        '📚 See: @authway/react README > "React Query와 함께 사용"'
+      )
     }
 
     throw new ApiError(error.message || 'Network request failed', 0)
@@ -124,6 +154,21 @@ export async function postForm<T = any>(url: string, data: Record<string, string
       return await response.json()
     }
 
+    // Detect HTML response (likely auth redirect after logout)
+    if (contentType?.includes('text/html')) {
+      console.warn(
+        '⚠️ Authway: Received HTML response instead of JSON.\n' +
+        'This usually happens when React Query refetches cached queries after logout.\n\n' +
+        '💡 Solution: Clear React Query cache BEFORE calling logout():\n\n' +
+        '  const handleLogout = () => {\n' +
+        '    queryClient.cancelQueries()\n' +
+        '    queryClient.clear()\n' +
+        '    logout({ returnTo: window.location.origin })\n' +
+        '  }\n\n' +
+        '📚 See: @authway/react README > "React Query와 함께 사용"'
+      )
+    }
+
     return await response.text() as any
   } catch (error: any) {
     clearTimeout(timeoutId)
@@ -134,6 +179,21 @@ export async function postForm<T = any>(url: string, data: Record<string, string
 
     if (error instanceof ApiError) {
       throw error
+    }
+
+    // Detect JSON parse error on HTML content
+    if (error.message?.includes('Unexpected token') && error.message?.includes('<')) {
+      console.warn(
+        '⚠️ Authway: JSON parse error on HTML response.\n' +
+        'This usually happens when React Query refetches cached queries after logout.\n\n' +
+        '💡 Solution: Clear React Query cache BEFORE calling logout():\n\n' +
+        '  const handleLogout = () => {\n' +
+        '    queryClient.cancelQueries()\n' +
+        '    queryClient.clear()\n' +
+        '    logout({ returnTo: window.location.origin })\n' +
+        '  }\n\n' +
+        '📚 See: @authway/react README > "React Query와 함께 사용"'
+      )
     }
 
     throw new ApiError(error.message || 'Network request failed', 0)

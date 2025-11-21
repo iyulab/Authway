@@ -62,6 +62,82 @@ export class AuthwayClient {
 
   private configReady: Promise<void>
 
+  /**
+   * Static method to handle popup callback context.
+   * Call this before creating AuthwayClient to check if running in a popup.
+   * If in popup context with OAuth params, sends postMessage and closes window.
+   *
+   * @returns true if popup callback was handled (window will close), false otherwise
+   */
+  static handlePopupCallback(): boolean {
+    if (typeof window === 'undefined') return false
+
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const state = params.get('state')
+    const error = params.get('error')
+    const errorDescription = params.get('error_description')
+
+    // Check if we have OAuth params
+    const hasOAuthParams = (code && state) || error
+
+    if (!hasOAuthParams) return false
+
+    // Check if we're in a popup (window.opener exists)
+    let isPopup = false
+    try {
+      isPopup = !!(window.opener && !window.opener.closed)
+    } catch (e) {
+      // COOP policy may block access to window.opener
+      // Try alternative detection via window.name or sessionStorage
+      isPopup = window.name === 'authway-login' ||
+                sessionStorage.getItem('authway_popup_context') === 'true'
+    }
+
+    if (!isPopup) return false
+
+    // We're in a popup with OAuth params - send message to parent and close
+    try {
+      const message = {
+        type: 'authway-callback',
+        code,
+        state,
+        error,
+        error_description: errorDescription
+      }
+
+      // Send to parent window
+      window.opener.postMessage(message, window.location.origin)
+
+      console.log('✅ Authway: Popup callback handled automatically')
+
+      // Close the popup
+      window.close()
+
+      return true
+    } catch (e) {
+      console.warn('⚠️ Authway: Failed to send postMessage to parent window:', e)
+
+      // Fallback: Store in localStorage for parent to pick up
+      try {
+        localStorage.setItem('authway_popup_result', JSON.stringify({
+          type: 'authway-callback',
+          code,
+          state,
+          error,
+          error_description: errorDescription,
+          timestamp: Date.now()
+        }))
+        window.close()
+        return true
+      } catch (storageError) {
+        console.error('⚠️ Authway: Fallback storage also failed:', storageError)
+      }
+
+      return false
+    }
+  }
+
   constructor(config: AuthwayConfig) {
     this.config = this.normalizeConfig(config)
     this.storage = createStorage(this.config.cacheLocation)
@@ -422,8 +498,35 @@ export class AuthwayClient {
       // Listen for postMessage from popup
       window.addEventListener('message', messageHandler)
 
-      // Fallback: Check if popup is closed (for browsers that don't block popup.closed)
-      intervalId = window.setInterval(() => {
+      // Fallback: Check if popup is closed or localStorage fallback result
+      intervalId = window.setInterval(async () => {
+        // Check localStorage fallback (for COOP-blocked scenarios)
+        try {
+          const fallbackResult = localStorage.getItem('authway_popup_result')
+          if (fallbackResult) {
+            const data = JSON.parse(fallbackResult)
+            // Check if result is recent (within 30 seconds)
+            if (Date.now() - data.timestamp < 30000) {
+              localStorage.removeItem('authway_popup_result')
+
+              // Create a synthetic MessageEvent-like object
+              const syntheticEvent = {
+                data,
+                origin: window.location.origin
+              } as MessageEvent
+
+              messageHandler(syntheticEvent)
+              return
+            } else {
+              // Old result, remove it
+              localStorage.removeItem('authway_popup_result')
+            }
+          }
+        } catch (err) {
+          // Ignore localStorage errors
+        }
+
+        // Check if popup is closed
         try {
           if (popup.closed) {
             cleanup()
@@ -433,7 +536,7 @@ export class AuthwayClient {
         } catch (err) {
           // COOP policy blocks popup.closed access - continue
         }
-      }, 1000) // Check every second
+      }, 500) // Check every 500ms for faster response
     })
   }
 

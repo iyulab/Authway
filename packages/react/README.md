@@ -323,6 +323,8 @@ function PopupLogin() {
 }
 ```
 
+**참고**: SDK가 팝업 콜백을 자동으로 처리합니다. 별도의 `callback.html` 파일이 필요 없습니다. Auth0, MSAL과 동일한 방식으로 동작합니다.
+
 ### API 호출
 
 Access Token을 사용한 API 호출:

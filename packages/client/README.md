@@ -92,6 +92,23 @@ try {
 }
 ```
 
+**참고**: SDK가 팝업 콜백을 자동으로 처리합니다. 별도의 `callback.html` 파일이 필요 없습니다.
+
+#### 팝업 콜백 자동 처리
+
+React를 사용하지 않는 경우, 앱 초기화 시 다음을 호출하세요:
+
+```typescript
+// 앱 시작 시 (main.ts 등)
+if (AuthwayClient.handlePopupCallback()) {
+  // 팝업 컨텍스트에서 실행됨 - 창이 자동으로 닫힘
+  return
+}
+
+// 일반 앱 초기화 계속
+const client = new AuthwayClient(config)
+```
+
 ## 사용자 정보
 
 ```typescript

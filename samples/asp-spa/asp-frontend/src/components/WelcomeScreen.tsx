@@ -12,12 +12,10 @@ export function WelcomeScreen() {
 
     try {
       console.log('🚀 Starting popup login...')
-      console.log('Redirect URI:', window.location.origin + '/callback.html')
+      console.log('Redirect URI:', window.location.origin)
 
-      // Popup login with callback.html for postMessage communication
-      const result = await loginWithPopup({
-        redirectUri: window.location.origin + '/callback.html'
-      })
+      // Popup login - SDK auto-handles callback (no callback.html needed!)
+      const result = await loginWithPopup()
 
       console.log('✅ Popup login successful!')
       console.log('Result:', {
@@ -123,7 +121,7 @@ export function WelcomeScreen() {
             <h4>🔒 Security Features</h4>
             <ul>
               <li>✅ OAuth 2.0 Authorization Code Flow with PKCE</li>
-              <li>✅ Popup uses postMessage for secure communication</li>
+              <li>✅ SDK auto-handles popup callback (no callback.html needed!)</li>
               <li>✅ Auto-discovery of OAuth endpoints from Auth Backend</li>
               <li>✅ JWT tokens with automatic refresh</li>
             </ul>

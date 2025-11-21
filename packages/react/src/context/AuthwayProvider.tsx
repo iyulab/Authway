@@ -15,7 +15,13 @@ export function AuthwayProvider({
   onRedirectCallback,
   skipRedirectCallback = false
 }: AuthwayProviderProps) {
-  const [client] = useState(() => new AuthwayClient(config))
+  // Check if we're in a popup callback context BEFORE creating client
+  // This handles the Auth0-style auto popup callback
+  const [client] = useState(() => {
+    // Handle popup callback first - if successful, window will close
+    AuthwayClient.handlePopupCallback()
+    return new AuthwayClient(config)
+  })
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     isLoading: true,
