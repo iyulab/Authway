@@ -55,153 +55,28 @@ const LoginPage: React.FC = () => {
     const isSessionStoragePopup = sessionStorage.getItem('authway_popup_mode') === 'true'
     const isPopupMode = hasWindowOpener || isSessionStoragePopup
 
+    // Check if response_mode is form_post (incompatible with popup iframe approach)
+    try {
+      const url = new URL(redirectUrl)
+      const responseMode = url.searchParams.get('response_mode')
+      if (responseMode === 'form_post') {
+        console.log('[LoginPage] form_post response mode detected - popup approach not supported')
+        console.log('[LoginPage] Clearing popup mode and using normal redirect')
+        sessionStorage.removeItem('authway_popup_mode')
+        return false // Use normal redirect
+      }
+    } catch (e) {
+      // URL parsing failed, continue with popup check
+    }
+
     if (isPopupMode) {
       console.log('[LoginPage] Popup mode detected via', hasWindowOpener ? 'window.opener' : 'sessionStorage')
-      console.log('[LoginPage] Popup mode - will follow Hydra redirect in hidden iframe')
 
-      try {
-        // Parse the redirect URL
-        const url = new URL(redirectUrl)
-
-        // Extract redirect_uri to get parent origin
-        const redirectUriParam = url.searchParams.get('redirect_uri') || url.searchParams.get('redirectUri')
-        let parentOrigin = '*'
-
-        if (redirectUriParam) {
-          try {
-            const redirectUriUrl = new URL(redirectUriParam)
-            parentOrigin = redirectUriUrl.origin
-            console.log('[LoginPage] Parent origin:', parentOrigin)
-          } catch (e) {
-            console.warn('[LoginPage] Failed to parse redirect_uri')
-          }
-        }
-
-        // Create hidden iframe to follow Hydra redirect
-        // This maintains the popup context while allowing Hydra to generate the code
-        const iframe = document.createElement('iframe')
-        iframe.style.display = 'none'
-        document.body.appendChild(iframe)
-
-        // Declare interval variable first for use in messageHandler
-        let checkCount = 0
-        const maxChecks = 50 // 5 seconds max
-        let checkInterval: ReturnType<typeof setInterval>
-
-        // Listen for postMessage from iframe (callback.html sends this)
-        const messageHandler = (event: MessageEvent) => {
-          console.log('[LoginPage] Received postMessage:', event.data)
-
-          if (event.data?.type === 'authway-callback') {
-            console.log('[LoginPage] ✅ Received code from iframe via postMessage')
-
-            const { code, state, error, error_description } = event.data
-
-            console.log('[LoginPage] Extracted from postMessage:', {
-              code: code ? `${code.substring(0, 10)}...` : null,
-              state,
-              error
-            })
-
-            // Clean up
-            window.removeEventListener('message', messageHandler)
-            if (checkInterval) clearInterval(checkInterval)
-            document.body.removeChild(iframe)
-
-            // Send to parent window (main app)
-            const targetWindow = window.opener || window.parent
-            if (targetWindow && targetWindow !== window) {
-              targetWindow.postMessage({
-                type: 'authway-callback',
-                code,
-                state,
-                error,
-                error_description
-              }, parentOrigin)
-
-              console.log('[LoginPage] ✅ Sent code to parent via postMessage')
-            } else {
-              console.error('[LoginPage] ❌ No parent window found for postMessage')
-            }
-
-            // Clean up sessionStorage and close
-            sessionStorage.removeItem('authway_popup_mode')
-            setTimeout(() => window.close(), 500)
-          }
-        }
-
-        window.addEventListener('message', messageHandler)
-
-        // Fallback: Listen for the iframe to navigate to callback URL (in case postMessage fails)
-        checkInterval = setInterval(() => {
-          checkCount++
-          try {
-            // Check if iframe has navigated to callback URL
-            const iframeUrl = iframe.contentWindow?.location.href
-            if (iframeUrl && (iframeUrl.includes('/callback.html') || iframeUrl.includes('code='))) {
-              console.log('[LoginPage] Iframe reached callback URL (fallback URL polling)')
-              clearInterval(checkInterval)
-              window.removeEventListener('message', messageHandler)
-
-              // Extract code and state from iframe URL
-              const callbackUrl = new URL(iframeUrl)
-              const code = callbackUrl.searchParams.get('code')
-              const state = callbackUrl.searchParams.get('state')
-              const error = callbackUrl.searchParams.get('error')
-              const errorDescription = callbackUrl.searchParams.get('error_description')
-
-              console.log('[LoginPage] Extracted from iframe URL:', {
-                code: code ? `${code.substring(0, 10)}...` : null,
-                state,
-                error
-              })
-
-              // Send to parent window
-              const targetWindow = window.opener || window.parent
-              if (targetWindow && targetWindow !== window) {
-                targetWindow.postMessage({
-                  type: 'authway-callback',
-                  code,
-                  state,
-                  error,
-                  error_description: errorDescription
-                }, parentOrigin)
-
-                console.log('[LoginPage] ✅ Sent code to parent via postMessage (fallback)')
-              } else {
-                console.error('[LoginPage] ❌ No parent window found for postMessage')
-              }
-
-              // Clean up sessionStorage and close
-              sessionStorage.removeItem('authway_popup_mode')
-              document.body.removeChild(iframe)
-              setTimeout(() => window.close(), 500)
-            }
-          } catch (e) {
-            // Cross-origin iframe access will throw - this is expected
-            // Keep checking until we can access it (same-origin callback URL)
-          }
-
-          // Timeout after max checks
-          if (checkCount >= maxChecks) {
-            console.error('[LoginPage] Timeout waiting for callback URL')
-            clearInterval(checkInterval)
-            window.removeEventListener('message', messageHandler)
-            document.body.removeChild(iframe)
-            // Fall back to normal redirect
-            window.location.href = redirectUrl
-          }
-        }, 100)
-
-        // Load Hydra URL in iframe
-        console.log('[LoginPage] Loading Hydra URL in iframe')
-        iframe.src = redirectUrl
-
-        return true // Indicate that popup redirect was handled
-      } catch (err) {
-        console.error('[LoginPage] Failed to handle popup redirect:', err)
-        return false
-      }
+      // Use direct navigation instead of hidden iframe to avoid COOP issues with social logins (Google, etc.)
+      // The callback.html in the popup will handle sending postMessage to the parent
+      console.log('[LoginPage] Popup mode - navigating directly to:', redirectUrl)
+      window.location.href = redirectUrl
+      return true
     }
 
     return false // Not in popup mode

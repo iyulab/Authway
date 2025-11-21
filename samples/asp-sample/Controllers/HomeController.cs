@@ -210,10 +210,15 @@ public class HomeController : Controller
             // Sign out from cookie authentication
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
-            // Sign out from OpenID Connect
-            // Don't set RedirectUri - let the server handle logout without redirect
-            // This works even if post_logout_redirect_uris is not configured
-            var properties = new AuthenticationProperties();
+            // Sign out from OpenID Connect with redirect to app root
+            // Use bare origin URL (without path) for post_logout_redirect_uri
+            var oidcRedirectUri = $"{Request.Scheme}://{Request.Host}";
+            _logger.LogInformation("OIDC logout flow with redirect URI: {RedirectUri}", oidcRedirectUri);
+
+            var properties = new AuthenticationProperties
+            {
+                RedirectUri = oidcRedirectUri
+            };
 
             return SignOut(properties, OpenIdConnectDefaults.AuthenticationScheme);
         }
@@ -229,10 +234,12 @@ public class HomeController : Controller
                 var apiServer = await authwayConfigService.GetApiServerAsync();
                 var httpClient = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>().CreateClient();
 
+                // Use bare origin URL (without path) for post_logout_redirect_uri
+                var postLogoutUri = $"{Request.Scheme}://{Request.Host}";
                 var logoutRequest = new
                 {
                     id_token = idToken,
-                    post_logout_redirect_uri = Url.Action("Index", "Home", null, Request.Scheme)
+                    post_logout_redirect_uri = postLogoutUri
                 };
 
                 var response = await httpClient.PostAsJsonAsync($"{apiServer}/api/v1/logout", logoutRequest);
@@ -267,7 +274,16 @@ public class HomeController : Controller
 
         // Fallback to OIDC flow if direct logout fails
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        var fallbackProperties = new AuthenticationProperties();
+
+        // Use bare origin URL (without path) for post_logout_redirect_uri
+        // This must match exactly what's registered in Hydra client configuration
+        var redirectUri = $"{Request.Scheme}://{Request.Host}";
+        _logger.LogInformation("Logout fallback with redirect URI: {RedirectUri}", redirectUri);
+
+        var fallbackProperties = new AuthenticationProperties
+        {
+            RedirectUri = redirectUri
+        };
         return SignOut(fallbackProperties, OpenIdConnectDefaults.AuthenticationScheme);
     }
 

@@ -22,6 +22,44 @@ const ErrorPage = () => {
     const error = searchParams.get('error')
     const errorDescription = searchParams.get('error_description')
 
+    // Log developer-friendly guidance to console
+    const logDeveloperGuidance = (errorCode: string | null, description: string | null) => {
+      const decodedDesc = description ? decodeURIComponent(description) : ''
+
+      console.group('%c🔧 Authway Developer Guide', 'color: #2563eb; font-weight: bold; font-size: 14px')
+      console.log('%cError:', 'font-weight: bold', errorCode)
+      console.log('%cDescription:', 'font-weight: bold', decodedDesc)
+
+      // Specific guidance based on error type
+      if (decodedDesc.includes('post_logout_redirect_uri') && decodedDesc.includes('not a whitelisted')) {
+        console.log('%c\n📋 How to fix:', 'color: #059669; font-weight: bold')
+        console.log('1. Register post_logout_redirect_uri in Hydra:')
+        console.log('%c   curl -X PUT http://localhost:4445/admin/clients/YOUR_CLIENT_ID \\', 'color: #6b7280; font-family: monospace')
+        console.log('%c     -H "Content-Type: application/json" \\', 'color: #6b7280; font-family: monospace')
+        console.log('%c     -d \'{"post_logout_redirect_uris": ["http://localhost:YOUR_PORT"]}\'', 'color: #6b7280; font-family: monospace')
+        console.log('\n2. Or update via Authway Central API:')
+        console.log('%c   POST /api/v1/clients/YOUR_CLIENT_ID', 'color: #6b7280; font-family: monospace')
+        console.log('\n📚 Docs: https://github.com/authway/authway/docs/SETUP.md')
+      } else if (errorCode === 'invalid_client') {
+        console.log('%c\n📋 How to fix:', 'color: #059669; font-weight: bold')
+        console.log('1. Verify client_id is registered')
+        console.log('2. Check client_secret matches')
+        console.log('3. Register client: POST /api/v1/clients')
+      } else if (errorCode === 'consent_required') {
+        console.log('%c\n📋 How to fix:', 'color: #059669; font-weight: bold')
+        console.log('1. Set skip_consent: true in client config')
+        console.log('2. Or implement consent flow in your app')
+      } else if (decodedDesc.includes('redirect_uri')) {
+        console.log('%c\n📋 How to fix:', 'color: #059669; font-weight: bold')
+        console.log('1. Register redirect_uri in client config')
+        console.log('2. Ensure exact match (including trailing slash)')
+      }
+
+      console.groupEnd()
+    }
+
+    logDeveloperGuidance(error, errorDescription)
+
     const getErrorInfo = (errorCode: string | null, description: string | null): ErrorInfo => {
       // URL 디코딩
       const decodedDescription = description ? decodeURIComponent(description) : ''

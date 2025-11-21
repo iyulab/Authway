@@ -134,6 +134,7 @@ $hydraData = @{
     grant_types = @("authorization_code", "refresh_token")
     response_types = @("code")
     redirect_uris = $REDIRECT_URIS
+    post_logout_redirect_uris = @("http://localhost:5000", "https://localhost:5001")  # OIDC RP-Initiated Logout
     scope = "openid profile email offline_access"  # Added offline_access for refresh tokens
     token_endpoint_auth_method = "client_secret_post"  # ASP.NET uses client_secret_post
     access_token_strategy = "jwt"  # Issue JWT access tokens instead of opaque tokens

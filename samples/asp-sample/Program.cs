@@ -134,12 +134,24 @@ builder.Services.AddAuthentication(options =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-            // Don't set post_logout_redirect_uri by default
-            // This allows logout to work gracefully even if post_logout_redirect_uris is not configured
-            // The identity provider will show its default logout confirmation page
-            context.ProtocolMessage.PostLogoutRedirectUri = null;
+            // Set post_logout_redirect_uri from AuthenticationProperties.RedirectUri
+            // This follows OIDC RP-Initiated Logout standard
+            var redirectUri = context.Properties?.RedirectUri;
+            if (!string.IsNullOrEmpty(redirectUri))
+            {
+                context.ProtocolMessage.PostLogoutRedirectUri = redirectUri;
+                logger.LogInformation("Logout with post_logout_redirect_uri: {Uri}", redirectUri);
+            }
+            else
+            {
+                // Fallback to app root - use bare origin (no path)
+                // This must match exactly what's registered in Hydra client post_logout_redirect_uris
+                var request = context.HttpContext.Request;
+                var defaultUri = $"{request.Scheme}://{request.Host}";
+                context.ProtocolMessage.PostLogoutRedirectUri = defaultUri;
+                logger.LogInformation("Logout with default redirect to app root: {Uri}", defaultUri);
+            }
 
-            logger.LogInformation("Logout without post_logout_redirect_uri - letting server handle it");
             logger.LogInformation("Logout URL: {LogoutUrl}", context.ProtocolMessage.CreateLogoutRequestUrl());
 
             return Task.CompletedTask;

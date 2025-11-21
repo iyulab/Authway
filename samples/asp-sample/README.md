@@ -391,14 +391,20 @@ public async Task<IActionResult> Logout()
 {
     await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
+    // Use bare origin URL (without path) for post_logout_redirect_uri
+    // This must match exactly what's registered in Hydra client
+    var redirectUri = $"{Request.Scheme}://{Request.Host}";
+
     var properties = new AuthenticationProperties
     {
-        RedirectUri = Url.Action("Index", "Home")
+        RedirectUri = redirectUri
     };
 
     return SignOut(properties, OpenIdConnectDefaults.AuthenticationScheme);
 }
 ```
+
+> **주의**: `post_logout_redirect_uri`는 Hydra 클라이언트에 등록된 URI와 **정확히** 일치해야 합니다. Trailing slash(`/`)가 있으면 다른 URI로 인식됩니다.
 
 ### 4. 사용자 정보 접근
 
@@ -518,6 +524,26 @@ curl http://localhost:4445/admin/clients/asp-sample-client
   ```powershell
   .\setup-client-local.ps1
   ```
+
+### Logout 시 post_logout_redirect_uri 에러
+**증상**: 로그아웃 시 "post_logout_redirect_uri is not a whitelisted" 에러
+
+**원인**: Hydra 클라이언트에 `post_logout_redirect_uris`가 등록되지 않음
+
+**해결**:
+1. `setup-client-local.ps1`을 다시 실행 (자동으로 포함됨):
+   ```powershell
+   .\setup-client-local.ps1
+   ```
+
+2. 또는 수동으로 Hydra 클라이언트 업데이트:
+   ```powershell
+   curl -X PUT http://localhost:4445/admin/clients/asp-sample-client `
+     -H "Content-Type: application/json" `
+     -d '{"post_logout_redirect_uris": ["http://localhost:5000", "https://localhost:5001"]}'
+   ```
+
+**주의**: `post_logout_redirect_uri`는 정확히 일치해야 합니다 (trailing slash 주의)
 
 ### HTTPS 인증서 에러 (개발 환경)
 ```powershell
