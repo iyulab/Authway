@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function ResendVerificationPage() {
+  const { t } = useTranslation(['auth', 'common']);
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -29,14 +31,14 @@ export default function ResendVerificationPage() {
 
       if (response.ok) {
         setStatus('success');
-        setMessage(data.message || '인증 이메일이 발송되었습니다.');
+        setMessage(data.message || t('auth:resendVerification.success.message'));
       } else {
         setStatus('error');
-        setMessage(data.error || '이메일 발송에 실패했습니다.');
+        setMessage(data.error || t('auth:resendVerification.error.failed'));
       }
     } catch (error) {
       setStatus('error');
-      setMessage('서버 연결에 실패했습니다.');
+      setMessage(t('auth:resendVerification.error.failed'));
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +54,7 @@ export default function ResendVerificationPage() {
             className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-6"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            로그인으로 돌아가기
+            {t('auth:resendVerification.backToLogin')}
           </Link>
 
           {/* Header */}
@@ -60,27 +62,25 @@ export default function ResendVerificationPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">
               <Mail className="w-8 h-8 text-indigo-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">인증 이메일 재발송</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('auth:resendVerification.title')}</h1>
             <p className="text-gray-600">
-              가입하신 이메일 주소를 입력하시면 인증 링크를 다시 보내드립니다.
+              {t('auth:resendVerification.subtitle')}
             </p>
           </div>
 
           {status === 'success' ? (
             <div className="text-center py-6">
               <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">이메일 발송 완료</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('auth:resendVerification.success.title')}</h2>
               <p className="text-gray-600 mb-6">{message}</p>
-              <p className="text-sm text-gray-500 mb-6">
-                이메일을 확인하시고 인증 링크를 클릭해주세요.
-                <br />
-                이메일이 오지 않았다면 스팸 폴더를 확인해주세요.
+              <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">
+                {t('auth:resendVerification.success.instructions')}
               </p>
               <Link
                 to="/login"
                 className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
               >
-                로그인 페이지로
+                {t('auth:verifyEmail.goToLogin')}
               </Link>
             </div>
           ) : (
@@ -88,7 +88,7 @@ export default function ResendVerificationPage() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                    이메일 주소
+                    {t('auth:resendVerification.emailLabel')}
                   </label>
                   <input
                     id="email"
@@ -134,19 +134,19 @@ export default function ResendVerificationPage() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         ></path>
                       </svg>
-                      발송 중...
+                      {t('auth:resendVerification.submitting')}
                     </>
                   ) : (
-                    '인증 이메일 보내기'
+                    t('auth:resendVerification.submitButton')
                   )}
                 </button>
               </form>
 
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-sm text-gray-600 text-center">
-                  이미 인증하셨나요?{' '}
+                  {t('auth:resendVerification.alreadyVerified')}{' '}
                   <Link to="/login" className="text-indigo-600 hover:underline font-medium">
-                    로그인하기
+                    {t('auth:resendVerification.loginLink')}
                   </Link>
                 </p>
               </div>

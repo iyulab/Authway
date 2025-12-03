@@ -53,6 +53,7 @@ func main() {
 	claimsHandler := handler.NewClaimsHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	profileHandler := handler.NewProfileHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	logoutHandler := handler.NewLogoutHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, cfg.Hydra.AdminURL, zapLogger)
+	authHandler := handler.NewAuthHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -106,6 +107,10 @@ func main() {
 	app.Post("/auth/google/login", oauthHandler.GoogleLogin)
 	app.Get("/auth/google/login", oauthHandler.GoogleLoginGet)
 	app.Get("/auth/google/callback", oauthHandler.GoogleCallback)
+
+	// Auth endpoints (proxy to Central API)
+	app.Post("/register", authHandler.Register)
+	app.Post("/authenticate", authHandler.Authenticate)
 
 	// Consent endpoints (proxy to Central API)
 	app.Post("/consent", consentHandler.GetConsentInfo)

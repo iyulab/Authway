@@ -6,6 +6,9 @@ import App from './App.tsx'
 import './index.css'
 import { initializeAppInsights } from './utils/appInsights'
 
+// Initialize i18n
+import './i18n'
+
 // Initialize Application Insights (optional)
 initializeAppInsights()
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 interface ErrorInfo {
   title: string
@@ -9,11 +10,12 @@ interface ErrorInfo {
 }
 
 const ErrorPage = () => {
+  const { t } = useTranslation(['errors', 'common'])
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [errorInfo, setErrorInfo] = useState<ErrorInfo>({
-    title: '오류가 발생했습니다',
-    description: '알 수 없는 오류가 발생했습니다.',
+    title: t('errors:title'),
+    description: t('errors:codes.unknown.description'),
     icon: '⚠️',
     color: 'red',
   })
@@ -64,89 +66,46 @@ const ErrorPage = () => {
       // URL 디코딩
       const decodedDescription = description ? decodeURIComponent(description) : ''
 
-      switch (errorCode) {
-        case 'invalid_client':
-          return {
-            title: '클라이언트 인증 실패',
-            description: decodedDescription || '등록되지 않은 애플리케이션이거나 클라이언트 인증에 실패했습니다.',
-            icon: '🔒',
-            color: 'red',
-          }
-        case 'access_denied':
-          return {
-            title: '접근이 거부되었습니다',
-            description: decodedDescription || '사용자가 인증 요청을 거부했습니다.',
-            icon: '🚫',
-            color: 'orange',
-          }
-        case 'invalid_request':
-          return {
-            title: '잘못된 요청',
-            description: decodedDescription || '요청 파라미터가 올바르지 않습니다.',
-            icon: '❌',
-            color: 'red',
-          }
-        case 'unauthorized_client':
-          return {
-            title: '인증되지 않은 클라이언트',
-            description: decodedDescription || '이 클라이언트는 요청한 권한 부여 방식을 사용할 수 없습니다.',
-            icon: '🔐',
-            color: 'red',
-          }
-        case 'unsupported_response_type':
-          return {
-            title: '지원하지 않는 응답 유형',
-            description: decodedDescription || '요청한 응답 유형을 지원하지 않습니다.',
-            icon: '🚫',
-            color: 'orange',
-          }
-        case 'invalid_scope':
-          return {
-            title: '잘못된 스코프',
-            description: decodedDescription || '요청한 스코프가 유효하지 않거나 허용되지 않습니다.',
-            icon: '⚠️',
-            color: 'orange',
-          }
-        case 'server_error':
-          return {
-            title: '서버 오류',
-            description: decodedDescription || '서버에서 예상치 못한 오류가 발생했습니다.',
-            icon: '💥',
-            color: 'red',
-          }
-        case 'temporarily_unavailable':
-          return {
-            title: '일시적으로 사용 불가',
-            description: decodedDescription || '서버가 일시적으로 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.',
-            icon: '⏸️',
-            color: 'yellow',
-          }
-        case 'consent_required':
-          return {
-            title: '동의가 필요합니다',
-            description: decodedDescription || '사용자 동의가 필요합니다.',
-            icon: '✋',
-            color: 'blue',
-          }
-        case 'login_required':
-          return {
-            title: '로그인이 필요합니다',
-            description: decodedDescription || '로그인이 필요합니다.',
-            icon: '🔑',
-            color: 'blue',
-          }
-        default:
-          return {
-            title: '오류가 발생했습니다',
-            description: decodedDescription || '알 수 없는 오류가 발생했습니다.',
-            icon: '⚠️',
-            color: 'red',
-          }
+      const errorKey = errorCode as keyof typeof errorCodeMap
+      const errorCodeMap = {
+        invalid_client: { icon: '🔒', color: 'red' },
+        access_denied: { icon: '🚫', color: 'orange' },
+        invalid_request: { icon: '❌', color: 'red' },
+        unauthorized_client: { icon: '🔐', color: 'red' },
+        unsupported_response_type: { icon: '🚫', color: 'orange' },
+        invalid_scope: { icon: '⚠️', color: 'orange' },
+        server_error: { icon: '💥', color: 'red' },
+        temporarily_unavailable: { icon: '⏸️', color: 'yellow' },
+        consent_required: { icon: '✋', color: 'blue' },
+        login_required: { icon: '🔑', color: 'blue' },
+        invalid_token: { icon: '⚠️', color: 'red' },
+        insufficient_scope: { icon: '⚠️', color: 'orange' },
+        request_not_supported: { icon: '🚫', color: 'orange' },
+        request_uri_not_supported: { icon: '🚫', color: 'orange' },
+        registration_not_supported: { icon: '🚫', color: 'orange' },
+        invalid_request_uri: { icon: '❌', color: 'red' },
+        invalid_request_object: { icon: '❌', color: 'red' },
+      }
+
+      if (errorCode && errorCodeMap[errorKey]) {
+        return {
+          title: t(`errors:codes.${errorCode}.title`, { defaultValue: t('errors:codes.unknown.title') }),
+          description: decodedDescription || t(`errors:codes.${errorCode}.description`, { defaultValue: t('errors:codes.unknown.description') }),
+          icon: errorCodeMap[errorKey].icon,
+          color: errorCodeMap[errorKey].color,
+        }
+      }
+
+      return {
+        title: t('errors:codes.unknown.title'),
+        description: decodedDescription || t('errors:codes.unknown.description'),
+        icon: '⚠️',
+        color: 'red',
       }
     }
 
     setErrorInfo(getErrorInfo(error, errorDescription))
-  }, [searchParams])
+  }, [searchParams, t])
 
   const getColorClasses = (color: string) => {
     switch (color) {
@@ -222,7 +181,7 @@ const ErrorPage = () => {
           {searchParams.get('error') && (
             <div className="bg-gray-100 rounded-md p-3 mb-6">
               <p className="text-xs text-gray-600 font-mono text-center">
-                오류 코드: {searchParams.get('error')}
+                {t('errors:errorCode')} {searchParams.get('error')}
               </p>
             </div>
           )}
@@ -233,20 +192,20 @@ const ErrorPage = () => {
               onClick={() => window.history.back()}
               className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-50 transition-colors"
             >
-              ← 이전 페이지
+              {t('common:goBack')}
             </button>
             <button
               onClick={() => navigate('/')}
               className={`px-6 py-3 ${colors.button} text-white rounded-md font-medium transition-colors`}
             >
-              홈으로 돌아가기
+              {t('common:goHome')}
             </button>
           </div>
 
           {/* Support Info */}
           <div className="mt-8 pt-6 border-t border-gray-300">
             <p className="text-sm text-gray-600 text-center">
-              문제가 계속되면 시스템 관리자에게 문의하세요.
+              {t('common:contactSupport')}
             </p>
           </div>
         </div>

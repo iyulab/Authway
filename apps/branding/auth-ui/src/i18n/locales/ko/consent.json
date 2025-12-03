@@ -1,0 +1,38 @@
+{
+  "title": "앱 권한 승인",
+  "greeting": "안녕하세요, {{name}}님",
+  "subtitle": "{{clientName}}에서 다음 권한을 요청하고 있습니다.",
+  "requestedPermissions": "요청된 권한",
+  "genericPermission": "{{scope}} 권한에 접근합니다.",
+  "rememberChoice": "이 선택을 기억하기 (1시간)",
+  "approveButton": "승인",
+  "approveButtonWithCount": "승인 ({{count}}개 권한)",
+  "approving": "승인 중...",
+  "denyButton": "거부",
+  "denying": "거부 중...",
+  "approveInfo": "승인하면 선택한 권한에 대해 {{clientName}}에서 접근할 수 있습니다.",
+  "scopes": {
+    "openid": {
+      "name": "OpenID 인증",
+      "description": "기본 사용자 인증 정보에 접근합니다."
+    },
+    "profile": {
+      "name": "프로필 정보",
+      "description": "사용자 이름, 프로필 사진 등 기본 프로필 정보에 접근합니다."
+    },
+    "email": {
+      "name": "이메일 주소",
+      "description": "사용자의 이메일 주소에 접근합니다."
+    },
+    "offline_access": {
+      "name": "오프라인 접근",
+      "description": "사용자가 오프라인일 때도 정보에 접근할 수 있습니다."
+    }
+  },
+  "errors": {
+    "missingChallenge": "Consent challenge가 누락되었습니다.",
+    "fetchFailed": "동의 정보를 가져오는데 실패했습니다.",
+    "approveFailed": "동의 처리 중 오류가 발생했습니다.",
+    "denyFailed": "거부 처리 중 오류가 발생했습니다."
+  }
+}

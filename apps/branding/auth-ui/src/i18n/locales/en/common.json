@@ -1,0 +1,22 @@
+{
+  "loading": "Loading...",
+  "error": "Error",
+  "success": "Success",
+  "submit": "Submit",
+  "cancel": "Cancel",
+  "back": "Back",
+  "next": "Next",
+  "close": "Close",
+  "or": "or",
+  "email": "Email",
+  "password": "Password",
+  "name": "Name",
+  "firstName": "First Name",
+  "lastName": "Last Name",
+  "errorOccurred": "Error Occurred",
+  "goBack": "← Go Back",
+  "goHome": "Go to Home",
+  "contactSupport": "If the problem persists, please contact the system administrator.",
+  "googleLogin": "Sign in with Google",
+  "connecting": "Connecting..."
+}

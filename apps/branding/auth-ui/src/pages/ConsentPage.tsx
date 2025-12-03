@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 
 interface ConsentRequest {
   challenge: string
@@ -24,26 +25,8 @@ interface ConsentPageInfo {
   }
 }
 
-const scopeDescriptions: Record<string, { name: string; description: string }> = {
-  openid: {
-    name: 'OpenID 인증',
-    description: '기본 사용자 인증 정보에 접근합니다.',
-  },
-  profile: {
-    name: '프로필 정보',
-    description: '사용자 이름, 프로필 사진 등 기본 프로필 정보에 접근합니다.',
-  },
-  email: {
-    name: '이메일 주소',
-    description: '사용자의 이메일 주소에 접근합니다.',
-  },
-  offline_access: {
-    name: '오프라인 접근',
-    description: '사용자가 오프라인일 때도 정보에 접근할 수 있습니다.',
-  },
-}
-
 const ConsentPage: React.FC = () => {
+  const { t } = useTranslation(['consent', 'common'])
   const [searchParams] = useSearchParams()
   const [consentInfo, setConsentInfo] = useState<ConsentPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -101,7 +84,7 @@ const ConsentPage: React.FC = () => {
     })
 
     if (!challenge) {
-      setError('Consent challenge가 누락되었습니다.')
+      setError(t('consent:errors.missingChallenge'))
       setIsLoading(false)
       return
     }
@@ -147,10 +130,10 @@ const ConsentPage: React.FC = () => {
       })
       .catch(err => {
         console.error('Consent challenge fetch error:', err)
-        setError('동의 정보를 가져오는데 실패했습니다.')
+        setError(t('consent:errors.fetchFailed'))
         setIsLoading(false)
       })
-  }, [challenge])
+  }, [challenge, t])
 
   // Accept consent mutation
   const acceptMutation = useMutation({
@@ -191,7 +174,7 @@ const ConsentPage: React.FC = () => {
     },
     onError: (error) => {
       console.error('Consent accept error:', error)
-      setError('동의 처리 중 오류가 발생했습니다.')
+      setError(t('consent:errors.approveFailed'))
     },
   })
 
@@ -234,7 +217,7 @@ const ConsentPage: React.FC = () => {
     },
     onError: (error) => {
       console.error('Consent reject error:', error)
-      setError('거부 처리 중 오류가 발생했습니다.')
+      setError(t('consent:errors.denyFailed'))
     },
   })
 
@@ -269,7 +252,7 @@ const ConsentPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">오류 발생</h2>
+            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('common:errorOccurred')}</h2>
             <p className="mt-2 text-sm text-red-600">{error}</p>
           </div>
         </div>
@@ -301,14 +284,14 @@ const ConsentPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            앱 권한 승인
+            {t('consent:title')}
           </h2>
           <div className="mt-4 text-center">
             <p className="text-sm text-gray-600">
-              안녕하세요, <span className="font-medium">{consentInfo.user.name || consentInfo.user.email}</span>님
+              {t('consent:greeting', { name: consentInfo.user.name || consentInfo.user.email })}
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              <span className="font-medium">{consentInfo.client_name}</span>에서 다음 권한을 요청하고 있습니다.
+              {t('consent:subtitle', { clientName: consentInfo.client_name })}
             </p>
           </div>
         </div>
@@ -322,13 +305,18 @@ const ConsentPage: React.FC = () => {
 
           {/* 권한 목록 */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">요청된 권한</h3>
+            <h3 className="text-lg font-medium text-gray-900">{t('consent:requestedPermissions')}</h3>
             <div className="space-y-3">
               {consentInfo.requested_scope.map((scope) => {
-                const scopeInfo = scopeDescriptions[scope] || {
-                  name: scope,
-                  description: `${scope} 권한에 접근합니다.`,
-                }
+                const scopeInfo = t(`consent:scopes.${scope}.name`, { defaultValue: '' })
+                  ? {
+                      name: t(`consent:scopes.${scope}.name`),
+                      description: t(`consent:scopes.${scope}.description`),
+                    }
+                  : {
+                      name: scope,
+                      description: t('consent:genericPermission', { scope }),
+                    }
 
                 return (
                   <div key={scope} className="flex items-start">
@@ -363,7 +351,7 @@ const ConsentPage: React.FC = () => {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             />
             <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
-              이 선택을 기억하기 (1시간)
+              {t('consent:rememberChoice')}
             </label>
           </div>
 
@@ -377,10 +365,10 @@ const ConsentPage: React.FC = () => {
               {rejectMutation.isPending ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                  거부 중...
+                  {t('consent:denying')}
                 </div>
               ) : (
-                '거부'
+                t('consent:denyButton')
               )}
             </button>
 
@@ -392,17 +380,17 @@ const ConsentPage: React.FC = () => {
               {acceptMutation.isPending ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  승인 중...
+                  {t('consent:approving')}
                 </div>
               ) : (
-                `승인 (${selectedScopes.length}개 권한)`
+                t('consent:approveButtonWithCount', { count: selectedScopes.length })
               )}
             </button>
           </div>
 
           <div className="text-center">
             <p className="text-xs text-gray-500">
-              승인하면 선택한 권한에 대해 {consentInfo.client_name}에서 접근할 수 있습니다.
+              {t('consent:approveInfo', { clientName: consentInfo.client_name })}
             </p>
           </div>
         </div>

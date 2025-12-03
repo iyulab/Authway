@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function VerifyEmailPage() {
+  const { t } = useTranslation(['auth', 'common']);
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
@@ -12,7 +14,7 @@ export default function VerifyEmailPage() {
     const verifyEmail = async () => {
       if (!token) {
         setStatus('error');
-        setMessage('인증 토큰이 없습니다.');
+        setMessage(t('auth:verifyEmail.error.noToken'));
         return;
       }
 
@@ -25,19 +27,19 @@ export default function VerifyEmailPage() {
 
         if (response.ok) {
           setStatus('success');
-          setMessage(data.message || '이메일이 성공적으로 인증되었습니다!');
+          setMessage(data.message || t('auth:verifyEmail.success.message'));
         } else {
           setStatus('error');
-          setMessage(data.error || '인증에 실패했습니다.');
+          setMessage(data.error || t('auth:verifyEmail.error.failed'));
         }
       } catch (error) {
         setStatus('error');
-        setMessage('서버 연결에 실패했습니다.');
+        setMessage(t('auth:verifyEmail.error.serverError'));
       }
     };
 
     verifyEmail();
-  }, [token]);
+  }, [token, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -48,7 +50,7 @@ export default function VerifyEmailPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">
               <Mail className="w-8 h-8 text-indigo-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">이메일 인증</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t('auth:verifyEmail.title')}</h1>
           </div>
 
           {/* Status Display */}
@@ -56,20 +58,20 @@ export default function VerifyEmailPage() {
             {status === 'loading' && (
               <div className="py-8">
                 <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
-                <p className="text-gray-600">이메일을 인증하고 있습니다...</p>
+                <p className="text-gray-600">{t('auth:verifyEmail.verifying')}</p>
               </div>
             )}
 
             {status === 'success' && (
               <div className="py-8">
                 <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">인증 완료!</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('auth:verifyEmail.success.title')}</h2>
                 <p className="text-gray-600 mb-6">{message}</p>
                 <Link
                   to="/login"
                   className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
                 >
-                  로그인하기
+                  {t('auth:verifyEmail.goToLogin')}
                 </Link>
               </div>
             )}
@@ -77,20 +79,20 @@ export default function VerifyEmailPage() {
             {status === 'error' && (
               <div className="py-8">
                 <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">인증 실패</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('auth:verifyEmail.error.title')}</h2>
                 <p className="text-gray-600 mb-6">{message}</p>
                 <div className="space-y-3">
                   <Link
                     to="/resend-verification"
                     className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
                   >
-                    인증 이메일 재발송
+                    {t('auth:verifyEmail.resendButton')}
                   </Link>
                   <Link
                     to="/login"
                     className="inline-block w-full py-3 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors"
                   >
-                    로그인 페이지로
+                    {t('auth:verifyEmail.goToLogin')}
                   </Link>
                 </div>
               </div>
@@ -100,11 +102,7 @@ export default function VerifyEmailPage() {
           {/* Footer */}
           <div className="mt-6 pt-6 border-t border-gray-200 text-center">
             <p className="text-sm text-gray-500">
-              문제가 계속되면{' '}
-              <a href="mailto:support@authway.com" className="text-indigo-600 hover:underline">
-                고객 지원
-              </a>
-              에 문의하세요.
+              {t('auth:verifyEmail.contactSupport')}
             </p>
           </div>
         </div>

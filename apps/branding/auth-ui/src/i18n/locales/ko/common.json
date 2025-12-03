@@ -1,0 +1,22 @@
+{
+  "loading": "로딩 중...",
+  "error": "오류",
+  "success": "성공",
+  "submit": "제출",
+  "cancel": "취소",
+  "back": "뒤로",
+  "next": "다음",
+  "close": "닫기",
+  "or": "또는",
+  "email": "이메일",
+  "password": "비밀번호",
+  "name": "이름",
+  "firstName": "이름",
+  "lastName": "성",
+  "errorOccurred": "오류 발생",
+  "goBack": "← 이전 페이지",
+  "goHome": "홈으로 돌아가기",
+  "contactSupport": "문제가 계속되면 시스템 관리자에게 문의하세요.",
+  "googleLogin": "Google로 로그인",
+  "connecting": "연결 중..."
+}

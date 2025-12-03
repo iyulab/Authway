@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface GoogleLoginButtonProps {
   onError?: (error: string) => void
@@ -14,6 +15,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
   clientId,
 }) => {
   // Force cache invalidation - 2025-10-16
+  const { t } = useTranslation(['common'])
   const [isLoading, setIsLoading] = useState(false)
 
   const handleGoogleLogin = async () => {
@@ -102,7 +104,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
       {isLoading ? (
         <div className="flex items-center">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-          연결 중...
+          {t('common:connecting')}
         </div>
       ) : (
         <div className="flex items-center">
@@ -128,7 +130,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Google로 로그인
+          {t('common:googleLogin')}
         </div>
       )}
     </button>

@@ -1,0 +1,38 @@
+{
+  "title": "Authorize Application",
+  "greeting": "Hello, {{name}}",
+  "subtitle": "{{clientName}} is requesting the following permissions.",
+  "requestedPermissions": "Requested Permissions",
+  "genericPermission": "Access to {{scope}} permission.",
+  "rememberChoice": "Remember this choice (1 hour)",
+  "approveButton": "Approve",
+  "approveButtonWithCount": "Approve ({{count}} permissions)",
+  "approving": "Approving...",
+  "denyButton": "Deny",
+  "denying": "Denying...",
+  "approveInfo": "By approving, {{clientName}} will have access to the selected permissions.",
+  "scopes": {
+    "openid": {
+      "name": "OpenID Authentication",
+      "description": "Access to basic user authentication information."
+    },
+    "profile": {
+      "name": "Profile Information",
+      "description": "Access to your name, profile picture, and other basic profile information."
+    },
+    "email": {
+      "name": "Email Address",
+      "description": "Access to your email address."
+    },
+    "offline_access": {
+      "name": "Offline Access",
+      "description": "Access your information even when you are offline."
+    }
+  },
+  "errors": {
+    "missingChallenge": "Consent challenge is missing.",
+    "fetchFailed": "Failed to retrieve consent information.",
+    "approveFailed": "An error occurred while processing consent.",
+    "denyFailed": "An error occurred while processing denial."
+  }
+}

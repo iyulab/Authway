@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { KeyRound, ArrowLeft, Mail } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation(['password', 'auth', 'common']);
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -30,10 +32,10 @@ export default function ForgotPasswordPage() {
       if (response.ok) {
         setIsSuccess(true);
       } else {
-        setError(data.error || '요청 처리에 실패했습니다.');
+        setError(data.error || t('password:forgot.errors.failed'));
       }
     } catch (err) {
-      setError('서버 연결에 실패했습니다.');
+      setError(t('password:forgot.errors.serverError'));
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +51,7 @@ export default function ForgotPasswordPage() {
             className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-6"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            로그인으로 돌아가기
+            {t('password:forgot.backToLogin')}
           </Link>
 
           {/* Header */}
@@ -57,32 +59,30 @@ export default function ForgotPasswordPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
               <KeyRound className="w-8 h-8 text-red-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">비밀번호 찾기</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('password:forgot.title')}</h1>
             <p className="text-gray-600">
-              가입하신 이메일 주소를 입력하시면 비밀번호 재설정 링크를 보내드립니다.
+              {t('password:forgot.subtitle')}
             </p>
           </div>
 
           {isSuccess ? (
             <div className="text-center py-6">
               <Mail className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">이메일 발송 완료</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('password:forgot.success.title')}</h2>
               <p className="text-gray-600 mb-6">
-                비밀번호 재설정 링크가 <strong>{email}</strong>로 발송되었습니다.
+                {t('password:forgot.success.message', { email })}
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  💡 <strong>안내:</strong>
-                  <br />• 이메일이 오지 않았다면 스팸 폴더를 확인해주세요.
-                  <br />• 링크는 1시간 동안 유효합니다.
-                  <br />• 보안을 위해 재설정 후 모든 기기에서 재로그인이 필요합니다.
+                <p className="text-sm text-blue-800 whitespace-pre-line">
+                  {t('password:forgot.success.infoTitle')}
+                  <br />{t('password:forgot.success.infoList')}
                 </p>
               </div>
               <Link
                 to="/login"
                 className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
               >
-                로그인 페이지로
+                {t('password:forgot.success.goToLogin')}
               </Link>
             </div>
           ) : (
@@ -90,7 +90,7 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                    이메일 주소
+                    {t('password:forgot.emailLabel')}
                   </label>
                   <input
                     id="email"
@@ -136,19 +136,19 @@ export default function ForgotPasswordPage() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         ></path>
                       </svg>
-                      발송 중...
+                      {t('auth:resendVerification.submitting')}
                     </>
                   ) : (
-                    '재설정 링크 보내기'
+                    t('password:forgot.submitButton')
                   )}
                 </button>
               </form>
 
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-sm text-gray-600 text-center">
-                  계정이 없으신가요?{' '}
+                  {t('password:forgot.noAccount')}{' '}
                   <Link to="/register" className="text-indigo-600 hover:underline font-medium">
-                    회원가입
+                    {t('password:forgot.signUp')}
                   </Link>
                 </p>
               </div>

@@ -1,0 +1,78 @@
+{
+  "title": "An Error Occurred",
+  "errorCode": "Error Code:",
+  "codes": {
+    "invalid_client": {
+      "title": "Client Authentication Failed",
+      "description": "The application is not registered or client authentication failed."
+    },
+    "access_denied": {
+      "title": "Access Denied",
+      "description": "The user denied the authentication request."
+    },
+    "invalid_request": {
+      "title": "Invalid Request",
+      "description": "The request parameters are invalid."
+    },
+    "unauthorized_client": {
+      "title": "Unauthorized Client",
+      "description": "This client is not authorized to use the requested grant type."
+    },
+    "unsupported_response_type": {
+      "title": "Unsupported Response Type",
+      "description": "The requested response type is not supported."
+    },
+    "invalid_scope": {
+      "title": "Invalid Scope",
+      "description": "The requested scope is invalid or not allowed."
+    },
+    "server_error": {
+      "title": "Server Error",
+      "description": "An unexpected error occurred on the server."
+    },
+    "temporarily_unavailable": {
+      "title": "Temporarily Unavailable",
+      "description": "The server is temporarily unable to process the request. Please try again later."
+    },
+    "consent_required": {
+      "title": "Consent Required",
+      "description": "User consent is required."
+    },
+    "login_required": {
+      "title": "Login Required",
+      "description": "Authentication is required."
+    },
+    "invalid_token": {
+      "title": "Token Error",
+      "description": "The token has expired or is invalid."
+    },
+    "insufficient_scope": {
+      "title": "Insufficient Permissions",
+      "description": "You don't have sufficient permissions for this operation."
+    },
+    "request_not_supported": {
+      "title": "Request Not Supported",
+      "description": "The requested feature is not supported."
+    },
+    "request_uri_not_supported": {
+      "title": "Request URI Not Supported",
+      "description": "The request_uri parameter is not supported."
+    },
+    "registration_not_supported": {
+      "title": "Registration Not Supported",
+      "description": "Dynamic client registration is not supported."
+    },
+    "invalid_request_uri": {
+      "title": "Invalid Request URI",
+      "description": "The request URI is invalid."
+    },
+    "invalid_request_object": {
+      "title": "Invalid Request Object",
+      "description": "The request object is invalid."
+    },
+    "unknown": {
+      "title": "Unknown Error",
+      "description": "An unknown error has occurred."
+    }
+  }
+}

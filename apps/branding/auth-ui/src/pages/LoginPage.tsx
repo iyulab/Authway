@@ -4,16 +4,18 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import GoogleLoginButton from '../components/GoogleLoginButton'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
-// Validation schema
-const loginSchema = z.object({
-  email: z.string().email('올바른 이메일을 입력해주세요'),
-  password: z.string().min(6, '비밀번호는 최소 6자 이상이어야 합니다'),
+// Validation schema - will use i18n messages dynamically
+const createLoginSchema = (t: (key: string) => string) => z.object({
+  email: z.string().email(t('auth:validation.emailInvalid')),
+  password: z.string().min(6, t('auth:validation.passwordMin6')),
   remember: z.boolean().optional(),
 })
 
-type LoginFormData = z.infer<typeof loginSchema>
+type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>
 
 interface LoginRequest {
   challenge: string
@@ -34,6 +36,7 @@ interface LoginPageInfo {
 }
 
 const LoginPage: React.FC = () => {
+  const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
@@ -81,6 +84,8 @@ const LoginPage: React.FC = () => {
 
     return false // Not in popup mode
   }
+
+  const loginSchema = createLoginSchema(t)
 
   const {
     register,
@@ -166,12 +171,12 @@ const LoginPage: React.FC = () => {
       })
       .catch(err => {
         console.error('Login challenge fetch error:', err)
-        setError('로그인 정보를 가져오는데 실패했습니다.')
+        setError(t('auth:errors.loginInfoFailed'))
       })
       .finally(() => {
         setIsLoading(false)
       })
-  }, [challenge])
+  }, [challenge, t])
 
   // Auto-trigger Google login if connection=google
   useEffect(() => {
@@ -270,7 +275,7 @@ const LoginPage: React.FC = () => {
     },
     onError: (error) => {
       console.error('Login error:', error)
-      setError('로그인 중 오류가 발생했습니다.')
+      setError(t('auth:errors.loginFailed'))
     },
   })
 
@@ -303,7 +308,7 @@ const LoginPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">오류 발생</h2>
+            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('common:errorOccurred')}</h2>
             <p className="mt-2 text-sm text-red-600">{error}</p>
           </div>
         </div>
@@ -312,7 +317,11 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Language Switcher - positioned at top right */}
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher variant="minimal" />
+      </div>
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
@@ -331,16 +340,17 @@ const LoginPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            로그인
+            {t('auth:login.title')}
           </h2>
           {loginInfo && (
             <div className="mt-2 text-center">
               <p className="text-sm text-gray-600">
-                <span className="font-medium">{loginInfo.client_name}</span>에 로그인하시겠습니까?
+                <span className="font-medium">{loginInfo.client_name}</span>
+                {t('auth:login.subtitle', { clientName: '' }).replace('{{clientName}}', '')}
               </p>
               {loginInfo.requested_scope?.length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
-                  요청된 권한: {loginInfo.requested_scope.join(', ')}
+                  {t('auth:login.requestedScopes', { scopes: loginInfo.requested_scope.join(', ') })}
                 </p>
               )}
             </div>
@@ -357,14 +367,14 @@ const LoginPage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                이메일
+                {t('auth:login.emailLabel')}
               </label>
               <input
                 {...register('email')}
                 type="email"
                 autoComplete="email"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="이메일을 입력하세요"
+                placeholder={t('auth:login.emailPlaceholder')}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -373,14 +383,14 @@ const LoginPage: React.FC = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                비밀번호
+                {t('auth:login.passwordLabel')}
               </label>
               <input
                 {...register('password')}
                 type="password"
                 autoComplete="current-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="비밀번호를 입력하세요"
+                placeholder={t('auth:login.passwordPlaceholder')}
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -394,7 +404,7 @@ const LoginPage: React.FC = () => {
                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
               />
               <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
-                로그인 상태 유지
+                {t('auth:login.rememberMe')}
               </label>
             </div>
           </div>
@@ -408,10 +418,10 @@ const LoginPage: React.FC = () => {
               {isSubmitting || loginMutation.isPending ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  로그인 중...
+                  {t('auth:login.submitting')}
                 </div>
               ) : (
-                '로그인'
+                t('auth:login.submitButton')
               )}
             </button>
           </div>
@@ -422,7 +432,7 @@ const LoginPage: React.FC = () => {
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">또는</span>
+                <span className="px-2 bg-gray-50 text-gray-500">{t('common:or')}</span>
               </div>
             </div>
 
@@ -438,10 +448,10 @@ const LoginPage: React.FC = () => {
           <div className="text-center">
             <button
               type="button"
-              onClick={() => navigate('/register')}
+              onClick={() => navigate(`/register${challenge ? `?login_challenge=${challenge}` : ''}`)}
               className="text-sm text-indigo-600 hover:text-indigo-500"
             >
-              계정이 없으신가요? 회원가입
+              {t('auth:login.noAccount')}
             </button>
           </div>
         </form>

@@ -967,6 +967,13 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	createdUser, err := h.userService.Create(tenantID, createReq)
 	if err != nil {
+		// Check for duplicate user error
+		if strings.Contains(err.Error(), "already exists") {
+			return c.Status(409).JSON(fiber.Map{
+				"error": "User with this email already exists",
+			})
+		}
+		h.logger.Error("Failed to create user", zap.Error(err))
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create user",
 		})

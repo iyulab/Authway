@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 const LogoutPage: React.FC = () => {
+  const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
   const [error, setError] = useState<string>('')
 
@@ -51,7 +53,7 @@ const LogoutPage: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Logout Error</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">{t('auth:logout.error')}</h1>
           <p className="text-red-600 mb-4">{error}</p>
           <p className="text-gray-600">Redirecting to home...</p>
         </div>
@@ -63,8 +65,8 @@ const LogoutPage: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Logging out...</h1>
-        <p className="text-gray-600">Please wait while we sign you out</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('auth:logout.loggingOut')}</h1>
+        <p className="text-gray-600">{t('auth:logout.pleaseWait')}</p>
       </div>
     </div>
   )

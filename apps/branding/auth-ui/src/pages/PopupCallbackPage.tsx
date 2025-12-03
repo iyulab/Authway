@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 /**
  * PopupCallbackPage
@@ -16,6 +17,7 @@ import { useSearchParams } from 'react-router-dom'
  * Used by @authway/client and @authway/react SDK popup login flows.
  */
 const PopupCallbackPage = () => {
+  const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
@@ -69,13 +71,13 @@ const PopupCallbackPage = () => {
       <div className="text-center max-w-md p-8">
         <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600 mb-6"></div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Authentication Successful
+          {t('auth:popup.success')}
         </h2>
         <p className="text-gray-600 mb-4">
-          This window will close automatically...
+          {t('auth:popup.autoClose')}
         </p>
         <p className="text-sm text-gray-500">
-          If the window doesn't close, you can safely close it manually.
+          {t('auth:popup.manualClose')}
         </p>
       </div>
     </div>

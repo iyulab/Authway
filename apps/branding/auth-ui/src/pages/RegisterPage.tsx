@@ -1,23 +1,25 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
-// Validation schema
-const registerSchema = z.object({
-  email: z.string().email('올바른 이메일을 입력해주세요'),
-  password: z.string().min(8, '비밀번호는 최소 8자 이상이어야 합니다'),
-  confirmPassword: z.string().min(8, '비밀번호 확인을 입력해주세요'),
-  firstName: z.string().min(1, '이름을 입력해주세요'),
-  lastName: z.string().min(1, '성을 입력해주세요'),
+// Validation schema - will use i18n messages dynamically
+const createRegisterSchema = (t: (key: string) => string) => z.object({
+  email: z.string().email(t('auth:validation.emailInvalid')),
+  password: z.string().min(8, t('auth:validation.passwordMin8')),
+  confirmPassword: z.string().min(8, t('auth:validation.confirmPasswordRequired')),
+  firstName: z.string().min(1, t('auth:validation.firstNameRequired')),
+  lastName: z.string().min(1, t('auth:validation.lastNameRequired')),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: '비밀번호가 일치하지 않습니다',
+  message: t('auth:validation.passwordMismatch'),
   path: ['confirmPassword'],
 })
 
-type RegisterFormData = z.infer<typeof registerSchema>
+type RegisterFormData = z.infer<ReturnType<typeof createRegisterSchema>>
 
 interface RegisterRequest {
   email: string
@@ -34,9 +36,16 @@ interface RegisterResponse {
 }
 
 const RegisterPage: React.FC = () => {
+  const { t } = useTranslation(['auth', 'common'])
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  // Preserve login_challenge for OAuth flow
+  const loginChallenge = searchParams.get('login_challenge')
+
+  const registerSchema = createRegisterSchema(t)
 
   const {
     register,
@@ -45,6 +54,17 @@ const RegisterPage: React.FC = () => {
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   })
+
+  // Error message mapping
+  const getErrorMessage = (apiError: string): string => {
+    const errorMessages: Record<string, string> = {
+      'User with this email already exists': t('auth:errors.userAlreadyExists'),
+      'Email and password are required': t('auth:errors.emailPasswordRequired'),
+      'Invalid request body': t('auth:errors.invalidRequest'),
+      'Failed to create user': t('auth:errors.createUserFailed'),
+    }
+    return errorMessages[apiError] || apiError
+  }
 
   // Register mutation
   const registerMutation = useMutation({
@@ -66,19 +86,22 @@ const RegisterPage: React.FC = () => {
     },
     onSuccess: (data) => {
       if (data.error) {
-        setError(data.error)
+        setError(getErrorMessage(data.error))
       } else {
         setSuccess(true)
         setError(null)
-        // 3초 후 로그인 페이지로 이동
+        // Redirect to login page after 3 seconds (preserve login_challenge)
         setTimeout(() => {
-          navigate('/login')
+          const loginUrl = loginChallenge
+            ? `/login?login_challenge=${loginChallenge}`
+            : '/login'
+          navigate(loginUrl)
         }, 3000)
       }
     },
     onError: (error) => {
       console.error('Register error:', error)
-      setError('회원가입 중 오류가 발생했습니다.')
+      setError(t('auth:errors.registerFailed'))
     },
   })
 
@@ -107,12 +130,12 @@ const RegisterPage: React.FC = () => {
                 />
               </svg>
             </div>
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">회원가입 완료!</h2>
+            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:register.success.title')}</h2>
             <p className="mt-2 text-sm text-gray-600">
-              계정이 성공적으로 생성되었습니다.
+              {t('auth:register.success.message')}
             </p>
             <p className="mt-1 text-sm text-gray-500">
-              3초 후 로그인 페이지로 이동합니다...
+              {t('auth:register.success.redirect')}
             </p>
           </div>
         </div>
@@ -121,7 +144,11 @@ const RegisterPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Language Switcher - positioned at top right */}
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher variant="minimal" />
+      </div>
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
@@ -140,10 +167,10 @@ const RegisterPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            회원가입
+            {t('auth:register.title')}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Authway 계정을 생성하세요
+            {t('auth:register.subtitle')}
           </p>
         </div>
 
@@ -158,14 +185,14 @@ const RegisterPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                  이름
+                  {t('auth:register.firstNameLabel')}
                 </label>
                 <input
                   {...register('firstName')}
                   type="text"
                   autoComplete="given-name"
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="이름"
+                  placeholder={t('auth:register.firstNamePlaceholder')}
                 />
                 {errors.firstName && (
                   <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
@@ -174,14 +201,14 @@ const RegisterPage: React.FC = () => {
 
               <div>
                 <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                  성
+                  {t('auth:register.lastNameLabel')}
                 </label>
                 <input
                   {...register('lastName')}
                   type="text"
                   autoComplete="family-name"
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="성"
+                  placeholder={t('auth:register.lastNamePlaceholder')}
                 />
                 {errors.lastName && (
                   <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
@@ -191,14 +218,14 @@ const RegisterPage: React.FC = () => {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                이메일
+                {t('auth:register.emailLabel')}
               </label>
               <input
                 {...register('email')}
                 type="email"
                 autoComplete="email"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="이메일을 입력하세요"
+                placeholder={t('auth:register.emailPlaceholder')}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -207,14 +234,14 @@ const RegisterPage: React.FC = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                비밀번호
+                {t('auth:register.passwordLabel')}
               </label>
               <input
                 {...register('password')}
                 type="password"
                 autoComplete="new-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="비밀번호를 입력하세요"
+                placeholder={t('auth:register.passwordPlaceholder')}
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -223,14 +250,14 @@ const RegisterPage: React.FC = () => {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                비밀번호 확인
+                {t('auth:register.confirmPasswordLabel')}
               </label>
               <input
                 {...register('confirmPassword')}
                 type="password"
                 autoComplete="new-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="비밀번호를 다시 입력하세요"
+                placeholder={t('auth:register.confirmPasswordPlaceholder')}
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
@@ -247,10 +274,10 @@ const RegisterPage: React.FC = () => {
               {isSubmitting || registerMutation.isPending ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  회원가입 중...
+                  {t('auth:register.submitting')}
                 </div>
               ) : (
-                '회원가입'
+                t('auth:register.submitButton')
               )}
             </button>
           </div>
@@ -258,10 +285,10 @@ const RegisterPage: React.FC = () => {
           <div className="text-center">
             <button
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate(`/login${loginChallenge ? `?login_challenge=${loginChallenge}` : ''}`)}
               className="text-sm text-indigo-600 hover:text-indigo-500"
             >
-              이미 계정이 있으신가요? 로그인
+              {t('auth:register.hasAccount')}
             </button>
           </div>
         </form>
