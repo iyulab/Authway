@@ -2,7 +2,7 @@
 
 Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with JavaScript/TypeScript SDKs.
 
-[![Version](https://img.shields.io/badge/version-0.1.4-blue.svg)](https://github.com/iyulab/authway)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/iyulab/authway)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **NPM Packages:**
@@ -20,15 +20,17 @@ Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with 
 - **Auto-Discovery** - Apps only need Auth Backend URL, rest is auto-discovered
 - **Dynamic Claims** - Runtime user claims management
 - **Multi-Tenancy** - Fully isolated tenant support
-- **Popup Login** - No-redirect authentication flow with Google OAuth support (v0.1.4)
+- **Popup Login** - No-redirect authentication flow with Google OAuth support
+- **i18n Support** - Multi-language UI (Korean, English)
 - **TypeScript SDKs** - `@authway/client` and `@authway/react`
 
-### What's New in v0.1.4 (2025-11-10)
+### What's New in v0.2.0
 
-- ✅ **Popup Mode with External OAuth Providers** - Google OAuth, GitHub, and other external providers now work seamlessly in popup mode
-- ✅ **COOP Compatibility** - Solved Cross-Origin-Opener-Policy blocking with sessionStorage persistence
-- 🔧 **SessionStorage + Hidden Iframe Pattern** - Robust cross-origin authentication flow
-- 📝 **Comprehensive Documentation** - Updated guides for popup authentication with external providers
+- ✅ **i18n (Internationalization)** - Multi-language support for Auth UI (Korean, English)
+- ✅ **Language Switcher** - User-selectable language with browser detection
+- ✅ **Auto-executing Popup Callback** - `@authway/client/popup-callback` module for seamless popup flow
+- ✅ **Enhanced Logout** - OIDC logout with `post_logout_redirect_uri` support
+- ✅ **Next.js Sample** - Complete integration example with `@authway/react`
 
 See [CHANGELOG.md](./CHANGELOG.md) for complete release notes.
 
@@ -137,6 +139,7 @@ const user = await client.getUser()
 - **[Popup Login Guide](./docs/features/POPUP_LOGIN_GUIDE.md)** - Popup authentication with external OAuth providers
 - **[Samples](./samples/)** - Example applications
   - [React SDK Sample](./samples/react-sdk-sample/) - Full-featured React demo
+  - [Next.js Sample](./samples/nextjs-sample/) - Next.js App Router integration
   - [ASP.NET SPA Sample](./samples/asp-spa/) - Backend + Frontend (React & Vanilla JS)
 
 ## Architecture
@@ -183,6 +186,7 @@ authway/
 │
 ├── samples/
 │   ├── react-sdk-sample/     # React demo
+│   ├── nextjs-sample/        # Next.js App Router demo
 │   └── asp-spa/              # ASP.NET + React/Vanilla JS
 │
 └── docs/                     # Documentation

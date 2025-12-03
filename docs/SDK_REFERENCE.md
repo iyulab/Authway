@@ -12,6 +12,43 @@ Core JavaScript/TypeScript SDK for OAuth 2.0 authentication.
 npm install @authway/client
 ```
 
+### Popup Callback Module
+
+For popup authentication flow, import the auto-executing callback handler in your callback page:
+
+```typescript
+// callback.html or callback page
+import '@authway/client/popup-callback'
+```
+
+This module automatically:
+- Detects popup/iframe context
+- Extracts OAuth authorization code from URL
+- Sends code to parent window via `postMessage`
+- Closes popup window after completion
+
+**Usage in HTML**:
+```html
+<script type="module">
+  import '@authway/client/popup-callback'
+</script>
+```
+
+**Usage in Next.js** (callback route):
+```tsx
+// app/callback/page.tsx
+'use client'
+import { useEffect } from 'react'
+
+export default function CallbackPage() {
+  useEffect(() => {
+    import('@authway/client/popup-callback')
+  }, [])
+
+  return <div>Processing authentication...</div>
+}
+```
+
 ### AuthwayClient
 
 Main client class for authentication operations.

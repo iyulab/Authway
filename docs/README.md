@@ -1,13 +1,15 @@
 # Authway Documentation
 
-**Latest Version**: 0.2.0 (2025-11-17)
+**Latest Version**: 0.2.0 (2025-12-03)
 
 ## 🆕 What's New in v0.2.0
 
+- ✅ **i18n (Internationalization)** - Multi-language support for Auth UI (Korean, English)
+- ✅ **Language Switcher** - User-selectable language with automatic browser detection
+- ✅ **Auto-executing Popup Callback** - `@authway/client/popup-callback` module for seamless popup flow
+- ✅ **Enhanced Logout** - OIDC logout with `post_logout_redirect_uri` support
+- ✅ **Next.js Sample** - Complete integration example with `@authway/react`
 - ✅ **Intelligent Auto-Migration System** - Fast detection (1-2s) with PostgreSQL advisory locks
-- ✅ **Consolidated Documentation** - Reorganized into 7 core documents for easier navigation
-- ✅ **Enhanced Logout Policies** - Flexible redirect validation with whitelist and custom policies
-- 📝 **Updated Guides** - Comprehensive setup, features, deployment, and backend integration guides
 
 See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
 
@@ -32,6 +34,7 @@ See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
 Example applications in `../samples/`:
 
 - **[React SDK Sample](../samples/react-sdk-sample/)** - Full-featured React demo
+- **[Next.js Sample](../samples/nextjs-sample/)** - Next.js App Router with `@authway/react`
 - **[ASP.NET SPA Sample](../samples/asp-spa/)** - Backend + Frontend (React & Vanilla JS)
   - React with @authway/react SDK
   - Vanilla JS with oauth4webapi (learning OAuth2 internals)

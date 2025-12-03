@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2025-12-03
+
+### Added
+- **i18n (Internationalization)**: Multi-language support for Auth UI
+  - Korean (ko) and English (en) languages
+  - Automatic browser language detection
+  - URL query parameter support (`?lang=ko`)
+  - Language preference persistence via localStorage
+- **LanguageSwitcher Component**: User-selectable language switching in Auth UI
+- **Popup Callback Module**: `@authway/client/popup-callback` for auto-executing callback handling
+  - Detects popup/iframe context automatically
+  - Extracts OAuth code and sends to parent via postMessage
+  - Closes popup after completion
+- **Next.js Sample**: Complete integration example with `@authway/react`
+- **OIDC Logout Enhancement**: `post_logout_redirect_uri` support for controlled logout redirects
+
+### Changed
+- **Auth UI Pages**: All pages migrated to use i18n (`useTranslation` hook)
+  - LoginPage, RegisterPage, ConsentPage, ErrorPage
+  - ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage
+  - ResendVerificationPage, LogoutPage, PopupCallbackPage
+  - GoogleLoginButton
+- **Zod Validation**: Dynamic schema factories for i18n validation messages
+- **Error Messages**: API error mapping to localized messages
+
+### Technical Details
+- **i18n Stack**: i18next + react-i18next + i18next-browser-languagedetector
+- **Translation Namespaces**: common, auth, consent, password, errors
+- **Language Detection Order**: querystring → localStorage → navigator → fallback (en)
+
+---
+
 ## [0.1.4] - 2025-11-10
 
 ### Fixed

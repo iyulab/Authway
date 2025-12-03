@@ -1,16 +1,79 @@
 # Authway Features Guide
 
 **Version**: 0.2.0
-**Last Updated**: 2025-11-17
+**Last Updated**: 2025-12-03
 
-Comprehensive guide to Authway's key features: Dynamic Claims, Popup Login, Logout Policies, and OAuth/JWT best practices.
+Comprehensive guide to Authway's key features: i18n, Dynamic Claims, Popup Login, Logout Policies, and OAuth/JWT best practices.
 
 ## Table of Contents
 
+- [Internationalization (i18n)](#internationalization-i18n)
 - [Dynamic Claims](#dynamic-claims)
 - [Popup Login](#popup-login)
 - [Logout & Redirect Policies](#logout--redirect-policies)
 - [OAuth & JWT Best Practices](#oauth--jwt-best-practices)
+
+---
+
+## Internationalization (i18n)
+
+Multi-language support for Auth UI with automatic browser detection and user-selectable language switching.
+
+### Overview
+
+Authway Auth UI supports:
+- ✅ **Korean (ko)** - Primary language
+- ✅ **English (en)** - Fallback language
+- ✅ **Automatic Detection** - Browser language preference detection
+- ✅ **Language Switcher** - User can change language anytime
+- ✅ **Persistent Selection** - Language preference saved in localStorage
+
+### How It Works
+
+**Language Detection Priority**:
+1. URL query parameter (`?lang=ko`)
+2. localStorage (`authway-language`)
+3. Browser settings (`navigator.language`)
+4. Fallback: English (en)
+
+### Customizing Language
+
+**Via URL**:
+```
+https://auth.example.com/login?lang=ko
+https://auth.example.com/login?lang=en
+```
+
+**Via SDK (future)**:
+```typescript
+const client = new AuthwayClient({
+  domain: 'http://localhost:8081',
+  clientId: 'my-client-id',
+  locale: 'ko' // Force specific language
+})
+```
+
+### Translation Files
+
+Located in `apps/branding/auth-ui/src/i18n/locales/`:
+
+```
+locales/
+├── ko/                     # Korean
+│   ├── common.json         # Common UI strings
+│   ├── auth.json           # Login, register, validation
+│   ├── consent.json        # OAuth consent page
+│   ├── password.json       # Password reset flow
+│   └── errors.json         # OAuth error codes
+└── en/                     # English (same structure)
+```
+
+### Adding New Languages
+
+1. Create language directory (e.g., `locales/ja/`)
+2. Copy English files as templates
+3. Translate all strings
+4. Update `src/i18n/index.ts` to include new language
 
 ---
 
