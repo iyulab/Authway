@@ -286,25 +286,27 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 	}
 
 	// Update fields
+	// Note: For string fields, we update even if empty to allow clearing values
+	// For array fields, nil means "not provided" while empty slice means "clear the values"
 	if req.Name != "" {
 		client.Name = req.Name
 	}
-	if req.Description != "" {
-		client.Description = req.Description
-	}
-	if req.Website != "" {
-		client.Website = req.Website
-	}
+	// Allow clearing description (empty string is valid)
+	client.Description = req.Description
+	// Allow clearing website (empty string is valid)
+	client.Website = req.Website
 	if req.Logo != "" {
 		client.Logo = req.Logo
 	}
-	if len(req.RedirectURIs) > 0 {
+
+	// Array fields: update if slice is not nil (allows clearing with empty array)
+	if req.RedirectURIs != nil {
 		client.RedirectURIs = req.RedirectURIs
 	}
-	if len(req.GrantTypes) > 0 {
+	if req.GrantTypes != nil {
 		client.GrantTypes = req.GrantTypes
 	}
-	if len(req.Scopes) > 0 {
+	if req.Scopes != nil {
 		client.Scopes = req.Scopes
 	}
 	if req.Public != nil {
@@ -328,18 +330,20 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		client.GoogleRedirectURI = req.GoogleRedirectURI
 	}
 
-	// Update allowed origins if provided
-	if len(req.AllowedOrigins) > 0 {
+	// Update allowed origins if provided (nil = not provided, empty = clear)
+	if req.AllowedOrigins != nil {
 		client.AllowedOrigins = req.AllowedOrigins
 	}
 
 	// Logout redirect policy settings
-	if len(req.PostLogoutRedirectURIs) > 0 {
+	// PostLogoutRedirectURIs: nil = not provided, empty = clear values
+	if req.PostLogoutRedirectURIs != nil {
 		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
 	}
 	if req.LogoutRedirectPolicy != nil {
 		client.LogoutRedirectPolicy = *req.LogoutRedirectPolicy
 	}
+	// DefaultLogoutURI: nil = not provided, empty string = clear value
 	if req.DefaultLogoutURI != nil {
 		client.DefaultLogoutURI = req.DefaultLogoutURI
 	}

@@ -281,17 +281,19 @@ const ClientsPage: React.FC = () => {
           .filter(uri => uri.length > 0)
       : []
 
+    // Explicitly send empty arrays and empty strings to allow clearing values
+    // Backend handles empty arrays/strings as intentional clears
     updateClientMutation.mutate({
       id: editingClient.id,
       data: {
         name: data.name,
-        description: data.description,
-        website: data.website || undefined,
+        description: data.description ?? '',
+        website: data.website ?? '',
         redirect_uris: redirectUris,
-        post_logout_redirect_uris: postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,
+        post_logout_redirect_uris: postLogoutRedirectUris,
         logout_redirect_policy: data.logout_redirect_policy || 'strict',
-        default_logout_uri: data.default_logout_uri || undefined,
-        allow_wildcard_logout: data.allow_wildcard_logout || false,
+        default_logout_uri: data.default_logout_uri ?? '',
+        allow_wildcard_logout: data.allow_wildcard_logout ?? false,
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
