@@ -636,7 +636,7 @@ const ClientsPage: React.FC = () => {
                     placeholder={`http://localhost:3000\nhttps://example.com`}
                   />
                   <p className="mt-1 text-sm text-gray-500">
-                    로그아웃 후 리다이렉트할 URI를 각 줄에 입력하세요. (OIDC RP-Initiated Logout 지원)
+                    로그아웃 후 리다이렉트할 URI를 각 줄에 입력하세요. 비워두면 Redirect URIs에서 자동 설정됩니다.
                   </p>
                   {errors.post_logout_redirect_uris && (
                     <p className="mt-1 text-sm text-red-600">{errors.post_logout_redirect_uris.message}</p>
@@ -976,7 +976,7 @@ const ClientsPage: React.FC = () => {
                     placeholder={`http://localhost:3000\nhttps://example.com`}
                   />
                   <p className="mt-1 text-sm text-gray-500">
-                    로그아웃 후 리다이렉트할 URI를 각 줄에 입력하세요. (OIDC RP-Initiated Logout 지원)
+                    로그아웃 후 리다이렉트할 URI를 각 줄에 입력하세요. 비워두면 Redirect URIs 값이 유지됩니다.
                   </p>
                   {editErrors.post_logout_redirect_uris && (
                     <p className="mt-1 text-sm text-red-600">{editErrors.post_logout_redirect_uris.message}</p>

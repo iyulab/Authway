@@ -124,6 +124,24 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 				existingClient.RedirectURIs = req.RedirectURIs
 				existingClient.Active = true
 
+				// Apply smart defaults for logout redirect URIs on restore
+				if len(req.PostLogoutRedirectURIs) > 0 {
+					existingClient.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+				} else if len(req.RedirectURIs) > 0 {
+					existingClient.PostLogoutRedirectURIs = req.RedirectURIs
+				}
+				if req.LogoutRedirectPolicy != "" {
+					existingClient.LogoutRedirectPolicy = req.LogoutRedirectPolicy
+				} else if existingClient.LogoutRedirectPolicy == "" {
+					existingClient.LogoutRedirectPolicy = "strict"
+				}
+				if req.DefaultLogoutURI != "" {
+					existingClient.DefaultLogoutURI = &req.DefaultLogoutURI
+				} else if existingClient.DefaultLogoutURI == nil && len(req.RedirectURIs) > 0 {
+					defaultURI := req.RedirectURIs[0]
+					existingClient.DefaultLogoutURI = &defaultURI
+				}
+
 				if err := s.db.Save(&existingClient).Error; err != nil {
 					return nil, nil, fmt.Errorf("failed to update restored client: %w", err)
 				}
@@ -192,6 +210,38 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if len(req.AllowedOrigins) > 0 {
 		client.AllowedOrigins = req.AllowedOrigins
 	}
+
+	// Logout Redirect Policy Configuration (Smart Defaults)
+	// Philosophy: Minimize boilerplate - auto-populate from redirect_uris if not explicitly set
+	if len(req.PostLogoutRedirectURIs) > 0 {
+		// Use explicitly provided URIs
+		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	} else if len(req.RedirectURIs) > 0 {
+		// Smart default: use redirect_uris as post_logout_redirect_uris
+		// This follows the common pattern used by Auth0, Okta, and other providers
+		client.PostLogoutRedirectURIs = req.RedirectURIs
+		s.logger.Debug("Auto-populated post_logout_redirect_uris from redirect_uris",
+			zap.String("client_id", clientID),
+			zap.Strings("uris", req.RedirectURIs))
+	}
+
+	// Set logout redirect policy (default: "strict" for production safety)
+	if req.LogoutRedirectPolicy != "" {
+		client.LogoutRedirectPolicy = req.LogoutRedirectPolicy
+	} else {
+		client.LogoutRedirectPolicy = "strict"
+	}
+
+	// Set default logout URI - use first redirect URI if not provided
+	if req.DefaultLogoutURI != "" {
+		client.DefaultLogoutURI = &req.DefaultLogoutURI
+	} else if len(req.RedirectURIs) > 0 {
+		defaultURI := req.RedirectURIs[0]
+		client.DefaultLogoutURI = &defaultURI
+	}
+
+	// Allow wildcard logout (default: false for security)
+	client.AllowWildcardLogout = req.AllowWildcardLogout
 
 	if err := s.db.Create(client).Error; err != nil {
 		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name), zap.String("tenant_id", tenantID.String()))

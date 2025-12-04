@@ -171,17 +171,59 @@ redirect_uris: [
   "https://www.example.com/auth/callback"
 ]
 
-// Logout URIs
+// Logout URIs (optional - auto-populated from redirect_uris if omitted)
 post_logout_redirect_uris: [
   "https://app.example.com/logged-out"
 ]
 ```
 
 **Rules**:
-- ✅ Exact match required (no wildcards)
+- ✅ Exact match required (no wildcards by default)
 - ✅ HTTPS required in production
 - ✅ Multiple URIs supported
 - ❌ No path traversal allowed
+
+### Smart Defaults (Zero Configuration)
+
+Authway minimizes boilerplate by auto-populating logout settings:
+
+| Field | Explicit Value | Smart Default |
+|-------|----------------|---------------|
+| `post_logout_redirect_uris` | Uses provided value | Copies from `redirect_uris` |
+| `logout_redirect_policy` | Uses provided value | `"strict"` (production-safe) |
+| `default_logout_uri` | Uses provided value | First `redirect_uri` |
+| `allow_wildcard_logout` | Uses provided value | `false` (secure default) |
+
+**Example - Minimal Configuration**:
+```bash
+# Only redirect_uris required - logout URIs auto-configured
+curl -X POST http://localhost:8080/api/v1/clients \
+  -d '{
+    "tenant_id": "...",
+    "name": "My App",
+    "redirect_uris": ["http://localhost:3000"],
+    "public": true,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
+  }'
+
+# Result: post_logout_redirect_uris = ["http://localhost:3000"] (auto)
+```
+
+**Override When Needed**:
+```bash
+# Explicit logout URIs for custom logout flow
+curl -X POST http://localhost:8080/api/v1/clients \
+  -d '{
+    "tenant_id": "...",
+    "name": "My App",
+    "redirect_uris": ["http://localhost:3000/callback"],
+    "post_logout_redirect_uris": ["http://localhost:3000/goodbye"],
+    "public": true,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
+  }'
+```
 
 ---
 

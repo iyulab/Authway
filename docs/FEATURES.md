@@ -277,6 +277,32 @@ Authway supports:
 - ✅ **Redirect Policies**: Whitelist, custom validation
 - ✅ **Front-Channel Logout**: Notify all apps
 - ✅ **Session Cleanup**: Clear all tokens and sessions
+- ✅ **Smart Defaults**: Auto-populate logout URIs from redirect URIs
+
+### Smart Defaults (Zero Configuration)
+
+Authway minimizes configuration by automatically setting logout URIs:
+
+| Field | Smart Default | When |
+|-------|---------------|------|
+| `post_logout_redirect_uris` | Copies from `redirect_uris` | Not explicitly set |
+| `logout_redirect_policy` | `"strict"` | Not explicitly set |
+| `default_logout_uri` | First `redirect_uri` | Not explicitly set |
+| `allow_wildcard_logout` | `false` | Not explicitly set |
+
+**Minimal Client Creation** (logout works out of the box):
+```bash
+curl -X POST http://localhost:8080/api/v1/clients \
+  -d '{
+    "tenant_id": "...",
+    "name": "My App",
+    "redirect_uris": ["http://localhost:3000"],
+    "public": true,
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"]
+  }'
+# Result: post_logout_redirect_uris = ["http://localhost:3000"] (auto)
+```
 
 ### Logout Flow
 
