@@ -206,3 +206,5 @@ nul
 
 setup-client-azure.ps1
 archive/
+# Azure Static Web Apps deployment artifacts
+*-app.zip

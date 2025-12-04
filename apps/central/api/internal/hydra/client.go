@@ -133,6 +133,61 @@ func (c *Client) UpdateOAuth2Client(clientID string, client *OAuth2Client) (*OAu
 	return &result, nil
 }
 
+// UpdateClient performs a partial update on an OAuth2 client using PATCH semantics
+// It first fetches the current client, merges the updates, then performs a PUT
+func (c *Client) UpdateClient(clientID string, updates map[string]interface{}) error {
+	// First, get the current client
+	currentClient, err := c.GetOAuth2Client(clientID)
+	if err != nil {
+		return fmt.Errorf("failed to get current client: %w", err)
+	}
+
+	// Convert current client to map for merging
+	clientData, err := json.Marshal(currentClient)
+	if err != nil {
+		return fmt.Errorf("failed to marshal current client: %w", err)
+	}
+
+	var clientMap map[string]interface{}
+	if err := json.Unmarshal(clientData, &clientMap); err != nil {
+		return fmt.Errorf("failed to unmarshal current client: %w", err)
+	}
+
+	// Merge updates into client map
+	for key, value := range updates {
+		clientMap[key] = value
+	}
+
+	// Send the merged update
+	data, err := json.Marshal(clientMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated client: %w", err)
+	}
+
+	req, err := http.NewRequest(
+		http.MethodPut,
+		fmt.Sprintf("%s/admin/clients/%s", c.AdminURL, clientID),
+		bytes.NewBuffer(data),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update client: %s", string(body))
+	}
+
+	return nil
+}
+
 func (c *Client) DeleteOAuth2Client(clientID string) error {
 	req, err := http.NewRequest(
 		http.MethodDelete,

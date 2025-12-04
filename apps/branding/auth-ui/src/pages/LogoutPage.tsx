@@ -1,24 +1,94 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+
+interface LogoutErrorState {
+  message: string
+  fallbackRedirect: string | null
+}
 
 const LogoutPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
-  const [error, setError] = useState<string>('')
+  const [error, setError] = useState<LogoutErrorState | null>(null)
+  const redirectTimerRef = useRef<number | null>(null)
+
+  // Extract origin from URL for fallback
+  const extractOrigin = (url: string): string => {
+    try {
+      const parsed = new URL(url)
+      return parsed.origin
+    } catch {
+      // Simple fallback: find third slash
+      const matches = url.match(/^(https?:\/\/[^/]+)/)
+      return matches ? matches[1] : url
+    }
+  }
+
+  // Determine fallback redirect URL
+  const getFallbackUrl = (data: Record<string, unknown>): string | null => {
+    // Priority: fallback_redirect from API > post_logout_redirect_uri param > referrer origin
+    if (data.fallback_redirect && typeof data.fallback_redirect === 'string') {
+      return data.fallback_redirect
+    }
+
+    const postLogoutUri = searchParams.get('post_logout_redirect_uri')
+    if (postLogoutUri) {
+      return extractOrigin(postLogoutUri)
+    }
+
+    if (document.referrer) {
+      return extractOrigin(document.referrer)
+    }
+
+    return null
+  }
+
+  // Handle redirect with countdown
+  useEffect(() => {
+    if (error?.fallbackRedirect) {
+      redirectTimerRef.current = window.setTimeout(() => {
+        window.location.href = error.fallbackRedirect!
+      }, 1000)
+
+      return () => {
+        if (redirectTimerRef.current) {
+          clearTimeout(redirectTimerRef.current)
+        }
+      }
+    }
+  }, [error])
 
   useEffect(() => {
     const logoutChallenge = searchParams.get('logout_challenge')
+    const postLogoutUri = searchParams.get('post_logout_redirect_uri')
 
     if (!logoutChallenge) {
-      setError('Logout challenge parameter is missing')
+      // No challenge - redirect to referrer or post_logout_redirect_uri
+      const fallback = postLogoutUri ? extractOrigin(postLogoutUri) :
+                       document.referrer ? extractOrigin(document.referrer) : null
+
+      console.error('[Authway Logout] Missing logout_challenge parameter', {
+        post_logout_redirect_uri: postLogoutUri,
+        referrer: document.referrer,
+        fallback_redirect: fallback
+      })
+
+      setError({
+        message: 'Logout challenge parameter is missing',
+        fallbackRedirect: fallback
+      })
       return
     }
 
     // Auto-accept logout by calling backend
     const performLogout = async () => {
       try {
-        const response = await fetch(`/logout?logout_challenge=${logoutChallenge}`, {
+        const url = postLogoutUri
+          ? `/logout?logout_challenge=${logoutChallenge}&post_logout_redirect_uri=${encodeURIComponent(postLogoutUri)}`
+          : `/logout?logout_challenge=${logoutChallenge}`
+
+        const response = await fetch(url, {
           redirect: 'manual' // Don't auto-follow redirects
         })
 
@@ -37,12 +107,39 @@ const LogoutPage: React.FC = () => {
           // Redirect to Hydra's logout completion URL
           window.location.href = data.redirect_to
         } else if (data.error) {
-          console.error('Logout API error:', data.error)
-          setError(`Logout failed: ${data.error_description || data.error}`)
+          // Log detailed error for developers
+          console.error('[Authway Logout] Logout failed', {
+            error: data.error,
+            error_description: data.error_description,
+            client_id: data.client_id,
+            fallback_redirect: data.fallback_redirect,
+            post_logout_redirect_uri: postLogoutUri,
+            logout_challenge: logoutChallenge,
+            hint: 'Ensure post_logout_redirect_uris is configured in Authway client settings'
+          })
+
+          const fallback = getFallbackUrl(data)
+          setError({
+            message: data.error_description || data.error,
+            fallbackRedirect: fallback
+          })
         }
       } catch (err) {
-        console.error('Logout error:', err)
-        setError('Logout failed. Please close this window or return to your application.')
+        // Log error for developers
+        console.error('[Authway Logout] Network or parsing error', {
+          error: err,
+          logout_challenge: logoutChallenge,
+          post_logout_redirect_uri: postLogoutUri,
+          referrer: document.referrer
+        })
+
+        const fallback = postLogoutUri ? extractOrigin(postLogoutUri) :
+                         document.referrer ? extractOrigin(document.referrer) : null
+
+        setError({
+          message: 'Logout failed due to network error',
+          fallbackRedirect: fallback
+        })
       }
     }
 
@@ -52,10 +149,14 @@ const LogoutPage: React.FC = () => {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">{t('auth:logout.error')}</h1>
-          <p className="text-red-600 mb-4">{error}</p>
-          <p className="text-gray-600">Redirecting to home...</p>
+        <div className="text-center max-w-md px-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t('auth:logout.error')}</h1>
+          <p className="text-red-600 mb-4 text-sm">{error.message}</p>
+          {error.fallbackRedirect ? (
+            <p className="text-gray-600">{t('auth:logout.redirecting', 'Redirecting you back...')}</p>
+          ) : (
+            <p className="text-gray-600">{t('auth:logout.closeWindow', 'Please close this window or return to your application.')}</p>
+          )}
         </div>
       </div>
     )

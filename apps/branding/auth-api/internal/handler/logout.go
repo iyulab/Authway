@@ -114,14 +114,53 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 			zap.String("policy", clientConfig.LogoutRedirectPolicy),
 			zap.Error(err))
 
+		// Return error with fallback redirect info for graceful degradation
+		// This allows the UI to redirect users back to their app even on error
+		fallbackURI := h.determineFallbackURI(clientConfig, postLogoutRedirectURI)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
 			"error_description": err.Error(),
+			"fallback_redirect": fallbackURI,
+			"client_id":         clientID,
 		})
 	}
 
 	// 5. Accept logout with validated redirect URI
 	return h.acceptLogout(c, logoutChallenge, redirectURI)
+}
+
+// determineFallbackURI determines the best fallback URI for error cases
+func (h *LogoutHandler) determineFallbackURI(config *ClientConfig, requestedURI string) string {
+	// Priority: default_logout_uri > first post_logout_redirect_uri > website > requested URI origin
+	if config.DefaultLogoutURI != nil && *config.DefaultLogoutURI != "" {
+		return *config.DefaultLogoutURI
+	}
+	if len(config.PostLogoutRedirectURIs) > 0 {
+		return config.PostLogoutRedirectURIs[0]
+	}
+	if config.Website != "" {
+		return config.Website
+	}
+	// Extract origin from requested URI as last resort
+	if requestedURI != "" {
+		return extractOrigin(requestedURI)
+	}
+	return ""
+}
+
+// extractOrigin extracts the origin (scheme + host) from a URL
+func extractOrigin(uri string) string {
+	// Simple extraction: find third slash or end
+	slashCount := 0
+	for i, ch := range uri {
+		if ch == '/' {
+			slashCount++
+			if slashCount == 3 {
+				return uri[:i]
+			}
+		}
+	}
+	return uri
 }
 
 // getLogoutRequest retrieves logout request info from Hydra

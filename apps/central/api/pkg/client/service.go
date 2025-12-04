@@ -22,6 +22,7 @@ type Service interface {
 	List(limit, offset int) ([]*Client, int64, error)
 	ValidateClient(clientID, clientSecret string) (*Client, error)
 	RegenerateSecret(id uuid.UUID) (*ClientCredentials, error)
+	SyncAllClientsToHydra() (int, int, error) // returns (synced, failed, error)
 }
 
 type service struct {
@@ -255,12 +256,18 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		authMethod = "none"
 	}
 
+	// Smart fallback: Ensure Hydra always has valid post_logout_redirect_uris
+	hydraPostLogoutURIs := client.PostLogoutRedirectURIs
+	if len(hydraPostLogoutURIs) == 0 && len(client.RedirectURIs) > 0 {
+		hydraPostLogoutURIs = client.RedirectURIs
+	}
+
 	hydraClient := &hydra.OAuth2Client{
 		ClientID:                clientID,
 		ClientSecret:            clientSecret,
 		ClientName:              client.Name,
 		RedirectUris:            client.RedirectURIs,
-		PostLogoutRedirectUris:  client.PostLogoutRedirectURIs,
+		PostLogoutRedirectUris:  hydraPostLogoutURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"}, // Default to authorization code flow
 		Scope:                   strings.Join(client.Scopes, " "),
@@ -393,9 +400,13 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 	if req.LogoutRedirectPolicy != nil {
 		client.LogoutRedirectPolicy = *req.LogoutRedirectPolicy
 	}
-	// DefaultLogoutURI: nil = not provided, empty string = clear value
+	// DefaultLogoutURI: nil = not provided, empty string = clear value (set to nil)
 	if req.DefaultLogoutURI != nil {
-		client.DefaultLogoutURI = req.DefaultLogoutURI
+		if *req.DefaultLogoutURI == "" {
+			client.DefaultLogoutURI = nil // Clear the value
+		} else {
+			client.DefaultLogoutURI = req.DefaultLogoutURI
+		}
 	}
 	if req.AllowWildcardLogout != nil {
 		client.AllowWildcardLogout = *req.AllowWildcardLogout
@@ -413,12 +424,21 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		authMethod = "none"
 	}
 
+	// Smart fallback: If PostLogoutRedirectURIs is empty, use RedirectURIs for Hydra
+	// This ensures logout always works even if user clears the explicit list
+	hydraPostLogoutURIs := client.PostLogoutRedirectURIs
+	if len(hydraPostLogoutURIs) == 0 && len(client.RedirectURIs) > 0 {
+		hydraPostLogoutURIs = client.RedirectURIs
+		s.logger.Debug("Using redirect_uris as fallback for empty post_logout_redirect_uris in Hydra",
+			zap.String("client_id", client.ClientID))
+	}
+
 	hydraUpdate := &hydra.OAuth2Client{
 		ClientID:                client.ClientID,
 		ClientSecret:            client.ClientSecret,
 		ClientName:              client.Name,
 		RedirectUris:            client.RedirectURIs,
-		PostLogoutRedirectUris:  client.PostLogoutRedirectURIs,
+		PostLogoutRedirectUris:  hydraPostLogoutURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"},
 		Scope:                   strings.Join(client.Scopes, " "),
@@ -598,4 +618,61 @@ func maskSecret(secret string) string {
 		return "****"
 	}
 	return secret[:2] + "****" + secret[len(secret)-2:]
+}
+
+// SyncAllClientsToHydra synchronizes all clients' post_logout_redirect_uris to Hydra
+// This is useful for one-time migration of existing clients that have empty post_logout_redirect_uris in Hydra
+// For each client, if post_logout_redirect_uris is empty, it uses redirect_uris as fallback
+func (s *service) SyncAllClientsToHydra() (int, int, error) {
+	s.logger.Info("Starting Hydra sync for all clients")
+
+	var clients []*Client
+	if err := s.db.Find(&clients).Error; err != nil {
+		return 0, 0, fmt.Errorf("failed to fetch clients: %w", err)
+	}
+
+	synced := 0
+	failed := 0
+
+	for _, client := range clients {
+		// Determine post_logout_redirect_uris to use
+		hydraPostLogoutURIs := client.PostLogoutRedirectURIs
+		if len(hydraPostLogoutURIs) == 0 && len(client.RedirectURIs) > 0 {
+			hydraPostLogoutURIs = client.RedirectURIs
+			s.logger.Debug("Using redirect_uris as fallback for empty post_logout_redirect_uris",
+				zap.String("client_id", client.ClientID))
+		}
+
+		// Skip if still no URIs to set
+		if len(hydraPostLogoutURIs) == 0 {
+			s.logger.Debug("Skipping client with no redirect URIs",
+				zap.String("client_id", client.ClientID))
+			continue
+		}
+
+		// Update Hydra with the URIs
+		err := s.hydraClient.UpdateClient(client.ClientID, map[string]interface{}{
+			"post_logout_redirect_uris": hydraPostLogoutURIs,
+		})
+
+		if err != nil {
+			s.logger.Error("Failed to sync client to Hydra",
+				zap.String("client_id", client.ClientID),
+				zap.Error(err))
+			failed++
+			continue
+		}
+
+		s.logger.Debug("Successfully synced client to Hydra",
+			zap.String("client_id", client.ClientID),
+			zap.Strings("post_logout_redirect_uris", hydraPostLogoutURIs))
+		synced++
+	}
+
+	s.logger.Info("Hydra sync completed",
+		zap.Int("synced", synced),
+		zap.Int("failed", failed),
+		zap.Int("total", len(clients)))
+
+	return synced, failed, nil
 }

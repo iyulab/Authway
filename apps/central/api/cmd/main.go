@@ -267,6 +267,9 @@ func main() {
 	v1.Delete("/clients/:id/google-oauth", clientHandler.DisableGoogleOAuth)
 	v1.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
 
+	// Client Hydra sync (admin operation for one-time migration)
+	v1.Post("/clients/sync-hydra", clientHandler.SyncToHydra)
+
 	// System claims management routes (require re-authentication)
 	v1.Post("/claims/update", jwtAuth, claimsHandler.HandleUpdateClaims) // Legacy endpoint
 	v1.Patch("/claims", jwtAuth, claimsHandler.HandleUpdateClaims)       // RESTful endpoint

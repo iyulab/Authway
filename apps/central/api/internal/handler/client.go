@@ -335,6 +335,26 @@ func (h *ClientHandler) GetGoogleOAuthStatus(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// SyncToHydra handles syncing all clients' post_logout_redirect_uris to Hydra
+// This is an admin-only endpoint for one-time migration of existing clients
+func (h *ClientHandler) SyncToHydra(c *fiber.Ctx) error {
+	synced, failed, err := h.services.ClientService.SyncAllClientsToHydra()
+	if err != nil {
+		h.logger.Error("Failed to sync clients to Hydra", zap.Error(err))
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to sync clients: "+err.Error())
+	}
+
+	h.logger.Info("Hydra sync completed",
+		zap.Int("synced", synced),
+		zap.Int("failed", failed))
+
+	return c.JSON(fiber.Map{
+		"message": "Hydra sync completed",
+		"synced":  synced,
+		"failed":  failed,
+	})
+}
+
 // GetPublicConfig handles getting public OAuth configuration for a client by client_id
 // This is a PUBLIC endpoint that doesn't require authentication
 // Used by SDK to auto-configure OAuth settings

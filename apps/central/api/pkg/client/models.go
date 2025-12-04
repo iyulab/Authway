@@ -192,9 +192,11 @@ type UpdateClientRequest struct {
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 
 	// Logout Redirect Policy Configuration
+	// PostLogoutRedirectURIs: empty array means "clear", nil means "not provided"
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
 	LogoutRedirectPolicy   *string  `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
-	DefaultLogoutURI       *string  `json:"default_logout_uri" validate:"omitempty,url"`
+	// DefaultLogoutURI: empty string means "clear", nil means "not provided"
+	DefaultLogoutURI       *string  `json:"default_logout_uri" validate:"omitempty"`
 	AllowWildcardLogout    *bool    `json:"allow_wildcard_logout"`
 }
 
