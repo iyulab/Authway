@@ -132,7 +132,7 @@ function Main() {
 }
 
 function WelcomeScreen() {
-  const { loginWithRedirect, loginWithPopup, error } = useAuth()
+  const { loginWithRedirect, loginWithPopup } = useAuth()
   const [loading, setLoading] = useState(false)
   const [popupError, setPopupError] = useState<string | null>(null)
 
@@ -140,10 +140,9 @@ function WelcomeScreen() {
     setLoading(true)
     setPopupError(null)
     try {
-      // Use callback.html for popup to enable postMessage communication
-      await loginWithPopup({
-        redirectUri: window.location.origin + '/callback.html'
-      })
+      // No redirectUri needed - uses default redirect_uri (same as redirect login)
+      // SDK's handlePopupCallback() automatically detects popup context and closes
+      await loginWithPopup()
     } catch (err: any) {
       setPopupError(err.message)
       console.error('Popup login failed:', err)
@@ -676,9 +675,9 @@ function ComponentsTab() {
 }
 
 function AdvancedTab() {
-  const { getIdTokenClaims, getAccessTokenWithPopup, getLinkedAccounts, linkAccount, unlinkAccount } = useAuth()
+  const { getIdTokenClaims, getAccessTokenWithPopup } = useAuth()
   const [idTokenClaims, setIdTokenClaims] = useState<any>(null)
-  const [linkedAccounts, setLinkedAccounts] = useState<any[]>([])
+  // const [linkedAccounts, setLinkedAccounts] = useState<any[]>([]) // Backend not implemented
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -711,53 +710,8 @@ function AdvancedTab() {
     }
   }
 
-  const handleGetLinkedAccounts = async () => {
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      const accounts = await getLinkedAccounts()
-      setLinkedAccounts(accounts)
-      setSuccess(`✅ 연결된 계정 ${accounts.length}개를 찾았습니다!`)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleLinkAccount = async (provider: string) => {
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      const identity = await linkAccount({ provider })
-      setSuccess(`✅ ${provider} 계정이 성공적으로 연결되었습니다!`)
-      await handleGetLinkedAccounts() // Refresh list
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleUnlinkAccount = async (provider: string, userId: string) => {
-    if (!confirm(`정말로 ${provider} 계정 연결을 해제하시겠습니까?`)) {
-      return
-    }
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      await unlinkAccount(provider, userId)
-      setSuccess(`✅ ${provider} 계정 연결이 해제되었습니다!`)
-      await handleGetLinkedAccounts() // Refresh list
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Note: Account linking functions removed - backend not implemented yet
+  // Available in SDK: getLinkedAccounts, linkAccount, unlinkAccount
 
   return (
     <div className="advanced-tab">

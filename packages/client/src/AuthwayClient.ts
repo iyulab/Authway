@@ -241,7 +241,7 @@ export class AuthwayClient {
       audience: config.audience,
       scope: config.scope || DEFAULT_SCOPE,
       useRefreshTokens: config.useRefreshTokens ?? true,
-      cacheLocation: config.cacheLocation || 'memory',
+      cacheLocation: config.cacheLocation || 'localstorage',
       tenantId: config.tenantId,
       enableDynamicClaims: config.enableDynamicClaims ?? true,
       claimsUpdateInterval: config.claimsUpdateInterval || 0,

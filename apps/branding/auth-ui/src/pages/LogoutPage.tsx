@@ -84,9 +84,11 @@ const LogoutPage: React.FC = () => {
     // Auto-accept logout by calling backend
     const performLogout = async () => {
       try {
+        // Use backend URL in production, relative path in development (proxied by Vite)
+        const baseUrl = import.meta.env.VITE_AUTH_BACKEND_URL || ''
         const url = postLogoutUri
-          ? `/logout?logout_challenge=${logoutChallenge}&post_logout_redirect_uri=${encodeURIComponent(postLogoutUri)}`
-          : `/logout?logout_challenge=${logoutChallenge}`
+          ? `${baseUrl}/logout?logout_challenge=${logoutChallenge}&post_logout_redirect_uri=${encodeURIComponent(postLogoutUri)}`
+          : `${baseUrl}/logout?logout_challenge=${logoutChallenge}`
 
         const response = await fetch(url, {
           redirect: 'manual' // Don't auto-follow redirects

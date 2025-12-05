@@ -424,7 +424,7 @@ function CustomAuth() {
     redirectUri: window.location.origin,
     scope: 'openid profile email',
     audience: 'https://api.example.com',
-    cacheLocation: 'localstorage',
+    cacheLocation: 'localstorage',  // 기본값
     useDPoP: false,
   }}
 

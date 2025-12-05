@@ -177,7 +177,7 @@ const client = new AuthwayClient({
   redirectUri: window.location.origin,
   scope: 'openid profile email',
   audience: 'https://api.example.com',
-  cacheLocation: 'localstorage',  // 'localstorage' | 'memory'
+  cacheLocation: 'localstorage',  // 'localstorage' (기본값) | 'memory'
   useDPoP: false,  // DPoP (RFC 9449) 사용 여부
 
   // OAuth URL 직접 지정 (자동 검색 대신)
