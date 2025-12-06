@@ -1,125 +1,252 @@
 import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { usersApi, User } from '../lib/api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import {
+  UserIcon,
+  PencilIcon,
+  TrashIcon,
+  MagnifyingGlassIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  BuildingOfficeIcon,
+} from '@heroicons/react/24/outline'
+import { usersApi, User } from '@/lib/api'
+import {
+  Button,
+  Card,
+  Loading,
+  EmptyState,
+  ConfirmDialog,
+  StatusBadge,
+  Badge,
+  Input,
+  Pagination,
+} from '@/components/ui'
+import { UserFormModal, UserFormData, UserAvatar } from '@/components/users'
+import { useTenantStore } from '@/stores/tenant'
 
 const UsersPage: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  const queryClient = useQueryClient()
   const pageSize = 10
 
-  // 사용자 목록 조회
+  // Tenant context
+  const { selectedTenant } = useTenantStore()
+  const selectedTenantId = selectedTenant?.id || ''
+
+  // State
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+
+  // Fetch users for selected tenant
   const { data: usersData, isLoading, error, refetch } = useQuery({
-    queryKey: ['users', currentPage],
-    queryFn: () => usersApi.list({
-      limit: pageSize,
-      offset: (currentPage - 1) * pageSize
-    }),
+    queryKey: ['users', selectedTenantId, currentPage],
+    queryFn: () =>
+      usersApi.list({
+        limit: pageSize,
+        offset: (currentPage - 1) * pageSize,
+        tenant_id: selectedTenantId,
+      }),
+    enabled: !!selectedTenantId,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
   })
 
   const users = usersData?.data.users || []
   const totalUsers = usersData?.data.total || 0
   const totalPages = Math.ceil(totalUsers / pageSize)
 
-  // 검색 필터링
-  const filteredUsers = users.filter((user: User) =>
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter users by search term (client-side filtering for current page)
+  const filteredUsers = users.filter(
+    (user: User) =>
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.name && user.name.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
+  // Update user mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; avatar_url?: string } }) =>
+      usersApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setShowEditModal(false)
+      setSelectedUser(null)
+      toast.success('User updated successfully')
+    },
+    onError: (error: any) => {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.details ||
+        'Failed to update user'
+      toast.error(`Update failed: ${errorMessage}`)
+    },
+  })
+
+  // Delete user mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => usersApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setShowDeleteConfirm(false)
+      setSelectedUser(null)
+      toast.success('User deleted successfully')
+    },
+    onError: (error: any) => {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.details ||
+        'Failed to delete user'
+      toast.error(`Delete failed: ${errorMessage}`)
+    },
+  })
+
+  // Handlers
   const handleEdit = (user: User) => {
-    alert(`편집 기능: ${user.email}`)
+    setSelectedUser(user)
+    setShowEditModal(true)
   }
 
-  const handleDelete = async (user: User) => {
-    if (confirm(`정말로 ${user.email} 사용자를 삭제하시겠습니까?`)) {
-      try {
-        await usersApi.delete(user.id)
-        refetch()
-        alert('사용자가 삭제되었습니다.')
-      } catch (err) {
-        alert('삭제에 실패했습니다.')
-      }
+  const handleDelete = (user: User) => {
+    setSelectedUser(user)
+    setShowDeleteConfirm(true)
+  }
+
+  const handleEditSubmit = (data: UserFormData) => {
+    if (selectedUser) {
+      updateMutation.mutate({
+        id: selectedUser.id,
+        data: {
+          name: data.name,
+          avatar_url: data.avatar_url || undefined,
+        },
+      })
     }
   }
 
-  if (isLoading) {
+  const handleDeleteConfirm = () => {
+    if (selectedUser) {
+      deleteMutation.mutate(selectedUser.id)
+    }
+  }
+
+  // Get provider badge color
+  const getProviderBadge = (provider: string) => {
+    switch (provider) {
+      case 'google':
+        return <Badge variant="info" size="sm">Google</Badge>
+      case 'github':
+        return <Badge variant="purple" size="sm">GitHub</Badge>
+      default:
+        return <Badge variant="default" size="sm">Local</Badge>
+    }
+  }
+
+  // Show message if no tenant selected
+  if (!selectedTenantId) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+          <p className="mt-2 text-sm text-gray-700">
+            Manage users and their access.
+          </p>
+        </div>
+        <Card className="p-8">
+          <EmptyState
+            icon={<BuildingOfficeIcon className="h-12 w-12" />}
+            title="No tenant selected"
+            description="Please select a tenant from the header to view and manage users."
+          />
+        </Card>
       </div>
     )
+  }
+
+  if (isLoading) {
+    return <Loading message="Loading users..." />
   }
 
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">사용자 목록을 불러오는데 실패했습니다.</p>
-        <button
-          onClick={() => refetch()}
-          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-        >
-          다시 시도
-        </button>
+        <p className="text-red-600">Failed to load users.</p>
+        <Button className="mt-4" onClick={() => refetch()}>
+          Retry
+        </Button>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/* 헤더 */}
+      {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">사용자 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
           <p className="mt-2 text-sm text-gray-700">
-            총 {totalUsers}명의 사용자가 등록되어 있습니다.
+            {totalUsers} user(s) in <span className="font-medium">{selectedTenant?.name}</span>.
           </p>
         </div>
       </div>
 
-      {/* 검색 */}
-      <div className="bg-white shadow rounded-lg p-6">
+      {/* Search */}
+      <Card className="p-4">
         <div className="relative">
-          <input
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Input
             type="text"
-            placeholder="이메일 또는 이름으로 검색..."
+            placeholder="Search by email or name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="pl-10"
           />
         </div>
-      </div>
+      </Card>
 
-      {/* 사용자 테이블 */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      {/* Users Table */}
+      <Card>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  사용자
+                  User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  상태
+                  Provider
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  이메일 인증
+                  Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  마지막 로그인
+                  Email Verified
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  가입일
+                  Last Login
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created
                 </th>
                 <th className="relative px-6 py-3">
-                  <span className="sr-only">액션</span>
+                  <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    {searchTerm ? '검색 결과가 없습니다.' : '등록된 사용자가 없습니다.'}
+                  <td colSpan={7} className="px-6 py-12">
+                    <EmptyState
+                      icon={<UserIcon className="h-12 w-12" />}
+                      title={searchTerm ? 'No results found' : 'No users'}
+                      description={
+                        searchTerm
+                          ? 'Try a different search term'
+                          : 'Users will appear here when they register'
+                      }
+                    />
                   </td>
                 </tr>
               ) : (
@@ -127,60 +254,65 @@ const UsersPage: React.FC = () => {
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                            <span className="text-sm font-medium text-gray-700">
-                              {(user.first_name?.[0] || user.email[0]).toUpperCase()}
-                            </span>
-                          </div>
-                        </div>
+                        <UserAvatar
+                          name={user.name}
+                          email={user.email}
+                          avatarUrl={user.avatar_url}
+                        />
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {user.first_name} {user.last_name}
+                            {user.name || 'Unnamed User'}
                           </div>
                           <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {user.active ? '활성' : '비활성'}
-                      </span>
+                      {getProviderBadge(user.provider)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm ${user.email_verified ? 'text-green-600' : 'text-red-600'}`}>
-                        {user.email_verified ? '✓ 인증됨' : '✗ 미인증'}
-                      </span>
+                      <StatusBadge
+                        active={user.active}
+                        activeText="Active"
+                        inactiveText="Inactive"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.email_verified ? (
+                        <span className="flex items-center text-sm text-green-600">
+                          <CheckCircleIcon className="h-5 w-5 mr-1" />
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-sm text-red-600">
+                          <XCircleIcon className="h-5 w-5 mr-1" />
+                          Not verified
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.last_login_at
-                        ? new Date(user.last_login_at).toLocaleDateString('ko-KR')
-                        : '없음'}
+                        ? new Date(user.last_login_at).toLocaleDateString()
+                        : 'Never'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(user.created_at).toLocaleDateString('ko-KR')}
+                      {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => handleEdit(user)}
-                          className="text-indigo-600 hover:text-indigo-900 px-3 py-1 text-sm border border-indigo-300 rounded"
-                          title="편집"
+                          className="text-indigo-600 hover:text-indigo-900"
+                          title="Edit"
                         >
-                          편집
+                          <PencilIcon className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => handleDelete(user)}
-                          className="text-red-600 hover:text-red-900 px-3 py-1 text-sm border border-red-300 rounded"
-                          title="삭제"
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete"
                         >
-                          삭제
+                          <TrashIcon className="h-5 w-5" />
                         </button>
                       </div>
                     </td>
@@ -191,76 +323,46 @@ const UsersPage: React.FC = () => {
           </table>
         </div>
 
-        {/* 페이지네이션 */}
+        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  이전
-                </button>
-                <button
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  다음
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    총 <span className="font-medium">{totalUsers}</span>개 중{' '}
-                    <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span>-
-                    <span className="font-medium">
-                      {Math.min(currentPage * pageSize, totalUsers)}
-                    </span>
-                    개 표시
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    <button
-                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      이전
-                    </button>
-                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                      const page = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
-                      return page <= totalPages ? (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            page === currentPage
-                              ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ) : null;
-                    })}
-                    <button
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      다음
-                    </button>
-                  </nav>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalUsers}
+            itemsPerPage={pageSize}
+            onPageChange={setCurrentPage}
+          />
         )}
-      </div>
+      </Card>
+
+      {/* Edit Modal */}
+      {selectedUser && (
+        <UserFormModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedUser(null)
+          }}
+          onSubmit={handleEditSubmit}
+          user={selectedUser}
+          isSubmitting={updateMutation.isPending}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false)
+          setSelectedUser(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete User"
+        message={`Are you sure you want to delete "${selectedUser?.email}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   )
 }

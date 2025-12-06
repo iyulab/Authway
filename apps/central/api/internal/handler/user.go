@@ -25,11 +25,12 @@ func NewUserHandler(services *service.Services, logger *zap.Logger) *UserHandler
 	}
 }
 
-// List handles listing users with pagination
+// List handles listing users with pagination and optional tenant filtering
 func (h *UserHandler) List(c *fiber.Ctx) error {
 	// Parse query parameters
 	limitStr := c.Query("limit", "20")
 	offsetStr := c.Query("offset", "0")
+	tenantIDStr := c.Query("tenant_id", "")
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 || limit > 100 {
@@ -41,10 +42,26 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	users, total, err := h.services.UserService.List(limit, offset)
-	if err != nil {
-		h.logger.Error("Failed to list users", zap.Error(err))
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve users")
+	var users []*user.User
+	var total int64
+
+	// If tenant_id is provided, filter by tenant
+	if tenantIDStr != "" {
+		tenantID, err := uuid.Parse(tenantIDStr)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+		}
+		users, total, err = h.services.UserService.GetByTenant(tenantID, limit, offset)
+		if err != nil {
+			h.logger.Error("Failed to list users by tenant", zap.Error(err), zap.String("tenant_id", tenantIDStr))
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve users")
+		}
+	} else {
+		users, total, err = h.services.UserService.List(limit, offset)
+		if err != nil {
+			h.logger.Error("Failed to list users", zap.Error(err))
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve users")
+		}
 	}
 
 	// Convert to public user objects

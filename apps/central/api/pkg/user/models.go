@@ -39,11 +39,13 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 // PublicUser returns user data safe for public consumption
 type PublicUser struct {
 	ID            uuid.UUID  `json:"id"`
+	TenantID      uuid.UUID  `json:"tenant_id"`
 	Email         string     `json:"email"`
 	Name          string     `json:"name"`
 	AvatarURL     string     `json:"avatar_url"`
 	EmailVerified bool       `json:"email_verified"`
 	Active        bool       `json:"active"`
+	Provider      string     `json:"provider"`
 	LastLoginAt   *time.Time `json:"last_login_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
@@ -61,11 +63,13 @@ func (u *User) ToPublic() PublicUser {
 
 	return PublicUser{
 		ID:            u.ID,
+		TenantID:      u.TenantID,
 		Email:         u.Email,
 		Name:          name,
 		AvatarURL:     avatarURL,
 		EmailVerified: u.EmailVerified,
 		Active:        u.Active,
+		Provider:      u.Provider,
 		LastLoginAt:   u.LastLoginAt,
 		CreatedAt:     u.CreatedAt,
 		UpdatedAt:     u.UpdatedAt,

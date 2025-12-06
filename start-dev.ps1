@@ -164,46 +164,120 @@ Write-Host ""
 Write-Host "✅ No manual migration required - migrations run with backend startup" -ForegroundColor Green
 Write-Host ""
 
-# Start backend server in new terminal
+# Verify all ports are free before starting
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "🔧 Starting Backend Server" -ForegroundColor Cyan
+Write-Host "🔧 Verifying Ports" -ForegroundColor Cyan
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 Write-Host ""
+
 if (-not (Ensure-PortFree -Port 8080 -ServiceName "Backend API")) {
     Write-Host "❌ Cannot start backend - port 8080 is in use" -ForegroundColor Red
     exit 1
 }
+if (-not (Ensure-PortFree -Port 3000 -ServiceName "Admin Dashboard")) {
+    Write-Host "❌ Cannot start Admin Dashboard - port 3000 is in use" -ForegroundColor Red
+    exit 1
+}
+if (-not (Ensure-PortFree -Port 3001 -ServiceName "Login UI")) {
+    Write-Host "❌ Cannot start Login UI - port 3001 is in use" -ForegroundColor Red
+    exit 1
+}
+if (-not (Ensure-PortFree -Port 8081 -ServiceName "Auth Backend")) {
+    Write-Host "❌ Cannot start Auth Backend - port 8081 is in use" -ForegroundColor Red
+    exit 1
+}
+
+# Define paths
 $backendPath = Join-Path $PSScriptRoot "apps\central\api"
-Write-Host "📂 Backend path: $backendPath" -ForegroundColor Gray
-Write-Host "🔄 Auto-migration: Enabled (runs on startup)" -ForegroundColor Gray
+$frontendPath = Join-Path $PSScriptRoot "apps\central\admin"
+$loginUiPath = Join-Path $PSScriptRoot "apps\branding\auth-ui"
+$authBackendPath = Join-Path $PSScriptRoot "apps\branding\auth-api"
+
 Write-Host ""
-Write-Host "🚀 Launching backend server in new window..." -ForegroundColor Yellow
-Write-Host "   Watch the backend window for migration logs" -ForegroundColor Gray
+
+# Check and install frontend dependencies
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "📦 Checking Dependencies" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 Write-Host ""
-$backendCommand = @"
-`$Host.UI.RawUI.WindowTitle = 'Authway Backend Server'
+
+if (-not (Test-Path "$frontendPath\node_modules")) {
+    Write-Host "📦 Installing Admin Dashboard dependencies (first time)..." -ForegroundColor Yellow
+    Push-Location $frontendPath
+    npm install
+    Pop-Location
+}
+
+if (-not (Test-Path "$loginUiPath\node_modules")) {
+    Write-Host "📦 Installing Login UI dependencies (first time)..." -ForegroundColor Yellow
+    Push-Location $loginUiPath
+    npm install
+    Pop-Location
+}
+
+Write-Host "✓ All dependencies ready" -ForegroundColor Green
+Write-Host ""
+
+# Start all 4 services in Windows Terminal with tabs
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "🚀 Starting Development Servers" -ForegroundColor Cyan
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "📂 Paths:" -ForegroundColor Gray
+Write-Host "   Backend:        $backendPath" -ForegroundColor Gray
+Write-Host "   Admin Dashboard: $frontendPath" -ForegroundColor Gray
+Write-Host "   Login UI:       $loginUiPath" -ForegroundColor Gray
+Write-Host "   Auth Backend:   $authBackendPath" -ForegroundColor Gray
+Write-Host ""
+Write-Host "🖥️  Launching Windows Terminal with 4 tabs..." -ForegroundColor Yellow
+Write-Host ""
+
+# Create a temporary script for each tab to avoid escaping issues
+$backendScript = @"
+Write-Host '🔧 Backend API - Port 8080' -ForegroundColor Cyan
 Write-Host ''
-Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
-Write-Host '🔧 Authway Backend Server - Development Mode' -ForegroundColor Cyan
-Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
-Write-Host ''
-Write-Host '📌 Configuration:' -ForegroundColor Yellow
-Write-Host '   API Port: 8080' -ForegroundColor Gray
-Write-Host '   PostgreSQL: localhost:5432' -ForegroundColor Gray
-Write-Host '   Redis: localhost:6379' -ForegroundColor Gray
-Write-Host '   Auto-Migration: Enabled' -ForegroundColor Gray
-Write-Host ''
-Write-Host '🔄 Database migrations will run automatically on startup' -ForegroundColor Yellow
-Write-Host '   Look for migration logs below...' -ForegroundColor Gray
-Write-Host ''
-cd '$backendPath'
 go run cmd/main.go
 "@
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCommand
+
+$adminScript = @"
+Write-Host '🎨 Admin Dashboard - Port 3000' -ForegroundColor Cyan
+Write-Host ''
+npm run dev
+"@
+
+$loginScript = @"
+Write-Host '🔐 Login UI - Port 3001' -ForegroundColor Cyan
+Write-Host ''
+npm run dev
+"@
+
+$authScript = @"
+Write-Host '🔑 Auth Backend - Port 8081' -ForegroundColor Cyan
+Write-Host ''
+go run cmd/main.go
+"@
+
+# Save scripts to temp files
+$tempDir = [System.IO.Path]::GetTempPath()
+$backendScriptPath = Join-Path $tempDir "authway-backend.ps1"
+$adminScriptPath = Join-Path $tempDir "authway-admin.ps1"
+$loginScriptPath = Join-Path $tempDir "authway-login.ps1"
+$authScriptPath = Join-Path $tempDir "authway-auth.ps1"
+
+$backendScript | Out-File -FilePath $backendScriptPath -Encoding UTF8
+$adminScript | Out-File -FilePath $adminScriptPath -Encoding UTF8
+$loginScript | Out-File -FilePath $loginScriptPath -Encoding UTF8
+$authScript | Out-File -FilePath $authScriptPath -Encoding UTF8
+
+# Launch Windows Terminal with 4 tabs using script files
+# Using cmd /c to properly handle the semicolon separators
+$wtCmd = "wt --title `"Authway Dev`" -d `"$backendPath`" powershell -NoExit -File `"$backendScriptPath`" ; new-tab --title `"Admin Dashboard`" -d `"$frontendPath`" powershell -NoExit -File `"$adminScriptPath`" ; new-tab --title `"Login UI`" -d `"$loginUiPath`" powershell -NoExit -File `"$loginScriptPath`" ; new-tab --title `"Auth Backend`" -d `"$authBackendPath`" powershell -NoExit -File `"$authScriptPath`""
+
+cmd /c $wtCmd
 
 # Wait for backend port to be listening
 Write-Host "⏳ Waiting for backend (port 8080) to start..." -ForegroundColor Yellow
-$maxAttempts = 20
+$maxAttempts = 30
 $attempt = 0
 $backendReady = $false
 
@@ -215,19 +289,20 @@ while ($attempt -lt $maxAttempts) {
     if ($portCheck) {
         Write-Host "✓ Backend port is listening (took ~$attempt seconds)" -ForegroundColor Green
         $backendReady = $true
-        # Give it 1 more second to fully initialize
         Start-Sleep -Seconds 1
         break
     }
 
-    Write-Host "  [$attempt/$maxAttempts] Waiting..." -ForegroundColor Gray
+    if ($attempt % 5 -eq 0) {
+        Write-Host "  [$attempt/$maxAttempts] Waiting..." -ForegroundColor Gray
+    }
     Start-Sleep -Seconds 1
 }
 
 if (-not $backendReady) {
     Write-Host ""
     Write-Host "⚠️  Backend did not start after $maxAttempts seconds" -ForegroundColor Yellow
-    Write-Host "   Check the backend terminal window for errors" -ForegroundColor Gray
+    Write-Host "   Check the Backend API tab in Windows Terminal for errors" -ForegroundColor Gray
     Write-Host "   Skipping client registration (you can run .\samples\setup-clients.ps1 manually)" -ForegroundColor Gray
 }
 Write-Host ""
@@ -251,57 +326,6 @@ if ($backendReady) {
     Write-Host "   You can manually run later: .\samples\setup-clients.ps1" -ForegroundColor Gray
 }
 Write-Host ""
-
-Start-Sleep -Seconds 2
-
-# Start frontend in new terminal
-Write-Host "🎨 Starting frontend in new terminal..." -ForegroundColor Yellow
-if (-not (Ensure-PortFree -Port 3000 -ServiceName "Admin Dashboard")) {
-    Write-Host "❌ Cannot start Admin Dashboard - port 3000 is in use" -ForegroundColor Red
-    exit 1
-}
-$frontendPath = Join-Path $PSScriptRoot "apps\central\admin"
-
-# Check if node_modules exists
-if (-not (Test-Path "$frontendPath\node_modules")) {
-    Write-Host "📦 Installing frontend dependencies (first time)..." -ForegroundColor Yellow
-    Push-Location $frontendPath
-    npm install
-    Pop-Location
-}
-
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$frontendPath'; Write-Host '🎨 Authway Admin Dashboard' -ForegroundColor Cyan; Write-Host ''; npm run dev"
-
-Start-Sleep -Seconds 2
-
-# Start Login UI in new terminal
-Write-Host "🔐 Starting Login UI in new terminal..." -ForegroundColor Yellow
-if (-not (Ensure-PortFree -Port 3001 -ServiceName "Login UI")) {
-    Write-Host "❌ Cannot start Login UI - port 3001 is in use" -ForegroundColor Red
-    exit 1
-}
-$loginUiPath = Join-Path $PSScriptRoot "apps\branding\auth-ui"
-
-# Check if node_modules exists
-if (-not (Test-Path "$loginUiPath\node_modules")) {
-    Write-Host "📦 Installing Login UI dependencies (first time)..." -ForegroundColor Yellow
-    Push-Location $loginUiPath
-    npm install
-    Pop-Location
-}
-
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$loginUiPath'; Write-Host '🔐 Authway Login UI' -ForegroundColor Cyan; Write-Host ''; npm run dev"
-
-Start-Sleep -Seconds 2
-
-# Start Auth Backend in new terminal
-Write-Host "🔑 Starting Auth Backend in new terminal..." -ForegroundColor Yellow
-if (-not (Ensure-PortFree -Port 8081 -ServiceName "Auth Backend")) {
-    Write-Host "❌ Cannot start Auth Backend - port 8081 is in use" -ForegroundColor Red
-    exit 1
-}
-$authBackendPath = Join-Path $PSScriptRoot "apps\branding\auth-api"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$authBackendPath'; Write-Host '🔑 Authway Auth Backend' -ForegroundColor Cyan; Write-Host ''; go run cmd/main.go"
 
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
@@ -335,10 +359,10 @@ Write-Host "   Docker logs:          docker-compose -f docker-compose.dev.yml lo
 Write-Host "   Manual migration:     .\scripts\deploy\run-migration.ps1" -ForegroundColor Gray
 Write-Host ""
 Write-Host "💡 Tips:" -ForegroundColor Yellow
-Write-Host "   - All services are running in separate windows" -ForegroundColor Gray
+Write-Host "   - All services are running in Windows Terminal tabs" -ForegroundColor Gray
 Write-Host "   - Database migrations run automatically on backend startup" -ForegroundColor Gray
-Write-Host "   - Close windows or press Ctrl+C to stop services" -ForegroundColor Gray
-Write-Host "   - Docker containers will keep running after closing windows" -ForegroundColor Gray
+Write-Host "   - Use Ctrl+Shift+W to close a tab or Ctrl+C to stop a service" -ForegroundColor Gray
+Write-Host "   - Docker containers will keep running after closing Terminal" -ForegroundColor Gray
 Write-Host "   - Use stop-dev.ps1 to stop all services including Docker" -ForegroundColor Gray
 Write-Host ""
 Write-Host "🎯 Quick Start:" -ForegroundColor Yellow

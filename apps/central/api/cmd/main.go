@@ -200,6 +200,7 @@ func main() {
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger)
+	userHandler := handler.NewUserHandler(services, zapLogger)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
@@ -290,6 +291,12 @@ func main() {
 	v1.Put("/docs/*", adminAuth, docsHandler.UpdateDoc)
 	v1.Delete("/docs/*", adminAuth, docsHandler.DeleteDoc)
 	v1.Post("/docs/upload", adminAuth, docsHandler.UploadDoc)
+
+	// User management routes (Admin only)
+	v1.Get("/users", adminAuth, userHandler.List)
+	v1.Get("/users/:id", adminAuth, userHandler.Get)
+	v1.Put("/users/:id", adminAuth, userHandler.Update)
+	v1.Delete("/users/:id", adminAuth, userHandler.Delete)
 
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate)

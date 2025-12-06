@@ -1,12 +1,58 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import {
   CogIcon,
   ServerIcon,
   ShieldCheckIcon,
   InformationCircleIcon,
+  BuildingOfficeIcon,
+  ArrowPathIcon,
+  TrashIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
+import { tenantsApi } from '@/lib/api'
+import { useTenantStore } from '@/stores/tenant'
+import { Button, Modal, Input } from '@/components/ui'
 
 const SettingsPage: React.FC = () => {
+  const queryClient = useQueryClient()
+  const { selectedTenant, clearSelectedTenant } = useTenantStore()
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+
+  // Delete tenant mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => tenantsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      clearSelectedTenant()
+      toast.success('Tenant deleted successfully')
+      // Navigate will happen automatically when tenant is cleared
+    },
+    onError: (error: any) => {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.details ||
+        'Failed to delete tenant'
+      toast.error(errorMessage)
+    },
+  })
+
+  const handleSwitchTenant = () => {
+    clearSelectedTenant()
+    // App will automatically show TenantSelectionPage when no tenant is selected
+  }
+
+  const handleDeleteTenant = () => {
+    if (selectedTenant && deleteConfirmText === selectedTenant.slug) {
+      deleteMutation.mutate(selectedTenant.id)
+      setShowDeleteModal(false)
+      setDeleteConfirmText('')
+    }
+  }
+
   // TODO: Fetch user data from API
   const user = {
     first_name: 'Admin',
@@ -94,6 +140,68 @@ const SettingsPage: React.FC = () => {
           Authway 시스템의 설정을 확인하고 관리할 수 있습니다.
         </p>
       </div>
+
+      {/* 현재 테넌트 정보 */}
+      {selectedTenant && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <div className="flex items-center">
+              <BuildingOfficeIcon className="h-6 w-6 text-gray-400 mr-3" />
+              <div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  현재 테넌트
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                  현재 작업 중인 테넌트 정보입니다.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-5 sm:px-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl font-bold text-white">
+                    {selectedTenant.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xl font-semibold text-gray-900">
+                    {selectedTenant.name}
+                  </h4>
+                  <p className="text-sm text-gray-500 font-mono">
+                    {selectedTenant.slug}
+                  </p>
+                  {selectedTenant.description && (
+                    <p className="mt-1 text-sm text-gray-600">
+                      {selectedTenant.description}
+                    </p>
+                  )}
+                  <div className="mt-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      selectedTenant.active
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {selectedTenant.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+                  onClick={handleSwitchTenant}
+                >
+                  테넌트 전환
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 관리자 정보 */}
       <div className="bg-white shadow rounded-lg">
@@ -264,6 +372,113 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Danger Zone - 테넌트 삭제 */}
+      {selectedTenant && (
+        <div className="bg-white shadow rounded-lg border-2 border-red-200">
+          <div className="px-4 py-5 sm:px-6 border-b border-red-200 bg-red-50">
+            <div className="flex items-center">
+              <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-3" />
+              <div>
+                <h3 className="text-lg leading-6 font-medium text-red-900">
+                  Danger Zone
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-red-600">
+                  이 작업은 되돌릴 수 없습니다. 신중하게 진행하세요.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-5 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-medium text-gray-900">
+                  테넌트 삭제
+                </h4>
+                <p className="mt-1 text-sm text-gray-500">
+                  이 테넌트와 관련된 모든 데이터(클라이언트, 사용자 등)가 영구적으로 삭제됩니다.
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                leftIcon={<TrashIcon className="h-4 w-4" />}
+                onClick={() => setShowDeleteModal(true)}
+              >
+                테넌트 삭제
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tenant Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setDeleteConfirmText('')
+        }}
+        title="테넌트 삭제"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mt-0.5" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">
+                  경고: 이 작업은 되돌릴 수 없습니다
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>
+                    테넌트 <strong className="font-mono">{selectedTenant?.name}</strong>을(를) 삭제하면
+                    다음 데이터가 모두 영구적으로 삭제됩니다:
+                  </p>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>모든 OAuth2 클라이언트</li>
+                    <li>모든 사용자 계정</li>
+                    <li>모든 세션 및 토큰</li>
+                    <li>관련된 모든 설정</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              확인을 위해 테넌트 슬러그 <span className="font-mono text-red-600">{selectedTenant?.slug}</span>을(를) 입력하세요:
+            </label>
+            <Input
+              type="text"
+              placeholder={selectedTenant?.slug}
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowDeleteModal(false)
+                setDeleteConfirmText('')
+              }}
+            >
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteTenant}
+              disabled={deleteConfirmText !== selectedTenant?.slug}
+              isLoading={deleteMutation.isPending}
+            >
+              테넌트 삭제
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

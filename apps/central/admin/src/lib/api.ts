@@ -38,12 +38,13 @@ api.interceptors.response.use(
 // API types
 export interface User {
   id: string
+  tenant_id: string
   email: string
-  first_name: string
-  last_name: string
-  avatar?: string
+  name: string
+  avatar_url?: string
   email_verified: boolean
   active: boolean
+  provider: 'local' | 'google' | 'github'
   last_login_at?: string
   created_at: string
   updated_at: string
@@ -110,19 +111,19 @@ export const authApi = {
     api.get<AdminInfo>('/admin/info'),
 }
 
-// Users API (Note: This is for admin dashboard - not implemented in backend yet)
+// Users API
 export const usersApi = {
-  list: (params?: { limit?: number; offset?: number }) =>
-    api.get<{ users: User[]; total: number; limit: number; offset: number }>('/api/users', { params }),
+  list: (params?: { limit?: number; offset?: number; tenant_id?: string }) =>
+    api.get<{ users: User[]; total: number; limit: number; offset: number }>('/api/v1/users', { params }),
 
   get: (id: string) =>
-    api.get<{ user: User }>(`/api/users/${id}`),
+    api.get<{ user: User }>(`/api/v1/users/${id}`),
 
-  update: (id: string, data: Partial<User>) =>
-    api.put<{ message: string; user: User }>(`/api/users/${id}`, data),
+  update: (id: string, data: { name?: string; avatar_url?: string }) =>
+    api.put<{ message: string; user: User }>(`/api/v1/users/${id}`, data),
 
   delete: (id: string) =>
-    api.delete<{ message: string }>(`/api/users/${id}`),
+    api.delete<{ message: string }>(`/api/v1/users/${id}`),
 }
 
 // Clients API
@@ -184,3 +185,4 @@ export const tenantsApi = {
   delete: (id: string) =>
     api.delete<void>(`/api/v1/tenants/${id}`),
 }
+
