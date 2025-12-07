@@ -12,6 +12,10 @@ import {
   ArrowPathIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  BellAlertIcon,
+  ClipboardDocumentListIcon,
+  EnvelopeIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 
 interface LayoutProps {
@@ -22,6 +26,10 @@ const navigation = [
   { name: '대시보드', href: '/dashboard', icon: HomeIcon },
   { name: '앱(클라이언트) 관리', href: '/clients', icon: KeyIcon },
   { name: '사용자 관리', href: '/users', icon: UsersIcon },
+  { name: '초대 관리', href: '/invitations', icon: EnvelopeIcon },
+  { name: '웹훅', href: '/webhooks', icon: BellAlertIcon },
+  { name: '감사 로그', href: '/audit-logs', icon: ClipboardDocumentListIcon },
+  { name: '사용자 위장', href: '/impersonation', icon: UserGroupIcon },
   { name: '설정', href: '/settings', icon: CogIcon },
 ]
 

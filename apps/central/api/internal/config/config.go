@@ -21,6 +21,8 @@ type Config struct {
 	Email               EmailConfig               `mapstructure:"email"`
 	Google              GoogleOAuthConfig         `mapstructure:"google"`
 	GitHub              GitHubOAuthConfig         `mapstructure:"github"`
+	Microsoft           MicrosoftOAuthConfig      `mapstructure:"microsoft"`
+	Apple               AppleOAuthConfig          `mapstructure:"apple"`
 	Tenant              TenantConfig              `mapstructure:"tenant"`
 	Admin               AdminConfig               `mapstructure:"admin"`
 	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`

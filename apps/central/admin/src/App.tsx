@@ -11,6 +11,10 @@ import ClientCreatePage from '@/pages/ClientCreatePage'
 import ClientDetailPage from '@/pages/ClientDetailPage'
 import UsersPage from '@/pages/UsersPage'
 import SettingsPage from '@/pages/SettingsPage'
+import WebhooksPage from '@/pages/WebhooksPage'
+import AuditLogsPage from '@/pages/AuditLogsPage'
+import InvitationsPage from '@/pages/InvitationsPage'
+import ImpersonationPage from '@/pages/ImpersonationPage'
 
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -51,6 +55,10 @@ function App() {
           <Route path="/clients/new" element={<ClientCreatePage />} />
           <Route path="/clients/:clientId" element={<ClientDetailPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
+          <Route path="/audit-logs" element={<AuditLogsPage />} />
+          <Route path="/invitations" element={<InvitationsPage />} />
+          <Route path="/impersonation" element={<ImpersonationPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -47,6 +47,25 @@ type Client struct {
 	DefaultLogoutURI       *string        `json:"default_logout_uri" gorm:"column:default_logout_uri;null"`
 	AllowWildcardLogout    bool           `json:"allow_wildcard_logout" gorm:"column:allow_wildcard_logout;default:false"`
 
+	// Authentication Provider Settings
+	// Controls which authentication methods are available for this client
+	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
+	AllowEmailSignup     bool           `json:"allow_email_signup" gorm:"column:allow_email_signup;default:true"`
+	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login;default:true"`
+
+	// Microsoft OAuth settings (optional - client-specific credentials)
+	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled" gorm:"column:microsoft_oauth_enabled;default:false"`
+	MicrosoftClientID     *string `json:"-" gorm:"column:microsoft_client_id;null"`
+	MicrosoftClientSecret *string `json:"-" gorm:"column:microsoft_client_secret;null"`
+	MicrosoftTenantID     *string `json:"microsoft_tenant_id" gorm:"column:microsoft_tenant_id;null"`
+
+	// Apple OAuth settings (optional - client-specific credentials)
+	AppleOAuthEnabled bool    `json:"apple_oauth_enabled" gorm:"column:apple_oauth_enabled;default:false"`
+	AppleClientID     *string `json:"-" gorm:"column:apple_client_id;null"`
+	AppleTeamID       *string `json:"-" gorm:"column:apple_team_id;null"`
+	AppleKeyID        *string `json:"-" gorm:"column:apple_key_id;null"`
+	ApplePrivateKey   *string `json:"-" gorm:"column:apple_private_key;null"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
@@ -89,6 +108,18 @@ type PublicClient struct {
 	DefaultLogoutURI       *string  `json:"default_logout_uri"`
 	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 
+	// Authentication Provider Settings
+	EnabledAuthProviders []string `json:"enabled_auth_providers"`
+	AllowEmailSignup     bool     `json:"allow_email_signup"`
+	AllowEmailLogin      bool     `json:"allow_email_login"`
+
+	// Microsoft OAuth (public fields)
+	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled"`
+	MicrosoftTenantID     *string `json:"microsoft_tenant_id"`
+
+	// Apple OAuth (public fields)
+	AppleOAuthEnabled bool `json:"apple_oauth_enabled"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -122,6 +153,18 @@ func (c *Client) ToPublic() PublicClient {
 		LogoutRedirectPolicy:   c.LogoutRedirectPolicy,
 		DefaultLogoutURI:       c.DefaultLogoutURI,
 		AllowWildcardLogout:    c.AllowWildcardLogout,
+
+		// Auth provider settings
+		EnabledAuthProviders: c.EnabledAuthProviders,
+		AllowEmailSignup:     c.AllowEmailSignup,
+		AllowEmailLogin:      c.AllowEmailLogin,
+
+		// Microsoft OAuth public fields
+		MicrosoftOAuthEnabled: c.MicrosoftOAuthEnabled,
+		MicrosoftTenantID:     c.MicrosoftTenantID,
+
+		// Apple OAuth public fields
+		AppleOAuthEnabled: c.AppleOAuthEnabled,
 
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
@@ -168,6 +211,25 @@ type CreateClientRequest struct {
 	LogoutRedirectPolicy   string   `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
 	DefaultLogoutURI       string   `json:"default_logout_uri" validate:"omitempty,url"`
 	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
+
+	// Authentication Provider Settings
+	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
+	EnabledAuthProviders []string `json:"enabled_auth_providers"`
+	AllowEmailSignup     *bool    `json:"allow_email_signup"` // Pointer to use default if not provided
+	AllowEmailLogin      *bool    `json:"allow_email_login"`  // Pointer to use default if not provided
+
+	// Microsoft OAuth Settings (optional - client-specific credentials)
+	MicrosoftOAuthEnabled bool   `json:"microsoft_oauth_enabled"`
+	MicrosoftClientID     string `json:"microsoft_client_id"`
+	MicrosoftClientSecret string `json:"microsoft_client_secret"`
+	MicrosoftTenantID     string `json:"microsoft_tenant_id"`
+
+	// Apple OAuth Settings (optional - client-specific credentials)
+	AppleOAuthEnabled bool   `json:"apple_oauth_enabled"`
+	AppleClientID     string `json:"apple_client_id"`
+	AppleTeamID       string `json:"apple_team_id"`
+	AppleKeyID        string `json:"apple_key_id"`
+	ApplePrivateKey   string `json:"apple_private_key"`
 }
 
 // UpdateClientRequest represents the request to update an OAuth client
@@ -196,8 +258,28 @@ type UpdateClientRequest struct {
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
 	LogoutRedirectPolicy   *string  `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
 	// DefaultLogoutURI: empty string means "clear", nil means "not provided"
-	DefaultLogoutURI       *string  `json:"default_logout_uri" validate:"omitempty"`
-	AllowWildcardLogout    *bool    `json:"allow_wildcard_logout"`
+	DefaultLogoutURI    *string `json:"default_logout_uri" validate:"omitempty"`
+	AllowWildcardLogout *bool   `json:"allow_wildcard_logout"`
+
+	// Authentication Provider Settings
+	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
+	// Empty array means "clear all", nil means "not provided"
+	EnabledAuthProviders []string `json:"enabled_auth_providers"`
+	AllowEmailSignup     *bool    `json:"allow_email_signup"`
+	AllowEmailLogin      *bool    `json:"allow_email_login"`
+
+	// Microsoft OAuth Settings (optional - client-specific credentials)
+	MicrosoftOAuthEnabled *bool   `json:"microsoft_oauth_enabled"`
+	MicrosoftClientID     *string `json:"microsoft_client_id"`
+	MicrosoftClientSecret *string `json:"microsoft_client_secret"`
+	MicrosoftTenantID     *string `json:"microsoft_tenant_id"`
+
+	// Apple OAuth Settings (optional - client-specific credentials)
+	AppleOAuthEnabled *bool   `json:"apple_oauth_enabled"`
+	AppleClientID     *string `json:"apple_client_id"`
+	AppleTeamID       *string `json:"apple_team_id"`
+	AppleKeyID        *string `json:"apple_key_id"`
+	ApplePrivateKey   *string `json:"apple_private_key"`
 }
 
 // ClientCredentials represents client ID and secret

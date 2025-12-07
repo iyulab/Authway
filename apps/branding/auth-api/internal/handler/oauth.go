@@ -146,14 +146,42 @@ func (h *OAuthHandler) GoogleLoginGet(c *fiber.Ctx) error {
 		requestedScope = loginReq.RequestedScope
 	}
 
+	// Fetch client auth configuration from Central API
+	clientConfig := fiber.Map{
+		"client_id": clientID,
+	}
+
+	if clientID != "" {
+		authConfig, err := h.centralAPI.GetClientByClientID(c.Context(), clientID)
+		if err != nil {
+			h.logger.Warn("Failed to fetch client auth config from Central API, using defaults",
+				zap.Error(err),
+				zap.String("client_id", clientID))
+			// Use defaults if Central API is not available
+			clientConfig["enabled_auth_providers"] = []string{"email", "google"}
+			clientConfig["allow_email_signup"] = true
+			clientConfig["allow_email_login"] = true
+			clientConfig["google_oauth_enabled"] = true
+			clientConfig["github_oauth_enabled"] = false
+			clientConfig["microsoft_oauth_enabled"] = false
+			clientConfig["apple_oauth_enabled"] = false
+		} else {
+			clientConfig["enabled_auth_providers"] = authConfig.EnabledAuthProviders
+			clientConfig["allow_email_signup"] = authConfig.AllowEmailSignup
+			clientConfig["allow_email_login"] = authConfig.AllowEmailLogin
+			clientConfig["google_oauth_enabled"] = authConfig.GoogleOAuthEnabled
+			clientConfig["github_oauth_enabled"] = authConfig.GithubOAuthEnabled
+			clientConfig["microsoft_oauth_enabled"] = authConfig.MicrosoftOAuthEnabled
+			clientConfig["apple_oauth_enabled"] = authConfig.AppleOAuthEnabled
+		}
+	}
+
 	// Return login page information
 	return c.JSON(fiber.Map{
 		"challenge":       loginChallenge,
 		"client_name":     clientName,
 		"requested_scope": requestedScope,
-		"client": fiber.Map{
-			"client_id": clientID,
-		},
+		"client":          clientConfig,
 	})
 }
 

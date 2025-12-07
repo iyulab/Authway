@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import GoogleLoginButton from '../components/GoogleLoginButton'
+import { GitHubLoginButton, MicrosoftLoginButton, AppleLoginButton } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 
 // Validation schema - will use i18n messages dynamically
@@ -29,10 +30,22 @@ interface LoginResponse {
   error?: string
 }
 
+interface ClientAuthConfig {
+  client_id?: string
+  enabled_auth_providers?: string[]
+  allow_email_signup?: boolean
+  allow_email_login?: boolean
+  google_oauth_enabled?: boolean
+  github_oauth_enabled?: boolean
+  microsoft_oauth_enabled?: boolean
+  apple_oauth_enabled?: boolean
+}
+
 interface LoginPageInfo {
   challenge: string
   client_name: string
   requested_scope: string[]
+  client?: ClientAuthConfig
 }
 
 const LoginPage: React.FC = () => {
@@ -284,6 +297,31 @@ const LoginPage: React.FC = () => {
     loginMutation.mutate(data)
   }
 
+  // Helper functions for checking enabled auth providers
+  const isProviderEnabled = (provider: string): boolean => {
+    // Default providers if not set: email and google
+    const enabledProviders = loginInfo?.client?.enabled_auth_providers || ['email', 'google']
+    return enabledProviders.includes(provider)
+  }
+
+  const isEmailLoginEnabled = (): boolean => {
+    // Default to true if not set
+    return loginInfo?.client?.allow_email_login ?? true
+  }
+
+  const isEmailSignupEnabled = (): boolean => {
+    // Default to true if not set
+    return loginInfo?.client?.allow_email_signup ?? true
+  }
+
+  // Check if any social provider is enabled
+  const hasSocialProviders = (): boolean => {
+    return isProviderEnabled('google') ||
+           isProviderEnabled('github') ||
+           isProviderEnabled('microsoft') ||
+           isProviderEnabled('apple')
+  }
+
   // No challenge - direct access (should not happen in normal OAuth flow)
   if (!challenge) {
     return (
@@ -364,96 +402,133 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                {t('auth:login.emailLabel')}
-              </label>
-              <input
-                {...register('email')}
-                type="email"
-                autoComplete="email"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder={t('auth:login.emailPlaceholder')}
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                {t('auth:login.passwordLabel')}
-              </label>
-              <input
-                {...register('password')}
-                type="password"
-                autoComplete="current-password"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder={t('auth:login.passwordPlaceholder')}
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div className="flex items-center">
-              <input
-                {...register('remember')}
-                type="checkbox"
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
-                {t('auth:login.rememberMe')}
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting || loginMutation.isPending}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting || loginMutation.isPending ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {t('auth:login.submitting')}
+          {/* Email/Password Login - only show if enabled */}
+          {isProviderEnabled('email') && isEmailLoginEnabled() && (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    {t('auth:login.emailLabel')}
+                  </label>
+                  <input
+                    {...register('email')}
+                    type="email"
+                    autoComplete="email"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder={t('auth:login.emailPlaceholder')}
+                  />
+                  {errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                  )}
                 </div>
-              ) : (
-                t('auth:login.submitButton')
-              )}
-            </button>
-          </div>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">{t('common:or')}</span>
-              </div>
-            </div>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    {t('auth:login.passwordLabel')}
+                  </label>
+                  <input
+                    {...register('password')}
+                    type="password"
+                    autoComplete="current-password"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder={t('auth:login.passwordPlaceholder')}
+                  />
+                  {errors.password && (
+                    <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                  )}
+                </div>
 
+                <div className="flex items-center">
+                  <input
+                    {...register('remember')}
+                    type="checkbox"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
+                    {t('auth:login.rememberMe')}
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || loginMutation.isPending}
+                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting || loginMutation.isPending ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      {t('auth:login.submitting')}
+                    </div>
+                  ) : (
+                    t('auth:login.submitButton')
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Social Login Providers */}
+          {hasSocialProviders() && (
             <div className="mt-6">
-              <GoogleLoginButton
-                onError={(error) => setError(error)}
-                disabled={isSubmitting || loginMutation.isPending}
-                clientId={clientId || undefined}
-              />
-            </div>
-          </div>
+              {/* Divider - only show if email login is also enabled */}
+              {isProviderEnabled('email') && isEmailLoginEnabled() && (
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-gray-50 text-gray-500">{t('common:or')}</span>
+                  </div>
+                </div>
+              )}
 
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate(`/register${challenge ? `?login_challenge=${challenge}` : ''}`)}
-              className="text-sm text-indigo-600 hover:text-indigo-500"
-            >
-              {t('auth:login.noAccount')}
-            </button>
-          </div>
+              <div className="space-y-3">
+                {isProviderEnabled('google') && (
+                  <GoogleLoginButton
+                    onError={(error) => setError(error)}
+                    disabled={isSubmitting || loginMutation.isPending}
+                    clientId={clientId || undefined}
+                  />
+                )}
+                {isProviderEnabled('github') && (
+                  <GitHubLoginButton
+                    onError={(error) => setError(error)}
+                    disabled={isSubmitting || loginMutation.isPending}
+                    clientId={clientId || undefined}
+                  />
+                )}
+                {isProviderEnabled('microsoft') && (
+                  <MicrosoftLoginButton
+                    onError={(error) => setError(error)}
+                    disabled={isSubmitting || loginMutation.isPending}
+                    clientId={clientId || undefined}
+                  />
+                )}
+                {isProviderEnabled('apple') && (
+                  <AppleLoginButton
+                    onError={(error) => setError(error)}
+                    disabled={isSubmitting || loginMutation.isPending}
+                    clientId={clientId || undefined}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Register Link - only show if email signup is enabled */}
+          {isProviderEnabled('email') && isEmailSignupEnabled() && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => navigate(`/register${challenge ? `?login_challenge=${challenge}` : ''}`)}
+                className="text-sm text-indigo-600 hover:text-indigo-500"
+              >
+                {t('auth:login.noAccount')}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

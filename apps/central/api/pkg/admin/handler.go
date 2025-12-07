@@ -102,6 +102,17 @@ func (h *Handler) Info(c *fiber.Ctx) error {
 
 // AdminAuthMiddleware validates admin session token
 func (h *Handler) AdminAuthMiddleware() fiber.Handler {
+	return h.createAdminAuthHandler()
+}
+
+// GetAdminSessionAuth returns the admin session authentication middleware
+// for use by other route handlers that need admin session validation
+func (h *Handler) GetAdminSessionAuth() fiber.Handler {
+	return h.createAdminAuthHandler()
+}
+
+// createAdminAuthHandler creates the admin session validation handler
+func (h *Handler) createAdminAuthHandler() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		token := h.extractToken(c)
 		if token == "" {

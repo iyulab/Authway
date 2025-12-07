@@ -207,6 +207,57 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		}
 	}
 
+	// Set Microsoft OAuth if provided
+	if req.MicrosoftOAuthEnabled {
+		client.MicrosoftOAuthEnabled = true
+		if req.MicrosoftClientID != "" {
+			client.MicrosoftClientID = &req.MicrosoftClientID
+		}
+		if req.MicrosoftClientSecret != "" {
+			client.MicrosoftClientSecret = &req.MicrosoftClientSecret
+		}
+		if req.MicrosoftTenantID != "" {
+			client.MicrosoftTenantID = &req.MicrosoftTenantID
+		}
+	}
+
+	// Set Apple OAuth if provided
+	if req.AppleOAuthEnabled {
+		client.AppleOAuthEnabled = true
+		if req.AppleClientID != "" {
+			client.AppleClientID = &req.AppleClientID
+		}
+		if req.AppleTeamID != "" {
+			client.AppleTeamID = &req.AppleTeamID
+		}
+		if req.AppleKeyID != "" {
+			client.AppleKeyID = &req.AppleKeyID
+		}
+		if req.ApplePrivateKey != "" {
+			client.ApplePrivateKey = &req.ApplePrivateKey
+		}
+	}
+
+	// Set Authentication Provider Settings
+	// EnabledAuthProviders: default to email and google if not provided
+	if len(req.EnabledAuthProviders) > 0 {
+		client.EnabledAuthProviders = req.EnabledAuthProviders
+	} else {
+		client.EnabledAuthProviders = []string{"email", "google"}
+	}
+	// AllowEmailSignup: default to true
+	if req.AllowEmailSignup != nil {
+		client.AllowEmailSignup = *req.AllowEmailSignup
+	} else {
+		client.AllowEmailSignup = true
+	}
+	// AllowEmailLogin: default to true
+	if req.AllowEmailLogin != nil {
+		client.AllowEmailLogin = *req.AllowEmailLogin
+	} else {
+		client.AllowEmailLogin = true
+	}
+
 	// Set allowed origins for CORS validation
 	if len(req.AllowedOrigins) > 0 {
 		client.AllowedOrigins = req.AllowedOrigins
@@ -410,6 +461,49 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 	}
 	if req.AllowWildcardLogout != nil {
 		client.AllowWildcardLogout = *req.AllowWildcardLogout
+	}
+
+	// Authentication Provider Settings
+	// EnabledAuthProviders: nil = not provided, empty array = clear all
+	if req.EnabledAuthProviders != nil {
+		client.EnabledAuthProviders = req.EnabledAuthProviders
+	}
+	if req.AllowEmailSignup != nil {
+		client.AllowEmailSignup = *req.AllowEmailSignup
+	}
+	if req.AllowEmailLogin != nil {
+		client.AllowEmailLogin = *req.AllowEmailLogin
+	}
+
+	// Microsoft OAuth settings
+	if req.MicrosoftOAuthEnabled != nil {
+		client.MicrosoftOAuthEnabled = *req.MicrosoftOAuthEnabled
+	}
+	if req.MicrosoftClientID != nil {
+		client.MicrosoftClientID = req.MicrosoftClientID
+	}
+	if req.MicrosoftClientSecret != nil {
+		client.MicrosoftClientSecret = req.MicrosoftClientSecret
+	}
+	if req.MicrosoftTenantID != nil {
+		client.MicrosoftTenantID = req.MicrosoftTenantID
+	}
+
+	// Apple OAuth settings
+	if req.AppleOAuthEnabled != nil {
+		client.AppleOAuthEnabled = *req.AppleOAuthEnabled
+	}
+	if req.AppleClientID != nil {
+		client.AppleClientID = req.AppleClientID
+	}
+	if req.AppleTeamID != nil {
+		client.AppleTeamID = req.AppleTeamID
+	}
+	if req.AppleKeyID != nil {
+		client.AppleKeyID = req.AppleKeyID
+	}
+	if req.ApplePrivateKey != nil {
+		client.ApplePrivateKey = req.ApplePrivateKey
 	}
 
 	if err := s.db.Save(&client).Error; err != nil {

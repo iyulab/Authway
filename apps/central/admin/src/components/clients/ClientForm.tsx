@@ -18,6 +18,10 @@ export const clientFormSchema = z.object({
   grant_types: z.array(z.string()).min(1, 'At least one Grant Type is required'),
   scopes: z.array(z.string()).min(1, 'At least one Scope is required'),
   public: z.boolean(),
+  // Authentication Provider Settings
+  enabled_auth_providers: z.array(z.string()).optional(),
+  allow_email_signup: z.boolean().optional(),
+  allow_email_login: z.boolean().optional(),
 })
 
 export type ClientFormData = z.infer<typeof clientFormSchema>
@@ -39,6 +43,14 @@ export const LOGOUT_REDIRECT_POLICIES = [
   { value: 'strict', label: 'Strict (Default) - URI required + validation' },
   { value: 'lenient', label: 'Lenient - URI optional + validation' },
   { value: 'disabled', label: 'Disabled - No validation (dev only)' },
+]
+
+export const AVAILABLE_AUTH_PROVIDERS = [
+  { value: 'email', label: 'Email/Password' },
+  { value: 'google', label: 'Google' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'microsoft', label: 'Microsoft' },
+  { value: 'apple', label: 'Apple' },
 ]
 
 export interface ClientFormProps {
@@ -77,6 +89,9 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           grant_types: initialData.grant_types,
           scopes: initialData.scopes,
           public: initialData.public,
+          enabled_auth_providers: initialData.enabled_auth_providers || ['email', 'google'],
+          allow_email_signup: initialData.allow_email_signup ?? true,
+          allow_email_login: initialData.allow_email_login ?? true,
         }
       : {
           grant_types: ['authorization_code'],
@@ -84,11 +99,15 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           public: false,
           logout_redirect_policy: 'strict',
           allow_wildcard_logout: false,
+          enabled_auth_providers: ['email', 'google'],
+          allow_email_signup: true,
+          allow_email_login: true,
         },
   })
 
   const grantTypes = watch('grant_types') || []
   const scopes = watch('scopes') || []
+  const enabledAuthProviders = watch('enabled_auth_providers') || []
 
   const handleGrantTypeChange = (values: string[]) => {
     setValue('grant_types', values, { shouldValidate: true })
@@ -96,6 +115,10 @@ export const ClientForm: React.FC<ClientFormProps> = ({
 
   const handleScopeChange = (values: string[]) => {
     setValue('scopes', values, { shouldValidate: true })
+  }
+
+  const handleAuthProviderChange = (values: string[]) => {
+    setValue('enabled_auth_providers', values, { shouldValidate: true })
   }
 
   return (
@@ -196,6 +219,32 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         label="Public Client (No Client Secret)"
         description="Select for SPAs or mobile apps that cannot securely store a Client Secret."
       />
+
+      {/* Authentication Provider Settings */}
+      <div className="border-t border-gray-200 pt-4 mt-4">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Authentication Provider Settings</h3>
+
+        <CheckboxGroup
+          label="Enabled Authentication Providers"
+          options={AVAILABLE_AUTH_PROVIDERS}
+          value={enabledAuthProviders}
+          onChange={handleAuthProviderChange}
+          error={errors.enabled_auth_providers?.message}
+        />
+
+        <div className="mt-4 space-y-3">
+          <Checkbox
+            {...register('allow_email_signup')}
+            label="Allow Email/Password Signup"
+            description="Allow new users to register with email and password. Disable to only allow social login."
+          />
+          <Checkbox
+            {...register('allow_email_login')}
+            label="Allow Email/Password Login"
+            description="Allow existing users to login with email and password."
+          />
+        </div>
+      </div>
 
       {/* Buttons */}
       <div className="flex justify-end space-x-3 pt-4">

@@ -236,7 +236,7 @@ Write-Host ""
 $backendScript = @"
 Write-Host '🔧 Backend API - Port 8080' -ForegroundColor Cyan
 Write-Host ''
-go run cmd/main.go
+go run ./cmd/
 "@
 
 $adminScript = @"

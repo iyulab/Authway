@@ -67,6 +67,15 @@ export interface Client {
   scopes: string[]
   public: boolean
   active: boolean
+  // Authentication Provider Settings
+  enabled_auth_providers?: string[]
+  allow_email_signup?: boolean
+  allow_email_login?: boolean
+  // Social OAuth Settings
+  google_oauth_enabled?: boolean
+  github_oauth_enabled?: boolean
+  microsoft_oauth_enabled?: boolean
+  apple_oauth_enabled?: boolean
   created_at: string
   updated_at: string
 }

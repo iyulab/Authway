@@ -39,10 +39,13 @@ func cleanExpiredStates() {
 }
 
 type SocialHandler struct {
-	googleService *social.GoogleService
-	userService   user.Service
-	hydraClient   *hydra.Client
-	logger        *zap.Logger
+	googleService    *social.GoogleService
+	githubService    *social.GitHubService
+	microsoftService *social.MicrosoftService
+	appleService     *social.AppleService
+	userService      user.Service
+	hydraClient      *hydra.Client
+	logger           *zap.Logger
 }
 
 func NewSocialHandler(
@@ -56,6 +59,27 @@ func NewSocialHandler(
 		userService:   userService,
 		hydraClient:   hydraClient,
 		logger:        logger,
+	}
+}
+
+// NewSocialHandlerWithAllProviders creates a SocialHandler with all OAuth providers
+func NewSocialHandlerWithAllProviders(
+	googleService *social.GoogleService,
+	githubService *social.GitHubService,
+	microsoftService *social.MicrosoftService,
+	appleService *social.AppleService,
+	userService user.Service,
+	hydraClient *hydra.Client,
+	logger *zap.Logger,
+) *SocialHandler {
+	return &SocialHandler{
+		googleService:    googleService,
+		githubService:    githubService,
+		microsoftService: microsoftService,
+		appleService:     appleService,
+		userService:      userService,
+		hydraClient:      hydraClient,
+		logger:           logger,
 	}
 }
 
@@ -431,4 +455,622 @@ func (s *SocialHandler) GetGoogleAuthURL(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(response)
+}
+
+// ======================================
+// GitHub OAuth Handlers
+// ======================================
+
+// GitHubLogin initiates GitHub OAuth flow
+func (s *SocialHandler) GitHubLogin(c *fiber.Ctx) error {
+	if s.githubService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "github_not_configured",
+			"error_description": "GitHub OAuth is not configured",
+		})
+	}
+
+	var loginChallenge, clientID string
+	if c.Method() == "POST" {
+		var req GoogleLoginRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":             "invalid_request_body",
+				"error_description": "Failed to parse request body",
+			})
+		}
+		loginChallenge = req.LoginChallenge
+		clientID = req.ClientID
+	} else {
+		loginChallenge = string([]byte(c.Query("login_challenge")))
+		clientID = string([]byte(c.Query("client_id")))
+	}
+
+	if loginChallenge == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "missing_login_challenge",
+			"error_description": "login_challenge parameter is required for OAuth flow",
+		})
+	}
+
+	if clientID == "" {
+		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
+		if err != nil {
+			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":             "failed_to_get_login_request",
+				"error_description": "Failed to retrieve OAuth client information",
+			})
+		}
+		clientID = loginReq.Client.ClientID
+	}
+
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "internal_server_error",
+			"error_description": "Failed to generate secure state parameter",
+		})
+	}
+	state := base64.URLEncoding.EncodeToString(stateBytes)
+
+	stateInfo := &oauthStateData{
+		LoginChallenge: loginChallenge,
+		ClientID:       clientID,
+		CreatedAt:      time.Now(),
+	}
+	oauthStateStore.Store(state, stateInfo)
+	cleanExpiredStates()
+
+	authURL := s.githubService.GetAuthURLForClient(state, clientID)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HTTPOnly: true,
+		Secure:   false,
+		SameSite: "Lax",
+	})
+
+	s.logger.Info("Initiating GitHub OAuth flow",
+		zap.String("client_id", clientID),
+		zap.String("login_challenge", loginChallenge))
+
+	if c.Method() == "POST" {
+		return c.JSON(fiber.Map{
+			"redirect_url": authURL,
+			"state":        state,
+		})
+	}
+
+	return c.Redirect(authURL, http.StatusTemporaryRedirect)
+}
+
+// GitHubCallback handles the GitHub OAuth callback
+func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
+	if s.githubService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "github_not_configured",
+			"error_description": "GitHub OAuth is not configured",
+		})
+	}
+
+	code := string([]byte(c.Query("code")))
+	state := string([]byte(c.Query("state")))
+	errorParam := string([]byte(c.Query("error")))
+
+	if errorParam != "" {
+		s.logger.Warn("GitHub OAuth error", zap.String("error", errorParam))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             errorParam,
+			"error_description": c.Query("error_description"),
+		})
+	}
+
+	if code == "" || state == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_request",
+			"error_description": "Missing required parameters",
+		})
+	}
+
+	stateCookie := string([]byte(c.Cookies("oauth_state")))
+	if stateCookie != state {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "state_mismatch",
+			"error_description": "State parameter does not match",
+		})
+	}
+
+	value, found := oauthStateStore.Load(state)
+	if !found {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_state",
+			"error_description": "OAuth state not found or expired",
+		})
+	}
+
+	stateData := value.(*oauthStateData)
+	loginChallenge := stateData.LoginChallenge
+	retrievedClientID := stateData.ClientID
+
+	oauthStateStore.Delete(state)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HTTPOnly: true,
+	})
+
+	authUser, err := s.githubService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
+	if err != nil {
+		s.logger.Error("GitHub OAuth callback failed", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "oauth_callback_failed",
+			"error_description": "Failed to process GitHub OAuth callback",
+			"details":           err.Error(),
+		})
+	}
+
+	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
+		s.logger.Error("Failed to update last login time", zap.Error(err))
+	}
+
+	acceptLoginRequest := &hydra.AcceptLoginRequest{
+		Subject:     authUser.ID.String(),
+		Remember:    true,
+		RememberFor: 3600,
+		Context: map[string]interface{}{
+			"user_id":   authUser.ID.String(),
+			"provider":  "github",
+			"email":     authUser.Email,
+			"tenant_id": authUser.TenantID.String(),
+		},
+	}
+
+	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
+	if err != nil {
+		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "hydra_login_failed",
+			"error_description": "Failed to complete OAuth login with Hydra",
+		})
+	}
+
+	s.logger.Info("GitHub OAuth login successful",
+		zap.String("user_id", authUser.ID.String()),
+		zap.String("email", authUser.Email))
+
+	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+}
+
+// ======================================
+// Microsoft OAuth Handlers
+// ======================================
+
+// MicrosoftLogin initiates Microsoft OAuth flow
+func (s *SocialHandler) MicrosoftLogin(c *fiber.Ctx) error {
+	if s.microsoftService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "microsoft_not_configured",
+			"error_description": "Microsoft OAuth is not configured",
+		})
+	}
+
+	var loginChallenge, clientID string
+	if c.Method() == "POST" {
+		var req GoogleLoginRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":             "invalid_request_body",
+				"error_description": "Failed to parse request body",
+			})
+		}
+		loginChallenge = req.LoginChallenge
+		clientID = req.ClientID
+	} else {
+		loginChallenge = string([]byte(c.Query("login_challenge")))
+		clientID = string([]byte(c.Query("client_id")))
+	}
+
+	if loginChallenge == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "missing_login_challenge",
+			"error_description": "login_challenge parameter is required for OAuth flow",
+		})
+	}
+
+	if clientID == "" {
+		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
+		if err != nil {
+			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":             "failed_to_get_login_request",
+				"error_description": "Failed to retrieve OAuth client information",
+			})
+		}
+		clientID = loginReq.Client.ClientID
+	}
+
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "internal_server_error",
+			"error_description": "Failed to generate secure state parameter",
+		})
+	}
+	state := base64.URLEncoding.EncodeToString(stateBytes)
+
+	stateInfo := &oauthStateData{
+		LoginChallenge: loginChallenge,
+		ClientID:       clientID,
+		CreatedAt:      time.Now(),
+	}
+	oauthStateStore.Store(state, stateInfo)
+	cleanExpiredStates()
+
+	authURL := s.microsoftService.GetAuthURLForClient(state, clientID)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HTTPOnly: true,
+		Secure:   false,
+		SameSite: "Lax",
+	})
+
+	s.logger.Info("Initiating Microsoft OAuth flow",
+		zap.String("client_id", clientID),
+		zap.String("login_challenge", loginChallenge))
+
+	if c.Method() == "POST" {
+		return c.JSON(fiber.Map{
+			"redirect_url": authURL,
+			"state":        state,
+		})
+	}
+
+	return c.Redirect(authURL, http.StatusTemporaryRedirect)
+}
+
+// MicrosoftCallback handles the Microsoft OAuth callback
+func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
+	if s.microsoftService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "microsoft_not_configured",
+			"error_description": "Microsoft OAuth is not configured",
+		})
+	}
+
+	code := string([]byte(c.Query("code")))
+	state := string([]byte(c.Query("state")))
+	errorParam := string([]byte(c.Query("error")))
+
+	if errorParam != "" {
+		s.logger.Warn("Microsoft OAuth error", zap.String("error", errorParam))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             errorParam,
+			"error_description": c.Query("error_description"),
+		})
+	}
+
+	if code == "" || state == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_request",
+			"error_description": "Missing required parameters",
+		})
+	}
+
+	stateCookie := string([]byte(c.Cookies("oauth_state")))
+	if stateCookie != state {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "state_mismatch",
+			"error_description": "State parameter does not match",
+		})
+	}
+
+	value, found := oauthStateStore.Load(state)
+	if !found {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_state",
+			"error_description": "OAuth state not found or expired",
+		})
+	}
+
+	stateData := value.(*oauthStateData)
+	loginChallenge := stateData.LoginChallenge
+	retrievedClientID := stateData.ClientID
+
+	oauthStateStore.Delete(state)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HTTPOnly: true,
+	})
+
+	authUser, err := s.microsoftService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
+	if err != nil {
+		s.logger.Error("Microsoft OAuth callback failed", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "oauth_callback_failed",
+			"error_description": "Failed to process Microsoft OAuth callback",
+			"details":           err.Error(),
+		})
+	}
+
+	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
+		s.logger.Error("Failed to update last login time", zap.Error(err))
+	}
+
+	acceptLoginRequest := &hydra.AcceptLoginRequest{
+		Subject:     authUser.ID.String(),
+		Remember:    true,
+		RememberFor: 3600,
+		Context: map[string]interface{}{
+			"user_id":   authUser.ID.String(),
+			"provider":  "microsoft",
+			"email":     authUser.Email,
+			"tenant_id": authUser.TenantID.String(),
+		},
+	}
+
+	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
+	if err != nil {
+		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "hydra_login_failed",
+			"error_description": "Failed to complete OAuth login with Hydra",
+		})
+	}
+
+	s.logger.Info("Microsoft OAuth login successful",
+		zap.String("user_id", authUser.ID.String()),
+		zap.String("email", authUser.Email))
+
+	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+}
+
+// ======================================
+// Apple OAuth Handlers
+// ======================================
+
+// AppleLogin initiates Apple OAuth flow
+func (s *SocialHandler) AppleLogin(c *fiber.Ctx) error {
+	if s.appleService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "apple_not_configured",
+			"error_description": "Apple OAuth is not configured",
+		})
+	}
+
+	var loginChallenge, clientID string
+	if c.Method() == "POST" {
+		var req GoogleLoginRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":             "invalid_request_body",
+				"error_description": "Failed to parse request body",
+			})
+		}
+		loginChallenge = req.LoginChallenge
+		clientID = req.ClientID
+	} else {
+		loginChallenge = string([]byte(c.Query("login_challenge")))
+		clientID = string([]byte(c.Query("client_id")))
+	}
+
+	if loginChallenge == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "missing_login_challenge",
+			"error_description": "login_challenge parameter is required for OAuth flow",
+		})
+	}
+
+	if clientID == "" {
+		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
+		if err != nil {
+			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":             "failed_to_get_login_request",
+				"error_description": "Failed to retrieve OAuth client information",
+			})
+		}
+		clientID = loginReq.Client.ClientID
+	}
+
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "internal_server_error",
+			"error_description": "Failed to generate secure state parameter",
+		})
+	}
+	state := base64.URLEncoding.EncodeToString(stateBytes)
+
+	stateInfo := &oauthStateData{
+		LoginChallenge: loginChallenge,
+		ClientID:       clientID,
+		CreatedAt:      time.Now(),
+	}
+	oauthStateStore.Store(state, stateInfo)
+	cleanExpiredStates()
+
+	authURL := s.appleService.GetAuthURLForClient(state, clientID)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600,
+		HTTPOnly: true,
+		Secure:   false,
+		SameSite: "Lax",
+	})
+
+	s.logger.Info("Initiating Apple OAuth flow",
+		zap.String("client_id", clientID),
+		zap.String("login_challenge", loginChallenge))
+
+	if c.Method() == "POST" {
+		return c.JSON(fiber.Map{
+			"redirect_url": authURL,
+			"state":        state,
+		})
+	}
+
+	return c.Redirect(authURL, http.StatusTemporaryRedirect)
+}
+
+// AppleCallback handles the Apple OAuth callback (POST because of form_post response_mode)
+func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
+	if s.appleService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":             "apple_not_configured",
+			"error_description": "Apple OAuth is not configured",
+		})
+	}
+
+	// Apple uses form_post response mode
+	code := c.FormValue("code")
+	state := c.FormValue("state")
+	errorParam := c.FormValue("error")
+
+	// Also try query params for GET requests
+	if code == "" {
+		code = string([]byte(c.Query("code")))
+	}
+	if state == "" {
+		state = string([]byte(c.Query("state")))
+	}
+	if errorParam == "" {
+		errorParam = string([]byte(c.Query("error")))
+	}
+
+	if errorParam != "" {
+		s.logger.Warn("Apple OAuth error", zap.String("error", errorParam))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             errorParam,
+			"error_description": c.FormValue("error_description"),
+		})
+	}
+
+	if code == "" || state == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_request",
+			"error_description": "Missing required parameters",
+		})
+	}
+
+	stateCookie := string([]byte(c.Cookies("oauth_state")))
+	if stateCookie != state {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "state_mismatch",
+			"error_description": "State parameter does not match",
+		})
+	}
+
+	value, found := oauthStateStore.Load(state)
+	if !found {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_state",
+			"error_description": "OAuth state not found or expired",
+		})
+	}
+
+	stateData := value.(*oauthStateData)
+	loginChallenge := stateData.LoginChallenge
+	retrievedClientID := stateData.ClientID
+
+	oauthStateStore.Delete(state)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HTTPOnly: true,
+	})
+
+	authUser, err := s.appleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
+	if err != nil {
+		s.logger.Error("Apple OAuth callback failed", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "oauth_callback_failed",
+			"error_description": "Failed to process Apple OAuth callback",
+			"details":           err.Error(),
+		})
+	}
+
+	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
+		s.logger.Error("Failed to update last login time", zap.Error(err))
+	}
+
+	acceptLoginRequest := &hydra.AcceptLoginRequest{
+		Subject:     authUser.ID.String(),
+		Remember:    true,
+		RememberFor: 3600,
+		Context: map[string]interface{}{
+			"user_id":   authUser.ID.String(),
+			"provider":  "apple",
+			"email":     authUser.Email,
+			"tenant_id": authUser.TenantID.String(),
+		},
+	}
+
+	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
+	if err != nil {
+		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "hydra_login_failed",
+			"error_description": "Failed to complete OAuth login with Hydra",
+		})
+	}
+
+	s.logger.Info("Apple OAuth login successful",
+		zap.String("user_id", authUser.ID.String()),
+		zap.String("email", authUser.Email))
+
+	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+}
+
+// ======================================
+// Helper Methods
+// ======================================
+
+// renderRedirectPage renders an HTML page with JavaScript redirect
+func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) error {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting...</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <div style="text-align: center; padding: 50px; font-family: sans-serif;">
+        <div style="font-size: 18px; color: #666; margin-bottom: 20px;">로그인 처리 중...</div>
+        <div style="width: 40px; height: 40px; margin: 0 auto; border: 4px solid #f3f3f3; border-top: 4px solid #4F46E5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    </div>
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        window.location.href = "` + redirectTo + `";
+    </script>
+</body>
+</html>`
+
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return c.SendString(html)
 }

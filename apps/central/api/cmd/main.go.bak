@@ -19,7 +19,6 @@ import (
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
-	"authway/apps/central/api/pkg/mfa"
 	adminMiddleware "authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
@@ -105,9 +104,6 @@ func main() {
 	userService := user.NewService(db, zapLogger)
 	clientService := client.NewService(db, zapLogger, hydraClient)
 	googleService := social.NewGoogleService(&cfg.Google, userService, clientService, zapLogger)
-	githubService := social.NewGitHubService(&cfg.GitHub, userService, clientService, zapLogger)
-	microsoftService := social.NewMicrosoftService(&cfg.Microsoft, userService, clientService, zapLogger)
-	appleService := social.NewAppleService(&cfg.Apple, userService, clientService, zapLogger)
 
 	// Initialize Claims Service
 	claimsRepo := claims.NewRepository(db, redisClient)
@@ -199,16 +195,12 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger)
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger)
+	socialHandler := handler.NewSocialHandler(googleService, userService, hydraClient, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger)
 	userHandler := handler.NewUserHandler(services, zapLogger)
-
-	// Initialize MFA Service and Handler
-	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name)
-	mfaHandler := handler.NewMFAHandler(mfaService, zapLogger)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
@@ -226,27 +218,11 @@ func main() {
 	// User registration
 	app.Post("/register", authHandler.Register)
 
-	// Social login routes - Google
+	// Social login routes
 	app.Get("/auth/google/login", socialHandler.GoogleLogin)
 	app.Post("/auth/google/login", socialHandler.GoogleLogin) // Support POST for long login_challenge
 	app.Get("/auth/google/callback", socialHandler.GoogleCallback)
 	app.Get("/auth/google/url", socialHandler.GetGoogleAuthURL)
-
-	// Social login routes - GitHub
-	app.Get("/auth/github/login", socialHandler.GitHubLogin)
-	app.Post("/auth/github/login", socialHandler.GitHubLogin)
-	app.Get("/auth/github/callback", socialHandler.GitHubCallback)
-
-	// Social login routes - Microsoft
-	app.Get("/auth/microsoft/login", socialHandler.MicrosoftLogin)
-	app.Post("/auth/microsoft/login", socialHandler.MicrosoftLogin)
-	app.Get("/auth/microsoft/callback", socialHandler.MicrosoftCallback)
-
-	// Social login routes - Apple
-	app.Get("/auth/apple/login", socialHandler.AppleLogin)
-	app.Post("/auth/apple/login", socialHandler.AppleLogin)
-	app.Post("/auth/apple/callback", socialHandler.AppleCallback) // Apple uses POST with form_post response mode
-	app.Get("/auth/apple/callback", socialHandler.AppleCallback)  // Also support GET
 
 	// API routes
 	api := app.Group("/api")
@@ -322,29 +298,12 @@ func main() {
 	v1.Put("/users/:id", adminAuth, userHandler.Update)
 	v1.Delete("/users/:id", adminAuth, userHandler.Delete)
 
-	// MFA management routes (authenticated users)
-	v1.Post("/users/mfa/setup", jwtAuth, mfaHandler.SetupMFA)
-	v1.Post("/users/mfa/verify", jwtAuth, mfaHandler.VerifyMFA)
-	v1.Delete("/users/mfa", jwtAuth, mfaHandler.DisableMFA)
-	v1.Get("/users/mfa/status", jwtAuth, mfaHandler.GetMFAStatus)
-	v1.Post("/users/mfa/recovery", jwtAuth, mfaHandler.VerifyRecoveryCode)
-	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, mfaHandler.RegenerateRecoveryCodes)
-
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 
 	// Admin Console routes
 	adminHandler.RegisterRoutes(app)
-
-	// ======================================
-	// Initialize and Register New Feature Services (Phase 1.7)
-	// ======================================
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
-	// Use admin session auth for Admin Console routes (not API key auth)
-	adminSessionAuth := adminHandler.GetAdminSessionAuth()
-	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminSessionAuth)
-	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)
 
 	// Cleanup expired admin sessions periodically
 	go func() {

@@ -61,6 +61,9 @@ const ClientDetailPage: React.FC = () => {
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
+        enabled_auth_providers: data.enabled_auth_providers || ['email', 'google'],
+        allow_email_signup: data.allow_email_signup ?? true,
+        allow_email_login: data.allow_email_login ?? true,
       })
     },
     onSuccess: () => {

@@ -18,14 +18,23 @@ type User struct {
 	AvatarURL     *string        `json:"avatar_url"`
 	EmailVerified bool           `json:"email_verified" gorm:"default:false"`
 	Active        bool           `json:"active" gorm:"default:true"`
-	Provider      string         `json:"provider" gorm:"default:local"` // local, google, github
+	Provider      string         `json:"provider" gorm:"default:local"` // local, google, github, microsoft, apple
 	GoogleID      *string        `json:"-" gorm:"index"`
 	GithubID      *string        `json:"-" gorm:"index"`
+	MicrosoftID   *string        `json:"-" gorm:"index"`
+	AppleID       *string        `json:"-" gorm:"index"`
 	Picture       *string        `json:"picture"`
-	LastLoginAt   *time.Time     `json:"last_login_at"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+
+	// MFA/TOTP fields
+	TOTPSecret     *string    `json:"-" gorm:"column:totp_secret"`
+	TOTPEnabled    bool       `json:"totp_enabled" gorm:"default:false"`
+	TOTPVerifiedAt *time.Time `json:"totp_verified_at"`
+	RecoveryCodes  *string    `json:"-" gorm:"column:recovery_codes"` // JSON array of hashed codes
+
+	LastLoginAt *time.Time     `json:"last_login_at"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
 // BeforeCreate sets UUID if not provided
@@ -46,6 +55,7 @@ type PublicUser struct {
 	EmailVerified bool       `json:"email_verified"`
 	Active        bool       `json:"active"`
 	Provider      string     `json:"provider"`
+	TOTPEnabled   bool       `json:"totp_enabled"`
 	LastLoginAt   *time.Time `json:"last_login_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
@@ -70,6 +80,7 @@ func (u *User) ToPublic() PublicUser {
 		EmailVerified: u.EmailVerified,
 		Active:        u.Active,
 		Provider:      u.Provider,
+		TOTPEnabled:   u.TOTPEnabled,
 		LastLoginAt:   u.LastLoginAt,
 		CreatedAt:     u.CreatedAt,
 		UpdatedAt:     u.UpdatedAt,
@@ -93,6 +104,13 @@ type UpdateUserRequest struct {
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
+}
+
+// LoginWithMFARequest represents login with MFA code
+type LoginWithMFARequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+	TOTPCode string `json:"totp_code" validate:"required,len=6"`
 }
 
 // ChangePasswordRequest represents the change password request
