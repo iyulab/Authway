@@ -328,8 +328,10 @@ func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers audit log routes
+// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
-	audit := app.Group("/audit", authMiddleware, adminMiddleware)
+	// Admin Console routes - use adminMiddleware only (validates admin session + tenant context)
+	audit := app.Group("/audit", adminMiddleware)
 	audit.Get("/logs", h.QueryAuditLogs)
 	audit.Get("/logs/:id", h.GetAuditLog)
 	audit.Get("/users/:userId/activity", h.GetUserActivity)

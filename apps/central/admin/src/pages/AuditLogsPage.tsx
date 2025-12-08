@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ClipboardDocumentListIcon,
@@ -51,7 +51,7 @@ const AuditLogsPage: React.FC = () => {
   // Fetch summary
   const { data: summaryData } = useQuery({
     queryKey: ['audit-summary', selectedTenantId],
-    queryFn: () => auditLogsApi.summary(),
+    queryFn: () => auditLogsApi.summary({ tenant_id: selectedTenantId }),
     enabled: !!selectedTenantId,
   })
 

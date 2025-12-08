@@ -26,9 +26,8 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 // POST /api/v1/admin/impersonate
 func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 	tenantIDStr := c.Locals("tenant_id")
-	adminIDStr := c.Locals("user_id")
-	if tenantIDStr == nil || adminIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	if tenantIDStr == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - tenant_id required"})
 	}
 
 	tenantID, err := uuid.Parse(tenantIDStr.(string))
@@ -36,9 +35,21 @@ func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
 	}
 
-	adminID, err := uuid.Parse(adminIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid admin ID"})
+	// For Admin Console requests, use a system UUID for admin
+	var adminID uuid.UUID
+	isAdminConsole := c.Locals("is_admin_console")
+	adminIDStr := c.Locals("user_id")
+
+	if adminIDStr != nil {
+		adminID, err = uuid.Parse(adminIDStr.(string))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid admin ID"})
+		}
+	} else if isAdminConsole != nil && isAdminConsole.(bool) {
+		// Admin Console request - use a deterministic system UUID for admin
+		adminID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	} else {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - admin_id required"})
 	}
 
 	var req StartImpersonationRequest
@@ -191,8 +202,10 @@ func (h *Handler) GetSessionHistory(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers impersonation routes (admin only)
+// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
-	impersonate := app.Group("/admin/impersonate", authMiddleware, adminMiddleware)
+	// Admin Console routes - use adminMiddleware only (validates admin session + tenant context)
+	impersonate := app.Group("/admin/impersonate", adminMiddleware)
 	impersonate.Post("/", h.StartImpersonation)
 	impersonate.Post("/validate", h.ValidateImpersonationToken)
 	impersonate.Post("/:sessionId/end", h.EndImpersonation)

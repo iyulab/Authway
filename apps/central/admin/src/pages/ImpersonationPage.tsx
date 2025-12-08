@@ -39,8 +39,9 @@ const ImpersonationPage: React.FC = () => {
 
   // Fetch active impersonation sessions
   const { data: activeData } = useQuery({
-    queryKey: ['impersonation-active'],
-    queryFn: () => impersonationApi.activeSessions(),
+    queryKey: ['impersonation-active', selectedTenantId],
+    enabled: !!selectedTenantId,
+    queryFn: () => impersonationApi.activeSessions({ tenant_id: selectedTenantId }),
   })
 
   const activeSessions = activeData?.data.sessions || []
@@ -48,9 +49,11 @@ const ImpersonationPage: React.FC = () => {
 
   // Fetch impersonation sessions history
   const { data: sessionsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['impersonation-history', currentPage],
+    queryKey: ['impersonation-history', selectedTenantId, currentPage],
+    enabled: !!selectedTenantId,
     queryFn: () =>
       impersonationApi.history({
+        tenant_id: selectedTenantId,
         limit: pageSize,
       }),
   })

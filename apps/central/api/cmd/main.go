@@ -87,7 +87,7 @@ func main() {
 
 	// Initialize Admin Service
 	adminService := admin.NewService(db, zapLogger, cfg.Admin.Password)
-	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version)
+	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey)
 
 	// Initialize Redis
 	redisClient, err := database.ConnectRedis(cfg.Redis)
@@ -341,9 +341,10 @@ func main() {
 	// Initialize and Register New Feature Services (Phase 1.7)
 	// ======================================
 	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
-	// Use admin session auth for Admin Console routes (not API key auth)
-	adminSessionAuth := adminHandler.GetAdminSessionAuth()
-	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminSessionAuth)
+	// Use admin console auth for Admin Console API routes
+	// This middleware validates admin session AND extracts tenant_id from query/header
+	adminConsoleAuth := adminHandler.GetAdminConsoleAuth()
+	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminConsoleAuth)
 	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)
 
 	// Cleanup expired admin sessions periodically

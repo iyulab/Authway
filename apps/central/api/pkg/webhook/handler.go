@@ -236,8 +236,10 @@ func (h *Handler) GetAvailableEvents(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers webhook management routes
+// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
-	webhooks := app.Group("/webhooks", authMiddleware, adminMiddleware)
+	// Admin Console routes - use adminMiddleware only (validates admin session + tenant context)
+	webhooks := app.Group("/webhooks", adminMiddleware)
 	webhooks.Get("/events", h.GetAvailableEvents)
 	webhooks.Post("/", h.CreateWebhook)
 	webhooks.Get("/", h.ListWebhooks)

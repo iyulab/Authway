@@ -11,13 +11,15 @@ type Handler struct {
 	service Service
 	logger  *zap.Logger
 	version string
+	apiKey  string // Empty = dev mode (skip auth for admin console)
 }
 
-func NewHandler(service Service, logger *zap.Logger, version string) *Handler {
+func NewHandler(service Service, logger *zap.Logger, version string, apiKey string) *Handler {
 	return &Handler{
 		service: service,
 		logger:  logger,
 		version: version,
+		apiKey:  apiKey,
 	}
 }
 
@@ -136,6 +138,74 @@ func (h *Handler) createAdminAuthHandler() fiber.Handler {
 		}
 
 		c.Locals("admin_authenticated", true)
+		return c.Next()
+	}
+}
+
+// GetAdminConsoleAuth returns a middleware for Admin Console API endpoints
+// This middleware validates admin session and extracts tenant_id from query/header
+// for use by feature handlers (webhooks, audit, invitations, impersonation)
+func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// Dev mode: Skip auth if no API key configured (same as AdminAuth middleware)
+		if h.apiKey == "" {
+			h.logger.Debug("AdminConsoleAuth: Dev mode - skipping auth",
+				zap.String("path", c.Path()),
+			)
+
+			// Extract tenant_id from query parameter or header
+			tenantID := c.Query("tenant_id")
+			if tenantID == "" {
+				tenantID = c.Get("X-Tenant-ID")
+			}
+			if tenantID != "" {
+				c.Locals("tenant_id", tenantID)
+			}
+
+			c.Locals("admin_authenticated", true)
+			c.Locals("is_admin_console", true)
+			return c.Next()
+		}
+
+		// Production mode: Validate admin session token
+		token := h.extractToken(c)
+		if token == "" {
+			h.logger.Warn("AdminConsoleAuth: No token provided",
+				zap.String("path", c.Path()),
+			)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "No authorization token provided",
+			})
+		}
+
+		valid, err := h.service.ValidateToken(token)
+		if err != nil {
+			h.logger.Error("Failed to validate admin token", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to validate session",
+			})
+		}
+
+		if !valid {
+			h.logger.Warn("AdminConsoleAuth: Token invalid or expired",
+				zap.String("path", c.Path()),
+			)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid or expired session",
+			})
+		}
+
+		// Extract tenant_id from query parameter or header
+		tenantID := c.Query("tenant_id")
+		if tenantID == "" {
+			tenantID = c.Get("X-Tenant-ID")
+		}
+		if tenantID != "" {
+			c.Locals("tenant_id", tenantID)
+		}
+
+		c.Locals("admin_authenticated", true)
+		c.Locals("is_admin_console", true)
 		return c.Next()
 	}
 }

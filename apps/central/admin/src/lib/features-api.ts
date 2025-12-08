@@ -1,4 +1,4 @@
-import { api } from './api'
+﻿import { api } from './api'
 
 // Webhook types
 export interface Webhook {
@@ -125,14 +125,14 @@ export const auditLogsApi = {
   get: (id: string) =>
     api.get<{ log: AuditLog }>(`/api/v1/audit/logs/${id}`),
 
-  userActivity: (userId: string, params?: { limit?: number }) =>
+  userActivity: (userId: string, params?: { tenant_id?: string; limit?: number }) =>
     api.get<{ logs: AuditLog[]; count: number; user_id: string }>(`/api/v1/audit/users/${userId}/activity`, { params }),
 
-  security: (params?: { hours?: number }) =>
+  security: (params?: { tenant_id?: string; hours?: number }) =>
     api.get<{ logs: AuditLog[]; count: number; hours: number }>('/api/v1/audit/security', { params }),
 
-  summary: () =>
-    api.get<{ summary: { total_24h: number; total_7d: number; total_30d: number; security_events: number; failed_operations: number } }>('/api/v1/audit/summary'),
+  summary: (params?: { tenant_id?: string }) =>
+    api.get<{ summary: { total_24h: number; total_7d: number; total_30d: number; security_events: number; failed_operations: number } }>('/api/v1/audit/summary', { params }),
 
   actions: () =>
     api.get<{ actions: { action: string; description: string }[]; severities: { severity: string; description: string }[] }>('/api/v1/audit/actions'),
@@ -173,9 +173,9 @@ export const impersonationApi = {
   validate: (token: string) =>
     api.post<{ valid: boolean; session_id: string; admin: { id: string; email: string }; target_user: { id: string; email: string }; expires_at: string }>('/api/v1/admin/impersonate/validate', { token }),
 
-  activeSessions: (params?: { limit?: number }) =>
+  activeSessions: (params?: { tenant_id?: string; limit?: number }) =>
     api.get<{ sessions: ImpersonationSession[]; count: number }>('/api/v1/admin/impersonate/sessions', { params }),
 
-  history: (params?: { limit?: number }) =>
+  history: (params?: { tenant_id?: string; limit?: number }) =>
     api.get<{ sessions: ImpersonationSession[]; count: number }>('/api/v1/admin/impersonate/history', { params }),
 }

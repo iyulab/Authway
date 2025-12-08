@@ -24,9 +24,8 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 // POST /api/v1/invitations
 func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 	tenantIDStr := c.Locals("tenant_id")
-	userIDStr := c.Locals("user_id")
-	if tenantIDStr == nil || userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	if tenantIDStr == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - tenant_id required"})
 	}
 
 	tenantID, err := uuid.Parse(tenantIDStr.(string))
@@ -34,9 +33,22 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
 	}
 
-	inviterID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
+	// For Admin Console requests, use a system UUID for inviter
+	// For regular user requests, use the authenticated user's ID
+	var inviterID uuid.UUID
+	isAdminConsole := c.Locals("is_admin_console")
+	userIDStr := c.Locals("user_id")
+
+	if userIDStr != nil {
+		inviterID, err = uuid.Parse(userIDStr.(string))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
+		}
+	} else if isAdminConsole != nil && isAdminConsole.(bool) {
+		// Admin Console request - use a deterministic system UUID for admin
+		inviterID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	} else {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - user_id required"})
 	}
 
 	var req CreateInvitationRequest
@@ -270,6 +282,7 @@ func (h *Handler) GetPendingInvitations(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers invitation routes
+// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
 	// Public endpoints (no auth required)
 	public := app.Group("/invitations")
@@ -278,8 +291,8 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	public.Post("/decline", h.DeclineInvitation)
 	public.Get("/pending", h.GetPendingInvitations)
 
-	// Protected endpoints (require auth)
-	protected := app.Group("/invitations", authMiddleware)
+	// Admin Console protected endpoints - use adminMiddleware only (validates admin session + tenant context)
+	protected := app.Group("/invitations", adminMiddleware)
 	protected.Post("/", h.CreateInvitation)
 	protected.Get("/", h.ListInvitations)
 	protected.Get("/:id", h.GetInvitation)
