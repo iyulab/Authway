@@ -152,7 +152,7 @@ Write-Host ""
 Write-Host "Publishing @authway/client..." -ForegroundColor Yellow
 Push-Location $clientPackagePath
 try {
-    npm publish --access public
+    pnpm publish --access public --no-git-checks
     if ($LASTEXITCODE -ne 0) {
         throw "Publishing failed for @authway/client"
     }
@@ -169,7 +169,7 @@ Write-Host ""
 Write-Host "Publishing @authway/react..." -ForegroundColor Yellow
 Push-Location $reactPackagePath
 try {
-    npm publish --access public
+    pnpm publish --access public --no-git-checks
     if ($LASTEXITCODE -ne 0) {
         throw "Publishing failed for @authway/react"
     }
