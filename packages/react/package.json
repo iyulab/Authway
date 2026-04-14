@@ -1,6 +1,6 @@
 {
   "name": "@authway/react",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "React integration for Authway authentication - Hooks, Context, and HOCs for OAuth 2.0 / OIDC",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -15,7 +15,8 @@
       "types": "./dist/ssr/index.d.ts",
       "import": "./dist/ssr/index.mjs",
       "require": "./dist/ssr/index.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",

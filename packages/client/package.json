@@ -1,6 +1,6 @@
 {
   "name": "@authway/client",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Framework-agnostic authentication client for Authway - OAuth 2.0 / OIDC with PKCE, DPoP, and multi-tenant support",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -15,7 +15,8 @@
       "types": "./dist/popup-callback.d.ts",
       "import": "./dist/popup-callback.mjs",
       "require": "./dist/popup-callback.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
