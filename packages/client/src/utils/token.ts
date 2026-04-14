@@ -56,6 +56,7 @@ export function extractUser(idToken: string): User {
   const claims = decodeToken(idToken)
 
   return {
+    ...claims,
     sub: claims.sub,
     email: claims.email || '',
     email_verified: claims.email_verified || false,
@@ -66,7 +67,6 @@ export function extractUser(idToken: string): User {
     locale: claims.locale,
     zoneinfo: claims.zoneinfo,
     updated_at: claims.updated_at,
-    ...claims // Include all other claims
   }
 }
 

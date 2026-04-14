@@ -70,27 +70,6 @@ export async function getDPoPKeyPair(storage: IStorage): Promise<CryptoKeyPair> 
 }
 
 /**
- * Generate JWK thumbprint (for 'jkt' claim)
- */
-async function generateJwkThumbprint(publicKey: CryptoKey): Promise<string> {
-  const jwk = await crypto.subtle.exportKey('jwk', publicKey)
-
-  // Create canonical JSON for thumbprint (RFC 7638)
-  const canonical = JSON.stringify({
-    crv: jwk.crv,
-    kty: jwk.kty,
-    x: jwk.x,
-    y: jwk.y
-  })
-
-  const encoder = new TextEncoder()
-  const data = encoder.encode(canonical)
-  const hash = await crypto.subtle.digest('SHA-256', data)
-
-  return base64UrlEncode(new Uint8Array(hash))
-}
-
-/**
  * Create DPoP proof JWT
  */
 export async function createDPoPProof(
