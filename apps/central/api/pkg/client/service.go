@@ -17,11 +17,14 @@ type Service interface {
 	GetByID(id uuid.UUID) (*Client, error)
 	GetByClientID(clientID string) (*Client, error)
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client, int64, error)
-	Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error)
-	Delete(id uuid.UUID) error
+	// Update writes the patch to Authway's DB and propagates to Hydra.
+	// SyncStatus reflects the upstream outcome — DB success with sync failure
+	// is the common case the API caller previously couldn't observe.
+	Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncStatus, error)
+	Delete(id uuid.UUID) (SyncStatus, error)
 	List(limit, offset int) ([]*Client, int64, error)
 	ValidateClient(clientID, clientSecret string) (*Client, error)
-	RegenerateSecret(id uuid.UUID) (*ClientCredentials, error)
+	RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus, error)
 	SyncAllClientsToHydra() (int, int, error) // returns (synced, failed, error)
 }
 
@@ -40,6 +43,12 @@ func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) Serv
 }
 
 func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials, error) {
+	// Reject internally inconsistent client configurations up-front
+	// (e.g. the ASP.NET-on-PKCE foot-gun — see validation.go).
+	if cerr := validateClientConfig(req.Public, req.ClientSecret, req.GrantTypes, req.RedirectURIs, req.AllowedOrigins); cerr != nil {
+		return nil, nil, cerr
+	}
+
 	// Validate tenant_id
 	tenantID, err := uuid.Parse(req.TenantID)
 	if err != nil {
@@ -325,11 +334,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		TokenEndpointAuthMethod: authMethod,
 	}
 
-	// DEBUG: Log Hydra Client AdminURL before making request
-	s.logger.Info("🔍 DEBUG: About to call Hydra CreateOAuth2Client",
-		zap.String("hydra_admin_url", s.hydraClient.AdminURL),
-		zap.String("client_id", clientID))
-
 	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
 	if err != nil {
 		// Check if error is due to client already existing in Hydra
@@ -384,13 +388,39 @@ func (s *service) GetByClientID(clientID string) (*Client, error) {
 	return &client, nil
 }
 
-func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error) {
+func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncStatus, error) {
 	var client Client
 	if err := s.db.Where("id = ?", id).First(&client).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("client not found")
+			return nil, SyncStatus{}, fmt.Errorf("client not found")
 		}
-		return nil, fmt.Errorf("failed to get client: %w", err)
+		return nil, SyncStatus{}, fmt.Errorf("failed to get client: %w", err)
+	}
+
+	// Validate the *resulting* configuration after the patch is applied.
+	// We compute the merged view of public/grant_types/origins/redirects
+	// against the existing record so partial updates can't slip through.
+	mergedPublic := client.Public
+	if req.Public != nil {
+		mergedPublic = *req.Public
+	}
+	mergedGrants := []string(client.GrantTypes)
+	if req.GrantTypes != nil {
+		mergedGrants = req.GrantTypes
+	}
+	mergedRedirects := []string(client.RedirectURIs)
+	if req.RedirectURIs != nil {
+		mergedRedirects = req.RedirectURIs
+	}
+	mergedOrigins := []string(client.AllowedOrigins)
+	if req.AllowedOrigins != nil {
+		mergedOrigins = req.AllowedOrigins
+	}
+	// Update doesn't expose client_secret; pass "" so the secret-on-public check
+	// doesn't reject toggling a confidential client to public (the secret stays
+	// in the DB but Hydra will be configured with token_endpoint_auth_method=none).
+	if cerr := validateClientConfig(mergedPublic, "", mergedGrants, mergedRedirects, mergedOrigins); cerr != nil {
+		return nil, SyncStatus{}, cerr
 	}
 
 	// Update fields
@@ -508,7 +538,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 
 	if err := s.db.Save(&client).Error; err != nil {
 		s.logger.Error("Failed to update client", zap.Error(err), zap.String("id", id.String()))
-		return nil, fmt.Errorf("failed to update client: %w", err)
+		return nil, SyncStatus{}, fmt.Errorf("failed to update client: %w", err)
 	}
 
 	// Update client in Hydra
@@ -539,47 +569,52 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, error
 		TokenEndpointAuthMethod: authMethod,
 	}
 
+	syncStatus := SyncStatus{State: SyncStateOK}
 	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
 	if errHydra != nil {
+		syncStatus = SyncStatus{State: SyncStateFailed, Error: errHydra.Error()}
 		s.logger.Warn("Failed to update client in Hydra (database updated)",
 			zap.Error(errHydra),
 			zap.String("client_id", client.ClientID))
-		// Don't rollback database - Hydra update is best-effort
 	}
 
-	s.logger.Info("Client updated successfully in database and Hydra", zap.String("id", client.ID.String()))
-	return &client, nil
+	s.logger.Info("Client updated in database",
+		zap.String("id", client.ID.String()),
+		zap.String("hydra_sync_state", syncStatus.State))
+	return &client, syncStatus, nil
 }
 
-func (s *service) Delete(id uuid.UUID) error {
+func (s *service) Delete(id uuid.UUID) (SyncStatus, error) {
 	// Get client first to retrieve client_id for Hydra deletion
 	client, err := s.GetByID(id)
 	if err != nil {
-		return err
+		return SyncStatus{}, err
 	}
 
 	// Delete from Hydra first
-	err = s.hydraClient.DeleteOAuth2Client(client.ClientID)
-	if err != nil {
+	syncStatus := SyncStatus{State: SyncStateOK}
+	if err := s.hydraClient.DeleteOAuth2Client(client.ClientID); err != nil {
+		syncStatus = SyncStatus{State: SyncStateFailed, Error: err.Error()}
 		s.logger.Warn("Failed to delete client from Hydra (proceeding with database deletion)",
 			zap.Error(err),
 			zap.String("client_id", client.ClientID))
-		// Continue with database deletion even if Hydra deletion fails
 	}
 
 	// Delete from database
 	result := s.db.Delete(&Client{}, id)
 	if result.Error != nil {
 		s.logger.Error("Failed to delete client", zap.Error(result.Error), zap.String("id", id.String()))
-		return fmt.Errorf("failed to delete client: %w", result.Error)
+		return syncStatus, fmt.Errorf("failed to delete client: %w", result.Error)
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("client not found")
+		return syncStatus, fmt.Errorf("client not found")
 	}
 
-	s.logger.Info("Client deleted successfully from database and Hydra", zap.String("id", id.String()))
-	return nil
+	s.logger.Info("Client deleted from database",
+		zap.String("id", id.String()),
+		zap.String("hydra_sync_state", syncStatus.State))
+	return syncStatus, nil
 }
 
 func (s *service) List(limit, offset int) ([]*Client, int64, error) {
@@ -622,10 +657,10 @@ func (s *service) ValidateClient(clientID, clientSecret string) (*Client, error)
 	return client, nil
 }
 
-func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, error) {
+func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus, error) {
 	client, err := s.GetByID(id)
 	if err != nil {
-		return nil, err
+		return nil, SyncStatus{}, err
 	}
 
 	// Generate new secret
@@ -633,7 +668,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, error) {
 
 	if err := s.db.Model(client).Update("client_secret", newSecret).Error; err != nil {
 		s.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", id.String()))
-		return nil, fmt.Errorf("failed to regenerate client secret: %w", err)
+		return nil, SyncStatus{}, fmt.Errorf("failed to regenerate client secret: %w", err)
 	}
 
 	// Update secret in Hydra
@@ -654,12 +689,15 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, error) {
 		TokenEndpointAuthMethod: authMethod,
 	}
 
-	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
-	if errHydra != nil {
-		s.logger.Warn("Failed to update client secret in Hydra (database updated)",
+	syncStatus := SyncStatus{State: SyncStateOK}
+	if _, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate); errHydra != nil {
+		// Critical: secret rotation drift means Authway DB and Hydra disagree
+		// on the client secret — every subsequent token request will fail until
+		// drift is reconciled. Caller MUST observe sync_status=failed.
+		syncStatus = SyncStatus{State: SyncStateFailed, Error: errHydra.Error()}
+		s.logger.Warn("Failed to update client secret in Hydra (database updated — DRIFT)",
 			zap.Error(errHydra),
 			zap.String("client_id", client.ClientID))
-		// Don't rollback - database update is primary
 	}
 
 	credentials := &ClientCredentials{
@@ -667,8 +705,10 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, error) {
 		ClientSecret: newSecret,
 	}
 
-	s.logger.Info("Client secret regenerated successfully in database and Hydra", zap.String("id", client.ID.String()))
-	return credentials, nil
+	s.logger.Info("Client secret regenerated in database",
+		zap.String("id", client.ID.String()),
+		zap.String("hydra_sync_state", syncStatus.State))
+	return credentials, syncStatus, nil
 }
 
 func (s *service) generateClientID() string {

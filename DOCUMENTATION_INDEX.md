@@ -30,6 +30,7 @@ The comprehensive documentation is located in `/docs/README.md` with:
 | **[Project README](README.md)** | Project overview and quick start |
 | **[Documentation Hub](docs/README.md)** | Complete documentation index |
 | **[API Reference](docs/API_INTRODUCTION.md)** | Full REST API documentation |
+| **[Client Management API](docs/api/client-management.md)** | OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M) |
 | **[SDK Guide](docs/sdk/README.md)** | @authway/client & @authway/react |
 | **[Integration Guide](docs/INTEGRATION_GUIDE.md)** | OAuth 2.0 integration |
 | **[Samples](samples/)** | Working example applications |

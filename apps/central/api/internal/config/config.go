@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -9,6 +11,16 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
+
+// generateRandomKey returns a URL-safe base64-encoded random string.
+// Used to auto-provision a dev-mode admin API key when one isn't configured.
+func generateRandomKey(bytes int) (string, error) {
+	buf := make([]byte, bytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
 
 type Config struct {
 	App                 AppConfig                 `mapstructure:"app"`
@@ -268,6 +280,19 @@ func Load() (*Config, error) {
 		config.Admin.APIKey = adminAPIKey
 	}
 
+	// Dev-mode fallback: auto-generate an admin API key when running outside
+	// production so the admin console remains usable without manual setup.
+	// Production fails validation (below) to force an explicit key.
+	if config.Admin.APIKey == "" && config.App.Environment != "production" {
+		key, err := generateRandomKey(32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate dev admin API key: %w", err)
+		}
+		config.Admin.APIKey = key
+		fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_API_KEY: %s\n", key)
+		fmt.Printf("⚠️  [dev] Set AUTHWAY_ADMIN_API_KEY env var to use a stable key across restarts.\n")
+	}
+
 	// Manual override for Application Insights config
 	if connectionString := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_CONNECTION_STRING"); connectionString != "" {
 		config.ApplicationInsights.ConnectionString = connectionString
@@ -346,6 +371,12 @@ func (c *Config) Validate() error {
 		}
 		if c.Admin.Password == "" || c.Admin.Password == "admin123" {
 			errors = append(errors, "CRITICAL: admin.password must be set to a strong password in production")
+		}
+		// Fail-closed: admin API key is required in production. Without it, every
+		// adminAuth-protected endpoint rejects all traffic (and previously — before
+		// 0.2.1 — it silently bypassed auth).
+		if c.Admin.APIKey == "" {
+			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set in production — required for /api/v1/clients/* and other admin endpoints")
 		}
 	}
 

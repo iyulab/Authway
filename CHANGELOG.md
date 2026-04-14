@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-04-14
+
+### Added
+
+- **`sync_status` in client mutation responses**. `PUT/DELETE /api/v1/clients/:id`
+  and `POST /api/v1/clients/:id/regenerate-secret` now include a
+  `sync_status: { state, error }` object describing whether the change was
+  replicated to Hydra. Previously a Hydra failure was logged as a warning and
+  the response remained 200 OK — silently producing drift between Authway DB
+  and Hydra. (Issue: `hydra-sync-silent-failure`.)
+- **Strict-sync mode**. Pass `?strict_sync=true` on a mutation to receive
+  `502 Bad Gateway` (with `sync_status` and `hint`) when the upstream sync
+  fails, instead of the default best-effort 200. Useful for CI/migration
+  scripts that must not proceed past silent drift.
+- **Client config validation**. Create/Update now reject internally
+  inconsistent OAuth client configurations with a structured 400 response
+  (`code`, `field`, `message`, `hint`). Catches the ASP.NET-on-PKCE foot-gun
+  at registration instead of at first login. (Issue:
+  `aspnet-confidential-guidance-gap`.)
+  - `public_client_with_secret` — public clients must not have a `client_secret`
+  - `public_client_with_client_credentials` / `public_client_with_password_grant` — wrong client type for grant
+  - `public_client_missing_allowed_origins` — SPA needs CORS allow-list
+  - `confidential_client_unsupported_grants` — confidential clients need credential-bearing grants
+
+---
+
+## [0.2.1] - 2026-04-14
+
+### Security
+
+- **Critical: Authentication added to `/api/v1/clients/*` CRUD endpoints**. Before
+  this release, Create/Read/Update/Delete/RegenerateSecret/SyncHydra/GoogleOAuth
+  endpoints accepted unauthenticated requests, allowing any network-reachable
+  caller to enumerate OAuth client configurations, modify `redirect_uris`
+  (enabling authorization-code hijacking), and delete clients across tenants.
+  All write endpoints and sensitive reads now require `AUTHWAY_ADMIN_API_KEY`
+  via `Authorization: Bearer <key>`. Public-config (`/clients/:client_id/config`)
+  and internal lookup (`/clients/by-client-id/:client_id`) remain unchanged.
+- **Critical: `AdminAuth` middleware is now fail-closed**. Previously, when the
+  configured API key was empty the middleware called `c.Next()` — meaning a
+  deployment missing `AUTHWAY_ADMIN_API_KEY` silently exposed every protected
+  endpoint. It now returns `503 Service Unavailable` on empty configuration.
+  Production config validation enforces the key is set; development deployments
+  auto-generate a random key at startup and log it.
+- **PII: `/api/v1/profile/:id` now requires JWT**. The endpoint previously
+  returned `email`, `name`, and `email_verified` for any UUID without auth,
+  enabling user-enumeration. Use `/profile/me` for the authenticated user's
+  own profile and `/users/:id` (admin) for administrative access.
+
+### Changed
+
+- **Unified admin auth**. `/api/v1/clients/*`, `/api/v1/users/*`, and
+  `/api/v1/tenants/*` now accept either the long-lived `AUTHWAY_ADMIN_API_KEY`
+  (programmatic callers) **or** an admin session token issued by `/admin/login`
+  (Admin Console UI). Previously only the API key was accepted by the new
+  client routes, which would have broken the Admin Console.
+- **`GetAdminConsoleAuth` is fail-closed**. The same silent-bypass pattern that
+  affected `AdminAuth` was present here for `/api/v1/webhooks/*`,
+  `/api/v1/audit/*`, `/api/v1/invitations/*`, and `/api/v1/admin/impersonate/*`.
+  Empty `AUTHWAY_ADMIN_API_KEY` now returns 503 instead of granting access.
+
+### Migration
+
+Operators running Authway without `AUTHWAY_ADMIN_API_KEY` set in production
+**must** set it before upgrading — otherwise the server will refuse to start
+(`configuration validation failed`). Existing clients of the admin API must
+send `Authorization: Bearer $AUTHWAY_ADMIN_API_KEY` on all `/clients/*` and
+`/profile/:id` requests. The Admin Console UI continues to work via session
+tokens issued by `/admin/login`.
+
+---
+
 ## [0.2.0] - 2025-12-03
 
 ### Added

@@ -287,3 +287,27 @@ type ClientCredentials struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 }
+
+// Sync state constants for SyncStatus.State.
+const (
+	SyncStateOK      = "ok"      // upstream confirmed the change
+	SyncStateFailed  = "failed"  // upstream rejected or unreachable; DB drift
+	SyncStateSkipped = "skipped" // operation didn't require an upstream call
+)
+
+// SyncStatus describes the outcome of replicating a client-config change to
+// the upstream OAuth2/OIDC provider (currently Ory Hydra).
+//
+// API responses include this so callers can detect drift between Authway's
+// database and Hydra without scraping logs. The previous behavior was to
+// log a warning and return 200 OK regardless — see the
+// `hydra-sync-silent-failure` issue for the AllDot incident this fixes.
+type SyncStatus struct {
+	State string `json:"state"`           // "ok", "failed", "skipped"
+	Error string `json:"error,omitempty"` // human-readable upstream error
+}
+
+// OK reports whether the sync completed successfully (or wasn't needed).
+func (s SyncStatus) OK() bool {
+	return s.State == SyncStateOK || s.State == SyncStateSkipped
+}

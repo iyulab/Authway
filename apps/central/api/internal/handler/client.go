@@ -97,6 +97,16 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 
 	newClient, credentials, err := h.services.ClientService.Create(&req)
 	if err != nil {
+		// Surface client-config violations as 400 with a stable code/hint payload
+		// so SDKs and the Admin Console can render targeted UX.
+		if cerr, ok := err.(*client.ConfigError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   cerr.Message,
+				"code":    cerr.Code,
+				"field":   cerr.Field,
+				"hint":    cerr.Hint,
+			})
+		}
 		h.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name))
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -165,17 +175,30 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
-	updatedClient, err := h.services.ClientService.Update(id, &req)
+	updatedClient, syncStatus, err := h.services.ClientService.Update(id, &req)
 	if err != nil {
+		if cerr, ok := err.(*client.ConfigError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": cerr.Message,
+				"code":  cerr.Code,
+				"field": cerr.Field,
+				"hint":  cerr.Hint,
+			})
+		}
 		h.logger.Error("Failed to update client", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	h.logger.Info("Client updated successfully", zap.String("id", idStr))
-
-	return c.JSON(fiber.Map{
+	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
 		"message": "Client updated successfully",
 		"client":  updatedClient.ToPublic(),
+	}); status != 0 {
+		return c.Status(status).JSON(body)
+	}
+	return c.JSON(fiber.Map{
+		"message":     "Client updated successfully",
+		"client":      updatedClient.ToPublic(),
+		"sync_status": syncStatus,
 	})
 }
 
@@ -187,15 +210,20 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
 
-	if err := h.services.ClientService.Delete(id); err != nil {
+	syncStatus, err := h.services.ClientService.Delete(id)
+	if err != nil {
 		h.logger.Error("Failed to delete client", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	h.logger.Info("Client deleted successfully", zap.String("id", idStr))
-
-	return c.JSON(fiber.Map{
+	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
 		"message": "Client deleted successfully",
+	}); status != 0 {
+		return c.Status(status).JSON(body)
+	}
+	return c.JSON(fiber.Map{
+		"message":     "Client deleted successfully",
+		"sync_status": syncStatus,
 	})
 }
 
@@ -207,18 +235,39 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
 
-	credentials, err := h.services.ClientService.RegenerateSecret(id)
+	credentials, syncStatus, err := h.services.ClientService.RegenerateSecret(id)
 	if err != nil {
 		h.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	h.logger.Info("Client secret regenerated successfully", zap.String("id", idStr))
-
+	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
+		"message":     "Client secret regenerated successfully",
+		"credentials": credentials,
+	}); status != 0 {
+		return c.Status(status).JSON(body)
+	}
 	return c.JSON(fiber.Map{
 		"message":     "Client secret regenerated successfully",
 		"credentials": credentials,
+		"sync_status": syncStatus,
 	})
+}
+
+// respondWithSync returns (status, body) when the caller asked for strict sync
+// (`?strict_sync=true`) and the upstream sync failed — caller should write that
+// 502 response. Returns (0, nil) when normal best-effort behavior applies and
+// the caller should write its own success body (typically including
+// `sync_status` so callers can detect drift without scraping logs).
+func (h *ClientHandler) respondWithSync(c *fiber.Ctx, syncStatus client.SyncStatus, successPayload fiber.Map) (int, fiber.Map) {
+	if c.Query("strict_sync") == "true" && !syncStatus.OK() {
+		return fiber.StatusBadGateway, fiber.Map{
+			"error":       "Upstream OAuth provider sync failed",
+			"sync_status": syncStatus,
+			"hint":        "Authway DB was updated but Hydra rejected the change. Retry, or omit ?strict_sync=true to accept best-effort sync (drift visible in sync_status).",
+		}
+	}
+	return 0, nil
 }
 
 // UpdateGoogleOAuth handles updating Google OAuth configuration for a client
@@ -252,7 +301,7 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 		GoogleRedirectURI:  &req.GoogleRedirectURI,
 	}
 
-	updatedClient, err := h.services.ClientService.Update(id, updateReq)
+	updatedClient, _, err := h.services.ClientService.Update(id, updateReq)
 	if err != nil {
 		h.logger.Error("Failed to update client Google OAuth", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
@@ -284,7 +333,7 @@ func (h *ClientHandler) DisableGoogleOAuth(c *fiber.Ctx) error {
 		GoogleRedirectURI:  nil,
 	}
 
-	updatedClient, err := h.services.ClientService.Update(id, updateReq)
+	updatedClient, _, err := h.services.ClientService.Update(id, updateReq)
 	if err != nil {
 		h.logger.Error("Failed to disable client Google OAuth", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())

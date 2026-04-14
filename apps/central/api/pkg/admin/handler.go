@@ -142,32 +142,29 @@ func (h *Handler) createAdminAuthHandler() fiber.Handler {
 	}
 }
 
-// GetAdminConsoleAuth returns a middleware for Admin Console API endpoints
-// This middleware validates admin session and extracts tenant_id from query/header
-// for use by feature handlers (webhooks, audit, invitations, impersonation)
+// GetAdminConsoleAuth returns a middleware for Admin Console API endpoints.
+//
+// Accepts EITHER:
+//   - an admin session token (issued by /admin/login) — used by the Admin
+//     Console UI, or
+//   - the long-lived AUTHWAY_ADMIN_API_KEY — used by programmatic admin
+//     scripts (curl, CI, integrations).
+//
+// Fail-closed: when the API key is unset the middleware refuses every
+// request (503). Operators must set AUTHWAY_ADMIN_API_KEY in any
+// non-development environment — this is enforced at config validation.
 func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Dev mode: Skip auth if no API key configured (same as AdminAuth middleware)
+		// Fail-closed: missing key indicates misconfiguration.
 		if h.apiKey == "" {
-			h.logger.Debug("AdminConsoleAuth: Dev mode - skipping auth",
+			h.logger.Warn("AdminConsoleAuth: refusing request — admin API key not configured",
 				zap.String("path", c.Path()),
 			)
-
-			// Extract tenant_id from query parameter or header
-			tenantID := c.Query("tenant_id")
-			if tenantID == "" {
-				tenantID = c.Get("X-Tenant-ID")
-			}
-			if tenantID != "" {
-				c.Locals("tenant_id", tenantID)
-			}
-
-			c.Locals("admin_authenticated", true)
-			c.Locals("is_admin_console", true)
-			return c.Next()
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
+			})
 		}
 
-		// Production mode: Validate admin session token
 		token := h.extractToken(c)
 		if token == "" {
 			h.logger.Warn("AdminConsoleAuth: No token provided",
@@ -178,6 +175,25 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			})
 		}
 
+		// Programmatic auth: long-lived API key match.
+		if token == h.apiKey {
+			c.Locals("admin_authenticated", true)
+			c.Locals("is_admin_console", true)
+			c.Locals("auth_method", "api_key")
+
+			// Extract tenant_id from query parameter or header
+			tenantID := c.Query("tenant_id")
+			if tenantID == "" {
+				tenantID = c.Get("X-Tenant-ID")
+			}
+			if tenantID != "" {
+				c.Locals("tenant_id", tenantID)
+			}
+
+			return c.Next()
+		}
+
+		// Session-token auth: Admin Console UI login.
 		valid, err := h.service.ValidateToken(token)
 		if err != nil {
 			h.logger.Error("Failed to validate admin token", zap.Error(err))
@@ -194,6 +210,7 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 				"error": "Invalid or expired session",
 			})
 		}
+		c.Locals("auth_method", "session")
 
 		// Extract tenant_id from query parameter or header
 		tenantID := c.Query("tenant_id")

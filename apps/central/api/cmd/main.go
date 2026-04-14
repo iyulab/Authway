@@ -20,7 +20,6 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/mfa"
-	adminMiddleware "authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
@@ -271,7 +270,8 @@ func main() {
 	// User profile routes
 	// IMPORTANT: /profile/me must come BEFORE /profile/:id to match correctly
 	v1.Get("/profile/me", jwtAuth, authHandler.ProfileMe)
-	v1.Get("/profile/:id", authHandler.Profile)
+	// /profile/:id leaks email/name by UUID — require JWT to prevent PII enumeration.
+	v1.Get("/profile/:id", jwtAuth, authHandler.Profile)
 
 	// Logout route - direct session revocation
 	v1.Post("/logout", authHandler.Logout)
@@ -279,21 +279,26 @@ func main() {
 	// Public client configuration (no auth required)
 	v1.Get("/clients/:client_id/config", clientHandler.GetPublicConfig)
 
-	// Client management routes
-	v1.Post("/clients", clientHandler.Create)
-	v1.Get("/clients/:id", clientHandler.Get)
-	v1.Put("/clients/:id", clientHandler.Update)
-	v1.Delete("/clients/:id", clientHandler.Delete)
-	v1.Get("/clients", clientHandler.List)
-	v1.Post("/clients/:id/regenerate-secret", clientHandler.RegenerateSecret)
+	// Admin auth — accepts EITHER the long-lived AUTHWAY_ADMIN_API_KEY (for
+	// programmatic callers like CI/curl) or an admin session token issued by
+	// /admin/login (used by the Admin Console UI). Fail-closed on missing key.
+	adminAuth := adminHandler.GetAdminConsoleAuth()
 
-	// Client Google OAuth configuration routes
-	v1.Put("/clients/:id/google-oauth", clientHandler.UpdateGoogleOAuth)
-	v1.Delete("/clients/:id/google-oauth", clientHandler.DisableGoogleOAuth)
-	v1.Get("/clients/:id/google-oauth/status", clientHandler.GetGoogleOAuthStatus)
+	// Client management routes (admin-only — config changes affect OAuth security posture)
+	v1.Post("/clients", adminAuth, clientHandler.Create)
+	v1.Get("/clients/:id", adminAuth, clientHandler.Get)
+	v1.Put("/clients/:id", adminAuth, clientHandler.Update)
+	v1.Delete("/clients/:id", adminAuth, clientHandler.Delete)
+	v1.Get("/clients", adminAuth, clientHandler.List)
+	v1.Post("/clients/:id/regenerate-secret", adminAuth, clientHandler.RegenerateSecret)
+
+	// Client Google OAuth configuration routes (admin-only)
+	v1.Put("/clients/:id/google-oauth", adminAuth, clientHandler.UpdateGoogleOAuth)
+	v1.Delete("/clients/:id/google-oauth", adminAuth, clientHandler.DisableGoogleOAuth)
+	v1.Get("/clients/:id/google-oauth/status", adminAuth, clientHandler.GetGoogleOAuthStatus)
 
 	// Client Hydra sync (admin operation for one-time migration)
-	v1.Post("/clients/sync-hydra", clientHandler.SyncToHydra)
+	v1.Post("/clients/sync-hydra", adminAuth, clientHandler.SyncToHydra)
 
 	// System claims management routes (require re-authentication)
 	v1.Post("/claims/update", jwtAuth, claimsHandler.HandleUpdateClaims) // Legacy endpoint
@@ -311,7 +316,6 @@ func main() {
 	v1.Get("/docs/download/*", docsHandler.DownloadDoc)
 	v1.Get("/docs/*", docsHandler.GetDoc)
 	// Admin only docs operations
-	adminAuth := adminMiddleware.AdminAuth(cfg.Admin.APIKey)
 	v1.Put("/docs/*", adminAuth, docsHandler.UpdateDoc)
 	v1.Delete("/docs/*", adminAuth, docsHandler.DeleteDoc)
 	v1.Post("/docs/upload", adminAuth, docsHandler.UploadDoc)
@@ -341,10 +345,8 @@ func main() {
 	// Initialize and Register New Feature Services (Phase 1.7)
 	// ======================================
 	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
-	// Use admin console auth for Admin Console API routes
-	// This middleware validates admin session AND extracts tenant_id from query/header
-	adminConsoleAuth := adminHandler.GetAdminConsoleAuth()
-	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminConsoleAuth)
+	// adminAuth (declared above) already accepts session tokens and the API key.
+	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminAuth)
 	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)
 
 	// Cleanup expired admin sessions periodically
