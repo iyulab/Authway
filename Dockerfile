@@ -2,7 +2,7 @@
 # This Dockerfile builds the Central API which is part of the main authway module
 
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install dependencies for building with CGO
 RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
