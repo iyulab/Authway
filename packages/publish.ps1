@@ -34,6 +34,48 @@ function Set-PackageVersion {
     $updatedContent | Set-Content $packageJsonPath -Encoding UTF8
 }
 
+# Verifies the publishable tarball does NOT contain unresolved `workspace:` protocol.
+# Guards against regressing to `npm publish`, which would ship broken packages.
+# See: claudedocs/issues/closed/ISSUE-Authway-20260413-pnpm-publish-workspace-protocol.md
+function Assert-NoWorkspaceProtocol {
+    param([string]$packagePath)
+
+    Push-Location $packagePath
+    try {
+        $packOutput = pnpm pack --pack-destination . 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "pnpm pack failed: $packOutput"
+        }
+
+        $tarball = Get-ChildItem -Filter "*.tgz" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if (-not $tarball) {
+            throw "No tarball produced by pnpm pack"
+        }
+
+        $tempDir = Join-Path $env:TEMP "authway-verify-$([System.Guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $tempDir | Out-Null
+        try {
+            tar -xzf $tarball.FullName -C $tempDir
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to extract tarball for verification"
+            }
+            $extractedPkgJson = Join-Path $tempDir "package\package.json"
+            if (-not (Test-Path $extractedPkgJson)) {
+                throw "package.json not found in extracted tarball"
+            }
+            $content = Get-Content $extractedPkgJson -Raw
+            if ($content -match '"workspace:') {
+                throw "Tarball at $($tarball.Name) contains unresolved 'workspace:' protocol. Abort. Ensure 'pnpm publish' is used (not 'npm publish')."
+            }
+        } finally {
+            Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+            Remove-Item $tarball.FullName -Force -ErrorAction SilentlyContinue
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 # Display header
 Write-Host ""
 Write-Host "=====================================" -ForegroundColor Cyan
@@ -141,6 +183,31 @@ try {
     exit 1
 }
 Pop-Location
+
+Write-Host ""
+Write-Host "=====================================" -ForegroundColor Cyan
+Write-Host "  Step 2.5: Verifying Tarball Integrity" -ForegroundColor Cyan
+Write-Host "=====================================" -ForegroundColor Cyan
+
+Write-Host ""
+Write-Host "Verifying @authway/client tarball..." -ForegroundColor Yellow
+try {
+    Assert-NoWorkspaceProtocol $clientPackagePath
+    Write-Host " @authway/client tarball verified (no workspace: protocol)" -ForegroundColor Green
+} catch {
+    Write-Host "Verification failed for @authway/client: $_" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ""
+Write-Host "Verifying @authway/react tarball..." -ForegroundColor Yellow
+try {
+    Assert-NoWorkspaceProtocol $reactPackagePath
+    Write-Host " @authway/react tarball verified (no workspace: protocol)" -ForegroundColor Green
+} catch {
+    Write-Host "Verification failed for @authway/react: $_" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "=====================================" -ForegroundColor Cyan
