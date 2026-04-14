@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-04-14
+
+### Security
+
+- **Critical: JWT signatures are now verified**. The `JWTAuth` middleware
+  protecting `/api/v1/profile/*`, `/api/v1/claims/*`, `/api/v1/users/mfa/*`,
+  `/api/v1/account-link/*`, and `/api/v1/logout` previously decoded
+  non-`ory_at_*` tokens locally without checking the signature, accepting any
+  base64-encoded JWT-shaped payload as authentication. Forging a valid
+  Authorization header for arbitrary `sub` (user_id) and `tenant_id` claims
+  was trivial. All tokens — opaque and JWT — now go through Hydra's
+  `/admin/oauth2/introspect` endpoint, which validates the signature, active
+  state, and expiration. The local `extractClaimsFromToken` path was removed
+  entirely.
+- **Constant-time credential compare**. `AdminAuth`, `GetAdminConsoleAuth`,
+  `InternalAPIAuth`, and `admin.Authenticate` (password) used plain `!=`
+  comparisons that leak prefix-match length via timing. Replaced with
+  `crypto/subtle.ConstantTimeCompare`.
+- **`InternalAPIAuth` no longer logs the configured key**. The previous
+  implementation logged `expected_key` and the configured `apiKey` length on
+  every failed attempt, turning the audit log into a credential-disclosure
+  surface for anyone with log access.
+- **`InternalAPIAuth` is fail-closed**. Empty configured key now returns 503
+  (matching the `AdminAuth`/`GetAdminConsoleAuth` policy from 0.2.1).
+  Production validation now requires `AUTHWAY_ADMIN_INTERNAL_API_KEY` to be
+  set; dev mode auto-generates and logs a key (same pattern as the admin key).
+- **`crypto/rand` failure handling in client credential generation**. The
+  `generateClientID`/`generateClientSecret` helpers ignored `rand.Read`
+  errors, which on a broken-entropy system would silently mint zero-byte
+  (i.e. fully predictable) credentials. They now panic, matching the
+  treatment in `pkg/admin/service.go` and `pkg/impersonation/service.go`.
+
+### Fixed
+
+- **URL encoding in Hydra client**. `subject` (in `RevokeUserSessions`) and
+  `challenge` (in 8 login/consent/logout request endpoints) were raw-
+  interpolated into URLs via `fmt.Sprintf`. Subjects containing spaces
+  produced a 400 Bad Request from Hydra; this is what surfaced the bug
+  through the `subject_with_spaces` regression test that started failing
+  this release. All values now pass through `url.QueryEscape`.
+- **TOTP otpauth URL encoding** (`pkg/mfa/service.go`). The QR-code URL was
+  built by `fmt.Sprintf("otpauth://totp/%s:%s?…", issuer, email, …)` and
+  silently produced an invalid URI for any email containing `+` (the very
+  common alias form `user+tag@example.com`) or any issuer with whitespace.
+  The library already returns a properly encoded URL via `key.URL()` — we
+  now use it.
+- **OAuth authorize URL encoding** (`internal/handler/auth.go`). The
+  authorize URL was built by `fmt.Sprintf` with raw `redirect_uri`, `scope`
+  (which contains spaces by definition), and caller-supplied `state`.
+  Replaced with `url.Values.Encode()`.
+- **Removed production DEBUG logs** from `pkg/client/service.go` and
+  `internal/hydra/client.go`.
+
+### Migration
+
+- All environments now require Hydra to be reachable for any
+  JWT-authenticated endpoint. The previous local-decode path that allowed
+  unauthenticated requests through is gone — there is no compatibility shim.
+- Production deployments must additionally set
+  `AUTHWAY_ADMIN_INTERNAL_API_KEY`. Without it the server refuses to start
+  (same policy as `AUTHWAY_ADMIN_API_KEY` in 0.2.1).
+
+---
+
 ## [0.3.0] - 2026-04-14
 
 ### Added

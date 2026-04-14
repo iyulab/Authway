@@ -189,10 +189,7 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
-		"message": "Client updated successfully",
-		"client":  updatedClient.ToPublic(),
-	}); status != 0 {
+	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
 		return c.Status(status).JSON(body)
 	}
 	return c.JSON(fiber.Map{
@@ -216,9 +213,7 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
-		"message": "Client deleted successfully",
-	}); status != 0 {
+	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
 		return c.Status(status).JSON(body)
 	}
 	return c.JSON(fiber.Map{
@@ -241,10 +236,7 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	if status, body := h.respondWithSync(c, syncStatus, fiber.Map{
-		"message":     "Client secret regenerated successfully",
-		"credentials": credentials,
-	}); status != 0 {
+	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
 		return c.Status(status).JSON(body)
 	}
 	return c.JSON(fiber.Map{
@@ -259,7 +251,7 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 // 502 response. Returns (0, nil) when normal best-effort behavior applies and
 // the caller should write its own success body (typically including
 // `sync_status` so callers can detect drift without scraping logs).
-func (h *ClientHandler) respondWithSync(c *fiber.Ctx, syncStatus client.SyncStatus, successPayload fiber.Map) (int, fiber.Map) {
+func (h *ClientHandler) respondWithSync(c *fiber.Ctx, syncStatus client.SyncStatus) (int, fiber.Map) {
 	if c.Query("strict_sync") == "true" && !syncStatus.OK() {
 		return fiber.StatusBadGateway, fiber.Map{
 			"error":       "Upstream OAuth provider sync failed",

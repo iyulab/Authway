@@ -1,10 +1,9 @@
 package middleware
 
 import (
-	"authway/apps/central/api/internal/hydra"
-	"encoding/base64"
-	"encoding/json"
 	"strings"
+
+	"authway/apps/central/api/internal/hydra"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -46,35 +45,20 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 			})
 		}
 
-		var userID uuid.UUID
-		var tenantID uuid.UUID
-		var err error
-
-		// Check if token is opaque (starts with "ory_at_") or JWT (starts with "eyJ")
-		if strings.HasPrefix(token, "ory_at_") || strings.HasPrefix(token, "ory_rt_") {
-			// Opaque token - use Hydra token introspection
-			logger.Info("Using token introspection for opaque token")
-			userID, tenantID, err = introspectOpaqueToken(token, hydraClient, logger)
-			if err != nil {
-				logger.Error("Token introspection failed",
-					zap.Error(err),
-					zap.String("token_prefix", token[:min(20, len(token))]))
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Invalid token",
-				})
-			}
-		} else {
-			// JWT token - parse claims directly (without signature validation for now)
-			logger.Info("Using JWT parsing")
-			userID, tenantID, err = extractClaimsFromToken(token)
-			if err != nil {
-				logger.Error("Failed to extract claims from JWT",
-					zap.Error(err),
-					zap.String("token_prefix", token[:min(20, len(token))]))
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Invalid token",
-				})
-			}
+		// Always validate via Hydra's introspection endpoint. It works for both
+		// opaque (ory_at_*) and JWT-format access tokens, and — crucially —
+		// verifies the signature, active state, and expiration. The previous
+		// branch that decoded JWTs locally without checking the signature
+		// accepted ANY base64-encoded payload as authentication, allowing
+		// trivial token forgery for `sub` and `tenant_id` claims.
+		userID, tenantID, err := introspectToken(token, hydraClient, logger)
+		if err != nil {
+			logger.Error("Token introspection failed",
+				zap.Error(err),
+				zap.String("token_prefix", token[:min(20, len(token))]))
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid token",
+			})
 		}
 
 		// If tenant_id is not in token (nil), look it up from user
@@ -103,8 +87,13 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 	}
 }
 
-// introspectOpaqueToken uses Hydra's token introspection endpoint to validate and extract claims
-func introspectOpaqueToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, error) {
+// introspectToken validates a bearer token (opaque or JWT) via Hydra's
+// /admin/oauth2/introspect endpoint and extracts user_id + tenant_id.
+//
+// Hydra's introspection performs full signature/expiration/active checks for
+// both token formats, so this is the only safe validation path — local JWT
+// decode-without-verify is NEVER acceptable in this codebase.
+func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, error) {
 	introspectResp, err := hydraClient.IntrospectToken(token)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
@@ -135,79 +124,10 @@ func introspectOpaqueToken(token string, hydraClient *hydra.Client, logger *zap.
 	return userID, tenantID, nil
 }
 
-// extractClaimsFromToken extracts user_id and tenant_id from JWT token
-// Using JWT decoding without signature verification for development
-// In production, should use Hydra's token introspection endpoint or JWKS validation
-func extractClaimsFromToken(token string) (userID uuid.UUID, tenantID uuid.UUID, err error) {
-	// Split JWT into parts (header.payload.signature)
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid JWT format")
-	}
-
-	// Decode payload (base64url)
-	payload := parts[1]
-
-	// Add padding if needed
-	switch len(payload) % 4 {
-	case 2:
-		payload += "=="
-	case 3:
-		payload += "="
-	}
-
-	// Decode base64
-	decoded, err := base64.URLEncoding.DecodeString(payload)
-	if err != nil {
-		decoded, err = base64.RawURLEncoding.DecodeString(parts[1])
-		if err != nil {
-			return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Failed to decode JWT payload")
-		}
-	}
-
-	// Parse JSON claims
-	var claims map[string]interface{}
-	if err := json.Unmarshal(decoded, &claims); err != nil {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Failed to parse JWT claims")
-	}
-
-	// Extract user_id from "sub" claim
-	sub, ok := claims["sub"].(string)
-	if !ok || sub == "" {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Missing sub claim")
-	}
-
-	userID, err = uuid.Parse(sub)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
-	}
-
-	// Extract tenant_id claim (optional - may not be in Hydra tokens)
-	// Hydra puts custom claims in "ext" object
-	tenantIDStr := ""
-
-	// Try to get from top-level first (backward compatibility)
-	if tid, ok := claims["tenant_id"].(string); ok {
-		tenantIDStr = tid
-	} else if ext, ok := claims["ext"].(map[string]interface{}); ok {
-		// Try to get from ext object (Hydra custom claims)
-		if tid, ok := ext["tenant_id"].(string); ok {
-			tenantIDStr = tid
-		}
-	}
-
-	if tenantIDStr != "" {
-		tenantID, err = uuid.Parse(tenantIDStr)
-		if err != nil {
-			return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid tenant ID in token")
-		}
-	} else {
-		// If tenant_id is not in token, use nil (will be resolved later from user's tenant)
-		tenantID = uuid.Nil
-	}
-
-	return userID, tenantID, nil
-}
+// (Removed: extractClaimsFromToken — it decoded JWTs without verifying their
+// signature, which let any caller forge `sub` and `tenant_id`. All token
+// validation now goes through introspectToken → Hydra. See the security
+// note above introspectToken.)
 
 func min(a, b int) int {
 	if a < b {

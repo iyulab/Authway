@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
@@ -880,15 +881,20 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 		scope = "openid profile email"
 	}
 
-	authURL := fmt.Sprintf("%s/oauth2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s&code_challenge=%s&code_challenge_method=%s",
-		h.hydraClient.AdminURL, // Should use public URL, but we'll use admin for now
-		req.ClientID,
-		req.RedirectURI,
-		scope,
-		req.State,
-		req.CodeChallenge,
-		req.CodeChallengeMethod,
-	)
+	// Build with url.Values so reserved characters (the `+` in "openid profile
+	// email", the `&` and `=` callers may put in `state`, redirect URIs that
+	// already carry their own query string) are properly percent-encoded.
+	// Raw fmt.Sprintf interpolation here previously corrupted any non-trivial
+	// value before it ever reached Hydra.
+	q := url.Values{}
+	q.Set("client_id", req.ClientID)
+	q.Set("redirect_uri", req.RedirectURI)
+	q.Set("response_type", "code")
+	q.Set("scope", scope)
+	q.Set("state", req.State)
+	q.Set("code_challenge", req.CodeChallenge)
+	q.Set("code_challenge_method", req.CodeChallengeMethod)
+	authURL := fmt.Sprintf("%s/oauth2/auth?%s", h.hydraClient.AdminURL, q.Encode())
 
 	// Make request to Hydra to get login_challenge
 	resp, err := http.Get(authURL)

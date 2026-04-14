@@ -68,7 +68,11 @@ func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Update("totp_secret", secret).Error; err != nil {
 		return nil, fmt.Errorf("failed to store TOTP secret: %w", err)
 	}
-	qrCodeURL := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30", s.issuer, u.Email, secret, s.issuer)
+	// Use the otpauth URL produced by the totp library — it URL-encodes the
+	// label (issuer:email) and parameters per the Key URI Format spec. The
+	// previous fmt.Sprintf path silently broke for any email containing `+`
+	// or `@` past the first occurrence (e.g. `user+alias@example.com`).
+	qrCodeURL := key.URL()
 	s.logger.Info("TOTP setup initiated", zap.String("user_id", userID.String()), zap.String("email", u.Email))
 	return &TOTPSetupResponse{Secret: secret, QRCodeDataURL: qrCodeURL, Issuer: s.issuer, AccountName: u.Email}, nil
 }

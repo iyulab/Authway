@@ -280,17 +280,29 @@ func Load() (*Config, error) {
 		config.Admin.APIKey = adminAPIKey
 	}
 
-	// Dev-mode fallback: auto-generate an admin API key when running outside
-	// production so the admin console remains usable without manual setup.
-	// Production fails validation (below) to force an explicit key.
-	if config.Admin.APIKey == "" && config.App.Environment != "production" {
-		key, err := generateRandomKey(32)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate dev admin API key: %w", err)
+	// Dev-mode fallback: auto-generate the admin/internal API keys when running
+	// outside production so the admin console + auth-api integration remain
+	// usable without manual setup. Production fails validation (below) to force
+	// explicit keys.
+	if config.App.Environment != "production" {
+		if config.Admin.APIKey == "" {
+			key, err := generateRandomKey(32)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate dev admin API key: %w", err)
+			}
+			config.Admin.APIKey = key
+			fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_API_KEY: %s\n", key)
+			fmt.Printf("⚠️  [dev] Set AUTHWAY_ADMIN_API_KEY env var to use a stable key across restarts.\n")
 		}
-		config.Admin.APIKey = key
-		fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_API_KEY: %s\n", key)
-		fmt.Printf("⚠️  [dev] Set AUTHWAY_ADMIN_API_KEY env var to use a stable key across restarts.\n")
+		if config.Admin.InternalAPIKey == "" {
+			key, err := generateRandomKey(32)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate dev internal API key: %w", err)
+			}
+			config.Admin.InternalAPIKey = key
+			fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_INTERNAL_API_KEY: %s\n", key)
+			fmt.Printf("⚠️  [dev] Branding auth-api integrations must use this value (or set the env var).\n")
+		}
 	}
 
 	// Manual override for Application Insights config
@@ -377,6 +389,9 @@ func (c *Config) Validate() error {
 		// 0.2.1 — it silently bypassed auth).
 		if c.Admin.APIKey == "" {
 			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set in production — required for /api/v1/clients/* and other admin endpoints")
+		}
+		if c.Admin.InternalAPIKey == "" {
+			errors = append(errors, "CRITICAL: admin.internal_api_key (AUTHWAY_ADMIN_INTERNAL_API_KEY) must be set in production — required for branding auth-api → central /internal/* calls")
 		}
 	}
 

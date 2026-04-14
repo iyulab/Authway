@@ -2,6 +2,7 @@ package admin
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"time"
@@ -34,8 +35,9 @@ func NewService(db *gorm.DB, logger *zap.Logger, adminPassword string) Service {
 
 // Authenticate validates admin password and creates session
 func (s *service) Authenticate(password string) (*AdminSession, error) {
-	// Validate password
-	if password != s.password {
+	// Constant-time compare to defend against timing oracles. Plain `!=` returns
+	// as soon as a byte mismatches, leaking the matched-prefix length.
+	if subtle.ConstantTimeCompare([]byte(password), []byte(s.password)) != 1 {
 		s.logger.Warn("Failed admin authentication attempt")
 		return nil, fmt.Errorf("invalid password")
 	}

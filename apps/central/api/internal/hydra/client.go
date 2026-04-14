@@ -49,12 +49,8 @@ func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error)
 		return nil, err
 	}
 
-	// DEBUG: Log the AdminURL and full URL being used
-	fullURL := fmt.Sprintf("%s/admin/clients", c.AdminURL)
-	fmt.Printf("🔍 DEBUG Hydra Client: AdminURL='%s', FullURL='%s'\n", c.AdminURL, fullURL)
-
 	resp, err := c.client.Post(
-		fullURL,
+		fmt.Sprintf("%s/admin/clients", c.AdminURL),
 		"application/json",
 		bytes.NewBuffer(data),
 	)
@@ -237,7 +233,7 @@ type LoginResponse struct {
 }
 
 func (c *Client) GetLoginRequest(challenge string) (*LoginRequest, error) {
-	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/login?challenge=%s", c.AdminURL, challenge)
+	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/login?challenge=%s", c.AdminURL, url.QueryEscape(challenge))
 	resp, err := c.client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to request Hydra at %s: %w", url, err)
@@ -263,13 +259,9 @@ func (c *Client) AcceptLoginRequest(challenge string, body *AcceptLoginRequest) 
 		return nil, err
 	}
 
-	// Debug: log the request
-	fmt.Printf("🔍 Hydra AcceptLoginRequest body: %s\n", string(data))
-	fmt.Printf("🔍 Hydra AcceptLoginRequest challenge (first 50 chars): %.50s\n", challenge)
-
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/login/accept?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/login/accept?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
@@ -288,10 +280,6 @@ func (c *Client) AcceptLoginRequest(challenge string, body *AcceptLoginRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// Debug: log the response
-	fmt.Printf("🔍 Hydra AcceptLoginRequest response status: %d\n", resp.StatusCode)
-	fmt.Printf("🔍 Hydra AcceptLoginRequest response body: %s\n", string(bodyBytes))
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
@@ -319,7 +307,7 @@ func (c *Client) RejectLoginRequest(challenge string, error_code, error_descript
 
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/login/reject?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/login/reject?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
@@ -381,7 +369,7 @@ type ConsentSession struct {
 
 func (c *Client) GetConsentRequest(challenge string) (*ConsentRequest, error) {
 	resp, err := c.client.Get(
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 	)
 	if err != nil {
 		return nil, err
@@ -413,12 +401,9 @@ func (c *Client) AcceptConsentRequest(challenge string, body *AcceptConsentReque
 		return nil, err
 	}
 
-	// Debug: log the request body
-	fmt.Printf("🔍 Hydra AcceptConsentRequest body: %s\n", string(data))
-
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/accept?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/accept?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
@@ -437,9 +422,6 @@ func (c *Client) AcceptConsentRequest(challenge string, body *AcceptConsentReque
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// Debug: log the response
-	fmt.Printf("🔍 Hydra response status: %d, body: %s\n", resp.StatusCode, string(bodyBytes))
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
@@ -467,7 +449,7 @@ func (c *Client) RejectConsentRequest(challenge string, error_code, error_descri
 
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/reject?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/reject?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
@@ -501,12 +483,19 @@ func (c *Client) RejectConsentRequest(challenge string, error_code, error_descri
 }
 
 // Session Management
-// RevokeUserSessions revokes all OAuth2 sessions for a specific user
+// RevokeUserSessions revokes all OAuth2 sessions for a specific user.
+//
+// Subject is URL-escaped so non-UUID identifiers (emails, names, anything
+// containing spaces or `&`) are transmitted intact instead of producing a
+// 400 Bad Request from Hydra. Pre-fix this silently failed for any subject
+// containing reserved URL characters.
 func (c *Client) RevokeUserSessions(subject string) error {
+	escapedSubject := url.QueryEscape(subject)
+
 	// Revoke login sessions
 	req, err := http.NewRequest(
 		http.MethodDelete,
-		fmt.Sprintf("%s/admin/oauth2/auth/sessions/login?subject=%s", c.AdminURL, subject),
+		fmt.Sprintf("%s/admin/oauth2/auth/sessions/login?subject=%s", c.AdminURL, escapedSubject),
 		nil,
 	)
 	if err != nil {
@@ -527,7 +516,7 @@ func (c *Client) RevokeUserSessions(subject string) error {
 	// Revoke consent sessions
 	req, err = http.NewRequest(
 		http.MethodDelete,
-		fmt.Sprintf("%s/admin/oauth2/auth/sessions/consent?subject=%s&all=true", c.AdminURL, subject),
+		fmt.Sprintf("%s/admin/oauth2/auth/sessions/consent?subject=%s&all=true", c.AdminURL, escapedSubject),
 		nil,
 	)
 	if err != nil {
@@ -564,7 +553,7 @@ type LogoutResponse struct {
 
 func (c *Client) GetLogoutRequest(challenge string) (*LogoutRequest, error) {
 	resp, err := c.client.Get(
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/logout?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/logout?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 	)
 	if err != nil {
 		return nil, err
@@ -591,7 +580,7 @@ func (c *Client) GetLogoutRequest(challenge string) (*LogoutRequest, error) {
 func (c *Client) AcceptLogoutRequest(challenge string) (*LogoutResponse, error) {
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?challenge=%s", c.AdminURL, challenge),
+		fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?challenge=%s", c.AdminURL, url.QueryEscape(challenge)),
 		nil,
 	)
 	if err != nil {

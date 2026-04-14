@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"crypto/subtle"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -175,8 +176,8 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			})
 		}
 
-		// Programmatic auth: long-lived API key match.
-		if token == h.apiKey {
+		// Programmatic auth: long-lived API key match (constant-time).
+		if subtle.ConstantTimeCompare([]byte(token), []byte(h.apiKey)) == 1 {
 			c.Locals("admin_authenticated", true)
 			c.Locals("is_admin_console", true)
 			c.Locals("auth_method", "api_key")

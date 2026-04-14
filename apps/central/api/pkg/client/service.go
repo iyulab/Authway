@@ -712,16 +712,22 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 }
 
 func (s *service) generateClientID() string {
-	// Generate a random client ID
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// crypto/rand failure means the OS entropy source is broken; minting a
+		// predictable client_id from zeroed bytes is worse than crashing.
+		panic(fmt.Sprintf("crypto/rand failed: %v", err))
+	}
 	return fmt.Sprintf("authway_%s", base64.URLEncoding.EncodeToString(bytes)[:22])
 }
 
 func (s *service) generateClientSecret() string {
-	// Generate a random client secret
 	bytes := make([]byte, 32)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// Same reasoning as generateClientID: a zeroed-bytes secret is a
+		// catastrophic credential leak. Crash instead.
+		panic(fmt.Sprintf("crypto/rand failed: %v", err))
+	}
 	return strings.ReplaceAll(base64.URLEncoding.EncodeToString(bytes), "=", "")
 }
 

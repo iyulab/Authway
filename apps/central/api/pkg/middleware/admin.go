@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -45,8 +46,8 @@ func AdminAuth(apiKey string) fiber.Handler {
 		// Extract token
 		token := strings.TrimPrefix(auth, "Bearer ")
 
-		// Validate token
-		if token != apiKey {
+		// Constant-time compare to defend against timing oracles.
+		if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid API key",
 			})
