@@ -116,7 +116,9 @@ jobs:
           smoke="$(mktemp -d)"
           cd "$smoke"
           npm init -y >/dev/null
-          for attempt in 1 2 3 4 5; do
+          # Up to 8 attempts × 30s = 4 minutes. npm publish returns before the new
+          # version fully propagates to the install CDN (ETARGET for 30s–2min is normal).
+          for attempt in 1 2 3 4 5 6 7 8; do
             if npm install "@authway/react@$version" --no-audit --no-fund; then
               # Read package.json directly via fs — `require(...)` is gated by the package's `exports` map.
               installed="$(jq -r .version node_modules/@authway/client/package.json)"
@@ -127,10 +129,10 @@ jobs:
               echo "✓ @authway/react@$version and @authway/client@$installed installed cleanly"
               exit 0
             fi
-            echo "install attempt $attempt failed, retrying in 15s..."
-            sleep 15
+            echo "install attempt $attempt failed, retrying in 30s..."
+            sleep 30
           done
-          echo "::error::npm install @authway/react@$version failed after 5 attempts"
+          echo "::error::npm install @authway/react@$version failed after 8 attempts"
           exit 1
 
       - name: Create GitHub Release
