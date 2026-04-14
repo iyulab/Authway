@@ -1,5 +1,13 @@
-# Authway Packages Publishing Script
-# Publishes @authway/client and @authway/react to npm
+# Authway Packages Publishing Script (local fallback)
+# Publishes @authway/client and @authway/react to npm.
+#
+# CANONICAL publish path is .github/workflows/release.yml — triggered by pushing
+# a `v<version>` tag. CI also validates tag↔package.json parity and runs a
+# post-publish smoke install against the real registry.
+#
+# Use this script only for:
+#   - local version bump + build iteration before tagging
+#   - emergency publishes when CI is unavailable
 
 $ErrorActionPreference = "Stop"
 

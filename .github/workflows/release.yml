@@ -1,0 +1,134 @@
+name: Release
+
+# Publishes @authway/client and @authway/react to npm on version tags.
+#
+# Prerequisites:
+#   - Repository secret NPM_TOKEN (npmjs.com "Automation" token with publish scope)
+#   - Tag name MUST equal "v<version>" where <version> matches packages/*/package.json version
+#     (e.g. tag `v0.3.2` requires both client and react package.json at 0.3.2)
+#
+# Human workflow:
+#   1. Bump version in packages/client/package.json and packages/react/package.json
+#      (or run `packages/publish.ps1` in dry mode for version bump + build only)
+#   2. Commit, e.g. `release: @authway/{client,react} 0.3.2`
+#   3. `git tag v0.3.2 && git push origin v0.3.2`
+#
+# This workflow then:
+#   - Validates tag ↔ package.json version parity
+#   - Builds both packages
+#   - Verifies tarballs do not contain unresolved `workspace:` protocol
+#   - Publishes with `pnpm publish` (resolves workspace:* → real version)
+#   - Smoke-installs the published version from the real registry
+#   - Creates a GitHub Release with auto-generated notes
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required for `gh release create`
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so `gh release --generate-notes` sees prior tags
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+
+      - name: Extract version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches package versions
+        run: |
+          set -euo pipefail
+          expected="${{ steps.ver.outputs.version }}"
+          for pkg in client react; do
+            actual="$(node -p "require('./packages/$pkg/package.json').version")"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::@authway/$pkg package.json version ($actual) does not match tag ($expected)"
+              exit 1
+            fi
+          done
+          echo "✓ tag $GITHUB_REF_NAME matches both packages at $expected"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: |
+          pnpm --filter @authway/client build
+          pnpm --filter @authway/react build
+
+      - name: Verify tarballs contain no `workspace:` protocol
+        run: |
+          set -euo pipefail
+          for pkg in client react; do
+            pack_dir="$(mktemp -d)"
+            extract_dir="$(mktemp -d)"
+            (cd "packages/$pkg" && pnpm pack --pack-destination "$pack_dir" >/dev/null)
+            tarball="$(ls "$pack_dir"/*.tgz | head -n1)"
+            tar -xzf "$tarball" -C "$extract_dir"
+            if grep -q '"workspace:' "$extract_dir/package/package.json"; then
+              echo "::error::@authway/$pkg tarball contains unresolved 'workspace:' protocol"
+              exit 1
+            fi
+          done
+
+      - name: Publish @authway/client
+        working-directory: packages/client
+        run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @authway/react
+        working-directory: packages/react
+        run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Post-publish smoke test: confirms the package is installable from the public
+      # registry exactly as a downstream consumer would see it.
+      # Retries accommodate registry propagation delay (usually < 30s).
+      - name: Smoke-test npm install
+        run: |
+          set -euo pipefail
+          version="${{ steps.ver.outputs.version }}"
+          smoke="$(mktemp -d)"
+          cd "$smoke"
+          npm init -y >/dev/null
+          for attempt in 1 2 3 4 5; do
+            if npm install "@authway/react@$version" --silent --no-audit --no-fund; then
+              installed="$(node -p "require('@authway/client/package.json').version")"
+              if [ "$installed" != "$version" ]; then
+                echo "::error::smoke install resolved @authway/client to $installed, expected $version"
+                exit 1
+              fi
+              echo "✓ @authway/react@$version and @authway/client@$installed installed cleanly"
+              exit 0
+            fi
+            echo "install attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "::error::npm install @authway/react@$version failed after 5 attempts"
+          exit 1
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go build / vet / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (central API)
+        run: go test ./apps/central/api/...
+
+  packages:
+    name: TS packages build / typecheck / tarball verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @authway/client
+        run: pnpm --filter @authway/client build
+
+      - name: Build @authway/react
+        run: pnpm --filter @authway/react build
+
+      - name: Typecheck @authway/client
+        run: pnpm --filter @authway/client typecheck
+
+      - name: Typecheck @authway/react
+        run: pnpm --filter @authway/react typecheck
+
+      # Guards against regression to `npm publish`, which leaves `workspace:*`
+      # unresolved in the tarball and breaks every downstream `npm install`.
+      # See claudedocs/issues/closed/ISSUE-Authway-20260413-pnpm-publish-workspace-protocol.md
+      - name: Verify tarballs contain no `workspace:` protocol
+        run: |
+          set -euo pipefail
+          for pkg in client react; do
+            pack_dir="$(mktemp -d)"
+            extract_dir="$(mktemp -d)"
+            (cd "packages/$pkg" && pnpm pack --pack-destination "$pack_dir" >/dev/null)
+            tarball="$(ls "$pack_dir"/*.tgz | head -n1)"
+            tar -xzf "$tarball" -C "$extract_dir"
+            if grep -q '"workspace:' "$extract_dir/package/package.json"; then
+              echo "::error::@authway/$pkg tarball contains unresolved 'workspace:' protocol"
+              exit 1
+            fi
+            echo "✓ @authway/$pkg tarball verified"
+          done
