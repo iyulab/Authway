@@ -111,7 +111,8 @@ jobs:
           npm init -y >/dev/null
           for attempt in 1 2 3 4 5; do
             if npm install "@authway/react@$version" --silent --no-audit --no-fund; then
-              installed="$(node -p "require('@authway/client/package.json').version")"
+              # Read package.json directly via fs — `require(...)` is gated by the package's `exports` map.
+              installed="$(jq -r .version node_modules/@authway/client/package.json)"
               if [ "$installed" != "$version" ]; then
                 echo "::error::smoke install resolved @authway/client to $installed, expected $version"
                 exit 1
