@@ -103,6 +103,13 @@ jobs:
       # registry exactly as a downstream consumer would see it.
       # Retries accommodate registry propagation delay (usually < 30s).
       - name: Smoke-test npm install
+        # Redirect NPM_CONFIG_USERCONFIG away from setup-node's auth-scoped .npmrc.
+        # That file contains `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,
+        # and without NODE_AUTH_TOKEN in this step's env, npm resolves it as empty
+        # and fails authentication. A downstream consumer installing the public
+        # package has no such config — simulate that.
+        env:
+          NPM_CONFIG_USERCONFIG: /dev/null
         run: |
           set -euo pipefail
           version="${{ steps.ver.outputs.version }}"
@@ -110,7 +117,7 @@ jobs:
           cd "$smoke"
           npm init -y >/dev/null
           for attempt in 1 2 3 4 5; do
-            if npm install "@authway/react@$version" --silent --no-audit --no-fund; then
+            if npm install "@authway/react@$version" --no-audit --no-fund; then
               # Read package.json directly via fs — `require(...)` is gated by the package's `exports` map.
               installed="$(jq -r .version node_modules/@authway/client/package.json)"
               if [ "$installed" != "$version" ]; then
