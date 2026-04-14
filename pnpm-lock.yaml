@@ -6,8 +6,6 @@ settings:
 
 importers:
 
-  .: {}
-
   packages/client:
     devDependencies:
       '@types/node':

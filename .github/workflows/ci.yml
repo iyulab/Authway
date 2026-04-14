@@ -48,7 +48,10 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # --config.strict-dep-builds=false: pnpm 10은 전이 postinstall (esbuild/sharp 등)을
+        # 기본 strict 차단한다. 빌드 자체에는 tsup 내장 esbuild를 쓰므로 postinstall
+        # 바이너리는 CI에서 꼭 필요하지 않다.
+        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
 
       - name: Build @authway/client
         run: pnpm --filter @authway/client build

@@ -65,7 +65,7 @@ jobs:
           echo "✓ tag $GITHUB_REF_NAME matches both packages at $expected"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
 
       - name: Build packages
         run: |
