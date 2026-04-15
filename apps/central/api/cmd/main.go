@@ -208,10 +208,16 @@ func main() {
 		})
 	})
 
+	// Feature services (audit, webhooks, invitations, ...) are initialized
+	// early so the audit.Service is available to wire into write-path handlers
+	// below. Route registration still happens later once jwtAuth/adminAuth are
+	// constructed.
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
+
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger)
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger)
-	clientHandler := handler.NewClientHandler(services, zapLogger, cfg)
+	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger)
@@ -354,9 +360,10 @@ func main() {
 	adminHandler.RegisterRoutes(app)
 
 	// ======================================
-	// Initialize and Register New Feature Services (Phase 1.7)
+	// Register New Feature Services routes (Phase 1.7)
+	// Services were constructed earlier so audit.Service could be injected
+	// into ClientHandler; route registration waits for jwtAuth/adminAuth.
 	// ======================================
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
 	// adminAuth (declared above) already accepts session tokens and the API key.
 	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminAuth)
 	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)

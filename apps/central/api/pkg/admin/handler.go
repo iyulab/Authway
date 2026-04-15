@@ -1,12 +1,22 @@
 package admin
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
+
+// apiKeyHint returns the first 8 hex chars of SHA-256(key) — a stable,
+// non-reversible identifier for audit logs so operators can distinguish
+// which provisioned key performed an action without ever storing the key.
+func apiKeyHint(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])[:8]
+}
 
 type Handler struct {
 	service Service
@@ -181,6 +191,11 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			c.Locals("admin_authenticated", true)
 			c.Locals("is_admin_console", true)
 			c.Locals("auth_method", "api_key")
+			// Actor identity for audit logging (api key carries no user — emit
+			// a non-reversible key fingerprint so multiple provisioned keys
+			// remain distinguishable in audit_logs without leaking secrets).
+			c.Locals("actor_type", "api_key")
+			c.Locals("actor_key_hint", apiKeyHint(h.apiKey))
 
 			// Extract tenant_id from query parameter or header
 			tenantID := c.Query("tenant_id")
@@ -212,6 +227,10 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			})
 		}
 		c.Locals("auth_method", "session")
+		// Admin session is a shared-password login (see AdminSession model) —
+		// no per-user identity is stored. Mark actor_type so audit logs can
+		// distinguish console-driven changes from api_key-driven ones.
+		c.Locals("actor_type", "admin_session")
 
 		// Extract tenant_id from query parameter or header
 		tenantID := c.Query("tenant_id")

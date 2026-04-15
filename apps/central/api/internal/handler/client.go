@@ -5,6 +5,7 @@ import (
 
 	"authway/apps/central/api/internal/config"
 	"authway/apps/central/api/internal/service"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -13,19 +14,36 @@ import (
 )
 
 type ClientHandler struct {
-	services  *service.Services
-	logger    *zap.Logger
-	validator *validator.Validate
-	config    *config.Config
+	services     *service.Services
+	logger       *zap.Logger
+	validator    *validator.Validate
+	config       *config.Config
+	auditService audit.Service
 }
 
-func NewClientHandler(services *service.Services, logger *zap.Logger, cfg *config.Config) *ClientHandler {
+func NewClientHandler(services *service.Services, logger *zap.Logger, cfg *config.Config, auditService audit.Service) *ClientHandler {
 	return &ClientHandler{
-		services:  services,
-		logger:    logger,
-		validator: validator.New(),
-		config:    cfg,
+		services:     services,
+		logger:       logger,
+		validator:    validator.New(),
+		config:       cfg,
+		auditService: auditService,
 	}
+}
+
+// logAudit emits an audit log entry for a client write path. audit is best-effort
+// (LogAsync drops on buffer overflow) — never block the response on audit I/O.
+// A nil auditService (e.g. in older tests) is tolerated so handler can be
+// exercised without the full DI graph.
+func (h *ClientHandler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, tenantID, action, "client", resourceID)
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
 }
 
 // List handles listing OAuth clients with pagination
@@ -113,6 +131,14 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 
 	h.logger.Info("Client created successfully", zap.String("client_id", newClient.ClientID))
 
+	h.logAudit(c, newClient.TenantID, audit.ActionClientCreated, newClient.ID.String(), map[string]interface{}{
+		"client_id":     newClient.ClientID,
+		"name":          newClient.Name,
+		"public":        newClient.Public,
+		"grant_types":   []string(newClient.GrantTypes),
+		"redirect_uris": []string(newClient.RedirectURIs),
+	})
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message":     "Client created successfully",
 		"client":      newClient.ToPublic(),
@@ -175,6 +201,11 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
+	// Capture before-state for audit diff. Missing record surfaces as the
+	// same 404 the Update call would raise, so we only take the snapshot on
+	// success and let Update own the canonical error path.
+	beforeClient, _ := h.services.ClientService.GetByID(id)
+
 	updatedClient, syncStatus, err := h.services.ClientService.Update(id, &req)
 	if err != nil {
 		if cerr, ok := err.(*client.ConfigError); ok {
@@ -189,6 +220,22 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
+	auditDetails := map[string]interface{}{
+		"client_id":        updatedClient.ClientID,
+		"hydra_sync_state": syncStatus.State,
+	}
+	// Only emit the diff for fields that changed — full before/after snapshots
+	// inflate audit rows without aiding forensics on redirect-uri tampering.
+	if beforeClient != nil && !stringSlicesEqual(beforeClient.RedirectURIs, updatedClient.RedirectURIs) {
+		auditDetails["redirect_uris_before"] = []string(beforeClient.RedirectURIs)
+		auditDetails["redirect_uris_after"] = []string(updatedClient.RedirectURIs)
+	}
+	if beforeClient != nil && !stringSlicesEqual(beforeClient.AllowedOrigins, updatedClient.AllowedOrigins) {
+		auditDetails["allowed_origins_before"] = []string(beforeClient.AllowedOrigins)
+		auditDetails["allowed_origins_after"] = []string(updatedClient.AllowedOrigins)
+	}
+	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), auditDetails)
+
 	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
 		return c.Status(status).JSON(body)
 	}
@@ -199,6 +246,18 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 	})
 }
 
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // Delete handles deleting an OAuth client
 func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 	idStr := c.Params("id")
@@ -207,10 +266,22 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
 
+	// Snapshot for audit before the row disappears — without this the log
+	// entry can't answer "what tenant did the deleted client belong to?"
+	beforeClient, _ := h.services.ClientService.GetByID(id)
+
 	syncStatus, err := h.services.ClientService.Delete(id)
 	if err != nil {
 		h.logger.Error("Failed to delete client", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+
+	if beforeClient != nil {
+		h.logAudit(c, beforeClient.TenantID, audit.ActionClientDeleted, beforeClient.ID.String(), map[string]interface{}{
+			"client_id":        beforeClient.ClientID,
+			"name":             beforeClient.Name,
+			"hydra_sync_state": syncStatus.State,
+		})
 	}
 
 	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
@@ -230,10 +301,28 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
 
+	// Fetch for tenant_id (required by audit entry) before rotation — the
+	// record itself is unchanged by rotation, so reading it first is safe.
+	beforeClient, _ := h.services.ClientService.GetByID(id)
+
 	credentials, syncStatus, err := h.services.ClientService.RegenerateSecret(id)
 	if err != nil {
 		h.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+
+	// Secret rotation is a security-critical event — use Warning so it
+	// surfaces in GetRecentSecurityEvents-style queries alongside lockouts.
+	// Reuse ActionClientUpdated with a subresource tag (no dedicated constant
+	// exists yet; adding one is scoped to a follow-up change).
+	if h.auditService != nil && beforeClient != nil {
+		entry := audit.EntryFromFiber(c, beforeClient.TenantID, audit.ActionClientUpdated, "client", id.String())
+		entry.Severity = audit.SeverityWarning
+		entry.Details["subresource"] = "client_secret"
+		entry.Details["event"] = "secret_rotated"
+		entry.Details["client_id"] = credentials.ClientID
+		entry.Details["hydra_sync_state"] = syncStatus.State
+		h.auditService.LogAsync(entry)
 	}
 
 	if status, body := h.respondWithSync(c, syncStatus); status != 0 {
@@ -299,6 +388,13 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
+	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]interface{}{
+		"subresource":      "google_oauth",
+		"event":            "google_oauth_configured",
+		"client_id":        updatedClient.ClientID,
+		"google_client_id": req.GoogleClientID,
+	})
+
 	h.logger.Info("Client Google OAuth updated successfully",
 		zap.String("id", idStr),
 		zap.String("google_client_id", req.GoogleClientID))
@@ -330,6 +426,12 @@ func (h *ClientHandler) DisableGoogleOAuth(c *fiber.Ctx) error {
 		h.logger.Error("Failed to disable client Google OAuth", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
+
+	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]interface{}{
+		"subresource": "google_oauth",
+		"event":       "google_oauth_disabled",
+		"client_id":   updatedClient.ClientID,
+	})
 
 	h.logger.Info("Client Google OAuth disabled successfully", zap.String("id", idStr))
 
