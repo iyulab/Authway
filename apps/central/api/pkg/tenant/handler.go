@@ -3,6 +3,7 @@ package tenant
 import (
 	"errors"
 
+	"authway/apps/central/api/pkg/audit"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -10,16 +11,34 @@ import (
 
 // Handler handles HTTP requests for tenant operations
 type Handler struct {
-	service  *Service
-	validate *validator.Validate
+	service      *Service
+	validate     *validator.Validate
+	auditService audit.Service
 }
 
-// NewHandler creates a new tenant handler
-func NewHandler(service *Service, validate *validator.Validate) *Handler {
+// NewHandler creates a new tenant handler. auditService may be nil — the
+// handler tolerates missing audit wiring so tests without the full DI graph
+// still compile.
+func NewHandler(service *Service, validate *validator.Validate, auditService audit.Service) *Handler {
 	return &Handler{
-		service:  service,
-		validate: validate,
+		service:      service,
+		validate:     validate,
+		auditService: auditService,
 	}
+}
+
+// logAudit emits a best-effort audit entry for a tenant admin write path.
+// Same contract as other handlers: nil auditService tolerated, LogAsync may
+// drop on buffer overflow — acceptable because these are non-auth paths.
+func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, tenantID, action, "tenant", resourceID)
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
 }
 
 // RegisterRoutes registers tenant routes
@@ -67,6 +86,11 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 			"error": "Failed to create tenant",
 		})
 	}
+
+	h.logAudit(c, tenant.ID, audit.ActionTenantCreated, tenant.ID.String(), map[string]interface{}{
+		"slug": tenant.Slug,
+		"name": tenant.Name,
+	})
 
 	return c.Status(fiber.StatusCreated).JSON(tenant.ToPublic())
 }
@@ -137,6 +161,10 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 		})
 	}
 
+	// Before-state snapshot for audit diff. Miss surfaces as the same 404
+	// UpdateTenant would raise, so the service owns the canonical error path.
+	beforeTenant, _ := h.service.GetTenantByID(id)
+
 	tenant, err := h.service.UpdateTenant(id, req)
 	if err != nil {
 		// Handle specific errors with appropriate status codes
@@ -155,6 +183,23 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 		})
 	}
 
+	// Diff-only details: flagging the *changed* fields makes the audit row
+	// useful for forensics without ballooning storage on full snapshots.
+	auditDetails := map[string]interface{}{
+		"slug": tenant.Slug,
+	}
+	if beforeTenant != nil {
+		if beforeTenant.Name != tenant.Name {
+			auditDetails["name_before"] = beforeTenant.Name
+			auditDetails["name_after"] = tenant.Name
+		}
+		if beforeTenant.Active != tenant.Active {
+			auditDetails["active_before"] = beforeTenant.Active
+			auditDetails["active_after"] = tenant.Active
+		}
+	}
+	h.logAudit(c, tenant.ID, audit.ActionTenantUpdated, tenant.ID.String(), auditDetails)
+
 	return c.JSON(tenant.ToPublic())
 }
 
@@ -168,6 +213,11 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 			"error": "Invalid tenant ID format",
 		})
 	}
+
+	// Snapshot before deletion — without this the audit entry cannot answer
+	// "what was the slug/name of the deleted tenant?" (soft-delete still hides
+	// it from the default query scope).
+	beforeTenant, _ := h.service.GetTenantByID(id)
 
 	if err := h.service.DeleteTenant(id); err != nil {
 		// Handle specific errors with appropriate status codes
@@ -193,6 +243,13 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to delete tenant",
+		})
+	}
+
+	if beforeTenant != nil {
+		h.logAudit(c, beforeTenant.ID, audit.ActionTenantDeleted, beforeTenant.ID.String(), map[string]interface{}{
+			"slug": beforeTenant.Slug,
+			"name": beforeTenant.Name,
 		})
 	}
 

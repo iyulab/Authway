@@ -358,7 +358,7 @@ func main() {
 	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, mfaHandler.RegenerateRecoveryCodes)
 
 	// Tenant Management API routes (Admin only)
-	tenantHandler := tenant.NewHandler(tenantService, validate)
+	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 
 	// Admin Console routes
