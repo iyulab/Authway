@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"authway/apps/central/api/pkg/audit"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -19,18 +21,64 @@ func apiKeyHint(key string) string {
 }
 
 type Handler struct {
-	service Service
-	logger  *zap.Logger
-	version string
-	apiKey  string // Empty = dev mode (skip auth for admin console)
+	service      Service
+	logger       *zap.Logger
+	version      string
+	apiKey       string // Empty = dev mode (skip auth for admin console)
+	auditService audit.Service
 }
 
-func NewHandler(service Service, logger *zap.Logger, version string, apiKey string) *Handler {
+// NewHandler builds the admin Handler. auditService may be nil — the handler
+// tolerates missing audit wiring so tests without the full DI graph still
+// compile. In prod, main.go passes the live audit.Service so every
+// authentication failure is captured.
+func NewHandler(service Service, logger *zap.Logger, version string, apiKey string, auditService audit.Service) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
-		version: version,
-		apiKey:  apiKey,
+		service:      service,
+		logger:       logger,
+		version:      version,
+		apiKey:       apiKey,
+		auditService: auditService,
+	}
+}
+
+// logAuthFailure records an authentication failure synchronously. Failure
+// events must not be dropped on buffer overflow, so we use Log (not LogAsync).
+// Tenant is unknown at this point (auth has not succeeded), so we write
+// uuid.Nil and stash the *attempted* tenant from the X-Tenant-ID header /
+// query param into Details for operator forensics.
+func (h *Handler) logAuthFailure(c *fiber.Ctx, reason string, errMsg string) {
+	if h.auditService == nil {
+		return
+	}
+	tenantAttempted := c.Query("tenant_id")
+	if tenantAttempted == "" {
+		tenantAttempted = c.Get("X-Tenant-ID")
+	}
+
+	entry := &audit.AuditEntry{
+		TenantID:     uuid.Nil,
+		Action:       audit.ActionUserLoginFailed,
+		Severity:     audit.SeverityWarning,
+		ResourceType: "admin_console",
+		ResourceID:   c.Path(),
+		IPAddress:    c.IP(),
+		UserAgent:    c.Get("User-Agent"),
+		Success:      false,
+		ErrorMsg:     errMsg,
+		Details: map[string]interface{}{
+			"reason": reason,
+			"method": c.Method(),
+		},
+	}
+	if tenantAttempted != "" {
+		entry.Details["tenant_id_attempted"] = tenantAttempted
+	}
+	if err := h.auditService.Log(c.UserContext(), entry); err != nil {
+		h.logger.Error("Failed to write admin auth failure audit log",
+			zap.Error(err),
+			zap.String("reason", reason),
+		)
 	}
 }
 
@@ -171,6 +219,7 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			h.logger.Warn("AdminConsoleAuth: refusing request — admin API key not configured",
 				zap.String("path", c.Path()),
 			)
+			h.logAuthFailure(c, "api_key_not_configured", "admin API key missing — fail-closed")
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
 			})
@@ -181,6 +230,7 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			h.logger.Warn("AdminConsoleAuth: No token provided",
 				zap.String("path", c.Path()),
 			)
+			h.logAuthFailure(c, "no_token", "missing or malformed Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "No authorization token provided",
 			})
@@ -222,6 +272,7 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			h.logger.Warn("AdminConsoleAuth: Token invalid or expired",
 				zap.String("path", c.Path()),
 			)
+			h.logAuthFailure(c, "invalid_or_expired_session", "token rejected by session validator (also covers api_key mismatch)")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid or expired session",
 			})

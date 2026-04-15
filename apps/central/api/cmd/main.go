@@ -96,9 +96,10 @@ func main() {
 		}
 	}
 
-	// Initialize Admin Service
+	// Initialize Admin Service (Handler is constructed later, once the audit
+	// service is available — admin auth failures must be recorded, so the
+	// Handler depends on newFeatureServices.AuditService).
 	adminService := admin.NewService(db, zapLogger, cfg.Admin.Password)
-	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey)
 
 	// Initialize Redis
 	redisClient, err := database.ConnectRedis(cfg.Redis)
@@ -213,6 +214,10 @@ func main() {
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
 	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
+
+	// Admin handler depends on audit.Service so auth failures surface in
+	// audit_logs (see pkg/admin/handler.go logAuthFailure).
+	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey, newFeatureServices.AuditService)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger)
