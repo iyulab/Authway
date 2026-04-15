@@ -5,16 +5,25 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/mfa"
+	"authway/apps/central/api/pkg/user"
 )
 
 type MFAHandler struct {
-	mfaService mfa.Service
-	logger     *zap.Logger
+	mfaService   mfa.Service
+	userService  user.Service
+	logger       *zap.Logger
+	auditService audit.Service
 }
 
-func NewMFAHandler(mfaService mfa.Service, logger *zap.Logger) *MFAHandler {
-	return &MFAHandler{mfaService: mfaService, logger: logger}
+func NewMFAHandler(mfaService mfa.Service, userService user.Service, logger *zap.Logger, auditService audit.Service) *MFAHandler {
+	return &MFAHandler{
+		mfaService:   mfaService,
+		userService:  userService,
+		logger:       logger,
+		auditService: auditService,
+	}
 }
 
 type VerifyMFARequest struct {
@@ -23,6 +32,53 @@ type VerifyMFARequest struct {
 
 type VerifyRecoveryCodeRequest struct {
 	Code string `json:"code" validate:"required"`
+}
+
+// tenantForUser resolves a user's tenant for audit entries. Unknown users fall
+// back to uuid.Nil so the audit write never fails on its own lookup — the row
+// is still queryable by actor_id / resource_id.
+func (h *MFAHandler) tenantForUser(userID uuid.UUID) uuid.UUID {
+	if h.userService == nil {
+		return uuid.Nil
+	}
+	u, err := h.userService.GetByID(userID)
+	if err != nil || u == nil {
+		return uuid.Nil
+	}
+	return u.TenantID
+}
+
+// logMFASuccess emits a best-effort (async) audit entry for a successful MFA
+// event. Buffer drops are acceptable here — failure paths use logMFAFailure.
+func (h *MFAHandler) logMFASuccess(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, severity audit.AuditSeverity, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, h.tenantForUser(userID), action, "user_mfa", userID.String())
+	entry.Severity = severity
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
+}
+
+// logMFAFailure emits a sync audit entry for a failed MFA verification. Sync
+// (not Async) because security-critical failures must not be dropped on buffer
+// overflow — this is the write path a lockout investigation relies on.
+func (h *MFAHandler) logMFAFailure(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, errMsg string, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, h.tenantForUser(userID), action, "user_mfa", userID.String())
+	entry.Severity = audit.SeverityWarning
+	entry.Success = false
+	entry.ErrorMsg = errMsg
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	if err := h.auditService.Log(c.UserContext(), entry); err != nil {
+		h.logger.Error("Failed to write MFA failure audit log", zap.Error(err), zap.String("user_id", userID.String()))
+	}
 }
 
 // SetupMFA initiates TOTP setup
@@ -41,8 +97,11 @@ func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 		h.logger.Error("MFA setup failed", zap.Error(err), zap.String("user_id", userID.String()))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+	// Setup alone does not enable MFA — the audit event fires on VerifyMFA
+	// success. Logging setup separately would just double every enablement.
 	return c.JSON(resp)
 }
+
 // VerifyMFA verifies TOTP code and enables MFA
 // POST /api/v1/users/mfa/verify
 func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
@@ -61,8 +120,12 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 	resp, err := h.mfaService.VerifyAndEnable(userID, req.Code)
 	if err != nil {
 		h.logger.Warn("MFA verification failed", zap.Error(err), zap.String("user_id", userID.String()))
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]interface{}{
+			"phase": "enable",
+		})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+	h.logMFASuccess(c, userID, audit.ActionUserMFAEnabled, audit.SeverityWarning, nil)
 	return c.JSON(resp)
 }
 
@@ -81,8 +144,10 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 		h.logger.Error("MFA disable failed", zap.Error(err), zap.String("user_id", userID.String()))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+	h.logMFASuccess(c, userID, audit.ActionUserMFADisabled, audit.SeverityWarning, nil)
 	return c.JSON(fiber.Map{"message": "MFA disabled successfully"})
 }
+
 // GetMFAStatus returns MFA status
 // GET /api/v1/users/mfa/status
 func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
@@ -118,11 +183,20 @@ func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
 	}
 	valid, err := h.mfaService.VerifyRecoveryCode(userID, req.Code)
 	if err != nil {
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]interface{}{
+			"phase": "recovery_code",
+		})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	if !valid {
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, "invalid recovery code", map[string]interface{}{
+			"phase": "recovery_code",
+		})
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid recovery code"})
 	}
+	h.logMFASuccess(c, userID, audit.ActionUserMFAVerified, audit.SeverityInfo, map[string]interface{}{
+		"phase": "recovery_code",
+	})
 	return c.JSON(fiber.Map{"message": "Recovery code verified", "valid": true})
 }
 

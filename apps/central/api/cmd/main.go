@@ -221,11 +221,11 @@ func main() {
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger)
-	userHandler := handler.NewUserHandler(services, zapLogger)
+	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 
 	// Initialize MFA Service and Handler
 	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name)
-	mfaHandler := handler.NewMFAHandler(mfaService, zapLogger)
+	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
