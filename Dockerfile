@@ -21,8 +21,13 @@ COPY apps/central/ ./apps/central/
 
 # Build the application with optimizations
 # Central API is part of the authway module, so we build from the module root
+# APP_VERSION build arg is stamped into main.version (→ /health) so the
+# deployed binary's version is observable and CD drift is detectable.
+# Defaults to a timestamp when unset (local builds); release pipelines
+# should pass the git tag (e.g. `--build-arg APP_VERSION=0.3.1`).
+ARG APP_VERSION
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
-    -ldflags="-w -s -X main.version=$(date +%Y%m%d-%H%M%S)" \
+    -ldflags="-w -s -X main.version=${APP_VERSION:-$(date +%Y%m%d-%H%M%S)}" \
     -o authway-api authway/apps/central/api/cmd
 
 # Production stage

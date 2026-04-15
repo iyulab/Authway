@@ -30,11 +30,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// version is set at build time via -ldflags "-X main.version=<value>"
+// (see Dockerfile). Overrides cfg.App.Version so `/health` reports the actual
+// deployed build, not the stale viper default. If left as "dev", config/env
+// wins — keeping local dev and explicit overrides functional.
+var version = "dev"
+
 func main() {
 	// Initialize configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
+	}
+
+	// Prefer build-time version over the viper default so deploy drift is
+	// observable via /health. Explicit env (APP_VERSION) still wins.
+	if version != "dev" && os.Getenv("APP_VERSION") == "" {
+		cfg.App.Version = version
 	}
 
 	// Initialize logger
