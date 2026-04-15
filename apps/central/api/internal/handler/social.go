@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
@@ -9,8 +10,10 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service/social"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -46,6 +49,7 @@ type SocialHandler struct {
 	userService      user.Service
 	hydraClient      *hydra.Client
 	logger           *zap.Logger
+	auditService     audit.Service
 }
 
 func NewSocialHandler(
@@ -53,12 +57,14 @@ func NewSocialHandler(
 	userService user.Service,
 	hydraClient *hydra.Client,
 	logger *zap.Logger,
+	auditService audit.Service,
 ) *SocialHandler {
 	return &SocialHandler{
 		googleService: googleService,
 		userService:   userService,
 		hydraClient:   hydraClient,
 		logger:        logger,
+		auditService:  auditService,
 	}
 }
 
@@ -71,6 +77,7 @@ func NewSocialHandlerWithAllProviders(
 	userService user.Service,
 	hydraClient *hydra.Client,
 	logger *zap.Logger,
+	auditService audit.Service,
 ) *SocialHandler {
 	return &SocialHandler{
 		googleService:    googleService,
@@ -80,6 +87,57 @@ func NewSocialHandlerWithAllProviders(
 		userService:      userService,
 		hydraClient:      hydraClient,
 		logger:           logger,
+		auditService:     auditService,
+	}
+}
+
+// logSocialLogin emits a success-path login audit entry with the resolved user
+// as actor, tagging the OAuth provider in Details.
+func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider string, extra map[string]interface{}) {
+	if s.auditService == nil || u == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, u.TenantID, audit.ActionUserLogin, "user", u.ID.String())
+	entry.ActorID = &u.ID
+	entry.ActorEmail = u.Email
+	entry.ActorType = "user"
+	entry.Details["provider"] = provider
+	entry.Details["method"] = "social"
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	s.auditService.LogAsync(entry)
+}
+
+// logSocialLoginFailure emits a sync failure audit for social callbacks. We
+// rarely know the user at failure time (OAuth handshake broke before user
+// resolution), so tenantID falls back to uuid.Nil when unknown.
+func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason string, extra map[string]interface{}) {
+	if s.auditService == nil {
+		return
+	}
+	details := map[string]interface{}{
+		"provider": provider,
+		"method":   "social",
+		"reason":   reason,
+	}
+	for k, v := range extra {
+		details[k] = v
+	}
+	entry := &audit.AuditEntry{
+		TenantID:     uuid.Nil,
+		ActorType:    "anonymous",
+		Action:       audit.ActionUserLoginFailed,
+		Severity:     audit.SeverityWarning,
+		ResourceType: "user",
+		IPAddress:    c.IP(),
+		UserAgent:    c.Get("User-Agent"),
+		Details:      details,
+		Success:      false,
+		ErrorMsg:     reason,
+	}
+	if err := s.auditService.Log(context.Background(), entry); err != nil {
+		s.logger.Warn("Failed to record social auth-failure audit", zap.Error(err), zap.String("provider", provider))
 	}
 }
 
@@ -321,6 +379,10 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		s.logger.Error("Google OAuth callback failed",
 			zap.Error(err),
 			zap.String("client_id", retrievedClientID))
+		s.logSocialLoginFailure(c, "google", "oauth_callback_failed", map[string]interface{}{
+			"client_id": retrievedClientID,
+			"error":     err.Error(),
+		})
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Google OAuth callback",
@@ -392,6 +454,10 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		zap.String("email", authUser.Email),
 		zap.String("provider", "google"),
 		zap.String("redirect_to", acceptResp.RedirectTo))
+
+	s.logSocialLogin(c, authUser, "google", map[string]interface{}{
+		"client_id": retrievedClientID,
+	})
 
 	// Return HTML page with JavaScript redirect to ensure proper browser navigation
 	// This is more reliable than HTTP 302 redirect for cross-origin OAuth flows
@@ -609,6 +675,10 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	authUser, err := s.githubService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("GitHub OAuth callback failed", zap.Error(err))
+		s.logSocialLoginFailure(c, "github", "oauth_callback_failed", map[string]interface{}{
+			"client_id": retrievedClientID,
+			"error":     err.Error(),
+		})
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process GitHub OAuth callback",
@@ -644,6 +714,10 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	s.logger.Info("GitHub OAuth login successful",
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
+
+	s.logSocialLogin(c, authUser, "github", map[string]interface{}{
+		"client_id": retrievedClientID,
+	})
 
 	return s.renderRedirectPage(c, acceptResp.RedirectTo)
 }
@@ -800,6 +874,10 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	authUser, err := s.microsoftService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("Microsoft OAuth callback failed", zap.Error(err))
+		s.logSocialLoginFailure(c, "microsoft", "oauth_callback_failed", map[string]interface{}{
+			"client_id": retrievedClientID,
+			"error":     err.Error(),
+		})
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Microsoft OAuth callback",
@@ -835,6 +913,10 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	s.logger.Info("Microsoft OAuth login successful",
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
+
+	s.logSocialLogin(c, authUser, "microsoft", map[string]interface{}{
+		"client_id": retrievedClientID,
+	})
 
 	return s.renderRedirectPage(c, acceptResp.RedirectTo)
 }
@@ -1003,6 +1085,10 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 	authUser, err := s.appleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("Apple OAuth callback failed", zap.Error(err))
+		s.logSocialLoginFailure(c, "apple", "oauth_callback_failed", map[string]interface{}{
+			"client_id": retrievedClientID,
+			"error":     err.Error(),
+		})
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Apple OAuth callback",
@@ -1038,6 +1124,10 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 	s.logger.Info("Apple OAuth login successful",
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
+
+	s.logSocialLogin(c, authUser, "apple", map[string]interface{}{
+		"client_id": retrievedClientID,
+	})
 
 	return s.renderRedirectPage(c, acceptResp.RedirectTo)
 }

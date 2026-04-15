@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] - 2026-04-15
+
+### Added
+
+- **Audit log coverage for central-API auth flows (P4a/P4b)**. `audit_logs`
+  action constants that were defined but never emitted are now wired into
+  the request path:
+  - `user.created` — `auth.Register` (self-registration), `internal_auth.AuthenticateGoogleUser`
+    (JIT provision path, tagged `jit_provisioned=true`).
+  - `user.login` — password `auth.Login`, all social callbacks (Google/GitHub/Microsoft/Apple),
+    `internal_auth.AuthenticateGoogleUser` (returning user refresh). Provider and
+    client_id are recorded in `Details`.
+  - `user.login_failed` — recorded synchronously (`Log`, not `LogAsync`) so buffer
+    overflow cannot swallow security events. Covers `auth.Login` (user_not_found /
+    invalid_password), `auth.LoginEmbedded` (user_not_found / invalid_password /
+    tenant_mismatch), and all four social callbacks when `HandleCallbackForClient`
+    fails.
+  - `user.logout` — both `auth.Logout` (direct API) and `auth.LogoutPage`
+    (Hydra-initiated OIDC flow, tagged `flow=oidc`).
+  - `user.password_reset` — `email.ResetPassword`.
+  - `user.email_verified` — `email.VerifyEmail`.
+  - `consent.granted` — `auth.Consent` (with `grant_scope`, `audience`, `client_id`).
+  - `consent.revoked` — `auth.RejectConsent` (fetches subject via `GetConsentRequest`
+    to preserve actor identity).
+  - `webhook.created`/`updated`/`deleted` — `pkg/webhook/handler.go` admin write paths.
+    Delete captures before-state snapshot (same pattern as user/tenant delete audits).
+
+- **`LogAsync` non-blocking contract test** (`pkg/audit/service_async_test.go`).
+  The login path is the highest-QPS audit producer; if `LogAsync` ever blocked
+  when the buffer saturated, request threads would pin waiting on audit writes.
+  `TestLogAsync_BufferOverflowNonBlocking` verifies the `default` drop branch
+  is taken under buffer saturation with a 2-second watchdog.
+
+### Changed
+
+- `NewAuthHandler`, `NewEmailHandler`, `NewInternalAuthHandler`,
+  `NewSocialHandler*`, `webhook.NewHandler` all accept `audit.Service` in
+  their signatures.
+- `apps/branding/auth-api/README.md` — explicit note that the branding layer
+  does **not** record audit (central API is the single source of truth).
+  Prevents double-recording during future refactors.
+
+### Carry-Forward Issues Filed
+
+- `ISSUE-Authway-20260415-stale-auth-handler-tests.md` — `internal/handler/auth_test.go`
+  is `integration`-tagged and fails to compile due to drift (User field rename,
+  two added constructor arguments). Option A (real-DB integration rewrite)
+  recommended.
+- `ISSUE-Authway-20260415-admin-session-token-hashing.md` — Admin session tokens
+  are stored plaintext in the DB. Needs SHA-256 hash + constant-time compare.
+  Blocked on staging environment availability.
+- `ISSUE-Authway-20260415-module-consolidation.md` — `apps/branding/auth-api`
+  separate `go.mod` blocks shared-pkg reuse. Awaiting architecture review.
+
+### Notes
+
+- `user.password_changed` constant remains unemitted. The only current
+  password-change path is `ResetPassword`, which records `user.password_reset`.
+  A dedicated change-password API would emit this constant at that point.
+- `user.locked`/`user.unlocked` constants remain unemitted; brute-force lockout
+  is not yet implemented (separate feature request).
+- `session.*` constants are not emitted — Hydra owns session lifecycle. Hydra
+  session revocation is captured as `user.logout`.
+- `token.*` constants are owned by Hydra; central API does not record them.
+
 ## [0.3.1] - 2026-04-14
 
 ### Security

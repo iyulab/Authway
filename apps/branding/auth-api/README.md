@@ -18,6 +18,7 @@ Auth Backend는 환경별로 배포되어 Google OAuth callback을 전담 처리
 - User CRUD (Central Backend)
 - Tenant management (Central Backend)
 - Business logic (Central Backend)
+- **Audit logging** (`audit_logs`) — Auth Backend는 UI 프록시 계층이므로 audit 기록을 수행하지 않는다. 모든 상태 변경(로그인/회원가입/consent 수락·거부/세션 폐기 등)의 audit 기록은 Central API에서만 수행된다. Branding 계층에서 중복 기록을 추가하면 동일 이벤트가 이중 기록되어 forensics가 어려워진다. 근거: `claudedocs/HANDOFF.md` P4c 항목.
 
 ## 프로젝트 구조
 

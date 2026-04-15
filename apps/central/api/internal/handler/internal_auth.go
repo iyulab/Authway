@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
 
@@ -14,18 +15,46 @@ type InternalAuthHandler struct {
 	userService   user.Service
 	clientService client.Service
 	logger        *zap.Logger
+	auditService  audit.Service
 }
 
 func NewInternalAuthHandler(
 	userService user.Service,
 	clientService client.Service,
 	logger *zap.Logger,
+	auditService audit.Service,
 ) *InternalAuthHandler {
 	return &InternalAuthHandler{
 		userService:   userService,
 		clientService: clientService,
 		logger:        logger,
+		auditService:  auditService,
 	}
+}
+
+// logGoogleAuth emits an audit entry for the Auth Backend → central
+// AuthenticateGoogleUser path. `created` discriminates first-login JIT from
+// returning user refresh.
+func (h *InternalAuthHandler) logGoogleAuth(c *fiber.Ctx, u *user.User, clientID string, created bool) {
+	if h.auditService == nil || u == nil {
+		return
+	}
+	action := audit.ActionUserLogin
+	if created {
+		action = audit.ActionUserCreated
+	}
+	entry := audit.EntryFromFiber(c, u.TenantID, action, "user", u.ID.String())
+	entry.ActorID = &u.ID
+	entry.ActorEmail = u.Email
+	entry.ActorType = "user"
+	entry.Details["provider"] = "google"
+	entry.Details["method"] = "social"
+	entry.Details["source"] = "internal_api"
+	entry.Details["client_id"] = clientID
+	if created {
+		entry.Details["jit_provisioned"] = true
+	}
+	h.auditService.LogAsync(entry)
 }
 
 // AuthenticateGoogleUserRequest represents the request from Auth Backend
@@ -111,6 +140,8 @@ func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
 			zap.String("email", existingUser.Email),
 			zap.String("tenant_id", clientTenantID.String()))
 
+		h.logGoogleAuth(c, existingUser, req.ClientID, false)
+
 		return c.JSON(AuthenticateGoogleUserResponse{
 			UserID:   existingUser.ID.String(),
 			TenantID: clientTenantID.String(),
@@ -158,6 +189,8 @@ func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
 		zap.String("user_id", newUser.ID.String()),
 		zap.String("email", newUser.Email),
 		zap.String("tenant_id", clientTenantID.String()))
+
+	h.logGoogleAuth(c, newUser, req.ClientID, true)
 
 	return c.JSON(AuthenticateGoogleUserResponse{
 		UserID:   newUser.ID.String(),

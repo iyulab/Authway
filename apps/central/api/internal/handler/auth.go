@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
@@ -25,15 +27,64 @@ type AuthHandler struct {
 	claimsService claims.Service
 	hydraClient   *hydra.Client
 	logger        *zap.Logger
+	auditService  audit.Service
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, hydraClient *hydra.Client, logger *zap.Logger) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service) *AuthHandler {
 	return &AuthHandler{
 		userService:   userService,
 		clientService: clientService,
 		claimsService: claimsService,
 		hydraClient:   hydraClient,
 		logger:        logger,
+		auditService:  auditService,
+	}
+}
+
+// logUserAudit emits a success-path audit entry with the resolved user as actor.
+func (h *AuthHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]interface{}) {
+	if h.auditService == nil || u == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, u.TenantID, action, "user", u.ID.String())
+	entry.ActorID = &u.ID
+	entry.ActorEmail = u.Email
+	entry.ActorType = "user"
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
+}
+
+// logAuthFailure emits a sync audit entry for login failures. Sync so buffer
+// overflow cannot swallow security events.
+func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, attemptedEmail, reason string, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	details := map[string]interface{}{
+		"reason": reason,
+	}
+	if attemptedEmail != "" {
+		details["attempted_email"] = attemptedEmail
+	}
+	for k, v := range extra {
+		details[k] = v
+	}
+	entry := &audit.AuditEntry{
+		TenantID:     tenantID,
+		ActorType:    "anonymous",
+		Action:       action,
+		Severity:     audit.SeverityWarning,
+		ResourceType: "user",
+		IPAddress:    c.IP(),
+		UserAgent:    c.Get("User-Agent"),
+		Details:      details,
+		Success:      false,
+		ErrorMsg:     reason,
+	}
+	if err := h.auditService.Log(context.Background(), entry); err != nil {
+		h.logger.Warn("Failed to record auth-failure audit", zap.Error(err), zap.String("action", string(action)))
 	}
 }
 
@@ -250,6 +301,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	// Authenticate user
 	user, err := h.userService.GetByEmail(req.Email)
 	if err != nil {
+		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
 		// Reject login request
 		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
 		return c.JSON(fiber.Map{
@@ -260,6 +312,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	// Verify password
 	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]interface{}{
+			"user_id": user.ID.String(),
+		})
 		// Reject login request
 		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
 		return c.JSON(fiber.Map{
@@ -305,6 +360,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			"error": "Failed to accept login request",
 		})
 	}
+
+	h.logUserAudit(c, user, audit.ActionUserLogin, map[string]interface{}{
+		"challenge": req.Challenge,
+		"remember":  req.Remember,
+		"method":    "password",
+	})
 
 	return c.JSON(fiber.Map{
 		"redirect_to": resp.RedirectTo,
@@ -579,6 +640,14 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 		zap.String("redirect_to", resp.RedirectTo),
 		zap.String("user_id", user.ID.String()))
 
+	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]interface{}{
+		"challenge":    req.Challenge,
+		"grant_scope":  req.GrantScope,
+		"audience":     consentReq.RequestedAudience,
+		"client_id":    consentReq.Client.ClientID,
+		"remember":     req.Remember,
+	})
+
 	return c.JSON(fiber.Map{
 		"redirect_to": resp.RedirectTo,
 	})
@@ -608,10 +677,25 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 		})
 	}
 
+	// Resolve subject for audit actor before rejecting — best effort, ignore errors.
+	var rejectingUser *user.User
+	if consentReq, err := h.hydraClient.GetConsentRequest(challenge); err == nil && consentReq != nil && consentReq.Subject != "" {
+		if uid, parseErr := uuid.Parse(consentReq.Subject); parseErr == nil {
+			rejectingUser, _ = h.userService.GetByID(uid)
+		}
+	}
+
 	resp, err := h.hydraClient.RejectConsentRequest(challenge, "access_denied", "User denied consent")
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to reject consent request",
+		})
+	}
+
+	if rejectingUser != nil {
+		h.logUserAudit(c, rejectingUser, audit.ActionConsentRevoked, map[string]interface{}{
+			"challenge": challenge,
+			"reason":    "user_denied",
 		})
 	}
 
@@ -666,6 +750,14 @@ func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
 	h.logger.Info("Logout accepted - redirecting",
 		zap.String("subject", logoutReq.Subject),
 		zap.String("redirect_to", resp.RedirectTo))
+
+	if subjectUUID, parseErr := uuid.Parse(logoutReq.Subject); parseErr == nil {
+		if logoutUser, getErr := h.userService.GetByID(subjectUUID); getErr == nil {
+			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, map[string]interface{}{
+				"flow": "oidc",
+			})
+		}
+	}
 
 	// Redirect to Hydra's logout endpoint (which will then redirect to post_logout_redirect_uri)
 	return c.Redirect(resp.RedirectTo)
@@ -742,6 +834,12 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	h.logger.Info("User sessions revoked successfully",
 		zap.String("subject", subject))
+
+	if subjectUUID, parseErr := uuid.Parse(subject); parseErr == nil {
+		if logoutUser, getErr := h.userService.GetByID(subjectUUID); getErr == nil {
+			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, nil)
+		}
+	}
 
 	response := LogoutResponse{
 		Success: true,
@@ -861,7 +959,21 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 
 	// Authenticate user
 	user, err := h.userService.GetByEmail(req.Email)
-	if err != nil || user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+	if err != nil {
+		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", map[string]interface{}{
+			"flow":      "embedded",
+			"client_id": req.ClientID,
+		})
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Invalid email or password",
+		})
+	}
+	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]interface{}{
+			"flow":      "embedded",
+			"client_id": req.ClientID,
+			"user_id":   user.ID.String(),
+		})
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Invalid email or password",
 		})
@@ -869,6 +981,13 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 
 	// Check tenant match
 	if user.TenantID != client.TenantID {
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "tenant_mismatch", map[string]interface{}{
+			"flow":             "embedded",
+			"client_id":        req.ClientID,
+			"user_id":          user.ID.String(),
+			"user_tenant":      user.TenantID.String(),
+			"client_tenant":    client.TenantID.String(),
+		})
 		return c.Status(403).JSON(fiber.Map{
 			"error": "User and client belong to different tenants",
 		})
@@ -984,6 +1103,11 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 			"error": "Failed to create user",
 		})
 	}
+
+	h.logUserAudit(c, createdUser, audit.ActionUserCreated, map[string]interface{}{
+		"email":     createdUser.Email,
+		"source":    "registration",
+	})
 
 	return c.Status(201).JSON(fiber.Map{
 		"id":        createdUser.ID,

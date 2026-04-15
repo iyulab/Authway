@@ -3,6 +3,8 @@ package webhook
 import (
 	"strconv"
 
+	"authway/apps/central/api/pkg/audit"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -10,16 +12,31 @@ import (
 
 // Handler handles webhook management HTTP requests
 type Handler struct {
-	service Service
-	logger  *zap.Logger
+	service      Service
+	logger       *zap.Logger
+	auditService audit.Service
 }
 
 // NewHandler creates a new webhook handler
-func NewHandler(service Service, logger *zap.Logger) *Handler {
+func NewHandler(service Service, logger *zap.Logger, auditService audit.Service) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		service:      service,
+		logger:       logger,
+		auditService: auditService,
 	}
+}
+
+// logAudit records an audit entry for a webhook admin write path. Mirrors the
+// client/tenant/user handler pattern — best-effort, nil auditService tolerated.
+func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, tenantID, action, "webhook", resourceID)
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
 }
 
 // CreateWebhook creates a new webhook
@@ -61,6 +78,12 @@ func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
 		zap.String("name", webhook.Name),
 		zap.String("tenant_id", tenantID.String()),
 	)
+
+	h.logAudit(c, tenantID, audit.ActionWebhookCreated, webhook.ID.String(), map[string]interface{}{
+		"name":   webhook.Name,
+		"url":    webhook.URL,
+		"events": req.Events,
+	})
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"webhook": webhook,
@@ -131,6 +154,11 @@ func (h *Handler) UpdateWebhook(c *fiber.Ctx) error {
 	}
 
 	h.logger.Info("Webhook updated", zap.String("webhook_id", webhook.ID.String()))
+
+	h.logAudit(c, webhook.TenantID, audit.ActionWebhookUpdated, webhook.ID.String(), map[string]interface{}{
+		"name": webhook.Name,
+	})
+
 	return c.JSON(fiber.Map{
 		"webhook": webhook,
 		"message": "webhook updated successfully",
@@ -146,12 +174,24 @@ func (h *Handler) DeleteWebhook(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid webhook ID"})
 	}
 
+	// Snapshot before deletion so the audit entry can answer which tenant the
+	// webhook belonged to after the row is gone.
+	before, _ := h.service.GetByID(id)
+
 	if err := h.service.Delete(id); err != nil {
 		h.logger.Warn("Failed to delete webhook", zap.Error(err), zap.String("webhook_id", idStr))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	h.logger.Info("Webhook deleted", zap.String("webhook_id", idStr))
+
+	if before != nil {
+		h.logAudit(c, before.TenantID, audit.ActionWebhookDeleted, before.ID.String(), map[string]interface{}{
+			"name": before.Name,
+			"url":  before.URL,
+		})
+	}
+
 	return c.JSON(fiber.Map{"message": "webhook deleted successfully"})
 }
 

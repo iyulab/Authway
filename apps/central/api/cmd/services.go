@@ -47,7 +47,7 @@ func InitNewFeatureServices(
 
 	// Webhook Service
 	webhookService := webhook.NewService(db, logger)
-	webhookHandler := webhook.NewHandler(webhookService, logger)
+	webhookHandler := webhook.NewHandler(webhookService, logger, auditService)
 
 	// Account Linking Service
 	accountLinkService := accountlink.NewService(db, userService, logger)

@@ -220,12 +220,12 @@ func main() {
 	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey, newFeatureServices.AuditService)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger)
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger, newFeatureServices.AuditService)
+	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
-	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger)
+	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
-	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger)
+	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger, newFeatureServices.AuditService)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 
 	// Initialize MFA Service and Handler

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/user"
 	"net/http"
@@ -13,12 +14,13 @@ import (
 
 // EmailHandler handles email verification and password reset requests
 type EmailHandler struct {
-	emailRepo   *email.Repository
-	emailSvc    email.EmailService
-	userSvc     user.Service
-	hydraClient *hydra.Client
-	validator   *validator.Validate
-	logger      *zap.Logger
+	emailRepo    *email.Repository
+	emailSvc     email.EmailService
+	userSvc      user.Service
+	hydraClient  *hydra.Client
+	validator    *validator.Validate
+	logger       *zap.Logger
+	auditService audit.Service
 }
 
 // NewEmailHandler creates a new email handler
@@ -29,15 +31,33 @@ func NewEmailHandler(
 	hydraClient *hydra.Client,
 	validator *validator.Validate,
 	logger *zap.Logger,
+	auditService audit.Service,
 ) *EmailHandler {
 	return &EmailHandler{
-		emailRepo:   emailRepo,
-		emailSvc:    emailSvc,
-		userSvc:     userSvc,
-		hydraClient: hydraClient,
-		validator:   validator,
-		logger:      logger,
+		emailRepo:    emailRepo,
+		emailSvc:     emailSvc,
+		userSvc:      userSvc,
+		hydraClient:  hydraClient,
+		validator:    validator,
+		logger:       logger,
+		auditService: auditService,
 	}
+}
+
+// logUserAudit records an audit entry for a user self-service flow (anonymous
+// request authenticated by a one-shot token). The resolved user is the actor.
+func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]interface{}) {
+	if h.auditService == nil || u == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, u.TenantID, action, "user", u.ID.String())
+	entry.ActorID = &u.ID
+	entry.ActorEmail = u.Email
+	entry.ActorType = "user"
+	for k, v := range extra {
+		entry.Details[k] = v
+	}
+	h.auditService.LogAsync(entry)
 }
 
 // SendVerificationEmail godoc
@@ -157,6 +177,12 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update user status",
 		})
+	}
+
+	if verifiedUser, err := h.userSvc.GetByID(verification.UserID); err == nil {
+		h.logUserAudit(c, verifiedUser, audit.ActionUserEmailVerified, nil)
+	} else {
+		h.logger.Warn("Failed to load user for email_verified audit", zap.Error(err))
 	}
 
 	return c.JSON(fiber.Map{
@@ -299,6 +325,11 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 		})
 	}
 
+	resetUser, resetUserErr := h.userSvc.GetByID(reset.UserID)
+	if resetUserErr != nil {
+		h.logger.Warn("Failed to load user for password_reset audit", zap.Error(resetUserErr))
+	}
+
 	// Update user password
 	if err := h.userSvc.UpdatePassword(reset.UserID, req.NewPassword); err != nil {
 		h.logger.Error("Failed to update password", zap.Error(err))
@@ -306,6 +337,8 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 			"error": "Failed to update password",
 		})
 	}
+
+	h.logUserAudit(c, resetUser, audit.ActionUserPasswordReset, nil)
 
 	// Mark reset as used
 	if err := h.emailRepo.MarkPasswordResetAsUsed(reset.ID); err != nil {
