@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.3.2] - 2026-04-27
+## [0.3.2] - 2026-04-15
 
 > **Note**: This entry was opened in Run-3 (2026-04-15) for the audit P4
 > wiring described below, then expanded in Run-7 (2026-04-27) with the
-> deployment-infrastructure changes recorded under "Operational" at the
-> bottom. Both sets of changes ship together when prod is updated to
-> `v0.3.2`.
+> deployment-infrastructure changes recorded under "Operational (Run-7)"
+> at the bottom. Both sets of changes ship together when prod is updated
+> to `v0.3.2`. Date reflects original merge of the entry to follow the
+> per-merge-date convention used by 0.3.0/0.3.1.
 
 ### Added
 
