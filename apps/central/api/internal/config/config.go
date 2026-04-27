@@ -339,16 +339,19 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Debug: Print configuration
-	fmt.Printf("🔍 Database Config: Host=%s, Port=%d, User=%s, Name=%s\n",
-		config.Database.Host, config.Database.Port, config.Database.User, config.Database.Name)
-	fmt.Printf("🔍 Redis Config: Host=%s, Port=%d\n",
-		config.Redis.Host, config.Redis.Port)
-	fmt.Printf("🔍 Google OAuth Config: ClientID=%s, Enabled=%v, RedirectURL=%s\n",
-		config.Google.ClientID, config.Google.Enabled, config.Google.RedirectURL)
-	fmt.Printf("🔍 Hydra Config: AdminURL=%s, PublicURL=%s\n",
-		config.Hydra.AdminURL, config.Hydra.PublicURL)
-	fmt.Printf("🔍 CORS Config: AllowedOrigins=%v\n", config.CORS.AllowedOrigins)
+	// Config 적용 확인용 stdout 출력 — production은 침묵
+	// (운영 환경은 zap logger가 별도로 startup state를 남기므로 중복).
+	if config.App.Environment != "production" {
+		fmt.Printf("🔍 Database Config: Host=%s, Port=%d, User=%s, Name=%s\n",
+			config.Database.Host, config.Database.Port, config.Database.User, config.Database.Name)
+		fmt.Printf("🔍 Redis Config: Host=%s, Port=%d\n",
+			config.Redis.Host, config.Redis.Port)
+		fmt.Printf("🔍 Google OAuth Config: ClientID=%s, Enabled=%v, RedirectURL=%s\n",
+			config.Google.ClientID, config.Google.Enabled, config.Google.RedirectURL)
+		fmt.Printf("🔍 Hydra Config: AdminURL=%s, PublicURL=%s\n",
+			config.Hydra.AdminURL, config.Hydra.PublicURL)
+		fmt.Printf("🔍 CORS Config: AllowedOrigins=%v\n", config.CORS.AllowedOrigins)
+	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {

@@ -55,7 +55,6 @@ func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error)
 		bytes.NewBuffer(data),
 	)
 	if err != nil {
-		fmt.Printf("❌ DEBUG Hydra Client: POST request failed with error: %v\n", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
