@@ -93,9 +93,10 @@ type HydraConfig struct {
 
 type EmailConfig struct {
 	// Azure Functions Email Service (Production)
-	UseAzure        bool   `mapstructure:"use_azure"`
-	AzureBaseURL    string `mapstructure:"azure_base_url"`
+	UseAzure         bool   `mapstructure:"use_azure"`
+	AzureBaseURL     string `mapstructure:"azure_base_url"`
 	AzureFunctionKey string `mapstructure:"azure_function_key"`
+	AzureProfile     string `mapstructure:"azure_profile"`
 
 	// Traditional SMTP (Development/Fallback)
 	SMTPHost     string `mapstructure:"smtp_host"`
@@ -104,8 +105,8 @@ type EmailConfig struct {
 	SMTPPassword string `mapstructure:"smtp_password"`
 
 	// Common settings
-	FromEmail    string `mapstructure:"from_email"`
-	FromName     string `mapstructure:"from_name"`
+	FromEmail string `mapstructure:"from_email"`
+	FromName  string `mapstructure:"from_name"`
 }
 
 type GoogleOAuthConfig struct {
@@ -457,6 +458,7 @@ func setDefaults() {
 	viper.SetDefault("email.use_azure", false) // Default to SMTP for development
 	viper.SetDefault("email.azure_base_url", "")
 	viper.SetDefault("email.azure_function_key", "")
+	viper.SetDefault("email.azure_profile", "")
 	viper.SetDefault("email.smtp_host", "localhost")
 	viper.SetDefault("email.smtp_port", 587)
 	viper.SetDefault("email.from_email", "noreply@authway.in")

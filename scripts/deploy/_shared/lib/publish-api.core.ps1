@@ -145,6 +145,7 @@ try {
             "AUTHWAY_EMAIL_USE_AZURE=$($envVars['EMAIL_USE_AZURE'])" `
             "AUTHWAY_EMAIL_AZURE_BASE_URL=$($envVars['EMAIL_AZURE_BASE_URL'])" `
             "AUTHWAY_EMAIL_AZURE_FUNCTION_KEY=$($envVars['EMAIL_AZURE_FUNCTION_KEY'])" `
+            "AUTHWAY_EMAIL_AZURE_PROFILE=$($envVars['EMAIL_AZURE_PROFILE'])" `
             "AUTHWAY_EMAIL_FROM_EMAIL=$($envVars['EMAIL_FROM_EMAIL'])" `
             "AUTHWAY_EMAIL_FROM_NAME=$($envVars['EMAIL_FROM_NAME'])" `
             "AUTHWAY_LOG_LEVEL=$($envVars['LOG_LEVEL'])"

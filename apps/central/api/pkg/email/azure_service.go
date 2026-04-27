@@ -15,6 +15,7 @@ import (
 type AzureEmailService struct {
 	baseURL     string
 	functionKey string
+	profileID   string
 	fromEmail   string
 	fromName    string
 	frontendURL string
@@ -26,6 +27,7 @@ type AzureEmailService struct {
 type AzureEmailConfig struct {
 	BaseURL     string
 	FunctionKey string
+	ProfileID   string
 	FromEmail   string
 	FromName    string
 	FrontendURL string
@@ -33,13 +35,14 @@ type AzureEmailConfig struct {
 
 // AzureEmailRequest represents the request to Azure Functions email service
 type AzureEmailRequest struct {
-	To          string            `json:"to"`
-	Subject     string            `json:"subject"`
-	TextBody    string            `json:"textBody,omitempty"`
-	HtmlBody    string            `json:"htmlBody,omitempty"`
-	FromEmail   string            `json:"fromEmail,omitempty"`
-	FromName    string            `json:"fromName,omitempty"`
-	Priority    string            `json:"priority,omitempty"`
+	To            []string          `json:"to"`
+	Subject       string            `json:"subject"`
+	TextBody      string            `json:"textBody,omitempty"`
+	HtmlBody      string            `json:"htmlBody,omitempty"`
+	FromEmail     string            `json:"fromEmail,omitempty"`
+	FromName      string            `json:"fromName,omitempty"`
+	ProfileID     string            `json:"profileId,omitempty"`
+	Priority      string            `json:"priority,omitempty"`
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"`
 }
 
@@ -58,6 +61,7 @@ func NewAzureEmailService(config AzureEmailConfig, logger *zap.Logger) *AzureEma
 	return &AzureEmailService{
 		baseURL:     config.BaseURL,
 		functionKey: config.FunctionKey,
+		profileID:   config.ProfileID,
 		fromEmail:   config.FromEmail,
 		fromName:    config.FromName,
 		frontendURL: config.FrontendURL,
@@ -73,7 +77,7 @@ func (s *AzureEmailService) SendVerificationEmail(toEmail, token string) error {
 	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", s.frontendURL, token)
 
 	req := AzureEmailRequest{
-		To:       toEmail,
+		To:       []string{toEmail},
 		Subject:  "Authway - 이메일 인증",
 		HtmlBody: s.renderVerificationTemplate(verificationLink),
 		TextBody: fmt.Sprintf("Authway 이메일 인증\n\n아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", verificationLink),
@@ -91,7 +95,7 @@ func (s *AzureEmailService) SendPasswordResetEmail(toEmail, token string) error 
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
 
 	req := AzureEmailRequest{
-		To:       toEmail,
+		To:       []string{toEmail},
 		Subject:  "Authway - 비밀번호 재설정",
 		HtmlBody: s.renderPasswordResetTemplate(resetLink),
 		TextBody: fmt.Sprintf("Authway 비밀번호 재설정\n\n아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", resetLink),
@@ -113,6 +117,9 @@ func (s *AzureEmailService) sendEmail(emailReq AzureEmailRequest) error {
 	if emailReq.FromName == "" {
 		emailReq.FromName = s.fromName
 	}
+	if emailReq.ProfileID == "" {
+		emailReq.ProfileID = s.profileID
+	}
 
 	// Build request URL
 	url := fmt.Sprintf("https://%s/api/email/send?code=%s", s.baseURL, s.functionKey)
@@ -122,7 +129,7 @@ func (s *AzureEmailService) sendEmail(emailReq AzureEmailRequest) error {
 	if err != nil {
 		s.logger.Error("Failed to marshal email request",
 			zap.Error(err),
-			zap.String("to", emailReq.To))
+			zap.Strings("to", emailReq.To))
 		return fmt.Errorf("failed to marshal email request: %w", err)
 	}
 
@@ -137,14 +144,14 @@ func (s *AzureEmailService) sendEmail(emailReq AzureEmailRequest) error {
 
 	// Send request
 	s.logger.Info("Sending email via Azure Functions",
-		zap.String("to", emailReq.To),
+		zap.Strings("to", emailReq.To),
 		zap.String("subject", emailReq.Subject))
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		s.logger.Error("Failed to send email via Azure Functions",
 			zap.Error(err),
-			zap.String("to", emailReq.To))
+			zap.Strings("to", emailReq.To))
 		return fmt.Errorf("failed to send email via Azure Functions: %w", err)
 	}
 	defer resp.Body.Close()
@@ -176,7 +183,7 @@ func (s *AzureEmailService) sendEmail(emailReq AzureEmailRequest) error {
 	}
 
 	s.logger.Info("Email sent successfully via Azure Functions",
-		zap.String("to", emailReq.To),
+		zap.Strings("to", emailReq.To),
 		zap.String("messageId", azureResp.MessageID),
 		zap.String("requestId", azureResp.RequestID))
 

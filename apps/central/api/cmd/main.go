@@ -137,6 +137,7 @@ func main() {
 		azureConfig := email.AzureEmailConfig{
 			BaseURL:     cfg.Email.AzureBaseURL,
 			FunctionKey: cfg.Email.AzureFunctionKey,
+			ProfileID:   cfg.Email.AzureProfile,
 			FromEmail:   cfg.Email.FromEmail,
 			FromName:    cfg.Email.FromName,
 			FrontendURL: cfg.App.BaseURL,
