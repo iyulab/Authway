@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.3.2] - 2026-04-15
+## [0.3.2] - 2026-04-27
+
+> **Note**: This entry was opened in Run-3 (2026-04-15) for the audit P4
+> wiring described below, then expanded in Run-7 (2026-04-27) with the
+> deployment-infrastructure changes recorded under "Operational" at the
+> bottom. Both sets of changes ship together when prod is updated to
+> `v0.3.2`.
 
 ### Added
 
@@ -71,6 +77,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `session.*` constants are not emitted — Hydra owns session lifecycle. Hydra
   session revocation is captured as `user.logout`.
 - `token.*` constants are owned by Hydra; central API does not record them.
+
+### Operational (Run-7, 2026-04-27)
+
+- **`scripts/deploy/` is now git-tracked** (commit `3c83b66`). Previously the
+  entire directory was `.gitignore`d, so every deploy machine drifted
+  independently. New policy: `scripts/deploy/*/.env` is the only ignored
+  pattern, so `prod/.env` and `staging/.env` stay local while the shared
+  logic, target wrappers, and `.env.example` templates are versioned.
+- **Hydra entrypoint args explicit on every deploy.**
+  `publish-hydra.core.ps1` passes `--command "/bin/sh" --args "-c" "hydra serve all --dev"`
+  on each `az containerapp update`. Run-6 staging hit a regression where the
+  Container App had `args=["serve all --dev"]` as a single token; forcing
+  prod's working pattern on every deploy prevents the regression returning.
+- **Migration 009** (`009_audit_logs_p4_columns.sql`, commit `cd8e35a`)
+  aligns `audit_logs` with the GORM model used by the P4 wiring above:
+  `actor_type`/`details`/`error_msg` columns added, `metadata → details`
+  backfilled, `tenant_id`/`actor_id` FKs dropped (audit is append-only
+  history; system events use `uuid.Nil` which violated the FKs).
+- **Polish (commit `1e9699f`)**: gated 5x startup `Config Printf` statements
+  behind `Environment != "production"`, removed the lingering "DEBUG Hydra
+  Client" `Printf`, and marked `_shared/deploy-with-migration.ps1` as
+  DEPRECATED (no callers across `scripts/deploy/` or `.github/`).
+
+### Removed (Run-7 pre-flight cleanup)
+
+- 4 dead helper files in `scripts/deploy/_shared/` that contained inline
+  secrets: `hydra-admin-config.yaml`, `hydra-container-config.yaml`,
+  `update-hydra-admin.ps1`, `test-oauth-client.ps1`. All confirmed never
+  committed (git ledger empty for each path) — no rotation needed. The
+  underlying `JWT_ACCESS_SECRET == Hydra SECRETS_SYSTEM` reuse pattern
+  observed in `prod/.env` is tracked separately in
+  `claudedocs/issues/ISSUE-Authway-20260427-hydra-secrets-system-jwt-reuse.md`.
 
 ## [0.3.1] - 2026-04-14
 
