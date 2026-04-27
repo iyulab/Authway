@@ -193,7 +193,9 @@ deployments/
 bin/
 obj/
 .serena/
-scripts/deploy/
+# scripts/deploy: 디렉터리는 트래킹, 환경별 .env 만 제외
+# .env.example 은 트래킹 대상 (위 .env 패턴이 .example 까지 잡지 않도록 명시 분리)
+scripts/deploy/*/.env
 
 # Test/sample client configurations
 client.json
