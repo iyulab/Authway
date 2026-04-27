@@ -38,11 +38,11 @@ services:
 
   # Ory Hydra (OAuth2 Core)
   hydra-migrate:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: authway-hydra-migrate
     environment:
       DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"
-    command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
+    command: migrate sql up -c /etc/config/hydra/hydra.yml -e --yes
     volumes:
       - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
     depends_on:
@@ -52,7 +52,7 @@ services:
       - authway-network
 
   hydra:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: authway-hydra
     environment:
       DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"

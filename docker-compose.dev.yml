@@ -49,11 +49,11 @@ services:
 
   # Ory Hydra - OAuth 2.0 Server
   hydra-migrate:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: authway-hydra-migrate
     environment:
       DSN: postgres://authway:authway@postgres:5432/hydra?sslmode=disable
-    command: migrate sql -e --yes
+    command: migrate sql up -e --yes
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
     restart: on-failure
 
   hydra:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: authway-hydra
     environment:
       DSN: postgres://authway:authway@postgres:5432/hydra?sslmode=disable

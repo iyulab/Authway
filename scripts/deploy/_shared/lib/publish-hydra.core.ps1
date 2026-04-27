@@ -69,7 +69,7 @@ try {
         }
     } else {
         Write-Host "📝 Hydra Container App 업데이트 중..." -ForegroundColor Yellow
-        Write-Host "   이미지: oryd/hydra:v2.2.0" -ForegroundColor Gray
+        Write-Host "   이미지: oryd/hydra:v26.2.0" -ForegroundColor Gray
         Write-Host ""
 
         $dsnUser = $envVars['AUTHWAY_DATABASE_USER']
@@ -85,7 +85,7 @@ try {
         az containerapp update `
             --name $CONTAINER_APP_HYDRA `
             --resource-group $RESOURCE_GROUP `
-            --image "oryd/hydra:v2.2.0" `
+            --image "oryd/hydra:v26.2.0" `
             --command "/bin/sh" `
             --args "-c" "hydra serve all --dev" `
             --set-env-vars `

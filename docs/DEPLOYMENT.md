@@ -71,7 +71,7 @@ az containerapp create \
   --name authway-hydra \
   --resource-group authway \
   --environment authway-env \
-  --image oryd/hydra:v2.2.0 \
+  --image oryd/hydra:v26.2.0 \
   --target-port 4444 \
   --ingress external \
   --env-vars \
@@ -177,7 +177,7 @@ services:
       - "5432:5432"
 
   hydra:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     command: serve all --dev
     environment:
       DSN: postgres://authway:${DB_PASSWORD}@postgres:5432/hydra?sslmode=disable

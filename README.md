@@ -59,7 +59,7 @@ cp .env.example .env
 
 # Start Hydra (Docker)
 docker run -d --name hydra -p 4444:4444 -p 4445:4445 \
-  oryd/hydra:v2.2.0 serve all --dev
+  oryd/hydra:v26.2.0 serve all --dev
 
 # Start Central API (port 8080)
 cd apps/central/api

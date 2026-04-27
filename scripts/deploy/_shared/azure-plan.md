@@ -28,7 +28,7 @@
 
 1. **authway-hydra** (`oauth.authway.in`)
    - Ory Hydra OAuth 2.0 / OIDC 서버
-   - Container: oryd/hydra:v2.2.0 + nginx (사이드카)
+   - Container: oryd/hydra:v26.2.0 + nginx (사이드카)
    - Ports: 4444 (public), 4445 (admin)
    - 리소스: 0.25 CPU, 0.5Gi Memory
 

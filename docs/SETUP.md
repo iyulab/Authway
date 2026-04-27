@@ -62,7 +62,7 @@ AUTH_BACKEND_PORT=8081
 # Terminal 1: Start Hydra
 docker run -d --name hydra \
   -p 4444:4444 -p 4445:4445 \
-  oryd/hydra:v2.2.0 serve all --dev
+  oryd/hydra:v26.2.0 serve all --dev
 
 # Terminal 2: Start Central API
 cd apps/central/api && go run cmd/main.go
