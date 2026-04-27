@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"authway/apps/central/api/pkg/accountlink"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
@@ -39,6 +39,7 @@ func InitNewFeatureServices(
 	logger *zap.Logger,
 	userService user.Service,
 	tenantService *tenant.Service,
+	emailService email.EmailService,
 	frontendURL string,
 ) *NewFeatureServices {
 	// Audit Service
@@ -55,14 +56,14 @@ func InitNewFeatureServices(
 
 	// Invitation Service
 	invitationEmailAdapter := &invitationEmailAdapterImpl{
-		frontendURL: frontendURL,
+		emailService: emailService,
 	}
 	invitationService := invitation.NewService(db, userService, tenantService, invitationEmailAdapter, logger, frontendURL)
 	invitationHandler := invitation.NewHandler(invitationService, logger)
 
 	// Passwordless Service
 	passwordlessEmailAdapter := &passwordlessEmailAdapterImpl{
-		frontendURL: frontendURL,
+		emailService: emailService,
 	}
 	passwordlessService := passwordless.NewService(db, userService, passwordlessEmailAdapter, logger, frontendURL)
 	passwordlessHandler := passwordless.NewHandler(passwordlessService, logger)
@@ -141,30 +142,22 @@ func (s *NewFeatureServices) StartBackgroundCleanupTasks(logger *zap.Logger) {
 // Email Adapter Implementations
 // ======================================
 
-// invitationEmailAdapterImpl implements invitation.EmailSender
+// invitationEmailAdapterImpl implements invitation.EmailSender by delegating
+// to the central email.EmailService (Azure Functions gateway in prod, SMTP in dev).
 type invitationEmailAdapterImpl struct {
-	frontendURL string
+	emailService email.EmailService
 }
 
 func (a *invitationEmailAdapterImpl) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	// TODO: Integrate with actual email service when available
-	// For now, log the invitation details
-	fmt.Printf("INVITATION EMAIL: To=%s, Inviter=%s, Tenant=%s, URL=%s\n", toEmail, inviterName, tenantName, inviteURL)
-	return nil
+	return a.emailService.SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL)
 }
 
-// passwordlessEmailAdapterImpl implements passwordless.EmailSender
+// passwordlessEmailAdapterImpl implements passwordless.EmailSender by delegating
+// to the central email.EmailService.
 type passwordlessEmailAdapterImpl struct {
-	frontendURL string
+	emailService email.EmailService
 }
 
 func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
-	// TODO: Integrate with actual email service when available
-	// For now, log the magic link details
-	userType := "existing"
-	if isNewUser {
-		userType = "new"
-	}
-	fmt.Printf("MAGIC LINK EMAIL: To=%s, URL=%s, UserType=%s\n", toEmail, linkURL, userType)
-	return nil
+	return a.emailService.SendMagicLinkEmail(toEmail, linkURL, isNewUser)
 }

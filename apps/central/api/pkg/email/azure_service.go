@@ -108,6 +108,54 @@ func (s *AzureEmailService) SendPasswordResetEmail(toEmail, token string) error 
 	return s.sendEmail(req)
 }
 
+// SendInvitationEmail sends a tenant invitation link via Azure Functions
+func (s *AzureEmailService) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
+	subject := fmt.Sprintf("Authway - %s 초대", tenantName)
+
+	textBody := fmt.Sprintf("Authway 초대\n\n%s 님이 %s 워크스페이스에 초대했습니다.\n\n초대 링크:\n%s\n\n",
+		inviterName, tenantName, inviteURL)
+	if message != "" {
+		textBody += fmt.Sprintf("메시지:\n%s\n\n", message)
+	}
+	textBody += "본인이 알지 못하는 초대인 경우 이 이메일을 무시하셔도 됩니다."
+
+	req := AzureEmailRequest{
+		To:       []string{toEmail},
+		Subject:  subject,
+		HtmlBody: renderInvitationTemplate(inviterName, tenantName, message, inviteURL),
+		TextBody: textBody,
+		Priority: "Normal",
+		CustomHeaders: map[string]string{
+			"X-Email-Type": "Invitation",
+		},
+	}
+
+	return s.sendEmail(req)
+}
+
+// SendMagicLinkEmail sends a passwordless magic link via Azure Functions
+func (s *AzureEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
+	subject := "Authway - 로그인 링크"
+	if isNewUser {
+		subject = "Authway - 가입 및 로그인 링크"
+	}
+
+	textBody := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n이 링크는 일정 시간 후 만료됩니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL)
+
+	req := AzureEmailRequest{
+		To:       []string{toEmail},
+		Subject:  subject,
+		HtmlBody: renderMagicLinkTemplate(linkURL, isNewUser),
+		TextBody: textBody,
+		Priority: "High",
+		CustomHeaders: map[string]string{
+			"X-Email-Type": "MagicLink",
+		},
+	}
+
+	return s.sendEmail(req)
+}
+
 // sendEmail sends an email via Azure Functions
 func (s *AzureEmailService) sendEmail(emailReq AzureEmailRequest) error {
 	// Set default from email/name if not provided

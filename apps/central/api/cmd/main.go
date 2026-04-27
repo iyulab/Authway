@@ -214,7 +214,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, cfg.App.BaseURL)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.BaseURL)
 
 	// Admin handler depends on audit.Service so auth failures surface in
 	// audit_logs (see pkg/admin/handler.go logAuthFailure).
