@@ -22,6 +22,7 @@ $SharedDir = Split-Path -Parent $LibDir
 
 try {
     $envVars = Get-DeployEnv -Target $Target
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM')
     Set-AzureSubscription -EnvVars $envVars
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
@@ -79,18 +80,18 @@ try {
         $dsnName = $envVars['AUTHWAY_DATABASE_NAME']
         $DSN = "postgres://${dsnUser}:${dsnPassword}@${dsnHost}:${dsnPort}/${dsnName}?sslmode=require"
 
-        # Hydra entrypoint를 매 배포마다 명시: 일부 환경에서 인자 토큰화가 어긋나
-        # `serve all --dev` 가 단일 토큰으로 들어가면 Hydra가 unknown command로 거절함.
-        # prod 패턴(command=/bin/sh, args=-c "hydra serve all --dev")을 강제 일관화.
+        # Hydra entrypoint를 매 배포마다 명시. args를 토큰 단위로 분리하여 az CLI parsing bug 회피
+        # (--args "-c" 패턴은 az CLI가 -c를 자신의 옵션으로 파싱하여 실패함).
+        # /bin/sh 래퍼 제거: hydra serve all 직접 토큰화. production에서 --dev 사용 불가.
         az containerapp update `
             --name $CONTAINER_APP_HYDRA `
             --resource-group $RESOURCE_GROUP `
             --image "oryd/hydra:v26.2.0" `
-            --command "/bin/sh" `
-            --args "-c" "hydra serve all --dev" `
+            --command "hydra" `
+            --args "serve" "all" `
             --set-env-vars `
                 "DSN=$DSN" `
-                "SECRETS_SYSTEM=$($envVars['JWT_ACCESS_SECRET'])" `
+                "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                 "URLS_LOGIN=$($envVars['LOGIN_URL'])" `
                 "URLS_CONSENT=$($envVars['CONSENT_URL'])" `
