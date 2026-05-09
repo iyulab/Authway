@@ -6,10 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// AdminSession represents an admin console session
+// AdminSession represents an admin console session.
+// TokenHash is stored in DB; Token is populated in-memory only after Authenticate.
 type AdminSession struct {
 	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
-	Token     string    `json:"-" gorm:"unique;not null"`
+	TokenHash string    `json:"-" gorm:"column:token_hash;unique;not null"`
+	Token     string    `json:"-" gorm:"-"` // plaintext; returned to client on login, never persisted
 	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
 	CreatedAt time.Time `json:"created_at"`
 }

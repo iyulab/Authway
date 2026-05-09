@@ -2,8 +2,10 @@ package admin
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -33,6 +35,13 @@ func NewService(db *gorm.DB, logger *zap.Logger, adminPassword string) Service {
 	}
 }
 
+// hashToken returns the SHA-256 hex digest of the given token.
+// Only the digest is stored in the DB; the plaintext is never persisted.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 // Authenticate validates admin password and creates session
 func (s *service) Authenticate(password string) (*AdminSession, error) {
 	// Constant-time compare to defend against timing oracles. Plain `!=` returns
@@ -49,11 +58,11 @@ func (s *service) Authenticate(password string) (*AdminSession, error) {
 	}
 	token := base64.URLEncoding.EncodeToString(tokenBytes)
 
-	// Create session
+	// Store only the hash; return the plaintext token to the caller
 	session := &AdminSession{
 		ID:        uuid.New(),
-		Token:     token,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour session
+		TokenHash: hashToken(token),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
 		CreatedAt: time.Now(),
 	}
 
@@ -65,13 +74,14 @@ func (s *service) Authenticate(password string) (*AdminSession, error) {
 	s.logger.Info("Admin authenticated successfully",
 		zap.String("session_id", session.ID.String()))
 
+	session.Token = token // in-memory only; handler returns this to the client
 	return session, nil
 }
 
 // ValidateToken checks if token is valid and not expired
 func (s *service) ValidateToken(token string) (bool, error) {
 	var session AdminSession
-	err := s.db.Where("token = ? AND expires_at > ?", token, time.Now()).First(&session).Error
+	err := s.db.Where("token_hash = ? AND expires_at > ?", hashToken(token), time.Now()).First(&session).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil
@@ -84,7 +94,7 @@ func (s *service) ValidateToken(token string) (bool, error) {
 
 // Logout removes admin session
 func (s *service) Logout(token string) error {
-	result := s.db.Where("token = ?", token).Delete(&AdminSession{})
+	result := s.db.Where("token_hash = ?", hashToken(token)).Delete(&AdminSession{})
 	if result.Error != nil {
 		s.logger.Error("Failed to delete admin session", zap.Error(result.Error))
 		return fmt.Errorf("failed to logout: %w", result.Error)
