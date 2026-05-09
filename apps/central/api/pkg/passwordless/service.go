@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"time"
 
 	"authway/apps/central/api/pkg/user"
@@ -78,14 +79,15 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	if err := s.db.Create(magicLink).Error; err != nil {
 		return nil, fmt.Errorf("failed to create magic link: %w", err)
 	}
-	linkURL := fmt.Sprintf("%s/auth/magic-link/verify?token=%s", s.baseURL, token)
+	linkURL := fmt.Sprintf("%s/auth/magic-link/verify?token=%s", s.baseURL, url.QueryEscape(token))
 	if req.State != "" {
-		linkURL = fmt.Sprintf("%s&state=%s", linkURL, req.State)
+		linkURL = fmt.Sprintf("%s&state=%s", linkURL, url.QueryEscape(req.State))
 	}
 	if s.emailSender != nil {
 		isNewUser := tokenType == TokenTypeRegister
 		if err := s.emailSender.SendMagicLinkEmail(req.Email, linkURL, isNewUser); err != nil {
 			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", req.Email))
+			return nil, fmt.Errorf("failed to send magic link email: %w", err)
 		}
 	}
 	s.logger.Info("Magic link sent", zap.String("email", req.Email), zap.String("token_type", string(tokenType)), zap.String("tenant_id", tenantID.String()))

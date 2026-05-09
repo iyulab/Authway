@@ -26,13 +26,14 @@ type LogoutValidationConfig struct {
 
 // ValidateLogoutRedirectURI validates post_logout_redirect_uri based on client policy
 func ValidateLogoutRedirectURI(uri string, config LogoutValidationConfig) error {
-	// Environment safety check: disabled policy not allowed in production
+	// Environment safety check: disabled policy not allowed in production or staging.
+	// Permissive mode is for local dev only — staging must mirror production behavior.
 	if config.Policy == PolicyDisabled {
 		env := os.Getenv("ENVIRONMENT")
-		if env == "production" || env == "prod" {
-			return fmt.Errorf("logout redirect validation cannot be disabled in production environment")
+		if env == "production" || env == "prod" || env == "staging" {
+			return fmt.Errorf("logout redirect validation cannot be disabled in production/staging environment")
 		}
-		// In non-production, allow any URI
+		// dev/test only — allow any URI
 		return nil
 	}
 
