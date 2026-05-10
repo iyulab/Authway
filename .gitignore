@@ -196,6 +196,8 @@ obj/
 # scripts/deploy: 디렉터리는 트래킹, 환경별 .env 만 제외
 # .env.example 은 트래킹 대상 (위 .env 패턴이 .example 까지 잡지 않도록 명시 분리)
 scripts/deploy/*/.env
+# hydra-migrate-job YAML: 환경별 DSN 크리덴셜 포함 (gitignore)
+scripts/deploy/_shared/hydra-migrate-job.*.yaml
 
 # Test/sample client configurations
 client.json
