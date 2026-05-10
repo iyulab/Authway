@@ -22,7 +22,7 @@ $SharedDir = Split-Path -Parent $LibDir
 
 try {
     $envVars = Get-DeployEnv -Target $Target
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM')
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD')
     Set-AzureSubscription -EnvVars $envVars
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
@@ -70,7 +70,19 @@ try {
         }
     } else {
         Write-Host "📝 Hydra Container App 업데이트 중..." -ForegroundColor Yellow
-        Write-Host "   이미지: oryd/hydra:v26.2.0" -ForegroundColor Gray
+        Write-Host "   이미지: iyulabimages.azurecr.io/hydra:v26.2.0" -ForegroundColor Gray
+        Write-Host ""
+
+        # ACR 레지스트리 자격증명 등록 (idempotent — 이미 있어도 덮어쓰기)
+        Write-Host "🔑 ACR 레지스트리 인증 설정 중..." -ForegroundColor Yellow
+        az containerapp registry set `
+            --name $CONTAINER_APP_HYDRA `
+            --resource-group $RESOURCE_GROUP `
+            --server "iyulabimages.azurecr.io" `
+            --username $envVars['ACR_USERNAME'] `
+            --password $envVars['ACR_PASSWORD'] | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "ACR 레지스트리 설정 실패" }
+        Write-Host "   ✓ ACR 레지스트리 인증 완료" -ForegroundColor Green
         Write-Host ""
 
         $dsnUser = $envVars['AUTHWAY_DATABASE_USER']
@@ -86,7 +98,7 @@ try {
         az containerapp update `
             --name $CONTAINER_APP_HYDRA `
             --resource-group $RESOURCE_GROUP `
-            --image "oryd/hydra:v26.2.0" `
+            --image "iyulabimages.azurecr.io/hydra:v26.2.0" `
             --command "hydra" `
             --args "serve" "all" `
             --set-env-vars `
