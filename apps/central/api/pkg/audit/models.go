@@ -43,6 +43,8 @@ const (
 	ActionWebhookUpdated      AuditAction = "webhook.updated"
 	ActionWebhookDeleted      AuditAction = "webhook.deleted"
 	ActionAdminAction         AuditAction = "admin.action"
+	ActionAdminLoginSuccess   AuditAction = "admin.login_success"
+	ActionAdminLogout         AuditAction = "admin.logout"
 )
 
 // AuditSeverity represents the severity level of the audit event
@@ -101,7 +103,7 @@ type AuditEntry struct {
 	ResourceID   string
 	IPAddress    string
 	UserAgent    string
-	Details      map[string]interface{}
+	Details      map[string]any
 	Success      bool
 	ErrorMsg     string
 }

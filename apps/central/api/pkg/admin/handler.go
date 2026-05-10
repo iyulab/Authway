@@ -66,7 +66,7 @@ func (h *Handler) logAuthFailure(c *fiber.Ctx, reason string, errMsg string) {
 		UserAgent:    c.Get("User-Agent"),
 		Success:      false,
 		ErrorMsg:     errMsg,
-		Details: map[string]interface{}{
+		Details: map[string]any{
 			"reason": reason,
 			"method": c.Method(),
 		},
@@ -116,6 +116,19 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	if h.auditService != nil {
+		h.auditService.LogAsync(&audit.AuditEntry{
+			TenantID:     uuid.Nil,
+			Action:       audit.ActionAdminLoginSuccess,
+			Severity:     audit.SeverityInfo,
+			ResourceType: "admin_session",
+			ResourceID:   session.ID.String(),
+			IPAddress:    c.IP(),
+			UserAgent:    c.Get("User-Agent"),
+			Success:      true,
+		})
+	}
+
 	return c.JSON(LoginResponse{
 		Token:     session.Token,
 		ExpiresAt: session.ExpiresAt,
@@ -134,6 +147,19 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 	if err := h.service.Logout(token); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to logout",
+		})
+	}
+
+	if h.auditService != nil {
+		h.auditService.LogAsync(&audit.AuditEntry{
+			TenantID:     uuid.Nil,
+			Action:       audit.ActionAdminLogout,
+			Severity:     audit.SeverityInfo,
+			ResourceType: "admin_session",
+			ResourceID:   apiKeyHint(token),
+			IPAddress:    c.IP(),
+			UserAgent:    c.Get("User-Agent"),
+			Success:      true,
 		})
 	}
 

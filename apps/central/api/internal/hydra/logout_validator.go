@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -84,10 +85,8 @@ func isWhitelisted(uri string, whitelist []string, allowWildcard bool) bool {
 	}
 
 	// Try exact match first
-	for _, allowed := range whitelist {
-		if uri == allowed {
-			return true
-		}
+	if slices.Contains(whitelist, uri) {
+		return true
 	}
 
 	// Try wildcard matching if enabled

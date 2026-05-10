@@ -60,15 +60,16 @@ func TestClient_RevokeUserSessions(t *testing.T) {
 				assert.Equal(t, http.MethodDelete, r.Method)
 
 				// Check which endpoint was called
-				if r.URL.Path == "/admin/oauth2/auth/sessions/login" {
+				switch r.URL.Path {
+				case "/admin/oauth2/auth/sessions/login":
 					loginCalled = true
 					assert.Equal(t, tt.subject, r.URL.Query().Get("subject"))
 					w.WriteHeader(tt.loginStatus)
-				} else if r.URL.Path == "/admin/oauth2/auth/sessions/consent" {
+				case "/admin/oauth2/auth/sessions/consent":
 					consentCalled = true
 					assert.Equal(t, tt.subject, r.URL.Query().Get("subject"))
 					w.WriteHeader(tt.consentStatus)
-				} else {
+				default:
 					t.Fatalf("unexpected path: %s", r.URL.Path)
 				}
 			}))
@@ -119,9 +120,10 @@ func TestClient_RevokeUserSessions_BothEndpointsCalled(t *testing.T) {
 	consentCalls := 0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/admin/oauth2/auth/sessions/login" {
+		switch r.URL.Path {
+		case "/admin/oauth2/auth/sessions/login":
 			loginCalls++
-		} else if r.URL.Path == "/admin/oauth2/auth/sessions/consent" {
+		case "/admin/oauth2/auth/sessions/consent":
 			consentCalls++
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -140,9 +142,10 @@ func TestClient_RevokeUserSessions_OrderOfCalls(t *testing.T) {
 	callOrder := []string{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/admin/oauth2/auth/sessions/login" {
+		switch r.URL.Path {
+		case "/admin/oauth2/auth/sessions/login":
 			callOrder = append(callOrder, "login")
-		} else if r.URL.Path == "/admin/oauth2/auth/sessions/consent" {
+		case "/admin/oauth2/auth/sessions/consent":
 			callOrder = append(callOrder, "consent")
 		}
 		w.WriteHeader(http.StatusNoContent)
