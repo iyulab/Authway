@@ -3,8 +3,6 @@
 -- Date: 2025-12-07
 -- Description: Add client-level auth provider selection and email signup settings
 
-BEGIN;
-
 -- ============================================================
 -- 1. Add authentication provider settings to clients table
 -- ============================================================
@@ -117,8 +115,6 @@ COMMENT ON COLUMN system_config.value IS 'Configuration value in JSONB format';
 
 CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-COMMIT;
 
 -- ============================================================
 -- Migration Complete

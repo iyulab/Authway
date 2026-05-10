@@ -12,8 +12,8 @@ param(
 
     [switch]$SkipBuild,
     [switch]$SkipHealthCheck,
-    [switch]$SkipMigration,
-    [switch]$ForceMigration,
+    [switch]$SkipMigration,   # DEPRECATED: migrations are now handled by the Go startup migrator
+    [switch]$ForceMigration,  # DEPRECATED: no longer used
     [string[]]$Services = @("hydra", "api", "auth-api", "admin", "auth-ui")
 )
 
@@ -147,53 +147,14 @@ function Test-AdminAuthSmoke {
 
 try {
     # ============================================================
-    # 0. DB 마이그레이션
+    # 0. DB 마이그레이션 — Go startup migrator가 자동 처리
     # ============================================================
-    if (-not $SkipMigration) {
-        Write-Host ""
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Magenta
-        Write-Host "  🗄️  데이터베이스 마이그레이션" -ForegroundColor Magenta
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Magenta
-        Write-Host ""
-
-        $migrationHelperPath = Join-Path $SharedDir "migration-helpers.ps1"
-        if (Test-Path $migrationHelperPath) {
-            . $migrationHelperPath
-
-            $migrationResult = Invoke-AutoMigration `
-                -EnvVars $envVars `
-                -ScriptDir $SharedDir `
-                -Force:$ForceMigration
-
-            if ($migrationResult.Skipped) {
-                if ($migrationResult.Applied -eq 0) {
-                    Write-Verbose "마이그레이션 확인 완료 (보류 없음)"
-                } else {
-                    Write-Host "⏭️  마이그레이션 스킵: $($migrationResult.Message)" -ForegroundColor Yellow
-                }
-                Write-Host ""
-            } elseif (-not $migrationResult.Success) {
-                Write-Host ""
-                Write-Host "❌ 마이그레이션 실패!" -ForegroundColor Red
-                Write-Host ""
-                $continue = Read-Host "배포를 계속하시겠습니까? (yes/no)"
-                if ($continue -ne "yes" -and $continue -ne "y") {
-                    exit 1
-                }
-                Write-Host ""
-            } else {
-                Write-Host ""
-                Write-Host "✅ 마이그레이션 완료: $($migrationResult.Applied)개 적용" -ForegroundColor Green
-                Write-Host ""
-            }
-        } else {
-            Write-Warning "⚠️  마이그레이션 헬퍼를 찾을 수 없습니다: $migrationHelperPath"
-            Write-Host ""
-        }
-    } else {
-        Write-Host "⏭️  마이그레이션을 건너뜁니다 (-SkipMigration)" -ForegroundColor Yellow
-        Write-Host ""
-    }
+    # PowerShell 마이그레이션(Invoke-AutoMigration)은 v0.4.0에서 제거됨.
+    # 마이그레이션은 API 컨테이너 기동 시 Go migrate.go가 자동 실행한다.
+    # -SkipMigration / -ForceMigration 파라미터는 하위 호환성을 위해 유지하나 무시됨.
+    Write-Host ""
+    Write-Host "ℹ️  DB 마이그레이션: Go startup migrator가 API 기동 시 자동 처리합니다." -ForegroundColor Cyan
+    Write-Host ""
 
     # ============================================================
     # 1. Container Apps 배포 (의존성 순서대로)

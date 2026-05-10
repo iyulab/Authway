@@ -8,8 +8,8 @@ import (
 // ActorFromFiber extracts actor identity fields that the adminAuth middleware
 // stashes in c.Locals. Missing/unparseable values are returned as zero values
 // so audit wiring stays non-fatal even if the middleware changes shape.
-func ActorFromFiber(c *fiber.Ctx) (actorType string, actorID *uuid.UUID, actorEmail string, details map[string]interface{}) {
-	details = map[string]interface{}{}
+func ActorFromFiber(c *fiber.Ctx) (actorType string, actorID *uuid.UUID, actorEmail string, details map[string]any) {
+	details = map[string]any{}
 
 	if v, ok := c.Locals("actor_type").(string); ok && v != "" {
 		actorType = v

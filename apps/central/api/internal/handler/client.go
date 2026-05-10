@@ -35,7 +35,7 @@ func NewClientHandler(services *service.Services, logger *zap.Logger, cfg *confi
 // (LogAsync drops on buffer overflow) — never block the response on audit I/O.
 // A nil auditService (e.g. in older tests) is tolerated so handler can be
 // exercised without the full DI graph.
-func (h *ClientHandler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+func (h *ClientHandler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -131,7 +131,7 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 
 	h.logger.Info("Client created successfully", zap.String("client_id", newClient.ClientID))
 
-	h.logAudit(c, newClient.TenantID, audit.ActionClientCreated, newClient.ID.String(), map[string]interface{}{
+	h.logAudit(c, newClient.TenantID, audit.ActionClientCreated, newClient.ID.String(), map[string]any{
 		"client_id":     newClient.ClientID,
 		"name":          newClient.Name,
 		"public":        newClient.Public,
@@ -220,7 +220,7 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	auditDetails := map[string]interface{}{
+	auditDetails := map[string]any{
 		"client_id":        updatedClient.ClientID,
 		"hydra_sync_state": syncStatus.State,
 	}
@@ -277,7 +277,7 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 	}
 
 	if beforeClient != nil {
-		h.logAudit(c, beforeClient.TenantID, audit.ActionClientDeleted, beforeClient.ID.String(), map[string]interface{}{
+		h.logAudit(c, beforeClient.TenantID, audit.ActionClientDeleted, beforeClient.ID.String(), map[string]any{
 			"client_id":        beforeClient.ClientID,
 			"name":             beforeClient.Name,
 			"hydra_sync_state": syncStatus.State,
@@ -388,7 +388,7 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]interface{}{
+	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]any{
 		"subresource":      "google_oauth",
 		"event":            "google_oauth_configured",
 		"client_id":        updatedClient.ClientID,
@@ -427,7 +427,7 @@ func (h *ClientHandler) DisableGoogleOAuth(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 
-	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]interface{}{
+	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]any{
 		"subresource": "google_oauth",
 		"event":       "google_oauth_disabled",
 		"client_id":   updatedClient.ClientID,

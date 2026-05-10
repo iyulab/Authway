@@ -12,7 +12,7 @@ type UserClaim struct {
 	UserID      uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
 	TenantID    uuid.UUID              `json:"tenant_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
 	ClaimKey    string                 `json:"claim_key" gorm:"type:varchar(255);not null;index:idx_user_claims_key;uniqueIndex:idx_user_claim_unique"`
-	ClaimValue  map[string]interface{} `json:"claim_value" gorm:"type:jsonb;not null;serializer:json"`
+	ClaimValue  map[string]any `json:"claim_value" gorm:"type:jsonb;not null;serializer:json"`
 	ClaimType   string                 `json:"claim_type" gorm:"type:varchar(50);not null;default:system;index:idx_user_claims_type"`
 	IsPermanent bool                   `json:"is_permanent" gorm:"default:false"`
 	CreatedAt   time.Time              `json:"created_at" gorm:"autoCreateTime"`
@@ -25,7 +25,7 @@ func (UserClaim) TableName() string {
 }
 
 // ClaimMap represents a map of claims (key-value pairs)
-type ClaimMap map[string]interface{}
+type ClaimMap map[string]any
 
 // UpdateClaimsRequest represents a request to update claims
 type UpdateClaimsRequest struct {

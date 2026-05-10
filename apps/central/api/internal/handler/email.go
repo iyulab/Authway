@@ -46,7 +46,7 @@ func NewEmailHandler(
 
 // logUserAudit records an audit entry for a user self-service flow (anonymous
 // request authenticated by a one-shot token). The resolved user is the actor.
-func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]interface{}) {
+func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]any) {
 	if h.auditService == nil || u == nil {
 		return
 	}
@@ -67,9 +67,9 @@ func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.Aud
 // @Accept json
 // @Produce json
 // @Param request body email.SendVerificationRequest true "Send verification request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 500 {object} map[string]any
 // @Router /api/email/send-verification [post]
 func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	var req email.SendVerificationRequest
@@ -135,9 +135,9 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param token query string true "Verification token"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /api/email/verify [get]
 func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 	token := c.Query("token")
@@ -197,8 +197,8 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param request body email.ForgotPasswordRequest true "Forgot password request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
 // @Router /api/email/forgot-password [post]
 func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	var req email.ForgotPasswordRequest
@@ -252,8 +252,8 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param token query string true "Reset token"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
 // @Router /api/email/verify-reset-token [get]
 func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	token := c.Query("token")
@@ -293,8 +293,8 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param request body email.ResetPasswordRequest true "Reset password request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
 // @Router /api/email/reset-password [post]
 func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	var req email.ResetPasswordRequest

@@ -20,7 +20,7 @@ type SocialUserInfo struct {
 	AccessToken  string
 	RefreshToken string
 	TokenExpiry  *time.Time
-	Metadata     map[string]interface{}
+	Metadata     map[string]any
 }
 
 // SocialAuthProvider interface for social authentication providers
@@ -181,7 +181,7 @@ func (s *service) UpdateLastUsed(id uuid.UUID) error {
 }
 
 func (s *service) UpdateTokens(id uuid.UUID, accessToken, refreshToken string, expiry *time.Time) error {
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
 		"token_expiry":  expiry,

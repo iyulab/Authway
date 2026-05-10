@@ -28,7 +28,7 @@ func NewHandler(service Service, logger *zap.Logger, auditService audit.Service)
 
 // logAudit records an audit entry for a webhook admin write path. Mirrors the
 // client/tenant/user handler pattern — best-effort, nil auditService tolerated.
-func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
 		zap.String("tenant_id", tenantID.String()),
 	)
 
-	h.logAudit(c, tenantID, audit.ActionWebhookCreated, webhook.ID.String(), map[string]interface{}{
+	h.logAudit(c, tenantID, audit.ActionWebhookCreated, webhook.ID.String(), map[string]any{
 		"name":   webhook.Name,
 		"url":    webhook.URL,
 		"events": req.Events,
@@ -155,7 +155,7 @@ func (h *Handler) UpdateWebhook(c *fiber.Ctx) error {
 
 	h.logger.Info("Webhook updated", zap.String("webhook_id", webhook.ID.String()))
 
-	h.logAudit(c, webhook.TenantID, audit.ActionWebhookUpdated, webhook.ID.String(), map[string]interface{}{
+	h.logAudit(c, webhook.TenantID, audit.ActionWebhookUpdated, webhook.ID.String(), map[string]any{
 		"name": webhook.Name,
 	})
 
@@ -186,7 +186,7 @@ func (h *Handler) DeleteWebhook(c *fiber.Ctx) error {
 	h.logger.Info("Webhook deleted", zap.String("webhook_id", idStr))
 
 	if before != nil {
-		h.logAudit(c, before.TenantID, audit.ActionWebhookDeleted, before.ID.String(), map[string]interface{}{
+		h.logAudit(c, before.TenantID, audit.ActionWebhookDeleted, before.ID.String(), map[string]any{
 			"name": before.Name,
 			"url":  before.URL,
 		})
@@ -238,7 +238,7 @@ func (h *Handler) TestWebhook(c *fiber.Ctx) error {
 	}
 
 	// Trigger a test event
-	testData := map[string]interface{}{
+	testData := map[string]any{
 		"test":    true,
 		"message": "This is a test webhook delivery",
 	}

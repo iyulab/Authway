@@ -97,7 +97,7 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 	}
 	codesJSON, _ := json.Marshal(hashedCodes)
 	now := time.Now()
-	updates := map[string]interface{}{"totp_enabled": true, "totp_verified_at": now, "recovery_codes": string(codesJSON)}
+	updates := map[string]any{"totp_enabled": true, "totp_verified_at": now, "recovery_codes": string(codesJSON)}
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("failed to enable MFA: %w", err)
 	}
@@ -123,7 +123,7 @@ func (s *service) Disable(userID uuid.UUID) error {
 	if !u.TOTPEnabled {
 		return fmt.Errorf("MFA is not enabled")
 	}
-	updates := map[string]interface{}{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "recovery_codes": nil}
+	updates := map[string]any{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "recovery_codes": nil}
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to disable MFA: %w", err)
 	}

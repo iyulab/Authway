@@ -791,7 +791,7 @@ func (s *service) SyncAllClientsToHydra() (int, int, error) {
 		}
 
 		// Update Hydra with the URIs
-		err := s.hydraClient.UpdateClient(client.ClientID, map[string]interface{}{
+		err := s.hydraClient.UpdateClient(client.ClientID, map[string]any{
 			"post_logout_redirect_uris": hydraPostLogoutURIs,
 		})
 

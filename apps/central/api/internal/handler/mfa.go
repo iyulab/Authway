@@ -50,7 +50,7 @@ func (h *MFAHandler) tenantForUser(userID uuid.UUID) uuid.UUID {
 
 // logMFASuccess emits a best-effort (async) audit entry for a successful MFA
 // event. Buffer drops are acceptable here — failure paths use logMFAFailure.
-func (h *MFAHandler) logMFASuccess(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, severity audit.AuditSeverity, extra map[string]interface{}) {
+func (h *MFAHandler) logMFASuccess(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, severity audit.AuditSeverity, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -65,7 +65,7 @@ func (h *MFAHandler) logMFASuccess(c *fiber.Ctx, userID uuid.UUID, action audit.
 // logMFAFailure emits a sync audit entry for a failed MFA verification. Sync
 // (not Async) because security-critical failures must not be dropped on buffer
 // overflow — this is the write path a lockout investigation relies on.
-func (h *MFAHandler) logMFAFailure(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, errMsg string, extra map[string]interface{}) {
+func (h *MFAHandler) logMFAFailure(c *fiber.Ctx, userID uuid.UUID, action audit.AuditAction, errMsg string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -120,7 +120,7 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 	resp, err := h.mfaService.VerifyAndEnable(userID, req.Code)
 	if err != nil {
 		h.logger.Warn("MFA verification failed", zap.Error(err), zap.String("user_id", userID.String()))
-		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]interface{}{
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
 			"phase": "enable",
 		})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -183,18 +183,18 @@ func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
 	}
 	valid, err := h.mfaService.VerifyRecoveryCode(userID, req.Code)
 	if err != nil {
-		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]interface{}{
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
 			"phase": "recovery_code",
 		})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	if !valid {
-		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, "invalid recovery code", map[string]interface{}{
+		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, "invalid recovery code", map[string]any{
 			"phase": "recovery_code",
 		})
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid recovery code"})
 	}
-	h.logMFASuccess(c, userID, audit.ActionUserMFAVerified, audit.SeverityInfo, map[string]interface{}{
+	h.logMFASuccess(c, userID, audit.ActionUserMFAVerified, audit.SeverityInfo, map[string]any{
 		"phase": "recovery_code",
 	})
 	return c.JSON(fiber.Map{"message": "Recovery code verified", "valid": true})

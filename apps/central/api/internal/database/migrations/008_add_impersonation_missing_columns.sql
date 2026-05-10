@@ -3,8 +3,6 @@
 -- Date: 2025-12-08
 -- Purpose: Add tenant_id, admin_email, target_user_email, expires_at columns
 
-BEGIN;
-
 -- ============================================================
 -- 1. Add tenant_id column
 -- ============================================================
@@ -99,8 +97,6 @@ ALTER COLUMN expires_at SET NOT NULL;
 
 -- Create index on expires_at for cleanup queries
 CREATE INDEX IF NOT EXISTS idx_impersonation_expires ON impersonation_sessions(expires_at);
-
-COMMIT;
 
 -- ============================================================
 -- Migration Complete

@@ -42,7 +42,7 @@ func NewAuthHandler(userService user.Service, clientService client.Service, clai
 }
 
 // logUserAudit emits a success-path audit entry with the resolved user as actor.
-func (h *AuthHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]interface{}) {
+func (h *AuthHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.AuditAction, extra map[string]any) {
 	if h.auditService == nil || u == nil {
 		return
 	}
@@ -58,11 +58,11 @@ func (h *AuthHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.Audi
 
 // logAuthFailure emits a sync audit entry for login failures. Sync so buffer
 // overflow cannot swallow security events.
-func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, attemptedEmail, reason string, extra map[string]interface{}) {
+func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, attemptedEmail, reason string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
-	details := map[string]interface{}{
+	details := map[string]any{
 		"reason": reason,
 	}
 	if attemptedEmail != "" {
@@ -232,7 +232,7 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 				Subject:     loginReq.Subject,
 				Remember:    true,
 				RememberFor: 3600,
-				Context: map[string]interface{}{
+				Context: map[string]any{
 					"email":     authenticatedUser.Email,
 					"name":      authenticatedUser.Name,
 					"tenant_id": authenticatedUser.TenantID.String(),
@@ -312,7 +312,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	// Verify password
 	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]interface{}{
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]any{
 			"user_id": user.ID.String(),
 		})
 		// Reject login request
@@ -343,7 +343,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Subject:     user.ID.String(),
 		Remember:    req.Remember,
 		RememberFor: rememberFor,
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"email":     user.Email,
 			"name":      user.Name,
 			"tenant_id": user.TenantID.String(),
@@ -361,7 +361,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	h.logUserAudit(c, user, audit.ActionUserLogin, map[string]interface{}{
+	h.logUserAudit(c, user, audit.ActionUserLogin, map[string]any{
 		"challenge": req.Challenge,
 		"remember":  req.Remember,
 		"method":    "password",
@@ -585,13 +585,13 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 	}
 
 	// Build session data with base claims + user claims
-	accessTokenClaims := map[string]interface{}{
+	accessTokenClaims := map[string]any{
 		"email":     user.Email,
 		"name":      user.Name,
 		"tenant_id": user.TenantID.String(),
 	}
 
-	idTokenClaims := map[string]interface{}{
+	idTokenClaims := map[string]any{
 		"email":          user.Email,
 		"name":           user.Name,
 		"email_verified": user.EmailVerified,
@@ -640,7 +640,7 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 		zap.String("redirect_to", resp.RedirectTo),
 		zap.String("user_id", user.ID.String()))
 
-	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]interface{}{
+	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]any{
 		"challenge":    req.Challenge,
 		"grant_scope":  req.GrantScope,
 		"audience":     consentReq.RequestedAudience,
@@ -693,7 +693,7 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 	}
 
 	if rejectingUser != nil {
-		h.logUserAudit(c, rejectingUser, audit.ActionConsentRevoked, map[string]interface{}{
+		h.logUserAudit(c, rejectingUser, audit.ActionConsentRevoked, map[string]any{
 			"challenge": challenge,
 			"reason":    "user_denied",
 		})
@@ -753,7 +753,7 @@ func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
 
 	if subjectUUID, parseErr := uuid.Parse(logoutReq.Subject); parseErr == nil {
 		if logoutUser, getErr := h.userService.GetByID(subjectUUID); getErr == nil {
-			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, map[string]interface{}{
+			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, map[string]any{
 				"flow": "oidc",
 			})
 		}
@@ -860,7 +860,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 // parseJWTClaims parses JWT token and returns claims (without signature verification)
 // WARNING: This is for demonstration. In production, verify signature!
-func parseJWTClaims(token string) (map[string]interface{}, error) {
+func parseJWTClaims(token string) (map[string]any, error) {
 	// Simple JWT parsing without verification (for ID token subject extraction)
 	// In production, use a proper JWT library with signature verification
 	parts := splitToken(token)
@@ -874,7 +874,7 @@ func parseJWTClaims(token string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to decode payload: %w", err)
 	}
 
-	var claims map[string]interface{}
+	var claims map[string]any
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, fmt.Errorf("failed to parse claims: %w", err)
 	}
@@ -960,7 +960,7 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 	// Authenticate user
 	user, err := h.userService.GetByEmail(req.Email)
 	if err != nil {
-		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", map[string]interface{}{
+		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", map[string]any{
 			"flow":      "embedded",
 			"client_id": req.ClientID,
 		})
@@ -969,7 +969,7 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 		})
 	}
 	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]interface{}{
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]any{
 			"flow":      "embedded",
 			"client_id": req.ClientID,
 			"user_id":   user.ID.String(),
@@ -981,7 +981,7 @@ func (h *AuthHandler) LoginEmbedded(c *fiber.Ctx) error {
 
 	// Check tenant match
 	if user.TenantID != client.TenantID {
-		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "tenant_mismatch", map[string]interface{}{
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "tenant_mismatch", map[string]any{
 			"flow":             "embedded",
 			"client_id":        req.ClientID,
 			"user_id":          user.ID.String(),
@@ -1104,7 +1104,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 
-	h.logUserAudit(c, createdUser, audit.ActionUserCreated, map[string]interface{}{
+	h.logUserAudit(c, createdUser, audit.ActionUserCreated, map[string]any{
 		"email":     createdUser.Email,
 		"source":    "registration",
 	})

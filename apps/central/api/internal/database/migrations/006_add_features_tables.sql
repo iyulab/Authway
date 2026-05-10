@@ -2,8 +2,6 @@
 -- Version: 006
 -- Date: 2025-12-07
 
-BEGIN;
-
 -- ============================================================
 -- 1. Webhooks Table
 -- ============================================================
@@ -174,8 +172,6 @@ CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks
 
 CREATE TRIGGER update_invitations_updated_at BEFORE UPDATE ON invitations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-COMMIT;
 
 -- ============================================================
 -- Migration Complete

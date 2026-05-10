@@ -7,8 +7,6 @@
 --          corresponding migration. Without 009 the API panics with:
 --          "column \"actor_type\" of relation \"audit_logs\" does not exist".
 
-BEGIN;
-
 ALTER TABLE audit_logs
     ADD COLUMN IF NOT EXISTS actor_type VARCHAR(50),
     ADD COLUMN IF NOT EXISTS details    JSONB,
@@ -27,5 +25,3 @@ UPDATE audit_logs
 ALTER TABLE audit_logs
     DROP CONSTRAINT IF EXISTS audit_logs_tenant_id_fkey,
     DROP CONSTRAINT IF EXISTS audit_logs_actor_id_fkey;
-
-COMMIT;

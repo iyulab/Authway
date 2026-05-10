@@ -273,12 +273,16 @@ SET executed_at = CURRENT_TIMESTAMP,
 }
 
 # 메인 마이그레이션 실행 함수 (배포 스크립트에서 호출)
+# DEPRECATED (v0.4.0): 마이그레이션은 Go startup migrator(migrate.go)가 처리한다.
+# deploy-all.core.ps1은 이 함수를 더 이상 호출하지 않는다. 직접 호출 시 오류 발생.
 function Invoke-AutoMigration {
     param(
         [hashtable]$EnvVars,
         [string]$ScriptDir,
         [switch]$Force
     )
+
+    throw "DEPRECATED: Invoke-AutoMigration은 v0.4.0에서 제거되었습니다. 마이그레이션은 Go startup migrator가 자동 처리합니다."
 
     # Central API의 embedded migrations 디렉토리 사용
     # $ScriptDir = scripts/deploy/_shared → 3-level Split-Path-Parent → repo root

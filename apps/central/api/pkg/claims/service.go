@@ -65,7 +65,7 @@ func (s *service) UpdateClaims(ctx context.Context, userID, tenantID uuid.UUID, 
 				UserID:      userID,
 				TenantID:    tenantID,
 				ClaimKey:    key,
-				ClaimValue:  map[string]interface{}{"value": value},
+				ClaimValue:  map[string]any{"value": value},
 				IsPermanent: true,
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
@@ -191,7 +191,7 @@ func (s *service) UpdateUserClaims(ctx context.Context, userID, tenantID uuid.UU
 			UserID:      userID,
 			TenantID:    tenantID,
 			ClaimKey:    key,
-			ClaimValue:  map[string]interface{}{"value": value},
+			ClaimValue:  map[string]any{"value": value},
 			ClaimType:   "user", // User claims don't require re-auth
 			IsPermanent: true,   // User claims are always permanent
 			CreatedAt:   time.Now(),

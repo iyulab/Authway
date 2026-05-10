@@ -130,7 +130,7 @@ func (c *Client) UpdateOAuth2Client(clientID string, client *OAuth2Client) (*OAu
 
 // UpdateClient performs a partial update on an OAuth2 client using PATCH semantics
 // It first fetches the current client, merges the updates, then performs a PUT
-func (c *Client) UpdateClient(clientID string, updates map[string]interface{}) error {
+func (c *Client) UpdateClient(clientID string, updates map[string]any) error {
 	// First, get the current client
 	currentClient, err := c.GetOAuth2Client(clientID)
 	if err != nil {
@@ -143,7 +143,7 @@ func (c *Client) UpdateClient(clientID string, updates map[string]interface{}) e
 		return fmt.Errorf("failed to marshal current client: %w", err)
 	}
 
-	var clientMap map[string]interface{}
+	var clientMap map[string]any
 	if err := json.Unmarshal(clientData, &clientMap); err != nil {
 		return fmt.Errorf("failed to unmarshal current client: %w", err)
 	}
@@ -224,7 +224,7 @@ type AcceptLoginRequest struct {
 	Remember    bool                   `json:"remember"`
 	RememberFor int                    `json:"remember_for"`
 	ACR         string                 `json:"acr,omitempty"`
-	Context     map[string]interface{} `json:"context,omitempty"`
+	Context     map[string]any `json:"context,omitempty"`
 }
 
 type LoginResponse struct {
@@ -349,7 +349,7 @@ type ConsentRequest struct {
 	LoginChallenge    string                 `json:"login_challenge"`
 	LoginSessionID    string                 `json:"login_session_id"`
 	ACR               string                 `json:"acr"`
-	Context           map[string]interface{} `json:"context"`
+	Context           map[string]any `json:"context"`
 	Skip              bool                   `json:"skip"`
 }
 
@@ -362,8 +362,8 @@ type AcceptConsentRequest struct {
 }
 
 type ConsentSession struct {
-	AccessToken map[string]interface{} `json:"access_token,omitempty"`
-	IDToken     map[string]interface{} `json:"id_token,omitempty"`
+	AccessToken map[string]any `json:"access_token,omitempty"`
+	IDToken     map[string]any `json:"id_token,omitempty"`
 }
 
 func (c *Client) GetConsentRequest(challenge string) (*ConsentRequest, error) {
@@ -623,7 +623,7 @@ type IntrospectResponse struct {
 	TokenType string                 `json:"token_type,omitempty"`
 	Exp       int64                  `json:"exp,omitempty"`
 	Iat       int64                  `json:"iat,omitempty"`
-	Ext       map[string]interface{} `json:"ext,omitempty"`
+	Ext       map[string]any `json:"ext,omitempty"`
 }
 
 func (c *Client) IntrospectToken(token string) (*IntrospectResponse, error) {

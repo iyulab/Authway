@@ -32,7 +32,7 @@ var oauthStateStore sync.Map
 // cleanExpiredStates removes OAuth states older than 15 minutes
 func cleanExpiredStates() {
 	now := time.Now()
-	oauthStateStore.Range(func(key, value interface{}) bool {
+	oauthStateStore.Range(func(key, value any) bool {
 		data := value.(*oauthStateData)
 		if now.Sub(data.CreatedAt) > 15*time.Minute {
 			oauthStateStore.Delete(key)
@@ -93,7 +93,7 @@ func NewSocialHandlerWithAllProviders(
 
 // logSocialLogin emits a success-path login audit entry with the resolved user
 // as actor, tagging the OAuth provider in Details.
-func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider string, extra map[string]interface{}) {
+func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider string, extra map[string]any) {
 	if s.auditService == nil || u == nil {
 		return
 	}
@@ -112,11 +112,11 @@ func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider stri
 // logSocialLoginFailure emits a sync failure audit for social callbacks. We
 // rarely know the user at failure time (OAuth handshake broke before user
 // resolution), so tenantID falls back to uuid.Nil when unknown.
-func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason string, extra map[string]interface{}) {
+func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason string, extra map[string]any) {
 	if s.auditService == nil {
 		return
 	}
-	details := map[string]interface{}{
+	details := map[string]any{
 		"provider": provider,
 		"method":   "social",
 		"reason":   reason,
@@ -319,7 +319,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 
 	// Debug: Check all keys in the map before retrieval
 	keyCount := 0
-	oauthStateStore.Range(func(key, value interface{}) bool {
+	oauthStateStore.Range(func(key, value any) bool {
 		keyCount++
 		keyStr := key.(string)
 		data := value.(*oauthStateData)
@@ -379,7 +379,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		s.logger.Error("Google OAuth callback failed",
 			zap.Error(err),
 			zap.String("client_id", retrievedClientID))
-		s.logSocialLoginFailure(c, "google", "oauth_callback_failed", map[string]interface{}{
+		s.logSocialLoginFailure(c, "google", "oauth_callback_failed", map[string]any{
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
@@ -412,7 +412,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(), // Use user ID as subject (consistent with regular login)
 		Remember:    true,
 		RememberFor: 3600, // 1 hour
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "google",
 			"email":     authUser.Email,
@@ -455,7 +455,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		zap.String("provider", "google"),
 		zap.String("redirect_to", acceptResp.RedirectTo))
 
-	s.logSocialLogin(c, authUser, "google", map[string]interface{}{
+	s.logSocialLogin(c, authUser, "google", map[string]any{
 		"client_id": retrievedClientID,
 	})
 
@@ -675,7 +675,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	authUser, err := s.githubService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("GitHub OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "github", "oauth_callback_failed", map[string]interface{}{
+		s.logSocialLoginFailure(c, "github", "oauth_callback_failed", map[string]any{
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
@@ -694,7 +694,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "github",
 			"email":     authUser.Email,
@@ -715,7 +715,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
 
-	s.logSocialLogin(c, authUser, "github", map[string]interface{}{
+	s.logSocialLogin(c, authUser, "github", map[string]any{
 		"client_id": retrievedClientID,
 	})
 
@@ -874,7 +874,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	authUser, err := s.microsoftService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("Microsoft OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "microsoft", "oauth_callback_failed", map[string]interface{}{
+		s.logSocialLoginFailure(c, "microsoft", "oauth_callback_failed", map[string]any{
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
@@ -893,7 +893,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "microsoft",
 			"email":     authUser.Email,
@@ -914,7 +914,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
 
-	s.logSocialLogin(c, authUser, "microsoft", map[string]interface{}{
+	s.logSocialLogin(c, authUser, "microsoft", map[string]any{
 		"client_id": retrievedClientID,
 	})
 
@@ -1085,7 +1085,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 	authUser, err := s.appleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		s.logger.Error("Apple OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "apple", "oauth_callback_failed", map[string]interface{}{
+		s.logSocialLoginFailure(c, "apple", "oauth_callback_failed", map[string]any{
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
@@ -1104,7 +1104,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "apple",
 			"email":     authUser.Email,
@@ -1125,7 +1125,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		zap.String("user_id", authUser.ID.String()),
 		zap.String("email", authUser.Email))
 
-	s.logSocialLogin(c, authUser, "apple", map[string]interface{}{
+	s.logSocialLogin(c, authUser, "apple", map[string]any{
 		"client_id": retrievedClientID,
 	})
 

@@ -25,7 +25,7 @@ func TestLogAsync_BufferOverflowNonBlocking(t *testing.T) {
 	entry := &AuditEntry{
 		TenantID: uuid.New(),
 		Action:   ActionUserLogin,
-		Details:  map[string]interface{}{"k": "v"},
+		Details:  map[string]any{"k": "v"},
 	}
 
 	// Fill the buffer.

@@ -36,7 +36,7 @@ type TenantSettings struct {
 }
 
 // Scan implements sql.Scanner for TenantSettings (JSONB support)
-func (s *TenantSettings) Scan(value interface{}) error {
+func (s *TenantSettings) Scan(value any) error {
 	if value == nil {
 		return nil
 	}

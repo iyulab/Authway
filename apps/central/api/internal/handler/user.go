@@ -32,7 +32,7 @@ func NewUserHandler(services *service.Services, logger *zap.Logger, auditService
 // ClientHandler.logAudit — same contract: nil auditService is tolerated, and
 // LogAsync may drop on buffer overflow (not acceptable for auth-failure paths,
 // which use sync Log instead).
-func (h *UserHandler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+func (h *UserHandler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -144,7 +144,7 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 
 	h.logger.Info("User updated successfully", zap.String("id", idStr))
 
-	auditDetails := map[string]interface{}{
+	auditDetails := map[string]any{
 		"email": updatedUser.Email,
 	}
 	if beforeUser != nil {
@@ -185,7 +185,7 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 	h.logger.Info("User deleted successfully", zap.String("id", idStr))
 
 	if beforeUser != nil {
-		h.logAudit(c, beforeUser.TenantID, audit.ActionUserDeleted, beforeUser.ID.String(), map[string]interface{}{
+		h.logAudit(c, beforeUser.TenantID, audit.ActionUserDeleted, beforeUser.ID.String(), map[string]any{
 			"email": beforeUser.Email,
 		})
 	}

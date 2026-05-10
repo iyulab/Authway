@@ -22,7 +22,7 @@ type Service interface {
 	ListByTenant(tenantID uuid.UUID) ([]Webhook, error)
 	Update(id uuid.UUID, req *UpdateWebhookRequest) (*Webhook, error)
 	Delete(id uuid.UUID) error
-	Trigger(tenantID uuid.UUID, eventType EventType, data interface{}) error
+	Trigger(tenantID uuid.UUID, eventType EventType, data any) error
 	GetDeliveries(webhookID uuid.UUID, limit int) ([]WebhookDelivery, error)
 }
 
@@ -118,7 +118,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateWebhookRequest) (*Webhook, err
 	if err != nil {
 		return nil, err
 	}
-	updates := make(map[string]interface{})
+	updates := make(map[string]any)
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
@@ -155,7 +155,7 @@ func (s *service) Delete(id uuid.UUID) error {
 	return nil
 }
 
-func (s *service) Trigger(tenantID uuid.UUID, eventType EventType, data interface{}) error {
+func (s *service) Trigger(tenantID uuid.UUID, eventType EventType, data any) error {
 	var webhooks []Webhook
 	if err := s.db.Where("tenant_id = ? AND enabled = true AND deleted_at IS NULL", tenantID).Find(&webhooks).Error; err != nil {
 		return fmt.Errorf("failed to fetch webhooks: %w", err)
@@ -178,7 +178,7 @@ func containsEvent(events []string, event string) bool {
 	return false
 }
 
-func (s *service) deliverWebhook(webhook Webhook, eventType EventType, data interface{}) {
+func (s *service) deliverWebhook(webhook Webhook, eventType EventType, data any) {
 	payload := WebhookPayload{
 		ID:        uuid.New().String(),
 		Type:      eventType,

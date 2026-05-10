@@ -65,7 +65,7 @@ type WebhookPayload struct {
 	Type      EventType   `json:"type"`
 	Timestamp time.Time   `json:"timestamp"`
 	TenantID  string      `json:"tenant_id"`
-	Data      interface{} `json:"data"`
+	Data      any `json:"data"`
 }
 
 // SignPayload generates HMAC-SHA256 signature for payload

@@ -102,7 +102,7 @@ func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpe
 		ResourceID:   targetUser.ID.String(),
 		IPAddress:    ipAddress,
 		UserAgent:    userAgent,
-		Details:      map[string]interface{}{"action": "impersonation_started", "reason": req.Reason, "target_email": targetUser.Email},
+		Details:      map[string]any{"action": "impersonation_started", "reason": req.Reason, "target_email": targetUser.Email},
 		Success:      true,
 	})
 	s.logger.Info("Impersonation started", zap.String("admin_id", adminID.String()), zap.String("target_user_id", targetUser.ID.String()), zap.String("reason", req.Reason))
@@ -151,7 +151,7 @@ func (s *service) EndImpersonation(sessionID uuid.UUID) error {
 		Severity:     audit.SeverityInfo,
 		ResourceType: "user",
 		ResourceID:   session.TargetUserID.String(),
-		Details:      map[string]interface{}{"action": "impersonation_ended", "target_email": session.TargetUserEmail},
+		Details:      map[string]any{"action": "impersonation_ended", "target_email": session.TargetUserEmail},
 		Success:      true,
 	})
 	s.logger.Info("Impersonation ended", zap.String("session_id", sessionID.String()))

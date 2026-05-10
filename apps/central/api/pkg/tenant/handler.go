@@ -30,7 +30,7 @@ func NewHandler(service *Service, validate *validator.Validate, auditService aud
 // logAudit emits a best-effort audit entry for a tenant admin write path.
 // Same contract as other handlers: nil auditService tolerated, LogAsync may
 // drop on buffer overflow — acceptable because these are non-auth paths.
-func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]interface{}) {
+func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, resourceID string, extra map[string]any) {
 	if h.auditService == nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 		})
 	}
 
-	h.logAudit(c, tenant.ID, audit.ActionTenantCreated, tenant.ID.String(), map[string]interface{}{
+	h.logAudit(c, tenant.ID, audit.ActionTenantCreated, tenant.ID.String(), map[string]any{
 		"slug": tenant.Slug,
 		"name": tenant.Name,
 	})
@@ -185,7 +185,7 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 
 	// Diff-only details: flagging the *changed* fields makes the audit row
 	// useful for forensics without ballooning storage on full snapshots.
-	auditDetails := map[string]interface{}{
+	auditDetails := map[string]any{
 		"slug": tenant.Slug,
 	}
 	if beforeTenant != nil {
@@ -247,7 +247,7 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 	}
 
 	if beforeTenant != nil {
-		h.logAudit(c, beforeTenant.ID, audit.ActionTenantDeleted, beforeTenant.ID.String(), map[string]interface{}{
+		h.logAudit(c, beforeTenant.ID, audit.ActionTenantDeleted, beforeTenant.ID.String(), map[string]any{
 			"slug": beforeTenant.Slug,
 			"name": beforeTenant.Name,
 		})
