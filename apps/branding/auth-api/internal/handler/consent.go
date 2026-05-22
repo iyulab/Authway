@@ -79,7 +79,7 @@ func (h *ConsentHandler) AcceptConsent(c *fiber.Ctx) error {
 	bodyBytes := c.Body()
 
 	// Log request for debugging
-	var reqData map[string]interface{}
+	var reqData map[string]any
 	if err := json.Unmarshal(bodyBytes, &reqData); err == nil {
 		h.logger.Info("Consent accept request",
 			zap.Any("request", reqData))

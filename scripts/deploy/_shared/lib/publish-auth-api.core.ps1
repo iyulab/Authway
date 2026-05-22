@@ -123,6 +123,7 @@ try {
             "INTERNAL_API_KEY=$($envVars['INTERNAL_API_KEY'])" `
             "HYDRA_ADMIN_URL=$($envVars['HYDRA_ADMIN_INTERNAL_URL'])" `
             "HYDRA_PUBLIC_URL=$($envVars['HYDRA_ISSUER'])" `
+            "LOGIN_UI_URL=$($envVars['LOGIN_URL'])" `
             "GOOGLE_CLIENT_ID=$($envVars['GOOGLE_CLIENT_ID'])" `
             "GOOGLE_CLIENT_SECRET=$($envVars['GOOGLE_CLIENT_SECRET'])" `
             "GOOGLE_REDIRECT_URI=$($envVars['GOOGLE_REDIRECT_URI'])"

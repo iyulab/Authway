@@ -85,7 +85,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	if clientID == "" {
 		h.logger.Warn("No client_id in logout request", zap.String("challenge", logoutChallenge))
 		// Accept logout without redirect validation if no client
-		return h.acceptLogout(c, logoutChallenge, "")
+		return h.acceptLogout(c, logoutChallenge)
 	}
 
 	// 2. Get client configuration from Central API
@@ -95,7 +95,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 			zap.String("client_id", clientID),
 			zap.Error(err))
 		// If we can't get client config, accept logout without redirect
-		return h.acceptLogout(c, logoutChallenge, "")
+		return h.acceptLogout(c, logoutChallenge)
 	}
 
 	// 3. Parse post_logout_redirect_uri from request
@@ -107,7 +107,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 		zap.Strings("whitelist", clientConfig.PostLogoutRedirectURIs))
 
 	// 4. Validate based on logout_redirect_policy
-	redirectURI, err := h.validateLogoutRedirect(clientConfig, postLogoutRedirectURI)
+	_, err = h.validateLogoutRedirect(clientConfig, postLogoutRedirectURI)
 	if err != nil {
 		h.logger.Error("Logout redirect validation failed",
 			zap.String("client_id", clientID),
@@ -126,7 +126,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	}
 
 	// 5. Accept logout with validated redirect URI
-	return h.acceptLogout(c, logoutChallenge, redirectURI)
+	return h.acceptLogout(c, logoutChallenge)
 }
 
 // determineFallbackURI determines the best fallback URI for error cases
@@ -321,7 +321,7 @@ func (h *LogoutHandler) matchesWildcard(uri, pattern string) bool {
 }
 
 // acceptLogout accepts the logout request with Hydra
-func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, redirectURI string) error {
+func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge string) error {
 	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?logout_challenge=%s",
 		h.hydraAdminURL, challenge)
 

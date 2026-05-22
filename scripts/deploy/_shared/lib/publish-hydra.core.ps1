@@ -31,6 +31,7 @@ try {
 
 $RESOURCE_GROUP = $envVars['RESOURCE_GROUP']
 $CONTAINER_APP_HYDRA = $envVars['CONTAINER_APP_HYDRA']
+$CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 
 Write-Host "✓ 환경 변수 로드 완료" -ForegroundColor Green
 Write-Host ""
@@ -113,21 +114,47 @@ try {
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])"
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }
+
+        if ($CONTAINER_APP_HYDRA_ADMIN) {
+            Write-Host "🔄 Hydra Admin Container App 업데이트 중..." -ForegroundColor Yellow
+            Write-Host "   Container App: $CONTAINER_APP_HYDRA_ADMIN" -ForegroundColor Gray
+
+            az containerapp registry set `
+                --name $CONTAINER_APP_HYDRA_ADMIN `
+                --resource-group $RESOURCE_GROUP `
+                --server "iyulabimages.azurecr.io" `
+                --username $envVars['ACR_USERNAME'] `
+                --password $envVars['ACR_PASSWORD'] | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Hydra admin ACR 설정 실패" }
+
+            az containerapp update `
+                --name $CONTAINER_APP_HYDRA_ADMIN `
+                --resource-group $RESOURCE_GROUP `
+                --image "iyulabimages.azurecr.io/hydra:v26.2.0" `
+                --command "hydra" `
+                --args "serve" "admin" `
+                --set-env-vars `
+                    "DSN=$DSN" `
+                    "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
+                    "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
+                    "LOG_LEVEL=$($envVars['LOG_LEVEL'])" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Hydra admin 업데이트 실패" }
+            Write-Host "   ✓ Hydra Admin 업데이트 완료" -ForegroundColor Green
             Write-Host ""
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-            Write-Host "  ✅ Hydra 배포 완료!" -ForegroundColor Green
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "🌐 Issuer URL: $($envVars['HYDRA_ISSUER'])" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "🔍 헬스 체크:" -ForegroundColor Yellow
-            Write-Host "   - OIDC Discovery: $($envVars['HYDRA_ISSUER'])/.well-known/openid-configuration" -ForegroundColor Gray
-            Write-Host "   - Health: $($envVars['HYDRA_ISSUER'])/health/ready" -ForegroundColor Gray
-            Write-Host ""
-        } else {
-            throw "Container App 업데이트 실패"
         }
+
+        Write-Host ""
+        Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+        Write-Host "  ✅ Hydra 배포 완료!" -ForegroundColor Green
+        Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "🌐 Issuer URL: $($envVars['HYDRA_ISSUER'])" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "🔍 헬스 체크:" -ForegroundColor Yellow
+        Write-Host "   - OIDC Discovery: $($envVars['HYDRA_ISSUER'])/.well-known/openid-configuration" -ForegroundColor Gray
+        Write-Host "   - Health: $($envVars['HYDRA_ISSUER'])/health/ready" -ForegroundColor Gray
+        Write-Host ""
     }
 
 } catch {

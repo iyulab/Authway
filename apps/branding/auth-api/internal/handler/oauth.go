@@ -349,7 +349,7 @@ func (h *OAuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		Subject:     authResp.UserID,
 		Remember:    true,
 		RememberFor: 3600,
-		Context: map[string]interface{}{
+		Context: map[string]any{
 			"email":     authResp.Email,
 			"tenant_id": authResp.TenantID,
 		},

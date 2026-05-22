@@ -47,7 +47,7 @@ type AcceptLoginRequest struct {
 	Remember    bool                   `json:"remember"`
 	RememberFor int                    `json:"remember_for"`
 	ACR         string                 `json:"acr,omitempty"`
-	Context     map[string]interface{} `json:"context,omitempty"`
+	Context     map[string]any `json:"context,omitempty"`
 }
 
 // LoginResponse contains the redirect URL after accepting/rejecting login
@@ -74,9 +74,10 @@ func NewHydraClient(cfg *config.HydraConfig, logger *zap.Logger) *HydraClient {
 func (h *HydraClient) GetLoginRequest(challenge string) (*LoginRequest, error) {
 	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/login?challenge=%s", h.adminURL, challenge)
 
+	challengePrefix := challenge[:min(10, len(challenge))] + "..."
 	h.logger.Info("Getting Hydra login request",
 		zap.String("url", url),
-		zap.String("challenge", challenge[:10]+"..."))
+		zap.String("challenge", challengePrefix))
 
 	resp, err := h.httpClient.Get(url)
 	if err != nil {
