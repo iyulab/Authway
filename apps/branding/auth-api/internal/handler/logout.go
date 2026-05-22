@@ -85,7 +85,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	if clientID == "" {
 		h.logger.Warn("No client_id in logout request", zap.String("challenge", logoutChallenge))
 		// Accept logout without redirect validation if no client
-		return h.acceptLogout(c, logoutChallenge)
+		return h.acceptLogout(c, logoutChallenge, "")
 	}
 
 	// 2. Get client configuration from Central API
@@ -95,7 +95,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 			zap.String("client_id", clientID),
 			zap.Error(err))
 		// If we can't get client config, accept logout without redirect
-		return h.acceptLogout(c, logoutChallenge)
+		return h.acceptLogout(c, logoutChallenge, "")
 	}
 
 	// 3. Parse post_logout_redirect_uri from request
@@ -107,7 +107,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 		zap.Strings("whitelist", clientConfig.PostLogoutRedirectURIs))
 
 	// 4. Validate based on logout_redirect_policy
-	_, err = h.validateLogoutRedirect(clientConfig, postLogoutRedirectURI)
+	validatedURI, err := h.validateLogoutRedirect(clientConfig, postLogoutRedirectURI)
 	if err != nil {
 		h.logger.Error("Logout redirect validation failed",
 			zap.String("client_id", clientID),
@@ -126,7 +126,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	}
 
 	// 5. Accept logout with validated redirect URI
-	return h.acceptLogout(c, logoutChallenge)
+	return h.acceptLogout(c, logoutChallenge, validatedURI)
 }
 
 // determineFallbackURI determines the best fallback URI for error cases
@@ -320,12 +320,26 @@ func (h *LogoutHandler) matchesWildcard(uri, pattern string) bool {
 	return false
 }
 
-// acceptLogout accepts the logout request with Hydra
-func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge string) error {
+// acceptLogout accepts the logout request with Hydra, forwarding the validated redirect URI.
+func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, postLogoutRedirectURI string) error {
 	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?logout_challenge=%s",
 		h.hydraAdminURL, challenge)
 
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer([]byte("{}")))
+	var bodyBytes []byte
+	if postLogoutRedirectURI != "" {
+		body := map[string]string{"post_logout_redirect_uri": postLogoutRedirectURI}
+		var err error
+		bodyBytes, err = json.Marshal(body)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to marshal accept request",
+			})
+		}
+	} else {
+		bodyBytes = []byte("{}")
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create accept request",

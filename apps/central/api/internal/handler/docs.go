@@ -39,6 +39,10 @@ type DocFile struct {
 // ListDocs returns the documentation file tree
 // GET /api/v1/docs
 func (h *DocsHandler) ListDocs(c *fiber.Ctx) error {
+	if _, err := os.Stat(h.docsPath); os.IsNotExist(err) {
+		return c.JSON(fiber.Map{"data": []DocFile{}})
+	}
+
 	tree, err := h.buildFileTree(h.docsPath, "")
 	if err != nil {
 		h.logger.Error("Failed to build docs tree", zap.Error(err))
