@@ -45,8 +45,11 @@ WORKDIR /home/authway
 # Copy binary from builder stage
 COPY --from=builder /app/authway-api ./app
 
-# Create logs directory
-RUN mkdir -p logs && chown authway:authway logs
+# Copy documentation files for the /api/v1/docs endpoint
+COPY docs/ ./docs/
+
+# Create logs directory and set ownership
+RUN mkdir -p logs && chown -R authway:authway logs docs
 
 # Switch to app user
 USER authway
