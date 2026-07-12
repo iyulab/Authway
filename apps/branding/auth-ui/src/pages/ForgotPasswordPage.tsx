@@ -143,15 +143,6 @@ export default function ForgotPasswordPage() {
                   )}
                 </button>
               </form>
-
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <p className="text-sm text-gray-600 text-center">
-                  {t('password:forgot.noAccount')}{' '}
-                  <Link to="/register" className="text-indigo-600 hover:underline font-medium">
-                    {t('password:forgot.signUp')}
-                  </Link>
-                </p>
-              </div>
             </>
           )}
         </div>

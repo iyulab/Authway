@@ -246,8 +246,8 @@ func main() {
 	// Popup callback for popup-based authentication (@authway/client, @authway/react)
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
 
-	// User registration
-	app.Post("/register", authHandler.Register)
+	// Onboarding is invitation-only — public self-registration removed (D-a/B).
+	// Users are created via POST /api/v1/invitations/accept or by an admin.
 
 	// Social login routes - Google
 	app.Get("/auth/google/login", socialHandler.GoogleLogin)

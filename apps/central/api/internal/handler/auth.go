@@ -836,76 +836,9 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// Registration endpoint
-type RegisterRequest struct {
-	TenantID string `json:"tenant_id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
-}
-
-func (h *AuthHandler) Register(c *fiber.Ctx) error {
-	var req RegisterRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	// Validate input
-	if req.Email == "" || req.Password == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Email and password are required",
-		})
-	}
-
-	if req.TenantID == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Tenant ID is required",
-		})
-	}
-
-	// Parse tenant ID
-	tenantID, err := uuid.Parse(req.TenantID)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid tenant ID format",
-		})
-	}
-
-	// Create user request
-	createReq := &user.CreateUserRequest{
-		Email:    req.Email,
-		Password: req.Password,
-		Name:     req.Name,
-	}
-
-	createdUser, err := h.userService.Create(tenantID, createReq)
-	if err != nil {
-		// Check for duplicate user error
-		if strings.Contains(err.Error(), "already exists") {
-			return c.Status(409).JSON(fiber.Map{
-				"error": "User with this email already exists",
-			})
-		}
-		h.logger.Error("Failed to create user", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create user",
-		})
-	}
-
-	h.logUserAudit(c, createdUser, audit.ActionUserCreated, map[string]any{
-		"email":     createdUser.Email,
-		"source":    "registration",
-	})
-
-	return c.Status(201).JSON(fiber.Map{
-		"id":        createdUser.ID,
-		"tenant_id": createdUser.TenantID,
-		"email":     createdUser.Email,
-		"name":      createdUser.Name,
-	})
-}
+// NOTE: The public self-registration endpoint (RegisterRequest + Register) was
+// removed — onboarding is invitation-only. Users are created via the invitation
+// accept flow (pkg/invitation) or by an admin. See decision D-a/B.
 
 // User profile endpoint
 func (h *AuthHandler) Profile(c *fiber.Ctx) error {

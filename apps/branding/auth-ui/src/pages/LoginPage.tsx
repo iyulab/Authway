@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -51,7 +51,6 @@ interface LoginPageInfo {
 const LoginPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -309,11 +308,6 @@ const LoginPage: React.FC = () => {
     return loginInfo?.client?.allow_email_login ?? true
   }
 
-  const isEmailSignupEnabled = (): boolean => {
-    // Default to true if not set
-    return loginInfo?.client?.allow_email_signup ?? true
-  }
-
   // Check if any social provider is enabled
   const hasSocialProviders = (): boolean => {
     return isProviderEnabled('google') ||
@@ -517,18 +511,7 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {/* Register Link - only show if email signup is enabled */}
-          {isProviderEnabled('email') && isEmailSignupEnabled() && (
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => navigate(`/register${challenge ? `?login_challenge=${challenge}` : ''}`)}
-                className="text-sm text-indigo-600 hover:text-indigo-500"
-              >
-                {t('auth:login.noAccount')}
-              </button>
-            </div>
-          )}
+          {/* Onboarding is invitation-only: no public self-registration CTA. */}
         </form>
       </div>
     </div>

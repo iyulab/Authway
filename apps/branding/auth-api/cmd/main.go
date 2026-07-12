@@ -109,7 +109,7 @@ func main() {
 	app.Get("/auth/google/callback", oauthHandler.GoogleCallback)
 
 	// Auth endpoints (proxy to Central API)
-	app.Post("/register", authHandler.Register)
+	// /register removed — onboarding is invitation-only (D-a/B).
 	app.Post("/authenticate", authHandler.Authenticate)
 
 	// Consent endpoints (proxy to Central API)

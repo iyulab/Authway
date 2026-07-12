@@ -265,31 +265,6 @@ describe('LoginPage', () => {
     })
   })
 
-  describe('Navigation', () => {
-    beforeEach(async () => {
-      server.use(
-        http.get('http://localhost:8080/login', () => {
-          return HttpResponse.json({
-            challenge: 'test-challenge',
-            client_name: 'Test App',
-            requested_scope: ['openid', 'email']
-          })
-        })
-      )
-
-      render(<LoginPage />)
-
-      await waitFor(() => {
-        expect(screen.getByText('계정이 없으신가요? 회원가입')).toBeInTheDocument()
-      })
-    })
-
-    it('navigates to register page', async () => {
-      const registerLink = screen.getByText('계정이 없으신가요? 회원가입')
-
-      await user.click(registerLink)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/register')
-    })
-  })
+  // Navigation-to-register tests removed: onboarding is invitation-only, so the
+  // login page no longer renders a public sign-up CTA.
 })

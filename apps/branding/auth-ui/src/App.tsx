@@ -1,9 +1,9 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import LogoutPage from './pages/LogoutPage'
 import ConsentPage from './pages/ConsentPage'
-import RegisterPage from './pages/RegisterPage'
+import AcceptInvitationPage from './pages/AcceptInvitationPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResendVerificationPage from './pages/ResendVerificationPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -22,7 +22,10 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/logout" element={<LogoutPage />} />
         <Route path="/consent" element={<ConsentPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        {/* Onboarding is invitation-only: public self-registration is removed.
+            The invitation email links to /invitation/accept?token=... */}
+        <Route path="/invitation/accept" element={<AcceptInvitationPage />} />
+        <Route path="/register" element={<Navigate to="/login" replace />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/resend-verification" element={<ResendVerificationPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
