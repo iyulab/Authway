@@ -9,9 +9,12 @@
 -- reverse-hashed); affected users simply request a new verification email.
 --
 -- See issue: sensitive-material-plaintext.
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction; an inner COMMIT would leak-commit that outer tx and defeat
+-- its all-or-nothing guarantee (empirically confirmed). Migration files must
+-- contain no transaction-control statements.
 -- ============================================================
-
-BEGIN;
 
 -- Invalidate all existing (plaintext) verification tokens.
 DELETE FROM email_verifications;
@@ -29,8 +32,6 @@ ALTER TABLE email_verifications ALTER COLUMN token_hash TYPE VARCHAR(64);
 CREATE UNIQUE INDEX idx_email_verifications_token_hash ON email_verifications(token_hash);
 
 COMMENT ON COLUMN email_verifications.token_hash IS 'SHA-256 hex digest of the verification token. Plaintext is never stored.';
-
-COMMIT;
 
 -- ============================================================
 -- Verification query:

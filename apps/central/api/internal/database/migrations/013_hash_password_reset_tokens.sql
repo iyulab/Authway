@@ -11,9 +11,12 @@
 -- limited to in-flight requests.
 --
 -- See issue: sensitive-material-plaintext.
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction; an inner COMMIT would leak-commit that outer tx and defeat
+-- its all-or-nothing guarantee (empirically confirmed). Migration files must
+-- contain no transaction-control statements.
 -- ============================================================
-
-BEGIN;
 
 -- Invalidate all existing (plaintext) reset tokens.
 DELETE FROM password_resets;
@@ -31,8 +34,6 @@ ALTER TABLE password_resets ALTER COLUMN token_hash TYPE VARCHAR(64);
 CREATE UNIQUE INDEX idx_password_resets_token_hash ON password_resets(token_hash);
 
 COMMENT ON COLUMN password_resets.token_hash IS 'SHA-256 hex digest of the reset token. Plaintext is never stored.';
-
-COMMIT;
 
 -- ============================================================
 -- Verification query:
