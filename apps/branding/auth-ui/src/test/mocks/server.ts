@@ -76,7 +76,7 @@ export const handlers = [
   }),
 
   // Accept consent
-  http.post('http://localhost:8080/consent', () => {
+  http.post('http://localhost:8080/consent/accept', () => {
     return HttpResponse.json({
       redirect_to: 'http://localhost:3000/callback?code=mock-auth-code'
     })

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { render } from '../test/utils'
 import ConsentPage from './ConsentPage'
 import { server } from '../test/mocks/server'
-import { rest } from 'msw'
+import { http, HttpResponse, delay } from 'msw'
 
 // Mock useSearchParams
 const mockSearchParams = new URLSearchParams()
@@ -17,13 +17,8 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-// Mock environment variables
-Object.defineProperty(import.meta, 'env', {
-  value: {
-    VITE_API_URL: 'http://localhost:8080'
-  },
-  writable: true
-})
+// Vite env vars (VITE_API_URL) are provided globally via vi.stubEnv in
+// src/test/setup.ts.
 
 describe('ConsentPage', () => {
   const user = userEvent.setup()
@@ -33,6 +28,9 @@ describe('ConsentPage', () => {
     client_name: 'Test Application',
     requested_scope: ['openid', 'profile', 'email', 'offline_access'],
     user: {
+      // ConsentPage renders `user.name || user.email`; the backend supplies
+      // a composed `name`. first/last kept for shape parity.
+      name: 'Test User',
       email: 'test@example.com',
       first_name: 'Test',
       last_name: 'User'
@@ -44,14 +42,15 @@ describe('ConsentPage', () => {
     mockSearchParams.set('consent_challenge', 'test-consent-challenge')
 
     server.use(
-      rest.get('http://localhost:8080/consent', (req, res, ctx) => {
-        return res(ctx.json(mockConsentInfo))
+      http.post('http://localhost:8080/consent', () => {
+        return HttpResponse.json(mockConsentInfo)
       })
     )
   })
 
   afterEach(() => {
-    mockSearchParams.clear()
+    // URLSearchParams has no .clear() in this runtime; delete each key.
+    Array.from(mockSearchParams.keys()).forEach((k) => mockSearchParams.delete(k))
   })
 
   describe('Initial Loading and Error States', () => {
@@ -74,8 +73,8 @@ describe('ConsentPage', () => {
 
     it('shows error when consent challenge fetch fails', async () => {
       server.use(
-        rest.get('http://localhost:8080/consent', (req, res, ctx) => {
-          return res(ctx.status(500), ctx.json({ error: 'Server error' }))
+        http.post('http://localhost:8080/consent', () => {
+          return HttpResponse.json({ error: 'Server error' }, { status: 500 })
         })
       )
 
@@ -89,8 +88,8 @@ describe('ConsentPage', () => {
 
     it('shows error when consent challenge fetch throws', async () => {
       server.use(
-        rest.get('http://localhost:8080/consent', (req, res, ctx) => {
-          return res.networkError('Network error')
+        http.post('http://localhost:8080/consent', () => {
+          return HttpResponse.error()
         })
       )
 
@@ -135,11 +134,11 @@ describe('ConsentPage', () => {
 
     it('shows fallback description for unknown scopes', async () => {
       server.use(
-        rest.get('http://localhost:8080/consent', (req, res, ctx) => {
-          return res(ctx.json({
+        http.post('http://localhost:8080/consent', () => {
+          return HttpResponse.json({
             ...mockConsentInfo,
             requested_scope: ['unknown_scope']
-          }))
+          })
         })
       )
 
@@ -220,11 +219,12 @@ describe('ConsentPage', () => {
     it('can toggle remember consent option', async () => {
       const rememberCheckbox = screen.getByLabelText('이 선택을 기억하기 (1시간)')
 
-      expect(rememberCheckbox).not.toBeChecked()
+      // rememberConsent defaults to true (better-UX default in ConsentPage).
+      expect(rememberCheckbox).toBeChecked()
 
       await user.click(rememberCheckbox)
 
-      expect(rememberCheckbox).toBeChecked()
+      expect(rememberCheckbox).not.toBeChecked()
     })
   })
 
@@ -239,8 +239,9 @@ describe('ConsentPage', () => {
 
     it('handles successful consent approval with redirect', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent', (req, res, ctx) => {
-          return res(ctx.json({ redirect_to: 'http://example.com/callback?code=auth-code' }))
+        http.post('http://localhost:8080/consent/accept', async () => {
+          await delay(50) // keep isPending long enough to observe the loading label
+          return HttpResponse.json({ redirect_to: 'http://example.com/callback?code=auth-code' })
         })
       )
 
@@ -262,8 +263,8 @@ describe('ConsentPage', () => {
 
     it('handles consent approval error from server', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent', (req, res, ctx) => {
-          return res(ctx.json({ error: 'Consent processing failed' }))
+        http.post('http://localhost:8080/consent/accept', () => {
+          return HttpResponse.json({ error: 'Consent processing failed' })
         })
       )
 
@@ -277,8 +278,8 @@ describe('ConsentPage', () => {
 
     it('handles network error during consent approval', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent', (req, res, ctx) => {
-          return res.networkError('Network error')
+        http.post('http://localhost:8080/consent/accept', () => {
+          return HttpResponse.error()
         })
       )
 
@@ -294,18 +295,15 @@ describe('ConsentPage', () => {
       let requestBody: any
 
       server.use(
-        rest.post('http://localhost:8080/consent', async (req, res, ctx) => {
-          requestBody = await req.json()
-          return res(ctx.json({ redirect_to: 'http://example.com/callback' }))
+        http.post('http://localhost:8080/consent/accept', async ({ request }) => {
+          requestBody = await request.json()
+          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
         })
       )
 
-      // Toggle off one scope and enable remember
+      // Toggle off one scope. remember stays at its default (true).
       const profileCheckbox = screen.getByLabelText('프로필 정보')
-      const rememberCheckbox = screen.getByLabelText('이 선택을 기억하기 (1시간)')
-
       await user.click(profileCheckbox)
-      await user.click(rememberCheckbox)
 
       const approveButton = screen.getByRole('button', { name: /승인/ })
       await user.click(approveButton)
@@ -332,8 +330,9 @@ describe('ConsentPage', () => {
 
     it('handles successful consent rejection with redirect', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent/reject', (req, res, ctx) => {
-          return res(ctx.json({ redirect_to: 'http://example.com/error?error=access_denied' }))
+        http.post('http://localhost:8080/consent/reject', async () => {
+          await delay(50) // keep isPending long enough to observe the loading label
+          return HttpResponse.json({ redirect_to: 'http://example.com/error?error=access_denied' })
         })
       )
 
@@ -355,8 +354,8 @@ describe('ConsentPage', () => {
 
     it('handles consent rejection error from server', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent/reject', (req, res, ctx) => {
-          return res(ctx.json({ error: 'Rejection processing failed' }))
+        http.post('http://localhost:8080/consent/reject', () => {
+          return HttpResponse.json({ error: 'Rejection processing failed' })
         })
       )
 
@@ -370,8 +369,8 @@ describe('ConsentPage', () => {
 
     it('handles network error during consent rejection', async () => {
       server.use(
-        rest.post('http://localhost:8080/consent/reject', (req, res, ctx) => {
-          return res.networkError('Network error')
+        http.post('http://localhost:8080/consent/reject', () => {
+          return HttpResponse.error()
         })
       )
 
@@ -387,15 +386,15 @@ describe('ConsentPage', () => {
   describe('User Display', () => {
     it('displays user email when names are not available', async () => {
       server.use(
-        rest.get('http://localhost:8080/consent', (req, res, ctx) => {
-          return res(ctx.json({
+        http.post('http://localhost:8080/consent', () => {
+          return HttpResponse.json({
             ...mockConsentInfo,
             user: {
               email: 'test@example.com',
               first_name: '',
               last_name: ''
             }
-          }))
+          })
         })
       )
 
@@ -425,6 +424,13 @@ describe('ConsentPage', () => {
     })
 
     it('disables buttons during approval', async () => {
+      server.use(
+        http.post('http://localhost:8080/consent/accept', async () => {
+          await delay(50)
+          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
+        })
+      )
+
       const approveButton = screen.getByRole('button', { name: /승인/ })
       const rejectButton = screen.getByRole('button', { name: '거부' })
 
@@ -437,6 +443,13 @@ describe('ConsentPage', () => {
     })
 
     it('disables buttons during rejection', async () => {
+      server.use(
+        http.post('http://localhost:8080/consent/reject', async () => {
+          await delay(50)
+          return HttpResponse.json({ redirect_to: 'http://example.com/error' })
+        })
+      )
+
       const approveButton = screen.getByRole('button', { name: /승인/ })
       const rejectButton = screen.getByRole('button', { name: '거부' })
 
