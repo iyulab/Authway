@@ -389,7 +389,10 @@ const LoginPage: React.FC = () => {
           )}
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        {/* noValidate: let zod/react-hook-form own validation so custom i18n
+            messages surface. Without it, the browser's native type="email"
+            constraint blocks submit before zod runs. */}
+        <form className="mt-8 space-y-6" noValidate onSubmit={handleSubmit(onSubmit)}>
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="text-sm text-red-700">{error}</div>
@@ -405,6 +408,7 @@ const LoginPage: React.FC = () => {
                     {t('auth:login.emailLabel')}
                   </label>
                   <input
+                    id="email"
                     {...register('email')}
                     type="email"
                     autoComplete="email"
@@ -421,6 +425,7 @@ const LoginPage: React.FC = () => {
                     {t('auth:login.passwordLabel')}
                   </label>
                   <input
+                    id="password"
                     {...register('password')}
                     type="password"
                     autoComplete="current-password"
@@ -434,6 +439,7 @@ const LoginPage: React.FC = () => {
 
                 <div className="flex items-center">
                   <input
+                    id="remember"
                     {...register('remember')}
                     type="checkbox"
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
