@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../test/utils'
+import i18n from '../i18n'
 import LoginPage from './LoginPage'
 import { server } from '../test/mocks/server'
 import { http, HttpResponse } from 'msw'
@@ -103,9 +104,11 @@ describe('LoginPage', () => {
       await waitFor(() => {
         // Title and submit button share the text '로그인'; disambiguate by role.
         expect(screen.getByRole('heading', { name: '로그인' })).toBeInTheDocument()
-        // client_name is a <span>, the rest is a sibling text node — assert separately.
-        expect(screen.getByText('Test App')).toBeInTheDocument()
-        expect(screen.getByText(/에 로그인하시겠습니까/)).toBeInTheDocument()
+        // The subtitle must read as one full sentence with the client name emphasized.
+        const subtitle = screen.getByText(
+          (_, el) => el?.tagName === 'P' && el.textContent === 'Test App에 로그인하시겠습니까?'
+        )
+        expect(within(subtitle).getByText('Test App')).toHaveClass('font-medium')
         expect(screen.getByText('요청된 권한: openid, email')).toBeInTheDocument()
       })
 
@@ -113,6 +116,44 @@ describe('LoginPage', () => {
       expect(screen.getByLabelText('비밀번호')).toBeInTheDocument()
       expect(screen.getByLabelText('로그인 상태 유지')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: '로그인' })).toBeInTheDocument()
+    })
+
+    it('renders the subtitle in English word order (client name mid-sentence)', async () => {
+      // Regression: en places {{clientName}} mid-sentence; prepending the name
+      // to a name-stripped template rendered "All.ModelsSign in to ?" in prod.
+      await i18n.changeLanguage('en')
+      try {
+        render(<LoginPage />)
+
+        await waitFor(() => {
+          expect(
+            screen.getByText(
+              (_, el) => el?.tagName === 'P' && el.textContent === 'Sign in to Test App?'
+            )
+          ).toBeInTheDocument()
+        })
+      } finally {
+        await i18n.changeLanguage('ko')
+      }
+    })
+
+    it('falls back to a generic subtitle when client_name is missing', async () => {
+      server.use(
+        http.get('http://localhost:8080/auth/google/login', () => {
+          return HttpResponse.json({
+            challenge: 'test-challenge',
+            client_name: '',
+            requested_scope: ['openid'],
+            client: { client_id: 'test-client-id' }
+          })
+        })
+      )
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('계속하려면 로그인하세요')).toBeInTheDocument()
+      })
     })
 
     it('shows Google login button with client ID', async () => {

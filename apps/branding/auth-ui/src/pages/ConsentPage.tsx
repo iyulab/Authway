@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 
 interface ConsentRequest {
   challenge: string
@@ -291,7 +291,11 @@ const ConsentPage: React.FC = () => {
               {t('consent:greeting', { name: consentInfo.user.name || consentInfo.user.email })}
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              {t('consent:subtitle', { clientName: consentInfo.client_name })}
+              <Trans
+                i18nKey="consent:subtitle"
+                values={{ clientName: consentInfo.client_name }}
+                components={{ strong: <span className="font-medium" /> }}
+              />
             </p>
           </div>
         </div>

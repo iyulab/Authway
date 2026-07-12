@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../test/utils'
 import ConsentPage from './ConsentPage'
@@ -109,7 +109,13 @@ describe('ConsentPage', () => {
       await waitFor(() => {
         expect(screen.getByText('앱 권한 승인')).toBeInTheDocument()
         expect(screen.getByText('안녕하세요, Test User님')).toBeInTheDocument()
-        expect(screen.getByText('Test Application에서 다음 권한을 요청하고 있습니다.')).toBeInTheDocument()
+        // Full sentence with the client name emphasized, matching LoginPage.
+        const subtitle = screen.getByText(
+          (_, el) =>
+            el?.tagName === 'P' &&
+            el.textContent === 'Test Application에서 다음 권한을 요청하고 있습니다.'
+        )
+        expect(within(subtitle).getByText('Test Application')).toHaveClass('font-medium')
         expect(screen.getByText('요청된 권한')).toBeInTheDocument()
       })
     })

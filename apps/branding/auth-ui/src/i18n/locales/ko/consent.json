@@ -1,7 +1,7 @@
 {
   "title": "앱 권한 승인",
   "greeting": "안녕하세요, {{name}}님",
-  "subtitle": "{{clientName}}에서 다음 권한을 요청하고 있습니다.",
+  "subtitle": "<strong>{{clientName}}</strong>에서 다음 권한을 요청하고 있습니다.",
   "requestedPermissions": "요청된 권한",
   "genericPermission": "{{scope}} 권한에 접근합니다.",
   "rememberChoice": "이 선택을 기억하기 (1시간)",

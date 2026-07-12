@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import GoogleLoginButton from '../components/GoogleLoginButton'
 import { GitHubLoginButton, MicrosoftLoginButton, AppleLoginButton } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
@@ -377,8 +377,15 @@ const LoginPage: React.FC = () => {
           {loginInfo && (
             <div className="mt-2 text-center">
               <p className="text-sm text-gray-600">
-                <span className="font-medium">{loginInfo.client_name}</span>
-                {t('auth:login.subtitle', { clientName: '' }).replace('{{clientName}}', '')}
+                {loginInfo.client_name ? (
+                  <Trans
+                    i18nKey="auth:login.subtitle"
+                    values={{ clientName: loginInfo.client_name }}
+                    components={{ strong: <span className="font-medium" /> }}
+                  />
+                ) : (
+                  t('auth:login.subtitleFallback')
+                )}
               </p>
               {loginInfo.requested_scope?.length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
