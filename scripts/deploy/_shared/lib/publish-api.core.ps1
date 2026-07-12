@@ -32,9 +32,10 @@ $ProjectRoot = Split-Path -Parent $ScriptsDir
 try {
     $envVars = Get-DeployEnv -Target $Target
 
-    # 중앙 API는 ADMIN_API_KEY / INTERNAL_API_KEY 가 비어 있으면 기동 시점에
-    # fail-closed로 거부한다. 2026-04 prod 사고 재발 방지 게이트.
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'INTERNAL_API_KEY')
+    # 중앙 API는 ADMIN_API_KEY / INTERNAL_API_KEY / TOTP 암호화 키가 비어 있으면
+    # 기동 시점에 fail-closed로 거부한다. 2026-04 prod 사고 재발 방지 게이트.
+    # (AUTHWAY_TOTP_ENCRYPTION_KEY 는 D-e — TOTP secret at-rest 암호화 — 필수)
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'INTERNAL_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY')
 
     Set-AzureSubscription -EnvVars $envVars
 } catch {
@@ -142,6 +143,7 @@ try {
             "AUTHWAY_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
             "AUTHWAY_ADMIN_API_KEY=$($envVars['ADMIN_API_KEY'])" `
             "AUTHWAY_ADMIN_INTERNAL_API_KEY=$($envVars['INTERNAL_API_KEY'])" `
+            "AUTHWAY_TOTP_ENCRYPTION_KEY=$($envVars['AUTHWAY_TOTP_ENCRYPTION_KEY'])" `
             "AUTHWAY_EMAIL_USE_AZURE=$($envVars['EMAIL_USE_AZURE'])" `
             "AUTHWAY_EMAIL_AZURE_BASE_URL=$($envVars['EMAIL_AZURE_BASE_URL'])" `
             "AUTHWAY_EMAIL_AZURE_FUNCTION_KEY=$($envVars['EMAIL_AZURE_FUNCTION_KEY'])" `
