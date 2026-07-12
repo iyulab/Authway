@@ -1,7 +1,14 @@
 import '@testing-library/jest-dom'
-import { beforeAll, afterAll, afterEach } from 'vitest'
+import { beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { server } from './mocks/server'
+
+// Provide Vite env vars used by components (import.meta.env). vi.stubEnv is
+// the reliable way to set these in vitest; per-file Object.defineProperty on
+// import.meta.env does not take effect. Both point at the msw mock origin so
+// LoginPage/ConsentPage fetch URLs resolve to intercepted handlers.
+vi.stubEnv('VITE_API_URL', 'http://localhost:8080')
+vi.stubEnv('VITE_AUTH_BACKEND_URL', 'http://localhost:8080')
 
 // Mock server setup
 beforeAll(() => server.listen())

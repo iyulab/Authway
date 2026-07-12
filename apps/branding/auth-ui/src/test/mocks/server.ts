@@ -42,8 +42,8 @@ export const handlers = [
     })
   }),
 
-  // Login challenge endpoint
-  http.get('http://localhost:8080/login', ({ request }) => {
+  // Login challenge info endpoint (LoginPage fetches login info here)
+  http.get('http://localhost:8080/auth/google/login', ({ request }) => {
     const url = new URL(request.url)
     const challenge = url.searchParams.get('login_challenge')
     return HttpResponse.json({
@@ -56,8 +56,8 @@ export const handlers = [
     })
   }),
 
-  // Login endpoint
-  http.post('http://localhost:8080/login', () => {
+  // Email/password authentication endpoint (proxied to Central /authenticate)
+  http.post('http://localhost:8080/authenticate', () => {
     return HttpResponse.json({
       redirect_to: 'http://localhost:3000/callback?code=mock-auth-code'
     })

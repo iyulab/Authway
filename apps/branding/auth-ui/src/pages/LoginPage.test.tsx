@@ -32,13 +32,8 @@ vi.mock('../components/GoogleLoginButton', () => ({
   )
 }))
 
-// Mock environment variables
-Object.defineProperty(import.meta, 'env', {
-  value: {
-    VITE_API_URL: 'http://localhost:8080'
-  },
-  writable: true
-})
+// Vite env vars (VITE_API_URL / VITE_AUTH_BACKEND_URL) are provided globally
+// via vi.stubEnv in src/test/setup.ts.
 
 describe('LoginPage', () => {
   const user = userEvent.setup()
@@ -49,7 +44,8 @@ describe('LoginPage', () => {
   })
 
   afterEach(() => {
-    mockSearchParams.clear()
+    // URLSearchParams has no .clear() in this runtime; delete each key.
+    Array.from(mockSearchParams.keys()).forEach((k) => mockSearchParams.delete(k))
   })
 
   describe('Initial Loading and Error States', () => {
@@ -59,20 +55,21 @@ describe('LoginPage', () => {
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
 
-    it('shows error when login_challenge is missing', async () => {
+    it('shows the Authway home fallback when login_challenge is missing', async () => {
+      // Direct access without an OAuth login_challenge is not part of the
+      // normal flow; the page renders a plain Authway landing instead of a form.
       mockSearchParams.delete('login_challenge')
 
       render(<LoginPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('오류 발생')).toBeInTheDocument()
-        expect(screen.getByText('Login challenge가 누락되었습니다.')).toBeInTheDocument()
+        expect(screen.getByText('Authway')).toBeInTheDocument()
       })
     })
 
     it('shows error when login challenge fetch fails', async () => {
       server.use(
-        http.get('http://localhost:8080/login', () => {
+        http.get('http://localhost:8080/auth/google/login', () => {
           return HttpResponse.json({ error: 'Server error' }, { status: 500 })
         })
       )
@@ -89,7 +86,7 @@ describe('LoginPage', () => {
   describe('Successful Login Challenge Fetch', () => {
     beforeEach(() => {
       server.use(
-        http.get('http://localhost:8080/login', () => {
+        http.get('http://localhost:8080/auth/google/login', () => {
           return HttpResponse.json({
             challenge: 'test-challenge',
             client_name: 'Test App',
@@ -104,8 +101,11 @@ describe('LoginPage', () => {
       render(<LoginPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('로그인')).toBeInTheDocument()
-        expect(screen.getByText('Test App에 로그인하시겠습니까?')).toBeInTheDocument()
+        // Title and submit button share the text '로그인'; disambiguate by role.
+        expect(screen.getByRole('heading', { name: '로그인' })).toBeInTheDocument()
+        // client_name is a <span>, the rest is a sibling text node — assert separately.
+        expect(screen.getByText('Test App')).toBeInTheDocument()
+        expect(screen.getByText(/에 로그인하시겠습니까/)).toBeInTheDocument()
         expect(screen.getByText('요청된 권한: openid, email')).toBeInTheDocument()
       })
 
@@ -128,7 +128,7 @@ describe('LoginPage', () => {
   describe('Form Validation', () => {
     beforeEach(async () => {
       server.use(
-        http.get('http://localhost:8080/login', () => {
+        http.get('http://localhost:8080/auth/google/login', () => {
           return HttpResponse.json({
             challenge: 'test-challenge',
             client_name: 'Test App',
@@ -174,7 +174,7 @@ describe('LoginPage', () => {
   describe('Login Submission', () => {
     beforeEach(async () => {
       server.use(
-        http.get('http://localhost:8080/login', () => {
+        http.get('http://localhost:8080/auth/google/login', () => {
           return HttpResponse.json({
             challenge: 'test-challenge',
             client_name: 'Test App',
@@ -192,7 +192,7 @@ describe('LoginPage', () => {
 
     it('handles successful login with redirect', async () => {
       server.use(
-        http.post('http://localhost:8080/login', () => {
+        http.post('http://localhost:8080/authenticate', () => {
           return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
         })
       )
@@ -216,7 +216,7 @@ describe('LoginPage', () => {
 
     it('handles login error from server', async () => {
       server.use(
-        http.post('http://localhost:8080/login', () => {
+        http.post('http://localhost:8080/authenticate', () => {
           return HttpResponse.json({ error: 'Invalid credentials' })
         })
       )
@@ -238,7 +238,7 @@ describe('LoginPage', () => {
       let requestBody: any
 
       server.use(
-        http.post('http://localhost:8080/login', async ({ request }) => {
+        http.post('http://localhost:8080/authenticate', async ({ request }) => {
           requestBody = await request.json()
           return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
         })
