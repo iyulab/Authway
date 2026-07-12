@@ -73,21 +73,6 @@ func (r *Repository) DeleteVerificationsByUserID(userID uuid.UUID) error {
 	return nil
 }
 
-// GetPendingVerificationByUserID gets pending verification for a user
-func (r *Repository) GetPendingVerificationByUserID(userID uuid.UUID) (*EmailVerification, error) {
-	var verification EmailVerification
-	if err := r.db.Where("user_id = ? AND verified = ? AND deleted_at IS NULL", userID, false).
-		Order("created_at DESC").
-		First(&verification).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get pending verification: %w", err)
-	}
-
-	return &verification, nil
-}
-
 // === Password Reset Methods ===
 
 // CreatePasswordReset creates a new password reset record

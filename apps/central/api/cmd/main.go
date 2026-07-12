@@ -280,7 +280,7 @@ func main() {
 	// API v1 routes
 	v1 := app.Group("/api/v1")
 
-	// Internal API routes (authenticated with X-Internal-Key)
+	// Internal API routes (authenticated with X-API-Key)
 	internalAPI := app.Group("/internal")
 	internalAuth := middleware.InternalAPIAuth(cfg.Admin.InternalAPIKey, zapLogger)
 	internalAPI.Post("/auth/google", internalAuth, internalAuthHandler.AuthenticateGoogleUser)

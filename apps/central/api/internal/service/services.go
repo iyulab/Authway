@@ -1,13 +1,9 @@
 package service
 
 import (
-	// "authway/apps/central/api/internal/config"  // Currently unused
-	// "authway/apps/central/api/pkg/auth"         // Package not yet implemented
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/client"
-	// "authway/apps/central/api/pkg/token"       // Package not yet implemented
 	"authway/apps/central/api/pkg/user"
-	// "github.com/redis/go-redis/v9"       // Currently unused
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -16,8 +12,6 @@ import (
 type Services struct {
 	UserService   user.Service
 	ClientService client.Service
-	// TokenService  token.Service  // Package not yet implemented
-	// AuthService   auth.Service   // Package not yet implemented
 }
 
 // NewUserService creates a new user service
@@ -29,13 +23,3 @@ func NewUserService(db *gorm.DB, logger *zap.Logger) user.Service {
 func NewClientService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) client.Service {
 	return client.NewService(db, logger, hydraClient)
 }
-
-// NewTokenService creates a new token service - Package not yet implemented
-// func NewTokenService(redis *redis.Client, jwtConfig config.JWTConfig, logger *zap.Logger) token.Service {
-//	return token.NewService(redis, jwtConfig, logger)
-// }
-
-// NewAuthService creates a new auth service - Package not yet implemented
-// func NewAuthService(db *gorm.DB, redis *redis.Client, cfg *config.Config, logger *zap.Logger) auth.Service {
-//	return auth.NewService(db, redis, cfg, logger)
-// }
