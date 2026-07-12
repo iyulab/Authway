@@ -24,21 +24,30 @@ func NewRepository(db *gorm.DB) *Repository {
 
 // CreateVerification creates a new email verification record
 func (r *Repository) CreateVerification(userID uuid.UUID) (*EmailVerification, error) {
+	// Generate a random token; store only its hash, keep the plaintext in
+	// memory for the caller to place in the verification email link.
+	token, err := tokenhash.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate verification token: %w", err)
+	}
+
 	verification := &EmailVerification{
-		UserID: userID,
+		UserID:    userID,
+		TokenHash: tokenhash.Hash(token),
 	}
 
 	if err := r.db.Create(verification).Error; err != nil {
 		return nil, fmt.Errorf("failed to create email verification: %w", err)
 	}
 
+	verification.Token = token // in-memory only (gorm:"-"); never persisted
 	return verification, nil
 }
 
 // GetVerificationByToken retrieves a verification by token
 func (r *Repository) GetVerificationByToken(token string) (*EmailVerification, error) {
 	var verification EmailVerification
-	if err := r.db.Where("token = ? AND verified = ? AND deleted_at IS NULL", token, false).First(&verification).Error; err != nil {
+	if err := r.db.Where("token_hash = ? AND verified = ? AND deleted_at IS NULL", tokenhash.Hash(token), false).First(&verification).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("verification token not found")
 		}

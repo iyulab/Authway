@@ -7,11 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// EmailVerification represents an email verification token
+// EmailVerification represents an email verification token.
+//
+// Only the SHA-256 hash of the token is persisted (TokenHash). Token holds
+// the plaintext in-memory only (gorm:"-"), populated by the repository at
+// creation time so the caller can place it in the verification email link.
 type EmailVerification struct {
 	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID    uuid.UUID      `json:"user_id" gorm:"type:uuid;index;not null"`
-	Token     string         `json:"token" gorm:"uniqueIndex;not null"`
+	TokenHash string         `json:"-" gorm:"column:token_hash;uniqueIndex;not null"`
+	Token     string         `json:"-" gorm:"-"` // plaintext, in-memory only (email link); never stored
 	ExpiresAt time.Time      `json:"expires_at" gorm:"not null"`
 	Verified  bool           `json:"verified" gorm:"default:false"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -19,13 +24,11 @@ type EmailVerification struct {
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
-// BeforeCreate sets UUID and token if not provided
+// BeforeCreate sets UUID and default expiration. Token generation/hashing is
+// done by the repository (which needs the plaintext to return to the caller).
 func (e *EmailVerification) BeforeCreate(tx *gorm.DB) error {
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()
-	}
-	if e.Token == "" {
-		e.Token = uuid.New().String()
 	}
 	// Default expiration: 6 hours
 	if e.ExpiresAt.IsZero() {
