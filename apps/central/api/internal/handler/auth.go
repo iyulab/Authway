@@ -2,8 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -760,10 +758,11 @@ func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
 	return c.Redirect(resp.RedirectTo)
 }
 
-// LogoutRequest for direct logout API
+// LogoutRequest for direct logout API.
+// NOTE: the subject is NEVER taken from the body — it is derived from the
+// validated bearer token by the jwtAuth middleware. Only non-security-sensitive
+// redirect parameters are accepted here.
 type LogoutRequest struct {
-	IDToken               string `json:"id_token"`                 // Optional: ID token to extract subject
-	Subject               string `json:"subject"`                  // Optional: Direct subject/user ID
 	PostLogoutRedirectURI string `json:"post_logout_redirect_uri"` // Optional: Where to redirect after logout
 	State                 string `json:"state"`                    // Optional: State parameter for redirect
 }
@@ -775,49 +774,33 @@ type LogoutResponse struct {
 	RedirectURL string `json:"redirect_url,omitempty"` // URL to redirect to (if post_logout_redirect_uri provided)
 }
 
-// Logout handles direct logout API - revokes all sessions for a user
-// Supports two modes:
-// 1. Direct session revocation (Option 1): Immediately revokes sessions via Hydra Admin API
-// 2. OIDC flow redirect (Option 2): Returns OIDC logout URL for standard flow
+// Logout revokes all OAuth2 sessions for the AUTHENTICATED user (direct
+// kill-switch via Hydra Admin API).
+//
+// SECURITY: the subject is derived solely from the validated bearer token
+// (jwtAuth middleware → Hydra introspection), never from the request body. A
+// caller can therefore revoke only their own sessions. The previous version
+// trusted a body `subject`/`id_token` (the latter parsed WITHOUT signature
+// verification), which let anyone force-logout any user by subject UUID.
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	// Authenticated subject, established by jwtAuth.
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok || userID == uuid.Nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"error":   "Unauthorized",
+			"guide":   "Send a valid 'Authorization: Bearer <access_token>' header.",
+		})
+	}
+	subject := userID.String()
+
+	// Body is optional and carries only non-security-sensitive redirect params.
 	var req LogoutRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"success": false,
-			"error":   "Invalid request body",
-			"guide":   "Send JSON with 'id_token' or 'subject' field",
-		})
-	}
+	_ = c.BodyParser(&req)
 
-	// Extract subject from ID token or use provided subject
-	subject := req.Subject
-	if subject == "" && req.IDToken != "" {
-		// Parse ID token to get subject (simplified - in production, verify signature)
-		claims, err := parseJWTClaims(req.IDToken)
-		if err != nil {
-			h.logger.Warn("Failed to parse ID token",
-				zap.Error(err))
-			return c.Status(400).JSON(fiber.Map{
-				"success": false,
-				"error":   "Invalid ID token",
-				"guide":   "Provide a valid JWT ID token or use 'subject' field directly",
-			})
-		}
-		subject = claims["sub"].(string)
-	}
-
-	if subject == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"success": false,
-			"error":   "Subject or ID token required",
-			"guide":   "Provide either 'id_token' or 'subject' in the request body",
-		})
-	}
-
-	// Option 1: Direct session revocation via Hydra Admin API
-	// This immediately revokes all OAuth2 sessions for the user
-	err := h.hydraClient.RevokeUserSessions(subject)
-	if err != nil {
+	// Direct session revocation via Hydra Admin API — revokes every OAuth2
+	// session for the authenticated subject only.
+	if err := h.hydraClient.RevokeUserSessions(subject); err != nil {
 		h.logger.Error("Failed to revoke user sessions",
 			zap.String("subject", subject),
 			zap.Error(err))
@@ -832,10 +815,8 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	h.logger.Info("User sessions revoked successfully",
 		zap.String("subject", subject))
 
-	if subjectUUID, parseErr := uuid.Parse(subject); parseErr == nil {
-		if logoutUser, getErr := h.userService.GetByID(subjectUUID); getErr == nil {
-			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, nil)
-		}
+	if logoutUser, getErr := h.userService.GetByID(userID); getErr == nil {
+		h.logUserAudit(c, logoutUser, audit.ActionUserLogout, nil)
 	}
 
 	response := LogoutResponse{
@@ -853,57 +834,6 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(response)
-}
-
-// parseJWTClaims parses JWT token and returns claims (without signature verification)
-// WARNING: This is for demonstration. In production, verify signature!
-func parseJWTClaims(token string) (map[string]any, error) {
-	// Simple JWT parsing without verification (for ID token subject extraction)
-	// In production, use a proper JWT library with signature verification
-	parts := splitToken(token)
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid JWT format")
-	}
-
-	// Decode payload (base64url)
-	payload, err := base64URLDecode(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode payload: %w", err)
-	}
-
-	var claims map[string]any
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("failed to parse claims: %w", err)
-	}
-
-	return claims, nil
-}
-
-func splitToken(token string) []string {
-	parts := make([]string, 0, 3)
-	start := 0
-	for i := 0; i < len(token); i++ {
-		if token[i] == '.' {
-			parts = append(parts, token[start:i])
-			start = i + 1
-		}
-	}
-	parts = append(parts, token[start:])
-	return parts
-}
-
-func base64URLDecode(s string) ([]byte, error) {
-	// Add padding if needed
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	}
-	// Replace URL-safe characters
-	s = strings.Replace(s, "-", "+", -1)
-	s = strings.Replace(s, "_", "/", -1)
-	return base64.StdEncoding.DecodeString(s)
 }
 
 // Registration endpoint

@@ -297,8 +297,10 @@ func main() {
 	// /profile/:id leaks email/name by UUID — require JWT to prevent PII enumeration.
 	v1.Get("/profile/:id", jwtAuth, authHandler.Profile)
 
-	// Logout route - direct session revocation
-	v1.Post("/logout", authHandler.Logout)
+	// Logout route - direct session revocation.
+	// Requires a valid bearer token: the subject to revoke is taken from the
+	// validated token, so a caller can only revoke their own sessions.
+	v1.Post("/logout", jwtAuth, authHandler.Logout)
 
 	// Public client configuration (no auth required)
 	v1.Get("/clients/:client_id/config", clientHandler.GetPublicConfig)

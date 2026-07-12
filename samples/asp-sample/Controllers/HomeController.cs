@@ -227,18 +227,22 @@ public class HomeController : Controller
         // This immediately revokes all sessions without redirects
         try
         {
-            var idToken = await HttpContext.GetTokenAsync("id_token");
-            if (!string.IsNullOrEmpty(idToken))
+            // Direct logout now requires the caller's own bearer ACCESS token.
+            // The server derives the subject to revoke from the validated token,
+            // so the request body no longer carries id_token/subject.
+            var accessToken = await HttpContext.GetTokenAsync("access_token");
+            if (!string.IsNullOrEmpty(accessToken))
             {
                 var authwayConfigService = HttpContext.RequestServices.GetRequiredService<AuthwayConfigService>();
                 var apiServer = await authwayConfigService.GetApiServerAsync();
                 var httpClient = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>().CreateClient();
+                httpClient.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
                 // Use bare origin URL (without path) for post_logout_redirect_uri
                 var postLogoutUri = $"{Request.Scheme}://{Request.Host}";
                 var logoutRequest = new
                 {
-                    id_token = idToken,
                     post_logout_redirect_uri = postLogoutUri
                 };
 
