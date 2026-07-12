@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"authway/apps/central/api/pkg/tokenhash"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -88,22 +90,30 @@ func (r *Repository) CreatePasswordReset(userID uuid.UUID) (*PasswordReset, erro
 		return nil, fmt.Errorf("failed to invalidate old reset tokens: %w", err)
 	}
 
-	// Create new reset token
+	// Generate a random token; store only its hash, keep the plaintext in
+	// memory for the caller to place in the reset email link.
+	token, err := tokenhash.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate reset token: %w", err)
+	}
+
 	reset := &PasswordReset{
-		UserID: userID,
+		UserID:    userID,
+		TokenHash: tokenhash.Hash(token),
 	}
 
 	if err := r.db.Create(reset).Error; err != nil {
 		return nil, fmt.Errorf("failed to create password reset: %w", err)
 	}
 
+	reset.Token = token // in-memory only (gorm:"-"); never persisted
 	return reset, nil
 }
 
 // GetPasswordResetByToken retrieves a password reset by token
 func (r *Repository) GetPasswordResetByToken(token string) (*PasswordReset, error) {
 	var reset PasswordReset
-	if err := r.db.Where("token = ? AND used = ? AND deleted_at IS NULL", token, false).First(&reset).Error; err != nil {
+	if err := r.db.Where("token_hash = ? AND used = ? AND deleted_at IS NULL", tokenhash.Hash(token), false).First(&reset).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("reset token not found or already used")
 		}

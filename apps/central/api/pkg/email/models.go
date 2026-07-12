@@ -39,11 +39,17 @@ func (e *EmailVerification) IsExpired() bool {
 	return time.Now().After(e.ExpiresAt)
 }
 
-// PasswordReset represents a password reset token
+// PasswordReset represents a password reset token.
+//
+// Only the SHA-256 hash of the token is persisted (TokenHash) — a database
+// read never yields a usable token. The plaintext lives in Token, which is
+// gorm:"-" (never persisted) and is populated in-memory by the repository at
+// creation time so the caller can place it in the reset email link.
 type PasswordReset struct {
 	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID    uuid.UUID      `json:"user_id" gorm:"type:uuid;index;not null"`
-	Token     string         `json:"token" gorm:"uniqueIndex;not null"`
+	TokenHash string         `json:"-" gorm:"column:token_hash;uniqueIndex;not null"`
+	Token     string         `json:"-" gorm:"-"` // plaintext, in-memory only (email link); never stored
 	ExpiresAt time.Time      `json:"expires_at" gorm:"not null"`
 	Used      bool           `json:"used" gorm:"default:false"`
 	UsedAt    *time.Time     `json:"used_at"`
@@ -52,13 +58,12 @@ type PasswordReset struct {
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
-// BeforeCreate sets UUID and token if not provided
+// BeforeCreate sets UUID and default expiration. Token generation/hashing is
+// done by the repository (which needs the plaintext to return to the caller),
+// so it is intentionally not handled here.
 func (p *PasswordReset) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
-	}
-	if p.Token == "" {
-		p.Token = uuid.New().String()
 	}
 	// Default expiration: 1 hour
 	if p.ExpiresAt.IsZero() {
