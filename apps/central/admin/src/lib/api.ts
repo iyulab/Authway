@@ -71,6 +71,9 @@ export interface Client {
   enabled_auth_providers?: string[]
   allow_email_signup?: boolean
   allow_email_login?: boolean
+  // Consent Flow Configuration (first-party clients bypass consent/logout screens)
+  skip_consent?: boolean
+  skip_logout_consent?: boolean
   // Social OAuth Settings
   google_oauth_enabled?: boolean
   github_oauth_enabled?: boolean
@@ -157,6 +160,8 @@ export const clientsApi = {
     grant_types: string[]
     scopes: string[]
     public: boolean
+    skip_consent?: boolean
+    skip_logout_consent?: boolean
   }) =>
     api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>('/api/v1/clients', data),
 

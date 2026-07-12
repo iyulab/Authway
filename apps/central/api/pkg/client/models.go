@@ -53,6 +53,14 @@ type Client struct {
 	AllowEmailSignup     bool           `json:"allow_email_signup" gorm:"column:allow_email_signup;default:true"`
 	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login;default:true"`
 
+	// Consent Flow Configuration
+	// SkipConsent bypasses the OAuth consent screen; SkipLogoutConsent bypasses
+	// the logout confirmation. Intended for first-party/trusted clients so users
+	// aren't prompted on every login. Propagated to Hydra's per-client
+	// skip_consent / skip_logout_consent (admin-API-only) fields on sync.
+	SkipConsent       bool `json:"skip_consent" gorm:"column:skip_consent;default:false"`
+	SkipLogoutConsent bool `json:"skip_logout_consent" gorm:"column:skip_logout_consent;default:false"`
+
 	// Microsoft OAuth settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled" gorm:"column:microsoft_oauth_enabled;default:false"`
 	MicrosoftClientID     *string `json:"-" gorm:"column:microsoft_client_id;null"`
@@ -218,6 +226,10 @@ type CreateClientRequest struct {
 	AllowEmailSignup     *bool    `json:"allow_email_signup"` // Pointer to use default if not provided
 	AllowEmailLogin      *bool    `json:"allow_email_login"`  // Pointer to use default if not provided
 
+	// Consent Flow Configuration (default: false — consent/logout screens shown)
+	SkipConsent       bool `json:"skip_consent"`
+	SkipLogoutConsent bool `json:"skip_logout_consent"`
+
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool   `json:"microsoft_oauth_enabled"`
 	MicrosoftClientID     string `json:"microsoft_client_id"`
@@ -267,6 +279,10 @@ type UpdateClientRequest struct {
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
 	AllowEmailSignup     *bool    `json:"allow_email_signup"`
 	AllowEmailLogin      *bool    `json:"allow_email_login"`
+
+	// Consent Flow Configuration (pointer: nil = not provided, allows explicit false)
+	SkipConsent       *bool `json:"skip_consent"`
+	SkipLogoutConsent *bool `json:"skip_logout_consent"`
 
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled *bool   `json:"microsoft_oauth_enabled"`

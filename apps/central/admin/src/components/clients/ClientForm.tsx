@@ -22,6 +22,9 @@ export const clientFormSchema = z.object({
   enabled_auth_providers: z.array(z.string()).optional(),
   allow_email_signup: z.boolean().optional(),
   allow_email_login: z.boolean().optional(),
+  // Consent Flow Configuration
+  skip_consent: z.boolean().optional(),
+  skip_logout_consent: z.boolean().optional(),
 })
 
 export type ClientFormData = z.infer<typeof clientFormSchema>
@@ -92,6 +95,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           enabled_auth_providers: initialData.enabled_auth_providers || ['email', 'google'],
           allow_email_signup: initialData.allow_email_signup ?? true,
           allow_email_login: initialData.allow_email_login ?? true,
+          skip_consent: initialData.skip_consent || false,
+          skip_logout_consent: initialData.skip_logout_consent || false,
         }
       : {
           grant_types: ['authorization_code'],
@@ -102,6 +107,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           enabled_auth_providers: ['email', 'google'],
           allow_email_signup: true,
           allow_email_login: true,
+          skip_consent: false,
+          skip_logout_consent: false,
         },
   })
 
@@ -191,6 +198,18 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         {...register('allow_wildcard_logout')}
         label="Allow Wildcard Patterns"
         description="Enable wildcard patterns in Post-Logout Redirect URIs (e.g., http://localhost:*, https://*.example.com)"
+      />
+
+      {/* Consent Flow */}
+      <Checkbox
+        {...register('skip_consent')}
+        label="Skip Consent Screen"
+        description="Bypass the OAuth consent screen on login. Enable only for first-party / trusted clients you control — never for third-party apps."
+      />
+      <Checkbox
+        {...register('skip_logout_consent')}
+        label="Skip Logout Confirmation"
+        description="Bypass the logout confirmation screen. Recommended together with Skip Consent Screen for first-party clients."
       />
 
       {/* Grant Types */}

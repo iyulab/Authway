@@ -304,6 +304,10 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	// Allow wildcard logout (default: false for security)
 	client.AllowWildcardLogout = req.AllowWildcardLogout
 
+	// Consent flow configuration (default: false — consent/logout screens shown)
+	client.SkipConsent = req.SkipConsent
+	client.SkipLogoutConsent = req.SkipLogoutConsent
+
 	if err := s.db.Create(client).Error; err != nil {
 		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name), zap.String("tenant_id", tenantID.String()))
 		return nil, nil, fmt.Errorf("failed to create client: %w", err)
@@ -332,6 +336,8 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		ResponseTypes:           []string{"code"}, // Default to authorization code flow
 		Scope:                   strings.Join(client.Scopes, " "),
 		TokenEndpointAuthMethod: authMethod,
+		SkipConsent:             client.SkipConsent,
+		SkipLogoutConsent:       client.SkipLogoutConsent,
 	}
 
 	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
@@ -493,6 +499,14 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		client.AllowWildcardLogout = *req.AllowWildcardLogout
 	}
 
+	// Consent flow configuration
+	if req.SkipConsent != nil {
+		client.SkipConsent = *req.SkipConsent
+	}
+	if req.SkipLogoutConsent != nil {
+		client.SkipLogoutConsent = *req.SkipLogoutConsent
+	}
+
 	// Authentication Provider Settings
 	// EnabledAuthProviders: nil = not provided, empty array = clear all
 	if req.EnabledAuthProviders != nil {
@@ -567,6 +581,8 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		ResponseTypes:           []string{"code"},
 		Scope:                   strings.Join(client.Scopes, " "),
 		TokenEndpointAuthMethod: authMethod,
+		SkipConsent:             client.SkipConsent,
+		SkipLogoutConsent:       client.SkipLogoutConsent,
 	}
 
 	syncStatus := SyncStatus{State: SyncStateOK}
@@ -687,6 +703,8 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 		ResponseTypes:           []string{"code"},
 		Scope:                   strings.Join(client.Scopes, " "),
 		TokenEndpointAuthMethod: authMethod,
+		SkipConsent:             client.SkipConsent,
+		SkipLogoutConsent:       client.SkipLogoutConsent,
 	}
 
 	syncStatus := SyncStatus{State: SyncStateOK}

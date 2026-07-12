@@ -41,6 +41,14 @@ type OAuth2Client struct {
 	ResponseTypes           []string `json:"response_types"`
 	Scope                   string   `json:"scope"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+
+	// Consent flow configuration (Hydra admin-API-only fields).
+	// Deliberately NOT omitempty: the Authway DB is the source of truth, so a
+	// false value must be transmitted to overwrite a previously-true state in
+	// Hydra (e.g. when an admin toggles skip_consent back off, or on secret
+	// regeneration which re-sends the full client object).
+	SkipConsent       bool `json:"skip_consent"`
+	SkipLogoutConsent bool `json:"skip_logout_consent"`
 }
 
 func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error) {

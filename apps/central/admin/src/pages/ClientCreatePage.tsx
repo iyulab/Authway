@@ -55,6 +55,8 @@ const ClientCreatePage: React.FC = () => {
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
+        skip_consent: data.skip_consent || false,
+        skip_logout_consent: data.skip_logout_consent || false,
       })
     },
     onSuccess: (response) => {
