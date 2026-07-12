@@ -37,6 +37,7 @@ type Config struct {
 	Apple               AppleOAuthConfig          `mapstructure:"apple"`
 	Tenant              TenantConfig              `mapstructure:"tenant"`
 	Admin               AdminConfig               `mapstructure:"admin"`
+	Security            SecurityConfig            `mapstructure:"security"`
 	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`
 }
 
@@ -133,6 +134,13 @@ type AdminConfig struct {
 	APIKey         string `mapstructure:"api_key"`
 	Password       string `mapstructure:"password"`
 	InternalAPIKey string `mapstructure:"internal_api_key"`
+}
+
+type SecurityConfig struct {
+	// TOTPEncryptionKey is a base64-encoded 32-byte AES-256 key used to encrypt
+	// TOTP shared secrets at rest. Required in production (fail-closed); when
+	// empty in development the secrets are stored as plaintext.
+	TOTPEncryptionKey string `mapstructure:"totp_encryption_key"`
 }
 
 type ApplicationInsightsConfig struct {
@@ -306,6 +314,11 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Manual override for Security config
+	if totpKey := os.Getenv("AUTHWAY_TOTP_ENCRYPTION_KEY"); totpKey != "" {
+		config.Security.TOTPEncryptionKey = totpKey
+	}
+
 	// Manual override for Application Insights config
 	if connectionString := os.Getenv("AUTHWAY_APPLICATIONINSIGHTS_CONNECTION_STRING"); connectionString != "" {
 		config.ApplicationInsights.ConnectionString = connectionString
@@ -397,6 +410,15 @@ func (c *Config) Validate() error {
 		if c.Admin.InternalAPIKey == "" {
 			errors = append(errors, "CRITICAL: admin.internal_api_key (AUTHWAY_ADMIN_INTERNAL_API_KEY) must be set in production — required for branding auth-api → central /internal/* calls")
 		}
+		// Fail-closed: TOTP secrets must be encrypted at rest in production. An
+		// absent or malformed key would silently fall back to plaintext storage.
+		if c.Security.TOTPEncryptionKey == "" {
+			errors = append(errors, "CRITICAL: security.totp_encryption_key (AUTHWAY_TOTP_ENCRYPTION_KEY) must be set in production — a base64-encoded 32-byte key for TOTP secret encryption at rest")
+		} else if key, err := base64.StdEncoding.DecodeString(c.Security.TOTPEncryptionKey); err != nil {
+			errors = append(errors, "CRITICAL: security.totp_encryption_key must be valid base64")
+		} else if len(key) != 32 {
+			errors = append(errors, fmt.Sprintf("CRITICAL: security.totp_encryption_key must decode to 32 bytes (AES-256), got %d", len(key)))
+		}
 	}
 
 	// Warn about missing admin password in all environments
@@ -480,6 +502,9 @@ func setDefaults() {
 	// Admin defaults (use strong password in production)
 	viper.SetDefault("admin.api_key", "")
 	viper.SetDefault("admin.password", "admin123") // Default for development only
+
+	// Security defaults (TOTP encryption key must be provided in production)
+	viper.SetDefault("security.totp_encryption_key", "")
 
 	// Application Insights defaults (completely optional)
 	viper.SetDefault("applicationinsights.enabled", false)

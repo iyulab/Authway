@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/user"
 )
 // Service provides MFA/TOTP functionality
@@ -33,10 +34,11 @@ type service struct {
 	userService user.Service
 	logger      *zap.Logger
 	issuer      string
+	cipher      crypto.Cipher
 }
 
-func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issuer string) Service {
-	return &service{db: db, userService: userService, logger: logger, issuer: issuer}
+func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issuer string, cipher crypto.Cipher) Service {
+	return &service{db: db, userService: userService, logger: logger, issuer: issuer, cipher: cipher}
 }
 type TOTPSetupResponse struct {
 	Secret        string `json:"secret"`
@@ -65,7 +67,11 @@ func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 		return nil, fmt.Errorf("failed to generate TOTP key: %w", err)
 	}
 	secret := key.Secret()
-	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Update("totp_secret", secret).Error; err != nil {
+	encSecret, err := s.cipher.Encrypt(secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt TOTP secret: %w", err)
+	}
+	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Update("totp_secret", encSecret).Error; err != nil {
 		return nil, fmt.Errorf("failed to store TOTP secret: %w", err)
 	}
 	// Use the otpauth URL produced by the totp library — it URL-encodes the
@@ -87,7 +93,11 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 	if u.TOTPEnabled {
 		return nil, fmt.Errorf("MFA is already enabled")
 	}
-	if !totp.Validate(code, *u.TOTPSecret) {
+	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt TOTP secret: %w", err)
+	}
+	if !totp.Validate(code, secret) {
 		s.logger.Warn("Invalid TOTP code during setup", zap.String("user_id", userID.String()))
 		return nil, fmt.Errorf("invalid TOTP code")
 	}
@@ -112,7 +122,11 @@ func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 	if !u.TOTPEnabled || u.TOTPSecret == nil {
 		return false, fmt.Errorf("MFA is not enabled")
 	}
-	return totp.Validate(code, *u.TOTPSecret), nil
+	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
+	if err != nil {
+		return false, fmt.Errorf("failed to decrypt TOTP secret: %w", err)
+	}
+	return totp.Validate(code, secret), nil
 }
 
 func (s *service) Disable(userID uuid.UUID) error {

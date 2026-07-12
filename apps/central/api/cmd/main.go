@@ -18,6 +18,7 @@ import (
 	"authway/apps/central/api/pkg/admin"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/tenant"
@@ -56,6 +57,17 @@ func main() {
 	}
 	defer zapLogger.Sync()
 
+	// Initialize the at-rest cipher for TOTP secrets. Fail-closed: a malformed
+	// key aborts startup. An empty key is permitted only in non-production (the
+	// config validator already rejects an empty key in production).
+	totpCipher, err := crypto.NewCipher(cfg.Security.TOTPEncryptionKey)
+	if err != nil {
+		zapLogger.Fatal("Failed to initialize TOTP cipher", zap.Error(err))
+	}
+	if !totpCipher.Enabled() {
+		zapLogger.Warn("TOTP encryption disabled — no AUTHWAY_TOTP_ENCRYPTION_KEY set (secrets stored as plaintext; development only)")
+	}
+
 	// Initialize database
 	db, err := database.Connect(cfg.Database)
 	if err != nil {
@@ -68,6 +80,14 @@ func main() {
 		zapLogger.Fatal("Failed to run database migrations", zap.Error(err))
 	}
 	zapLogger.Info("Database migrations completed successfully")
+
+	// Backfill: encrypt any legacy plaintext TOTP secrets. Idempotent and a
+	// no-op when no key is configured. Non-fatal by design — the lazy
+	// pass-through in Decrypt keeps validation working even if this never runs,
+	// so a transient DB error here must not block the whole IdP from starting.
+	if err := mfa.BackfillTOTPSecrets(db, totpCipher, zapLogger); err != nil {
+		zapLogger.Error("TOTP secret backfill failed (non-fatal; validation unaffected)", zap.Error(err))
+	}
 
 	// Initialize Tenant Service
 	tenantService := tenant.NewService(db)
@@ -230,7 +250,7 @@ func main() {
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 
 	// Initialize MFA Service and Handler
-	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name)
+	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
 	// Auth routes for Hydra login/consent flow
