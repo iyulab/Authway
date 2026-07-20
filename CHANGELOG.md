@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.4.0] - 2026-07-20
 
-> Run-17 (2026-07-20), triggered by consumer-reported issues from VibeBase.
-> Suggested version on release: **minor** (0.x.0) — `access_token_strategy` is a
-> new backward-compatible API field; everything else is a fix or docs.
-> Not deployed. See `scripts/deploy/POST-DEPLOY-VERIFY.md` for the claims that
-> still need runtime confirmation — most were closed locally against real
-> Hydra v26.2 and Postgres 15 on 2026-07-20; what remains is the `az` env
-> hand-off and the console/regression smoke.
+> Run-17, triggered by consumer-reported issues from VibeBase. Minor because
+> `access_token_strategy` is a new backward-compatible API field; everything
+> else is a fix or docs.
+>
+> Verified on staging (see `scripts/deploy/POST-DEPLOY-VERIFY.md`): the client
+> validation rules, migration 015, per-client JWT issuance including offline
+> validation against the published JWKS, un-pinning, and the Hydra env hand-off
+> all behave as described. No existing client's token format changes — the
+> migration opts in nobody.
 
 ### Added
 
