@@ -74,6 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the deployment default. Validation moved out of the struct tag into
   `validateAccessTokenStrategy`, which returns the same structured 400 as every
   other client-config violation. Caught before deploy.
+- **The deploy script's Hydra client sync never ran.** `deploy-all.core.ps1`
+  POSTs to `/api/v1/clients/sync-hydra` without an `Authorization` header, so
+  every deployment since admin routes moved behind `ADMIN_API_KEY` answered
+  "No authorization token provided" and reported the step as a soft failure —
+  and the fallback command it printed for the operator was unauthenticated too,
+  so the suggested remedy failed the same way. Verified fixed against staging
+  (`synced: 1, failed: 0`). Found by watching an actual deploy.
+- **Deployment health checks failed containers that were merely cold.** A single
+  10s attempt marked Hydra down immediately after an image swap, while discovery
+  answered 200 in ~5.5s moments later. Now 3 attempts at 30s with a 10s pause —
+  a false failure in a deploy checklist trains operators to ignore it.
 - **`docs/BACKEND_INTEGRATION.md` documented a contract the deployment could not
   keep** — it described JWT validation via OIDC discovery while Authway shipped
   opaque tokens, so anyone following it hit a wall. It now states the opaque

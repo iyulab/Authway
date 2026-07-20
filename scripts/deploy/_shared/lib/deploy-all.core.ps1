@@ -89,21 +89,32 @@ function Deploy-Service {
 }
 
 function Test-HealthEndpoint {
-    param([string]$Name, [string]$Url)
+    param([string]$Name, [string]$Url, [int]$Attempts = 3, [int]$TimeoutSec = 30)
+    # Retries because the first request after a container image swap pays the
+    # cold start. A single 10s attempt reported Hydra as down on 2026-07-20 while
+    # discovery in fact answered 200 in ~5.5s moments later — a false failure in
+    # a checklist is worse than a slow check.
     Write-Host "  🔍 $Name 헬스 체크: " -NoNewline -ForegroundColor Yellow
-    try {
-        $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 10 -UseBasicParsing
-        if ($response.StatusCode -eq 200) {
-            Write-Host "✓" -ForegroundColor Green
-            return $true
-        } else {
-            Write-Host "❌ (Status: $($response.StatusCode))" -ForegroundColor Red
-            return $false
+    $lastError = $null
+    for ($i = 1; $i -le $Attempts; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec $TimeoutSec -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+                if ($i -gt 1) {
+                    Write-Host "✓ (시도 $i/$Attempts)" -ForegroundColor Green
+                } else {
+                    Write-Host "✓" -ForegroundColor Green
+                }
+                return $true
+            }
+            $lastError = "Status: $($response.StatusCode)"
+        } catch {
+            $lastError = $_
         }
-    } catch {
-        Write-Host "❌ (Error: $_)" -ForegroundColor Red
-        return $false
+        if ($i -lt $Attempts) { Start-Sleep -Seconds 10 }
     }
+    Write-Host "❌ ($Attempts회 시도 실패 — $lastError)" -ForegroundColor Red
+    return $false
 }
 
 function Test-AdminAuthSmoke {
@@ -209,7 +220,12 @@ try {
             $syncUrl = "$($envVars['API_URL'])/api/v1/clients/sync-hydra"
             Write-Host "📡 동기화 요청: $syncUrl" -ForegroundColor Gray
 
-            $syncResponse = Invoke-RestMethod -Uri $syncUrl -Method Post -ContentType "application/json" -TimeoutSec 60
+            # sync-hydra is an admin route. Without this header it answers
+            # "No authorization token provided" and the step fails on every
+            # deploy — which is exactly what it did, silently, from the release
+            # that put admin routes behind ADMIN_API_KEY until 2026-07-20.
+            $syncHeaders = @{ Authorization = "Bearer $($envVars['ADMIN_API_KEY'])" }
+            $syncResponse = Invoke-RestMethod -Uri $syncUrl -Method Post -ContentType "application/json" -Headers $syncHeaders -TimeoutSec 60
 
             Write-Host ""
             Write-Host "✅ Hydra 동기화 완료!" -ForegroundColor Green
@@ -219,7 +235,7 @@ try {
         } catch {
             Write-Host ""
             Write-Host "⚠️  Hydra 동기화 실패 (수동으로 실행 가능): $_" -ForegroundColor Yellow
-            Write-Host "   curl -X POST $syncUrl" -ForegroundColor Gray
+            Write-Host "   curl -X POST -H `"Authorization: Bearer `$ADMIN_API_KEY`" $syncUrl" -ForegroundColor Gray
             Write-Host ""
         }
     }
