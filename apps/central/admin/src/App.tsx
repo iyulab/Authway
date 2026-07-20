@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, selectIsAuthenticated } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
@@ -17,7 +17,7 @@ import InvitationsPage from '@/pages/InvitationsPage'
 import ImpersonationPage from '@/pages/ImpersonationPage'
 
 function App() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const isAuthenticated = useAuthStore(selectIsAuthenticated)
   const selectedTenant = useTenantStore((state) => state.selectedTenant)
 
   // Step 1: Not authenticated -> Login page

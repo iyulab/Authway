@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Admin console reloaded forever once the session expired.** `/dashboard`
+  bounced between itself and `/login` in an endless full-page refresh that only
+  clearing browser storage by hand could escape. "Signed in" was stored in three
+  places — a `localStorage` token for axios, and a persisted `token` plus a
+  persisted `isAuthenticated` boolean in the store — and they drifted apart: the
+  401 handler cleared the standalone token while the app still believed it was
+  signed in, so `/login` redirected back to `/dashboard`, whose first request
+  401'd again. The stored expiry was never checked, so a token months past
+  expiry kept the loop alive.
+
+  The store is now the token's only home, and authentication is derived from
+  token *and* expiry rather than stored as its own flag. Rehydration reads back
+  only those two fields, so a stale `isAuthenticated: true` written by an older
+  build cannot come back — which is what lets an already-stuck browser heal by
+  simply loading the new build. Verified by replaying the exact poisoned storage
+  observed in production: it now lands on the login page and stays there.
+
 - **A blank database can be provisioned again.** `schema_migrations` carried a
   bookkeeping row at version `000` — the same version as the initial schema
   file — so the migrator considered the initial schema applied on every

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -8,10 +9,12 @@ export const api = axios.create({
   timeout: 30000, // 30 seconds for operations like OAuth client creation
 })
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token.
+// Reads the store rather than a mirrored localStorage key, so there is exactly
+// one answer to "are we authenticated" — see stores/auth.ts.
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authway_admin_token')
+    const token = useAuthStore.getState().token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -27,9 +30,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear token and redirect to login
-      localStorage.removeItem('authway_admin_token')
-      window.location.href = '/login'
+      // logout() clears token AND expiry together. Clearing only the token
+      // while the app still considered itself signed in is what produced the
+      // /login -> /dashboard -> 401 -> /login reload loop.
+      useAuthStore.getState().logout()
+      // Already on the login page? Then this 401 is a failed sign-in attempt,
+      // and reloading would throw away the error the user needs to see.
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }
