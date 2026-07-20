@@ -66,6 +66,8 @@ const ClientDetailPage: React.FC = () => {
         allow_email_login: data.allow_email_login ?? true,
         skip_consent: data.skip_consent ?? false,
         skip_logout_consent: data.skip_logout_consent ?? false,
+        // '' is meaningful on update: it clears the pin and restores inheritance.
+        access_token_strategy: data.access_token_strategy ?? '',
       })
     },
     onSuccess: () => {

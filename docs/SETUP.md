@@ -154,6 +154,30 @@ curl -X POST http://localhost:8080/api/v1/clients \
 - ✅ Supports `client_credentials` grant
 - 🔒 **Store secret securely** (environment variables, vault)
 
+### Machine-to-Machine (M2M) Clients
+
+A service that calls an API on its own behalf uses `client_credentials` only. This
+grant never redirects a browser, so **`redirect_uris` is omitted entirely** — do not
+invent a placeholder URI, it would also become the client's post-logout URI.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "YOUR_TENANT_ID",
+    "name": "Batch Worker",
+    "public": false,
+    "grant_types": ["client_credentials"],
+    "scopes": ["api"]
+  }'
+```
+
+**Key Points**:
+- ✅ No `redirect_uris`, no `post_logout_redirect_uris`
+- ✅ Must be confidential (`public: false`) — public clients cannot use `client_credentials`
+- ⚠️ Supply **both** `client_id` and `client_secret` or **neither**; supplying only one is rejected with `400 confidential_client_partial_credentials`
+- 💡 If a resource server must validate these tokens offline (JWKS), add `"access_token_strategy": "jwt"` — see [Backend Integration](BACKEND_INTEGRATION.md). Access tokens are opaque by default.
+
 ### Redirect URI Configuration
 
 **Best Practices**:

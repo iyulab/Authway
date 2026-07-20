@@ -31,6 +31,40 @@ jobs:
       - name: Test (central API)
         run: go test ./apps/central/api/...
 
+  # The two Vite apps live outside the pnpm workspace (each has its own
+  # package-lock.json), so they were invisible to CI — their test suites only ever
+  # ran on a developer machine. Build + test them here; no artifacts are uploaded
+  # (CI verifies, the release pipeline publishes).
+  apps:
+    name: UI apps build / test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - apps/central/admin
+          - apps/branding/auth-ui
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.app }}
+        run: npm ci
+
+      - name: Build (tsc + vite)
+        working-directory: ${{ matrix.app }}
+        run: npm run build
+
+      - name: Test
+        working-directory: ${{ matrix.app }}
+        run: npx vitest run
+
   packages:
     name: TS packages build / typecheck / tarball verify
     runs-on: ubuntu-latest

@@ -33,6 +33,26 @@ $RESOURCE_GROUP = $envVars['RESOURCE_GROUP']
 $CONTAINER_APP_HYDRA = $envVars['CONTAINER_APP_HYDRA']
 $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 
+# Token-shape settings, kept in one place so both the full deploy and the
+# env-only update stay identical.
+#
+# STRATEGIES_ACCESS_TOKEN: pinned to Hydra's current default rather than left
+# implicit, so a future change to that default cannot silently switch every
+# client's token format. Per-client opt-in (clients.access_token_strategy)
+# overrides this, which is how a resource server gets verifiable JWTs.
+#
+# OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS: for JWT access tokens Hydra nests session
+# claims under `ext` (mirroring the introspection response). Claims named here
+# are additionally mirrored to the top level, which resource servers that read
+# claims by their bare name require. The *names* are deployment configuration —
+# they are consumer domain concepts and must not be hard-coded here.
+$TokenEnv = @(
+    "STRATEGIES_ACCESS_TOKEN=opaque"
+)
+if ($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS']) {
+    $TokenEnv += "OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=$($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS'])"
+}
+
 Write-Host "✓ 환경 변수 로드 완료" -ForegroundColor Green
 Write-Host ""
 
@@ -61,7 +81,8 @@ try {
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
-                "LOG_LEVEL=$($envVars['LOG_LEVEL'])"
+                "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
+                $TokenEnv
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host ""
@@ -112,7 +133,8 @@ try {
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
-                "LOG_LEVEL=$($envVars['LOG_LEVEL'])"
+                "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
+                $TokenEnv
 
         if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }
 
@@ -138,7 +160,8 @@ try {
                     "DSN=$DSN" `
                     "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
                     "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
-                    "LOG_LEVEL=$($envVars['LOG_LEVEL'])" | Out-Null
+                    "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
+                    $TokenEnv | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Hydra admin 업데이트 실패" }
             Write-Host "   ✓ Hydra Admin 업데이트 완료" -ForegroundColor Green
             Write-Host ""

@@ -10,7 +10,7 @@ import (
 )
 
 // TestMigrateSmoke runs the REAL migrator (RunMigrations) against a live Postgres
-// bootstrapped with 000_v0_clean_slate.sql, exercising migrations 001..014 in the
+// bootstrapped with 000_v0_clean_slate.sql, exercising migrations 001..015 in the
 // exact single-outer-transaction context prod uses — including the nested BEGIN/COMMIT
 // inside individual migration files. Skips unless MIGRATE_SMOKE_DSN is set.
 func TestMigrateSmoke(t *testing.T) {
@@ -42,7 +42,11 @@ func TestMigrateSmoke(t *testing.T) {
 		{`SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='email_verifications' AND column_name='token')`, "email_verifications.token dropped"},
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='012' AND success)`, "012 recorded"},
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='013' AND success)`, "013 recorded"},
+		{`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='access_token_strategy')`, "clients.access_token_strategy"},
+		// 015 must not opt any client in — enabling JWT is an operational decision.
+		{`SELECT NOT EXISTS(SELECT 1 FROM clients WHERE access_token_strategy IS NOT NULL)`, "no client pinned to a strategy"},
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='014' AND success)`, "014 recorded"},
+		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='015' AND success)`, "015 recorded"},
 	}
 	for _, c := range checks {
 		var ok bool

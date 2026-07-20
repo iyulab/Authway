@@ -61,6 +61,14 @@ type Client struct {
 	SkipConsent       bool `json:"skip_consent" gorm:"column:skip_consent;default:false"`
 	SkipLogoutConsent bool `json:"skip_logout_consent" gorm:"column:skip_logout_consent;default:false"`
 
+	// Access Token Format
+	// nil inherits the deployment-wide strategy (Hydra `strategies.access_token`,
+	// currently opaque); "jwt" makes this client's access tokens self-contained so
+	// a resource server can validate them offline via OIDC discovery / JWKS.
+	// Propagated to Hydra's per-client access_token_strategy, which overrides the
+	// global setting for this client only.
+	AccessTokenStrategy *string `json:"access_token_strategy" gorm:"column:access_token_strategy;null"`
+
 	// Microsoft OAuth settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled" gorm:"column:microsoft_oauth_enabled;default:false"`
 	MicrosoftClientID     *string `json:"-" gorm:"column:microsoft_client_id;null"`
@@ -121,6 +129,9 @@ type PublicClient struct {
 	AllowEmailSignup     bool     `json:"allow_email_signup"`
 	AllowEmailLogin      bool     `json:"allow_email_login"`
 
+	// Access Token Format (null = inherit the deployment-wide strategy)
+	AccessTokenStrategy *string `json:"access_token_strategy"`
+
 	// Microsoft OAuth (public fields)
 	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled"`
 	MicrosoftTenantID     *string `json:"microsoft_tenant_id"`
@@ -167,6 +178,8 @@ func (c *Client) ToPublic() PublicClient {
 		AllowEmailSignup:     c.AllowEmailSignup,
 		AllowEmailLogin:      c.AllowEmailLogin,
 
+		AccessTokenStrategy: c.AccessTokenStrategy,
+
 		// Microsoft OAuth public fields
 		MicrosoftOAuthEnabled: c.MicrosoftOAuthEnabled,
 		MicrosoftTenantID:     c.MicrosoftTenantID,
@@ -194,7 +207,11 @@ type CreateClientRequest struct {
 	Description  string   `json:"description"`
 	Website      string   `json:"website" validate:"omitempty,url"`
 	Logo         string   `json:"logo" validate:"omitempty,url"`
-	RedirectURIs []string `json:"redirect_uris" validate:"required,min=1,dive,url"`
+	// RedirectURIs is required only for redirect-based grants (authorization_code,
+	// implicit) — see validateClientConfig. A struct tag cannot express that
+	// condition, so the presence rule lives in validation.go and this tag only
+	// checks the shape of whatever was supplied.
+	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,dive,url"`
 	GrantTypes   []string `json:"grant_types" validate:"required,min=1"`
 	Scopes       []string `json:"scopes" validate:"required,min=1"`
 
@@ -229,6 +246,11 @@ type CreateClientRequest struct {
 	// Consent Flow Configuration (default: false — consent/logout screens shown)
 	SkipConsent       bool `json:"skip_consent"`
 	SkipLogoutConsent bool `json:"skip_logout_consent"`
+
+	// Access Token Format (optional; empty inherits the deployment-wide strategy).
+	// "jwt" lets a resource server validate this client's access tokens offline
+	// via OIDC discovery / JWKS — at the cost of not being revocable before expiry.
+	AccessTokenStrategy string `json:"access_token_strategy" validate:"omitempty,oneof=jwt opaque"`
 
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool   `json:"microsoft_oauth_enabled"`
@@ -283,6 +305,10 @@ type UpdateClientRequest struct {
 	// Consent Flow Configuration (pointer: nil = not provided, allows explicit false)
 	SkipConsent       *bool `json:"skip_consent"`
 	SkipLogoutConsent *bool `json:"skip_logout_consent"`
+
+	// Access Token Format: nil = not provided, "" = clear (inherit global),
+	// "jwt"/"opaque" = pin this client.
+	AccessTokenStrategy *string `json:"access_token_strategy" validate:"omitempty,oneof=jwt opaque"`
 
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled *bool   `json:"microsoft_oauth_enabled"`

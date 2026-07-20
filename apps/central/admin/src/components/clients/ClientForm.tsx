@@ -10,7 +10,10 @@ export const clientFormSchema = z.object({
   name: z.string().min(1, 'Client name is required'),
   description: z.string().optional(),
   website: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
-  redirect_uris: z.string().min(1, 'At least one Redirect URI is required'),
+  // Required only for redirect-based grants — see the superRefine below. A
+  // machine-to-machine client (client_credentials only) never redirects, and
+  // forcing a dummy URI here pollutes its logout configuration.
+  redirect_uris: z.string(),
   post_logout_redirect_uris: z.string().optional(),
   logout_redirect_policy: z.enum(['strict', 'lenient', 'disabled']).optional(),
   default_logout_uri: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
@@ -25,6 +28,21 @@ export const clientFormSchema = z.object({
   // Consent Flow Configuration
   skip_consent: z.boolean().optional(),
   skip_logout_consent: z.boolean().optional(),
+  // '' = inherit the deployment-wide strategy.
+  access_token_strategy: z.enum(['', 'jwt', 'opaque']).optional(),
+}).superRefine((data, ctx) => {
+  // Mirrors the server rule (validateRedirectURIRequirement): redirect_uris is
+  // mandatory exactly for the grants that redirect the user-agent back.
+  const redirectsUserAgent = data.grant_types.some(
+    (g) => g === 'authorization_code' || g === 'implicit'
+  )
+  if (redirectsUserAgent && data.redirect_uris.trim() === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['redirect_uris'],
+      message: 'At least one Redirect URI is required for Authorization Code / Implicit',
+    })
+  }
 })
 
 export type ClientFormData = z.infer<typeof clientFormSchema>
@@ -46,6 +64,12 @@ export const LOGOUT_REDIRECT_POLICIES = [
   { value: 'strict', label: 'Strict (Default) - URI required + validation' },
   { value: 'lenient', label: 'Lenient - URI optional + validation' },
   { value: 'disabled', label: 'Disabled - No validation (dev only)' },
+]
+
+export const ACCESS_TOKEN_STRATEGIES = [
+  { value: '', label: 'Default (inherit server setting)' },
+  { value: 'opaque', label: 'Opaque - reference token, revocable' },
+  { value: 'jwt', label: 'JWT - self-contained, offline validation' },
 ]
 
 export const AVAILABLE_AUTH_PROVIDERS = [
@@ -84,7 +108,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           name: initialData.name,
           description: initialData.description || '',
           website: initialData.website || '',
-          redirect_uris: initialData.redirect_uris.join('\n'),
+          // M2M clients legitimately have no redirect_uris — the API may omit the field.
+          redirect_uris: (initialData.redirect_uris || []).join('\n'),
           post_logout_redirect_uris: (initialData.post_logout_redirect_uris || []).join('\n'),
           logout_redirect_policy: initialData.logout_redirect_policy || 'strict',
           default_logout_uri: initialData.default_logout_uri || '',
@@ -95,6 +120,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           enabled_auth_providers: initialData.enabled_auth_providers || ['email', 'google'],
           allow_email_signup: initialData.allow_email_signup ?? true,
           allow_email_login: initialData.allow_email_login ?? true,
+          access_token_strategy: initialData.access_token_strategy || '',
           skip_consent: initialData.skip_consent || false,
           skip_logout_consent: initialData.skip_logout_consent || false,
         }
@@ -109,12 +135,16 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           allow_email_login: true,
           skip_consent: false,
           skip_logout_consent: false,
+          access_token_strategy: '',
         },
   })
 
   const grantTypes = watch('grant_types') || []
   const scopes = watch('scopes') || []
   const enabledAuthProviders = watch('enabled_auth_providers') || []
+  const redirectsUserAgent = grantTypes.some(
+    (g) => g === 'authorization_code' || g === 'implicit'
+  )
 
   const handleGrantTypeChange = (values: string[]) => {
     setValue('grant_types', values, { shouldValidate: true })
@@ -157,10 +187,14 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       {/* Redirect URIs */}
       <Textarea
         {...register('redirect_uris')}
-        label="Redirect URIs *"
+        label={redirectsUserAgent ? 'Redirect URIs *' : 'Redirect URIs'}
         placeholder={`http://localhost:3000/callback\nhttps://example.com/callback`}
         rows={3}
-        helperText="Enter each URI on a new line."
+        helperText={
+          redirectsUserAgent
+            ? 'Enter each URI on a new line.'
+            : 'Not used by machine-to-machine clients — leave empty unless you add a redirect-based grant.'
+        }
         error={errors.redirect_uris?.message}
       />
 
@@ -210,6 +244,15 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         {...register('skip_logout_consent')}
         label="Skip Logout Confirmation"
         description="Bypass the logout confirmation screen. Recommended together with Skip Consent Screen for first-party clients."
+      />
+
+      {/* Access Token Format */}
+      <Select
+        {...register('access_token_strategy')}
+        label="Access Token Format"
+        options={ACCESS_TOKEN_STRATEGIES}
+        helperText="JWT lets a resource server validate this client's tokens offline via OIDC discovery (JWKS) — but a JWT cannot be revoked before it expires. Leave on Default unless an API needs offline validation."
+        error={errors.access_token_strategy?.message}
       />
 
       {/* Grant Types */}

@@ -74,6 +74,8 @@ export interface Client {
   // Consent Flow Configuration (first-party clients bypass consent/logout screens)
   skip_consent?: boolean
   skip_logout_consent?: boolean
+  // Access token format. null/undefined inherits the deployment-wide strategy.
+  access_token_strategy?: 'jwt' | 'opaque' | null
   // Social OAuth Settings
   google_oauth_enabled?: boolean
   github_oauth_enabled?: boolean
@@ -162,11 +164,18 @@ export const clientsApi = {
     public: boolean
     skip_consent?: boolean
     skip_logout_consent?: boolean
+    access_token_strategy?: string
   }) =>
     api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>('/api/v1/clients', data),
 
-  update: (id: string, data: Partial<Client>) =>
-    api.put<{ message: string; client: Client }>(`/api/v1/clients/${id}`, data),
+  // access_token_strategy accepts '' on update, which the API reads as "clear the
+  // pin and go back to inheriting the server setting". The response never uses ''.
+  update: (
+    id: string,
+    data: Partial<Omit<Client, 'access_token_strategy'>> & {
+      access_token_strategy?: 'jwt' | 'opaque' | ''
+    }
+  ) => api.put<{ message: string; client: Client }>(`/api/v1/clients/${id}`, data),
 
   delete: (id: string) =>
     api.delete<{ message: string }>(`/api/v1/clients/${id}`),

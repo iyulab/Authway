@@ -272,6 +272,12 @@ func TestCreateClient_ConfidentialPartialCredentials(t *testing.T) {
 	_, _, err := svc.Create(req1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must provide both client_id and client_secret")
+	// Must be a ConfigError — that is what makes the handler answer 400 instead
+	// of 500. A caller mistake is not a server fault.
+	var cerr1 *ConfigError
+	assert.ErrorAs(t, err, &cerr1)
+	assert.Equal(t, "confidential_client_partial_credentials", cerr1.Code)
+	assert.Equal(t, "client_secret", cerr1.Field)
 
 	// Test case 2: Only client_secret provided
 	req2 := &CreateClientRequest{
@@ -288,6 +294,9 @@ func TestCreateClient_ConfidentialPartialCredentials(t *testing.T) {
 	_, _, err = svc.Create(req2)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must provide both client_id and client_secret")
+	var cerr2 *ConfigError
+	assert.ErrorAs(t, err, &cerr2)
+	assert.Equal(t, "client_id", cerr2.Field)
 }
 
 // TestCreateClient_ConfidentialAutoGenerate tests auto-generation for confidential clients
@@ -339,23 +348,3 @@ func TestCreateClient_ConfidentialAutoGenerate(t *testing.T) {
 	mockHydra.AssertExpectations(t)
 }
 
-// TestMaskSecret tests the maskSecret helper function
-func TestMaskSecret(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"Empty string", "", "(empty)"},
-		{"Short secret", "abc", "****"},
-		{"Normal secret", "secret123", "se****23"},
-		{"Long secret", "very_long_secret_string", "ve****ng"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := maskSecret(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}

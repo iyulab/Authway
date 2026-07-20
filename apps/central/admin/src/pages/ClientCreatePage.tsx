@@ -57,6 +57,8 @@ const ClientCreatePage: React.FC = () => {
         public: data.public,
         skip_consent: data.skip_consent || false,
         skip_logout_consent: data.skip_logout_consent || false,
+        // '' means "inherit the server setting" — send nothing.
+        access_token_strategy: data.access_token_strategy || undefined,
       })
     },
     onSuccess: (response) => {

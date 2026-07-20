@@ -96,10 +96,18 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 				zap.String("tenant_id", tenantID.String()))
 
 		} else if req.ClientID != "" || req.ClientSecret != "" {
-			// Partial credentials provided - error
-			return nil, nil, fmt.Errorf(
-				"confidential clients must provide both client_id and client_secret, or neither (got client_id='%s', client_secret='%s')",
-				req.ClientID, maskSecret(req.ClientSecret))
+			// Partial credentials are a caller mistake, not a server fault —
+			// surface as a structured ConfigError so the handler maps it to 400.
+			missing := "client_secret"
+			if req.ClientID == "" {
+				missing = "client_id"
+			}
+			return nil, nil, &ConfigError{
+				Code:    "confidential_client_partial_credentials",
+				Field:   missing,
+				Message: "Confidential clients must provide both client_id and client_secret, or neither",
+				Hint:    fmt.Sprintf("Supply %s as well, or omit both and let Authway generate the pair.", missing),
+			}
 
 		} else {
 			// Generate both credentials
@@ -308,6 +316,12 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	client.SkipConsent = req.SkipConsent
 	client.SkipLogoutConsent = req.SkipLogoutConsent
 
+	// Access token format (empty = inherit the deployment-wide strategy)
+	if req.AccessTokenStrategy != "" {
+		strategy := req.AccessTokenStrategy
+		client.AccessTokenStrategy = &strategy
+	}
+
 	if err := s.db.Create(client).Error; err != nil {
 		s.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name), zap.String("tenant_id", tenantID.String()))
 		return nil, nil, fmt.Errorf("failed to create client: %w", err)
@@ -330,7 +344,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		ClientID:                clientID,
 		ClientSecret:            clientSecret,
 		ClientName:              client.Name,
-		RedirectUris:            client.RedirectURIs,
+		RedirectUris:            nonNilURIs(client.RedirectURIs),
 		PostLogoutRedirectUris:  hydraPostLogoutURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"}, // Default to authorization code flow
@@ -338,6 +352,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		TokenEndpointAuthMethod: authMethod,
 		SkipConsent:             client.SkipConsent,
 		SkipLogoutConsent:       client.SkipLogoutConsent,
+		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
 	}
 
 	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
@@ -507,6 +522,15 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		client.SkipLogoutConsent = *req.SkipLogoutConsent
 	}
 
+	// Access token format: nil = not provided, "" = clear (inherit global).
+	if req.AccessTokenStrategy != nil {
+		if *req.AccessTokenStrategy == "" {
+			client.AccessTokenStrategy = nil
+		} else {
+			client.AccessTokenStrategy = req.AccessTokenStrategy
+		}
+	}
+
 	// Authentication Provider Settings
 	// EnabledAuthProviders: nil = not provided, empty array = clear all
 	if req.EnabledAuthProviders != nil {
@@ -575,7 +599,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		ClientID:                client.ClientID,
 		ClientSecret:            client.ClientSecret,
 		ClientName:              client.Name,
-		RedirectUris:            client.RedirectURIs,
+		RedirectUris:            nonNilURIs(client.RedirectURIs),
 		PostLogoutRedirectUris:  hydraPostLogoutURIs,
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"},
@@ -583,6 +607,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		TokenEndpointAuthMethod: authMethod,
 		SkipConsent:             client.SkipConsent,
 		SkipLogoutConsent:       client.SkipLogoutConsent,
+		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
 	}
 
 	syncStatus := SyncStatus{State: SyncStateOK}
@@ -698,13 +723,14 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 		ClientID:                client.ClientID,
 		ClientSecret:            newSecret,
 		ClientName:              client.Name,
-		RedirectUris:            client.RedirectURIs,
+		RedirectUris:            nonNilURIs(client.RedirectURIs),
 		GrantTypes:              client.GrantTypes,
 		ResponseTypes:           []string{"code"},
 		Scope:                   strings.Join(client.Scopes, " "),
 		TokenEndpointAuthMethod: authMethod,
 		SkipConsent:             client.SkipConsent,
 		SkipLogoutConsent:       client.SkipLogoutConsent,
+		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
 	}
 
 	syncStatus := SyncStatus{State: SyncStateOK}
@@ -767,15 +793,26 @@ func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client,
 	return clients, total, nil
 }
 
-// maskSecret masks a secret string for logging purposes
-func maskSecret(secret string) string {
-	if secret == "" {
-		return "(empty)"
+// nonNilURIs guarantees a JSON `[]` rather than `null` on the wire to Hydra.
+// Machine-to-machine clients legitimately have no redirect_uris (see
+// validateRedirectURIRequirement), and a nil pq.StringArray would otherwise
+// marshal to null — an ambiguity no client-registration payload should carry.
+func nonNilURIs(uris []string) []string {
+	if uris == nil {
+		return []string{}
 	}
-	if len(secret) <= 4 {
-		return "****"
+	return uris
+}
+
+// derefStrategy flattens the optional per-client access token strategy for the
+// Hydra payload. nil (not pinned) becomes "", which the omitempty tag drops —
+// and since client update is a PUT full-replace, that also un-pins a client that
+// was previously pinned, restoring the deployment-wide strategy.
+func derefStrategy(strategy *string) string {
+	if strategy == nil {
+		return ""
 	}
-	return secret[:2] + "****" + secret[len(secret)-2:]
+	return *strategy
 }
 
 // SyncAllClientsToHydra synchronizes all clients' post_logout_redirect_uris to Hydra

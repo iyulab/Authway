@@ -1,7 +1,7 @@
 # Backend Integration Guide
 
-**Version**: 0.1.5
-**Last Updated**: 2025-11-14
+**Version**: 0.1.6
+**Last Updated**: 2026-07-20
 
 Complete guide for integrating Authway authentication into backend APIs (ASP.NET, Node.js, Go, etc.)
 
@@ -14,7 +14,7 @@ Authway uses a **dual-endpoint architecture** where frontend and backend compone
 | Component | Endpoint | Purpose |
 |-----------|----------|---------|
 | **Frontend** (SDK) | Auth Backend (`http://localhost:8081`) | User authentication, login flow |
-| **Backend** (API) | Ory Hydra (`http://localhost:4444`) | JWT token validation |
+| **Backend** (API) | Ory Hydra (`http://localhost:4444`) | JWT token validation — **requires `access_token_strategy: "jwt"` on the client, see below** |
 
 ```
 ┌─────────────┐
@@ -33,6 +33,74 @@ Authway uses a **dual-endpoint architecture** where frontend and backend compone
  │  Hydra  │  OAuth 2.0 Server
  └─────────┘  /.well-known/openid-configuration
 ```
+
+---
+
+## ⚠️ Prerequisite: your client must issue JWT access tokens
+
+**Read this before wiring any resource server.** Authway issues **opaque** access
+tokens by default (`ory_at_…`, two segments — not a JWT). An opaque token carries
+no claims and no signature a resource server can check, so the JWKS/OIDC-discovery
+setup described below **will reject every token** until the calling client is
+switched to the JWT format.
+
+Opt the client in per client — there is no need to change the format for everyone:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "YOUR_TENANT_ID",
+    "name": "Backend Service",
+    "public": false,
+    "grant_types": ["client_credentials"],
+    "scopes": ["api"],
+    "access_token_strategy": "jwt"
+  }'
+```
+
+Existing clients can be switched with `PUT /api/v1/clients/{id}`
+(`"access_token_strategy": "jwt"`), or in the Admin Console under
+**Access Token Format**. Sending `""` clears the setting and returns the client to
+the deployment-wide default.
+
+**The trade-off is real**: a JWT is validated offline, so it stays valid until it
+expires — revoking it before then is not possible. Opt in for service-to-service
+APIs that need offline validation; leave interactive clients on opaque and check
+tokens via the token introspection endpoint instead.
+
+Verify which format you got:
+
+```bash
+# 3 segments (xxx.yyy.zzz) = JWT.  Starts with ory_at_ = opaque.
+echo "$ACCESS_TOKEN" | awk -F. '{print NF" segments"}'
+```
+
+### Where your custom claims land
+
+Registered claims (`sub`, `iss`, `aud`, `exp`, `iat`, `scp`, `client_id`) are always
+top-level. **Custom claims are not** — Hydra nests session claims under `ext`, so
+the same shape is returned by both the JWT and the introspection endpoint:
+
+```json
+{
+  "sub": "b1e2…",
+  "client_id": "my_app",
+  "exp": 1770000000,
+  "ext": { "email": "u@example.com", "tenant_id": "662667c1…" }
+}
+```
+
+This matters because most JWT middlewares surface `ext` as a single claim holding
+a JSON object — they do **not** flatten it into individual claims. If your
+resource server expects to read a custom claim by its bare name, list those names
+in the deployment's `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS` (comma separated); Hydra then
+mirrors them to the top level while still keeping them under `ext`. Claim names
+are your service's domain vocabulary, so they live in deployment configuration,
+never in Authway's code.
+
+Whichever route you take, decode a real token and look before writing the mapping
+code — the claim shape is the contract.
 
 ---
 

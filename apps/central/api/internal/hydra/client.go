@@ -49,6 +49,13 @@ type OAuth2Client struct {
 	// regeneration which re-sends the full client object).
 	SkipConsent       bool `json:"skip_consent"`
 	SkipLogoutConsent bool `json:"skip_logout_consent"`
+
+	// Per-client access token format ("jwt" | "opaque"), overriding Hydra's
+	// global `strategies.access_token`. omitempty is correct here — unlike the
+	// booleans above, the zero value *is* the "inherit the global setting" state,
+	// and client update is a PUT full-replace, so omitting the field resets a
+	// previously-pinned client back to inheriting.
+	AccessTokenStrategy string `json:"access_token_strategy,omitempty"`
 }
 
 func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error) {

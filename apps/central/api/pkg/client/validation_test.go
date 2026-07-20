@@ -79,6 +79,58 @@ func TestValidateClientConfig(t *testing.T) {
 			wantCode:   "",
 		},
 
+		// --- redirect_uris conditional on grant type ----
+		// Regression: redirect_uris used to be unconditionally required, forcing
+		// M2M clients to register a dummy URI that then polluted the logout config.
+		{
+			name:         "M2M client without redirect_uris is OK",
+			public:       false,
+			clientSecret: "real-secret",
+			grantTypes:   []string{"client_credentials"},
+			redirectURIs: nil,
+			wantCode:     "",
+		},
+		{
+			name:         "confidential auth_code without redirect_uris rejected",
+			public:       false,
+			clientSecret: "real-secret",
+			grantTypes:   []string{"authorization_code", "refresh_token"},
+			redirectURIs: nil,
+			wantCode:     "redirect_grant_without_redirect_uris",
+		},
+		{
+			name:           "public auth_code without redirect_uris rejected",
+			public:         true,
+			grantTypes:     []string{"authorization_code"},
+			redirectURIs:   nil,
+			allowedOrigins: []string{"https://app.example"},
+			wantCode:       "redirect_grant_without_redirect_uris",
+		},
+		{
+			name:         "implicit without redirect_uris rejected",
+			public:       false,
+			clientSecret: "real-secret",
+			grantTypes:   []string{"authorization_code", "implicit"},
+			redirectURIs: nil,
+			wantCode:     "redirect_grant_without_redirect_uris",
+		},
+		{
+			name:         "refresh_token-only client needs no redirect_uris",
+			public:       false,
+			clientSecret: "real-secret",
+			grantTypes:   []string{"refresh_token"},
+			redirectURIs: nil,
+			wantCode:     "",
+		},
+		{
+			name:         "client-type violations outrank the missing redirect_uri",
+			public:       true,
+			clientSecret: "leaked-secret",
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: nil,
+			wantCode:     "public_client_with_secret",
+		},
+
 		// --- Case insensitivity / whitespace tolerance ----
 		{
 			name:       "grant_types are case-insensitive",
@@ -110,6 +162,33 @@ func TestValidateClientConfig(t *testing.T) {
 				t.Errorf("ConfigError missing Field")
 			}
 		})
+	}
+}
+
+// M2M clients now legitimately carry no redirect_uris; the Hydra payload must
+// still say `[]`, never `null`.
+func TestNonNilURIs(t *testing.T) {
+	if got := nonNilURIs(nil); got == nil || len(got) != 0 {
+		t.Fatalf("nil must become an empty non-nil slice, got %#v", got)
+	}
+	in := []string{"https://app.example/cb"}
+	if got := nonNilURIs(in); len(got) != 1 || got[0] != in[0] {
+		t.Fatalf("non-nil input must pass through unchanged, got %#v", got)
+	}
+}
+
+// A client that is not pinned must send no access_token_strategy at all, so the
+// omitempty tag drops it and Hydra falls back to the deployment-wide setting.
+// Client update is a PUT full-replace, so this is also how a pin gets cleared.
+func TestDerefStrategy(t *testing.T) {
+	if got := derefStrategy(nil); got != "" {
+		t.Fatalf("unpinned client must send an empty strategy, got %q", got)
+	}
+	for _, s := range []string{"jwt", "opaque"} {
+		v := s
+		if got := derefStrategy(&v); got != s {
+			t.Fatalf("pinned client must send %q, got %q", s, got)
+		}
 	}
 }
 

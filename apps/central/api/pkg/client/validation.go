@@ -72,7 +72,7 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 				Hint:    "Add the SPA origin (e.g. https://app.example.com) so the reverse proxy can validate cross-origin token requests.",
 			}
 		}
-		return nil
+		return validateRedirectURIRequirement(gt, redirectURIs)
 	}
 
 	// Confidential clients (server-side web apps, M2M, backend services).
@@ -87,7 +87,33 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 		}
 	}
 
-	return nil
+	return validateRedirectURIRequirement(gt, redirectURIs)
+}
+
+// validateRedirectURIRequirement enforces redirect_uris only for grants that
+// actually redirect the user-agent back to the client (RFC 6749 §3.1.2, §4.1.1).
+//
+// Requiring it unconditionally forces machine-to-machine registrations
+// (`client_credentials`, which never redirects) to invent a dummy URI. That dummy
+// then propagates into post_logout_redirect_uris / default_logout_uri and becomes
+// permanent configuration pollution for a URI that is never used.
+//
+// Runs last so that client-type violations (secret-on-public, wrong grant) are
+// reported first — those describe *what the client is*, this one only describes
+// what it is missing.
+func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []string) *ConfigError {
+	if !containsAny(normalizedGrants, "authorization_code", "implicit") {
+		return nil
+	}
+	if len(redirectURIs) > 0 {
+		return nil
+	}
+	return &ConfigError{
+		Code:    "redirect_grant_without_redirect_uris",
+		Field:   "redirect_uris",
+		Message: "Clients using authorization_code or implicit must declare at least one redirect_uri",
+		Hint:    "Add the callback URL the authorization server redirects to (e.g. https://app.example.com/signin-oidc). Machine-to-machine clients using only client_credentials do not need one.",
+	}
 }
 
 func normalizeGrantTypes(grantTypes []string) []string {

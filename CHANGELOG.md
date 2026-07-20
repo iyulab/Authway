@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+> Run-17 (2026-07-20), triggered by consumer-reported issues from VibeBase.
+> Suggested version on release: **minor** (0.x.0) — `access_token_strategy` is a
+> new backward-compatible API field; everything else is a fix or docs.
+> Not deployed. See `scripts/deploy/POST-DEPLOY-VERIFY.md` for the claims that
+> still need runtime confirmation.
+
+### Added
+
+- **Per-client access token format** (`access_token_strategy`: `jwt` | `opaque`,
+  migration `015`). Maps to Hydra's per-client field of the same name, which
+  overrides the deployment-wide `strategies.access_token`. This is what lets a
+  resource server validate Authway-issued tokens offline through standard OIDC
+  discovery / JWKS. NULL (the default, and the state of every existing client)
+  inherits the deployment-wide strategy — the migration opts in nobody, because
+  which clients should carry non-revocable tokens is an operational decision.
+  Exposed through the create/update API, the client response, and the Admin
+  Console ("Access Token Format"), with the revocation trade-off stated at the
+  point of choice.
+- **`HYDRA_ALLOWED_TOP_LEVEL_CLAIMS` deployment setting**. Hydra nests custom
+  session claims under `ext`; names listed here are mirrored to the token's top
+  level for resource servers that read claims by their bare name. The mechanism
+  lives in Authway, the names live in deployment config — claim vocabulary
+  belongs to the consuming service, not to the issuer.
+- **CI coverage for the two Vite apps** (`apps/central/admin`,
+  `apps/branding/auth-ui`). Both sit outside the pnpm workspace and had never
+  been built or tested by CI — auth-ui's 39 tests only ever ran on a developer
+  machine. No artifacts are uploaded; CI verifies, the release pipeline publishes.
+- **`ClientForm` regression tests** (admin console, 7 tests) covering the
+  conditional `redirect_uris` rule and the three-state access-token-format field.
+- **`scripts/deploy/POST-DEPLOY-VERIFY.md`** — checklist of claims that cannot be
+  verified locally, with the command and expected output for each.
+
+### Fixed
+
+- **`redirect_uris` is no longer required for grants that never redirect.** It is
+  now mandatory only for `authorization_code` / `implicit` (RFC 6749 §3.1.2).
+  Machine-to-machine clients previously had to invent a placeholder URI, which
+  then propagated into `post_logout_redirect_uris` / `default_logout_uri` and
+  became permanent configuration pollution. The Admin Console mirrors the rule.
+  Reported by VibeBase.
+- **Partial confidential-client credentials now return 400, not 500.** Supplying
+  `client_id` without `client_secret` (or vice versa) is a caller mistake; it now
+  returns a structured `ConfigError` (`confidential_client_partial_credentials`)
+  naming the missing field, like every other client-config violation. The masked
+  secret is no longer echoed in the error message. Reported by VibeBase.
+- **Hydra client payloads send `[]` rather than `null`** for a client with no
+  redirect URIs.
+- **`docs/BACKEND_INTEGRATION.md` documented a contract the deployment could not
+  keep** — it described JWT validation via OIDC discovery while Authway shipped
+  opaque tokens, so anyone following it hit a wall. It now states the opaque
+  default, how to opt a client in, where custom claims actually land (`ext`), and
+  the revocation trade-off.
+
+### Removed
+
+- `maskSecret()` and its test — the last production caller disappeared with the
+  400 fix above.
+
+---
+
 ## [0.3.2] - 2026-04-15
 
 > **Note**: This entry was opened in Run-3 (2026-04-15) for the audit P4
