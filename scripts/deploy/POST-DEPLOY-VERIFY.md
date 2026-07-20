@@ -6,6 +6,11 @@
 
 **사용법**: 배포 후 staging에서 전부 통과한 다음 prod로 넘어간다. 항목이 해소되면(=해당 변경이 여러 배포를 거쳐 안정) 이 문서에서 제거한다 — 영구 목록이 아니라 *미검증 주장의 대기열*이다.
 
+> **2026-07-20 갱신 — 다수 항목이 로컬에서 선검증됐다.** Docker로 Hydra v26.2 + Postgres 15를
+> 띄워 §2·§3·§4를 실측으로 통과시켰다(각 절 머리말 참조). 남은 배포-전용 항목은 **§5의 az 실호출**과
+> **§1-4 콘솔 UI**, **§6 회귀 스모크**다. 로컬 통과가 staging 검증을 대체하지는 않지만,
+> "핵심 전제가 참인지"는 이미 확인된 상태로 배포에 들어간다.
+
 ---
 
 ## 공통 준비
@@ -13,21 +18,30 @@
 ```bash
 ISSUER=https://stg-oauth.authway.in          # prod: https://oauth.authway.in
 API=https://<central-api-host>               # scripts/deploy/*/.env 의 CONTAINER_APP_API 도메인
-ADMIN_KEY=<ADMIN_API_KEY>
+ADMIN_KEY=<AUTHWAY_ADMIN_API_KEY>
 TENANT=<검증용 테넌트 UUID>
+AUTH="Authorization: Bearer $ADMIN_KEY"
 ```
+
+> ⚠️ 관리 API 인증 헤더는 **`Authorization: Bearer`** 다. `X-API-Key`는 **401**을 받는다(실측 확인).
 
 ---
 
 ## 1. 클라이언트 생성 검증 규칙 (Run-17 P-B)
 
 > 배경: M2M 클라이언트에 더미 `redirect_uris`를 강요하던 문제와, 클라이언트 입력 오류를 500으로 분류하던 문제. 발견자: VibeBase (2026-07-20).
+>
+> **1-1~1-3은 로컬 실측으로 통과했다**(실 Postgres + Hydra + 중앙 API 구동, 2026-07-20).
+> 이 과정에서 1-1이 **다른 원인으로 여전히 500**임을 발견해 고쳤다 — `clients.redirect_uris`가
+> `NOT NULL`인데 GORM이 nil 슬라이스를 명시적 NULL로 써서 컬럼 DEFAULT가 적용되지 않았다.
+> 회귀 가드: `pkg/client/service_postgres_test.go`(SQLite 하네스는 이 제약을 재현하지 못한다).
+> staging에서는 **확인** 목적으로 재실행한다.
 
 ### 1-1. `client_credentials` 전용 클라이언트를 redirect 없이 생성 → **201**
 
 ```bash
 curl -s -o /tmp/r.json -w '%{http_code}\n' -X POST "$API/api/v1/clients" \
-  -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" -H "$AUTH" \
   -d "{\"tenant_id\":\"$TENANT\",\"name\":\"verify-m2m\",\"public\":false,
        \"grant_types\":[\"client_credentials\"],\"scopes\":[\"api\"]}"
 ```
@@ -38,7 +52,7 @@ curl -s -o /tmp/r.json -w '%{http_code}\n' -X POST "$API/api/v1/clients" \
 
 ```bash
 curl -s -o /tmp/r.json -w '%{http_code}\n' -X POST "$API/api/v1/clients" \
-  -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" -H "$AUTH" \
   -d "{\"tenant_id\":\"$TENANT\",\"name\":\"verify-partial\",\"public\":false,
        \"client_id\":\"verify_partial\",
        \"grant_types\":[\"client_credentials\"],\"scopes\":[\"api\"]}"
@@ -60,7 +74,10 @@ cat /tmp/r.json
 
 ---
 
-## 2. 마이그레이션 015 (per-client access token strategy)
+## 2. 마이그레이션 015 (per-client access token strategy) — ✅ 로컬 선검증됨
+
+> 실 Postgres 15에서 `TestMigrateSmoke` 13/13 통과(2026-07-20). 아래는 배포 환경에서의 확인용이다.
+> 단, `count(*)=0` 항목은 **배포 직후에만** 유효하다 — 이후 누군가 opt-in하면 당연히 0이 아니다.
 
 ```sql
 -- 컬럼 존재 + nullable
@@ -81,15 +98,21 @@ SELECT version, success FROM schema_migrations WHERE version='015';
 
 ---
 
-## 3. 클라이언트 단위 JWT access token (Run-17 P-C) — ⚠️ 최우선 미검증
+## 3. 클라이언트 단위 JWT access token (Run-17 P-C) — ✅ 전제 실증됨
 
-> **로컬에서 확인 불가했던 항목.** Hydra v26.2가 클라이언트 필드 `access_token_strategy`를 실제로 수용하고 발급 시 존중하는지는 문서 근거만 있고 런타임 확인이 없다. 이것이 거짓이면 P-C 전체가 무효다.
+> **P-C의 전제가 참으로 확인됐다**(2026-07-20, 로컬 Hydra v26.2 격리 실험 + Authway 실경로).
+> 전역 `STRATEGIES_ACCESS_TOKEN=opaque` 하에서:
+> - `access_token_strategy:"jwt"` 클라이언트 → **3 segments JWT**(`eyJhbGci…`)
+> - 미핀 클라이언트 → **`ory_at_…` opaque**
+> - Authway `PUT {"access_token_strategy":""}` → **200**, DB `NULL`, 이후 토큰 다시 opaque
+>
+> 즉 §3-1·§3-2·§3-3과 `D80-2`(PUT 전체 치환 = 핀 해제) 모두 실측 통과. staging은 **확인** 목적이다.
 
 ### 3-1. jwt opt-in 클라이언트 생성 → 토큰 형식 확인
 
 ```bash
 curl -s -X POST "$API/api/v1/clients" \
-  -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" -H "$AUTH" \
   -d "{\"tenant_id\":\"$TENANT\",\"name\":\"verify-jwt\",\"public\":false,
        \"grant_types\":[\"client_credentials\"],\"scopes\":[\"api\"],
        \"access_token_strategy\":\"jwt\"}"
@@ -117,7 +140,13 @@ echo "$TOKEN" | awk -F. '{print NF" segments"}'
 
 ## 4. 커스텀 클레임 배치 (`ext` 중첩 / top-level 미러링)
 
-> `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS`라는 **env 키명 자체가 미검증**이다(Hydra 설정 키 `oauth2.allowed_top_level_claims`의 표준 env 매핑으로 도출). 미러링이 안 되면 키명부터 의심할 것.
+> ✅ **env 키명이 실측으로 확인됐다.** 동일 Hydra 이미지를 env 있음/없음으로 각각 띄우고
+> authorization_code 플로우를 끝까지 돌려 JWT payload를 디코드한 결과:
+> - 미설정: `kind`/`tenant`가 **`ext` 안에만** 존재
+> - `OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=kind,tenant`: 두 이름이 **top-level과 `ext` 양쪽에** 존재
+> - 목록에 없는 `unlisted` 클레임은 같은 토큰에서 `ext`에만 남아 음성 대조가 된다
+>
+> 따라서 아래 4-1·4-2는 배포 환경 **확인**용이다.
 
 ### 4-1. 기본 상태 — 커스텀 클레임은 `ext` 아래
 
@@ -136,9 +165,13 @@ echo "$TOKEN" | awk -F. '{print NF" segments"}'
 
 ---
 
-## 5. Hydra 배포 스크립트 env 전달 (PowerShell 배열 splat)
+## 5. Hydra 배포 스크립트 env 전달 (PowerShell 배열 splat) — ⚠️ 남은 배포-전용 항목
 
-> `publish-hydra.core.ps1`이 `$TokenEnv` 배열을 `az ... --set-env-vars` 뒤에 넘긴다. 구문은 검증했으나 **az 실제 호출은 미검증**이다.
+> `publish-hydra.core.ps1`이 `$TokenEnv` 배열을 `az ... --set-env-vars` 뒤에 넘긴다.
+> **PowerShell 측 인자 구성은 실측 확인됐다** — 각 env가 개별 인자로 전개되고,
+> `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS` 미설정 시 배열이 1개 원소로 유지돼 빈 인자가 생기지 않는다.
+> **남은 미검증은 `az` 자체가 그 인자들을(특히 값에 쉼표가 든 `kind,tenant`) 받아들이는지**뿐이며,
+> 이건 로컬로 닫을 수 없다. 배포 직후 아래로 확인한다.
 
 ```bash
 az containerapp show -n <hydra-app> -g <rg> \

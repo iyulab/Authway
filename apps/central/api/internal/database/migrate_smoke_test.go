@@ -13,6 +13,13 @@ import (
 // bootstrapped with 000_v0_clean_slate.sql, exercising migrations 001..015 in the
 // exact single-outer-transaction context prod uses — including the nested BEGIN/COMMIT
 // inside individual migration files. Skips unless MIGRATE_SMOKE_DSN is set.
+//
+// The target database must be a THROWAWAY one that has already been bootstrapped
+// by applying 000_v0_clean_slate.sql manually — the migrator itself never runs it
+// (its version collides with the bookkeeping sentinel row, so it is always treated
+// as already applied; see claudedocs/issues/ISSUE-Authway-20260720-migration-000-
+// version-collision.md). On a blank database this test fails at 001 with
+// `relation "users" does not exist`, which is that collision, not a broken migration.
 func TestMigrateSmoke(t *testing.T) {
 	dsn := os.Getenv("MIGRATE_SMOKE_DSN")
 	if dsn == "" {
@@ -44,7 +51,14 @@ func TestMigrateSmoke(t *testing.T) {
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='013' AND success)`, "013 recorded"},
 		{`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='access_token_strategy')`, "clients.access_token_strategy"},
 		// 015 must not opt any client in — enabling JWT is an operational decision.
-		{`SELECT NOT EXISTS(SELECT 1 FROM clients WHERE access_token_strategy IS NOT NULL)`, "no client pinned to a strategy"},
+		// Assert this at the schema level (no column default, so adding the column
+		// pins nobody) rather than by counting rows: a row count also reflects
+		// whatever the application did after migrating, which is not 015's doing.
+		// Postgres records the migration's explicit `DEFAULT NULL` as the default
+		// expression `NULL::character varying`, not as an absent default — so match
+		// on "the default evaluates to NULL" rather than "there is no default".
+		{`SELECT coalesce(column_default, 'NULL') ILIKE 'null%' FROM information_schema.columns WHERE table_name='clients' AND column_name='access_token_strategy'`, "access_token_strategy defaults to NULL (opts nobody in)"},
+		{`SELECT EXISTS(SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name='clients' AND constraint_name='clients_access_token_strategy_check')`, "access_token_strategy CHECK constraint present"},
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='014' AND success)`, "014 recorded"},
 		{`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='015' AND success)`, "015 recorded"},
 	}

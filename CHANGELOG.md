@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Suggested version on release: **minor** (0.x.0) — `access_token_strategy` is a
 > new backward-compatible API field; everything else is a fix or docs.
 > Not deployed. See `scripts/deploy/POST-DEPLOY-VERIFY.md` for the claims that
-> still need runtime confirmation.
+> still need runtime confirmation — most were closed locally against real
+> Hydra v26.2 and Postgres 15 on 2026-07-20; what remains is the `az` env
+> hand-off and the console/regression smoke.
 
 ### Added
 
@@ -56,6 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret is no longer echoed in the error message. Reported by VibeBase.
 - **Hydra client payloads send `[]` rather than `null`** for a client with no
   redirect URIs.
+- **Creating a machine-to-machine client still failed with 500 after the rule
+  change above.** Dropping the validation requirement was not enough:
+  `clients.redirect_uris` is `text[] NOT NULL`, and GORM writes an explicit NULL
+  for a nil slice instead of omitting the column, so the column's `DEFAULT '{}'`
+  never applied and every redirect-free create hit a not-null violation — the
+  exact scenario the change was meant to enable. The model now stores an empty
+  array, on both the create and the soft-delete-restore path. The SQLite test
+  harness cannot express that constraint, so the guard lives in the new
+  Postgres-gated `pkg/client/service_postgres_test.go`.
 - **Clearing a client's pinned access token format now works.** A
   `validate:"omitempty,oneof=…"` tag on a `*string` does not short-circuit for a
   non-nil pointer to `""` — the validator dereferences it and `oneof` rejects the

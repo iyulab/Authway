@@ -142,7 +142,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 				// Update other fields if needed
 				existingClient.Name = req.Name
 				existingClient.Description = req.Description
-				existingClient.RedirectURIs = req.RedirectURIs
+				existingClient.RedirectURIs = nonNilURIs(req.RedirectURIs) // NOT NULL column; see Create
 				existingClient.Active = true
 
 				// Apply smart defaults for logout redirect URIs on restore
@@ -195,7 +195,11 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		Description:  req.Description,
 		Website:      req.Website,
 		Logo:         req.Logo,
-		RedirectURIs: req.RedirectURIs,
+		// nonNilURIs, not req.RedirectURIs: clients.redirect_uris is NOT NULL, and
+		// GORM writes an explicit NULL for a nil slice rather than omitting the
+		// column, so the DB default never applies. Now that M2M clients legitimately
+		// have no redirect URIs, an empty array is the correct stored value.
+		RedirectURIs: nonNilURIs(req.RedirectURIs),
 		GrantTypes:   req.GrantTypes,
 		Scopes:       req.Scopes,
 		Public:       req.Public,
