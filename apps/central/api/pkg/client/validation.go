@@ -90,6 +90,29 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 	return validateRedirectURIRequirement(gt, redirectURIs)
 }
 
+// validateAccessTokenStrategy accepts "" (inherit the deployment-wide strategy)
+// alongside the two real formats.
+//
+// This cannot be a `validate:"omitempty,oneof=jwt opaque"` struct tag. On the
+// update request the field is a *string, and `omitempty` does NOT short-circuit
+// for a non-nil pointer to "" — the validator dereferences it and `oneof` then
+// rejects the empty value. That would make the un-pin signal (`""`, the console's
+// "Default (inherit)" option) un-submittable, so a client pinned to jwt could
+// never be returned to inheriting. Empirically confirmed; see
+// TestUpdateClientRequest_AccessTokenStrategyValidation.
+func validateAccessTokenStrategy(strategy string) *ConfigError {
+	switch strategy {
+	case "", "jwt", "opaque":
+		return nil
+	}
+	return &ConfigError{
+		Code:    "invalid_access_token_strategy",
+		Field:   "access_token_strategy",
+		Message: "access_token_strategy must be \"jwt\", \"opaque\", or empty",
+		Hint:    "Use \"jwt\" for offline validation by a resource server, \"opaque\" to pin the revocable format, or omit the field (empty) to inherit the deployment-wide setting.",
+	}
+}
+
 // validateRedirectURIRequirement enforces redirect_uris only for grants that
 // actually redirect the user-agent back to the client (RFC 6749 §3.1.2, §4.1.1).
 //

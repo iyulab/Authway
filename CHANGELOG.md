@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret is no longer echoed in the error message. Reported by VibeBase.
 - **Hydra client payloads send `[]` rather than `null`** for a client with no
   redirect URIs.
+- **Clearing a client's pinned access token format now works.** A
+  `validate:"omitempty,oneof=…"` tag on a `*string` does not short-circuit for a
+  non-nil pointer to `""` — the validator dereferences it and `oneof` rejects the
+  empty value, so a client pinned to `jwt` could never be returned to inheriting
+  the deployment default. Validation moved out of the struct tag into
+  `validateAccessTokenStrategy`, which returns the same structured 400 as every
+  other client-config violation. Caught before deploy.
 - **`docs/BACKEND_INTEGRATION.md` documented a contract the deployment could not
   keep** — it described JWT validation via OIDC discovery while Authway shipped
   opaque tokens, so anyone following it hit a wall. It now states the opaque

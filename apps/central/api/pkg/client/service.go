@@ -48,6 +48,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateClientConfig(req.Public, req.ClientSecret, req.GrantTypes, req.RedirectURIs, req.AllowedOrigins); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateAccessTokenStrategy(req.AccessTokenStrategy); cerr != nil {
+		return nil, nil, cerr
+	}
 
 	// Validate tenant_id
 	tenantID, err := uuid.Parse(req.TenantID)
@@ -442,6 +445,11 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// in the DB but Hydra will be configured with token_endpoint_auth_method=none).
 	if cerr := validateClientConfig(mergedPublic, "", mergedGrants, mergedRedirects, mergedOrigins); cerr != nil {
 		return nil, SyncStatus{}, cerr
+	}
+	if req.AccessTokenStrategy != nil {
+		if cerr := validateAccessTokenStrategy(*req.AccessTokenStrategy); cerr != nil {
+			return nil, SyncStatus{}, cerr
+		}
 	}
 
 	// Update fields

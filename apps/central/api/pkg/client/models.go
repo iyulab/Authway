@@ -250,7 +250,9 @@ type CreateClientRequest struct {
 	// Access Token Format (optional; empty inherits the deployment-wide strategy).
 	// "jwt" lets a resource server validate this client's access tokens offline
 	// via OIDC discovery / JWKS — at the cost of not being revocable before expiry.
-	AccessTokenStrategy string `json:"access_token_strategy" validate:"omitempty,oneof=jwt opaque"`
+	// Validated in validateAccessTokenStrategy, not by a struct tag — see the
+	// comment there for why `oneof` cannot express this.
+	AccessTokenStrategy string `json:"access_token_strategy"`
 
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool   `json:"microsoft_oauth_enabled"`
@@ -307,8 +309,10 @@ type UpdateClientRequest struct {
 	SkipLogoutConsent *bool `json:"skip_logout_consent"`
 
 	// Access Token Format: nil = not provided, "" = clear (inherit global),
-	// "jwt"/"opaque" = pin this client.
-	AccessTokenStrategy *string `json:"access_token_strategy" validate:"omitempty,oneof=jwt opaque"`
+	// "jwt"/"opaque" = pin this client. No struct tag — `omitempty` does not
+	// short-circuit for a non-nil pointer to "", so `oneof` would reject the
+	// un-pin signal. See validateAccessTokenStrategy.
+	AccessTokenStrategy *string `json:"access_token_strategy"`
 
 	// Microsoft OAuth Settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled *bool   `json:"microsoft_oauth_enabled"`

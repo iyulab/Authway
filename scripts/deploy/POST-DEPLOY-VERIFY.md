@@ -109,7 +109,9 @@ echo "$TOKEN" | awk -F. '{print NF" segments"}'
 ### 3-3. 핀 해제(un-pin)가 동작하는지
 
 - 3-1의 클라이언트를 `PUT /api/v1/clients/{id}` 로 `{"access_token_strategy": ""}` 갱신.
-- 기대: 이후 발급 토큰이 다시 opaque. (Hydra 클라이언트 갱신이 PUT 전체 치환이라는 가정의 검증 — 실패하면 `omitempty` 결정 `D80-2` 재고.)
+- 기대: 요청이 **200**(400 아님), 이후 발급 토큰이 다시 opaque.
+- 남은 미검증 지점은 **Hydra 쪽뿐**이다 — 클라이언트 갱신이 PUT 전체 치환이라 필드 생략이 핀 해제로 이어진다는 가정(`D80-2`). Authway 자체 검증 경로는 `TestUpdateClientRequest_AccessTokenStrategyValidation`으로 로컬 보장됨.
+- 실패 양상별 원인: **400**이면 Authway 검증(회귀), **200인데 여전히 JWT**면 Hydra PUT 치환 가정이 틀린 것 → sync 구조체의 `omitempty` 제거 후 명시적 `"opaque"` 전송으로 전환.
 
 ---
 

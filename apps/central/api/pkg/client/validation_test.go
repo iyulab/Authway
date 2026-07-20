@@ -1,6 +1,59 @@
 package client
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-playground/validator/v10"
+)
+
+// The empty string is the *un-pin* signal for access_token_strategy: the handler
+// runs the struct validator before service.Update ever sees the field, so if
+// `omitempty` did not short-circuit ahead of `oneof`, a pinned client could never
+// be returned to inheriting the deployment-wide strategy — via the API or the
+// console. That failure would only surface against a live deployment, so pin it
+// here instead. validator.New() matches how the handler builds its validator
+// (internal/handler/client.go).
+func TestUpdateClientRequest_AccessTokenStrategyValidation(t *testing.T) {
+	v := validator.New()
+
+	cases := []struct {
+		name     string
+		strategy *string
+		wantErr  bool
+	}{
+		{"not provided", nil, false},
+		{"empty means un-pin", strPtr(""), false},
+		{"jwt", strPtr("jwt"), false},
+		{"opaque", strPtr("opaque"), false},
+		{"unknown strategy rejected", strPtr("garbage"), true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// The struct validator must never be the thing that rejects a
+			// strategy — it cannot express "empty is meaningful".
+			if err := v.Struct(&UpdateClientRequest{AccessTokenStrategy: c.strategy}); err != nil {
+				t.Fatalf("struct validation must stay out of this field's way, got %v", err)
+			}
+
+			var got *ConfigError
+			if c.strategy != nil {
+				got = validateAccessTokenStrategy(*c.strategy)
+			}
+			if c.wantErr && got == nil {
+				t.Fatal("want a ConfigError, got nil")
+			}
+			if !c.wantErr && got != nil {
+				t.Fatalf("want no error, got %+v", got)
+			}
+			if got != nil && got.Code != "invalid_access_token_strategy" {
+				t.Fatalf("unexpected code %q", got.Code)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 func TestValidateClientConfig(t *testing.T) {
 	tests := []struct {
