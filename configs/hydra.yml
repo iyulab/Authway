@@ -1,6 +1,11 @@
-version: v1.11.8
+# Local development only. Production Hydra is configured entirely through
+# environment variables (see scripts/deploy/), not this file.
+version: v26.2.0
 
-dsn: memory
+# The DSN comes from the DSN environment variable in docker-compose.yml, which
+# points at the shared Postgres — hydra-migrate and hydra must agree on it, and
+# `memory` (as this said while the image was already v26.2) would have given the
+# server a private, empty store that discards every registered client on restart.
 
 serve:
   cookies:

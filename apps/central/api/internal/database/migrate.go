@@ -156,6 +156,19 @@ func getMigrationFiles() ([]migrationFile, error) {
 }
 
 // createMigrationsTableTx creates the schema_migrations tracking table within tx.
+//
+// It deliberately inserts no bookkeeping row. An earlier version seeded
+// ('000', 'init_migration_system') as a "migration system initialized" marker,
+// which put a meta record in the same version namespace as the migration files
+// — and 000_initial_schema.sql claims exactly that version. The sentinel made
+// isMigrationAppliedTx("000") true on every database, so the initial schema was
+// never applied and no blank database could be provisioned. The table's own
+// existence is the only marker needed; versions now belong to migrations alone.
+//
+// Databases created before this change still carry the legacy '000' row. That is
+// harmless and in fact correct: those databases do have the initial schema, so
+// skipping 000 is the right outcome. (It would also be safe if they did not skip
+// it — 000_initial_schema.sql is idempotent.)
 func createMigrationsTableTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 	CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -171,10 +184,6 @@ func createMigrationsTableTx(tx *sql.Tx) error {
 
 	CREATE INDEX IF NOT EXISTS idx_schema_migrations_version ON schema_migrations(version);
 	CREATE INDEX IF NOT EXISTS idx_schema_migrations_executed_at ON schema_migrations(executed_at DESC);
-
-	INSERT INTO schema_migrations (version, name, execution_time_ms, success)
-	VALUES ('000', 'init_migration_system', 0, true)
-	ON CONFLICT (version) DO NOTHING;
 	`)
 	return err
 }

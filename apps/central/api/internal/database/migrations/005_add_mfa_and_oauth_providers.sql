@@ -2,7 +2,9 @@
 -- Version: 005
 -- Date: 2025-12-07
 
-BEGIN;
+-- No BEGIN;/COMMIT; here: RunMigrations wraps the whole run in one transaction,
+-- and a nested COMMIT would commit that outer transaction early — dropping the
+-- all-or-nothing guarantee for every migration that follows.
 
 -- Add MFA/TOTP columns to users table
 ALTER TABLE users
@@ -36,4 +38,4 @@ COMMENT ON COLUMN users.totp_secret IS 'Encrypted TOTP secret for authenticator 
 COMMENT ON COLUMN users.totp_enabled IS 'Whether MFA is enabled for this user';
 COMMENT ON COLUMN users.recovery_codes IS 'JSON array of hashed recovery codes';
 
-COMMIT;
+

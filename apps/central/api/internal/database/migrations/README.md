@@ -27,7 +27,7 @@ This directory contains all SQL migration files for the Authway Central API.
 {VERSION}_{DESCRIPTION}.sql
 
 Examples:
-- 000_v0_clean_slate.sql      (Initial schema)
+- 000_initial_schema.sql      (Base schema — guarded, applies only to a blank DB)
 - 001_add_user_claims.sql     (Feature addition)
 - 008_add_impersonation_missing_columns.sql  (Schema fix)
 ```
@@ -42,15 +42,11 @@ Examples:
 -- Version: XXX
 -- Date: YYYY-MM-DD
 
-BEGIN;
-
 -- ============================================================
 -- 1. Section Name
 -- ============================================================
 
 -- Your SQL statements here
-
-COMMIT;
 
 -- ============================================================
 -- Migration Complete
@@ -61,7 +57,10 @@ COMMIT;
 ### 3. Best Practices
 
 #### DO:
-- Always wrap migrations in `BEGIN;` / `COMMIT;` transactions
+- **Write NO `BEGIN;` / `COMMIT;`.** `RunMigrations` wraps the entire run in one
+  transaction, so a migration that opens its own commits the *outer* one early and
+  silently destroys the all-or-nothing guarantee for everything after it. An earlier
+  version of this document advised the opposite, and 004 and 005 followed it.
 - Use `IF NOT EXISTS` / `IF EXISTS` for idempotency
 - Add comments explaining the purpose of each section
 - Create indexes for frequently queried columns
@@ -94,6 +93,26 @@ ALTER TABLE table_name ALTER COLUMN new_column SET NOT NULL;
 -- Step 4: Add index if needed
 CREATE INDEX IF NOT EXISTS idx_table_column ON table_name(new_column);
 ```
+
+## Provisioning a Blank Database
+
+Nothing manual is required: start the API against an empty database and
+`000_initial_schema.sql` creates the base schema, then 001..NNN evolve it.
+
+`000_initial_schema.sql` is guarded — it does nothing at all if `tenants` already
+exists — so it is safe on every existing deployment. Per-statement
+`IF NOT EXISTS` would not be enough, because later migrations drop columns the
+000-era indexes reference.
+
+To reset a development database, run the destructive script by hand and restart
+the app:
+
+```bash
+psql "$DSN" -f scripts/bootstrap/dev-clean-slate.sql
+```
+
+That script only drops (including `schema_migrations`); it never recreates, so
+the migrations stay the single source of truth for schema.
 
 ## Execution Flow
 
@@ -155,6 +174,13 @@ Each version number must be unique. Check existing versions before creating new 
 ```bash
 ls -la apps/central/api/internal/database/migrations/*.sql
 ```
+
+`schema_migrations.version` belongs to migration files and nothing else. It used
+to also hold bookkeeping rows (`('000', 'init_migration_system')`), which claimed
+the same version as the initial schema — so `000` was treated as applied on every
+database, was never executed, and no blank database could be provisioned without
+running SQL by hand. If you ever feel like recording a meta event in this table,
+that is the failure you would be recreating.
 
 ## Schema Migrations Table
 

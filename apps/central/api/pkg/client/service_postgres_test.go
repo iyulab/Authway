@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"authway/apps/central/api/internal/database"
 	"authway/apps/central/api/internal/hydra"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -19,9 +20,9 @@ import (
 // AutoMigrate-from-Go-struct never reproduces that — so a nil slice sails
 // through SQLite and only explodes on a real deployment.
 //
-// Gated on the same DSN as the migration smoke test. The database must already
-// be bootstrapped (see internal/database/migrate_smoke_test.go); these tests
-// write rows but create no schema.
+// Gated on the same DSN as the migration tests. The schema is brought up by the
+// real migrator rather than assumed: RunMigrations is idempotent, so this both
+// bootstraps a blank database and no-ops on one that is already current.
 func setupPostgres(t *testing.T) *gorm.DB {
 	t.Helper()
 	dsn := os.Getenv("MIGRATE_SMOKE_DSN")
@@ -31,6 +32,9 @@ func setupPostgres(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("connect: %v", err)
+	}
+	if err := database.RunMigrations(db, zap.NewNop()); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	return db
 }

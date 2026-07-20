@@ -12,10 +12,6 @@ scripts/deploy/
 │   ├── smoke-audit.ps1          # audit_logs 배포 smoke (fail-closed)
 │   ├── check-migration-status*.ps1
 │   ├── run-migration*.ps1
-│   ├── init-migration-system.ps1
-│   ├── migrate-tracking-table.ps1
-│   ├── upgrade-tracking-table.ps1
-│   ├── force-upgrade-tracking.ps1
 │   ├── deploy-with-migration.ps1
 │   ├── deploy-cors-update.ps1
 │   ├── azure-plan.md

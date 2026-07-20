@@ -10,8 +10,11 @@ services:
     ports:
       - "5432:5432"
     volumes:
+      # No init-db mount: the schema is owned by the Go migrator, which applies
+      # migrations/000..NNN on API start. (This previously mounted a
+      # scripts/init-db.sql that did not exist — Docker silently created it as a
+      # directory, so the entrypoint found nothing and the database came up bare.)
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U authway -d authway"]
       interval: 10s
@@ -110,39 +113,15 @@ services:
     networks:
       - authway-network
 
-  # Admin Dashboard (React)
-  admin-dashboard:
-    build:
-      context: ./packages/web/admin-dashboard
-      dockerfile: Dockerfile.dev
-    container_name: authway-admin
-    environment:
-      VITE_API_URL: "http://localhost:8080"
-      VITE_HYDRA_PUBLIC_URL: "http://localhost:4444"
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./packages/web/admin-dashboard:/app
-      - /app/node_modules
-    networks:
-      - authway-network
-
-  # Login UI (React)
-  login-ui:
-    build:
-      context: ./packages/web/login-ui
-      dockerfile: Dockerfile.dev
-    container_name: authway-login
-    environment:
-      VITE_API_URL: "http://localhost:8080"
-      VITE_HYDRA_PUBLIC_URL: "http://localhost:4444"
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./packages/web/login-ui:/app
-      - /app/node_modules
-    networks:
-      - authway-network
+  # The two Vite apps are NOT services here. They ran as containers built from
+  # ./packages/web/{admin-dashboard,login-ui} long after those directories were
+  # renamed to apps/central/admin and apps/branding/auth-ui, so `docker compose up`
+  # failed on a missing build context for anyone who tried. Rather than restore a
+  # second definition of the frontend dev environment, compose now provides only
+  # the backing services; run the UIs natively, which is also where Vite HMR works:
+  #
+  #   cd apps/central/admin   && npm run dev   # http://localhost:3000
+  #   cd apps/branding/auth-ui && npm run dev  # http://localhost:3001
 
 volumes:
   postgres_data:

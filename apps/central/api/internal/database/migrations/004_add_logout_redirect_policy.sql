@@ -5,7 +5,9 @@
 -- to clients table for enhanced OAuth 2.0 logout flows
 -- ============================================================
 
-BEGIN;
+-- No BEGIN;/COMMIT; here: RunMigrations wraps the whole run in one transaction,
+-- and a nested COMMIT would commit that outer transaction early — dropping the
+-- all-or-nothing guarantee for every migration that follows.
 
 -- ============================================================
 -- Add CORS and Logout Redirect Policy columns to clients table
@@ -30,7 +32,7 @@ COMMENT ON COLUMN clients.logout_redirect_policy IS 'Logout redirect validation 
 COMMENT ON COLUMN clients.default_logout_uri IS 'Default logout redirect URI when none provided by client';
 COMMENT ON COLUMN clients.allow_wildcard_logout IS 'Allow wildcard patterns in post_logout_redirect_uri (e.g., https://*.example.com)';
 
-COMMIT;
+
 
 -- ============================================================
 -- Migration Complete: Logout Redirect Policy Added

@@ -14,6 +14,28 @@ jobs:
   go:
     name: Go build / vet / test
     runs-on: ubuntu-latest
+
+    # The migration and client-persistence tests need a real Postgres: the
+    # constraints they guard (`redirect_uris text[] NOT NULL`, CHECK constraints,
+    # array types) cannot be expressed by the SQLite harness the other tests use,
+    # and a defect already escaped through that blind spot (commit 7082776).
+    # They were written gated on MIGRATE_SMOKE_DSN and, until this service
+    # existed, silently SKIPPED here — automated coverage was zero.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: authway
+          POSTGRES_USER: authway
+          POSTGRES_PASSWORD: authway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U authway -d authway"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v5
 
@@ -29,7 +51,32 @@ jobs:
         run: go vet ./...
 
       - name: Test (central API)
+        # Each migration test creates and drops its own throwaway database on
+        # this server, so the DSN's own database is only used by the client
+        # persistence tests, which bring the schema up via the real migrator.
+        env:
+          MIGRATE_SMOKE_DSN: postgres://authway:authway@localhost:5432/authway?sslmode=disable
         run: go test ./apps/central/api/...
+
+      # Fails the build if the Postgres-gated tests silently stop running — a
+      # skip here looks identical to a pass in the summary above.
+      - name: Verify Postgres-gated tests actually ran
+        env:
+          MIGRATE_SMOKE_DSN: postgres://authway:authway@localhost:5432/authway?sslmode=disable
+        run: |
+          set -euo pipefail
+          out="$(go test -v -count=1 \
+            -run 'TestMigrateFreshDatabase|TestInitialSchemaIsIdempotentOnPopulatedDatabase|TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs' \
+            ./apps/central/api/internal/database/ ./apps/central/api/pkg/client/)"
+          echo "$out"
+          for name in TestMigrateFreshDatabase \
+                      TestInitialSchemaIsIdempotentOnPopulatedDatabase \
+                      TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs; do
+            if ! grep -q "^--- PASS: $name" <<<"$out"; then
+              echo "::error::$name did not run against Postgres (skipped or failed)"
+              exit 1
+            fi
+          done
 
   # The two Vite apps live outside the pnpm workspace (each has its own
   # package-lock.json), so they were invisible to CI — their test suites only ever

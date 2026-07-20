@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A blank database can be provisioned again.** `schema_migrations` carried a
+  bookkeeping row at version `000` — the same version as the initial schema
+  file — so the migrator considered the initial schema applied on every
+  database and never ran it. On an empty database migration `001` failed with
+  `relation "users" does not exist`, making disaster recovery, a new
+  environment, and a new contributor's local setup all depend on an undocumented
+  manual `psql` step. The sentinel is gone; `version` now belongs to migration
+  files alone.
+
+  The initial schema was also a script whose first act was
+  `DROP TABLE ... CASCADE` — the collision skipping it is the only reason no
+  deployment was ever wiped. It is replaced by `000_initial_schema.sql`, which
+  creates without dropping and is guarded so it does nothing at all when a
+  schema already exists. The destructive script survives as an explicitly
+  invoked development reset at `scripts/bootstrap/dev-clean-slate.sql`.
+
+  Verified against a live Postgres in both directions: a blank database
+  provisions end to end, and re-applying the initial schema to a populated,
+  fully-migrated database with data in it leaves schema and rows untouched.
+  Both are now regression tests. Existing deployments skip `000` regardless —
+  confirmed by query on staging and prod.
+
+- **Migrations 004 and 005 broke the all-or-nothing guarantee.** `RunMigrations`
+  wraps the whole run in one transaction; these two opened their own `BEGIN` and
+  `COMMIT`, and the inner COMMIT committed the outer transaction, so a later
+  failure could no longer roll the run back. The migration guide advised this,
+  and now says the opposite.
+
+- **Postgres-gated tests were silently skipped in CI.** The migration and
+  client-persistence guards need constraints SQLite cannot express
+  (`text[] NOT NULL`, CHECK constraints) — the blind spot a NOT NULL violation
+  already escaped through. CI now runs a Postgres service, and a follow-up step
+  fails the build if any of those tests stops actually running.
+
+### Removed
+
+- Four unused deploy scripts that converted a long-gone `schema_migrations`
+  layout (`init-migration-system.ps1`, `migrate-tracking-table.ps1`,
+  `upgrade-tracking-table.ps1`, `force-upgrade-tracking.ps1`). Nothing called
+  them, and each reinserted the version-`000` sentinel — three also claimed
+  version `001`, which a real migration owns.
+- The two Vite apps as `docker-compose` services. They built from
+  `packages/web/*`, renamed long ago, so `docker compose up` failed on a missing
+  build context. Compose now provides the backing services only; run the UIs
+  with `npm run dev`, where Vite HMR works properly anyway.
+
 ## [0.4.0] - 2026-07-20
 
 > Run-17, triggered by consumer-reported issues from VibeBase. Minor because

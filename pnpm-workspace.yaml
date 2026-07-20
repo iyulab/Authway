@@ -1,6 +1,6 @@
+# The two Vite apps (apps/central/admin, apps/branding/auth-ui) are deliberately
+# NOT members: each carries its own package-lock.json and is built with npm.
 packages:
   - 'packages/*'
-  - 'packages/web/*'
-  - 'examples/*'
   - 'samples/*'
   - 'samples/*/asp-frontend'

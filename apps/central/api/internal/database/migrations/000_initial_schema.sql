@@ -1,32 +1,47 @@
 -- ============================================================
--- Authway v0.x Clean Slate Migration
+-- 000: Initial schema
 -- ============================================================
--- WARNING: This migration DROPS all existing tables
--- Only use this in development (v0.x) - NO backward compatibility
+-- Creates the base tables every later migration builds on.
+--
+-- The whole file is wrapped in a guard: if `tenants` already exists, nothing
+-- runs. That makes it a no-op on any database that already has a schema —
+-- which is the property that keeps existing deployments safe, and it is a
+-- structural guarantee rather than a per-statement one.
+--
+-- Per-statement `IF NOT EXISTS` is NOT sufficient here and was tried first.
+-- Later migrations reshape these tables (013/014 drop `token` in favour of
+-- `token_hash`), so re-running the 000-era `CREATE INDEX ... (token)` against a
+-- current database fails with `column "token" does not exist`. Any future
+-- migration that drops a column would reopen the same hole. One guard on "is
+-- there a schema at all" closes it permanently.
+--
+-- History: this replaced 000_v0_clean_slate.sql, whose first act was
+-- `DROP TABLE ... CASCADE`. That file was never actually executed — its version
+-- collided with a bookkeeping sentinel row, so the migrator always considered it
+-- applied, which is the only reason no deployment was ever wiped, and also why
+-- no blank database could be provisioned. The destructive script now lives at
+-- scripts/bootstrap/dev-clean-slate.sql and is only ever run by hand.
+--
+-- Deliberately contains NO `BEGIN;`/`COMMIT;`: RunMigrations owns a single outer
+-- transaction for the whole run, and a nested COMMIT would commit it early,
+-- destroying the all-or-nothing guarantee.
+--
+-- Only base tables belong here. Columns added later (claims, MFA, consent flags,
+-- token hashing, …) stay in their own migrations — this file must keep
+-- describing the schema as it was at 000, or a fresh database and an existing
+-- one would diverge.
 -- ============================================================
 
-BEGIN;
+DO $do$
+BEGIN
+
+IF to_regclass('public.tenants') IS NOT NULL THEN
+    RAISE NOTICE '000_initial_schema: schema already present, skipping';
+    RETURN;
+END IF;
 
 -- ============================================================
--- DANGER ZONE: Drop all existing tables
--- ============================================================
-
-DROP TABLE IF EXISTS admin_sessions CASCADE;
-DROP TABLE IF EXISTS password_resets CASCADE;
-DROP TABLE IF EXISTS email_verifications CASCADE;
-DROP TABLE IF EXISTS consent_grants CASCADE;
-DROP TABLE IF EXISTS sessions CASCADE;
-DROP TABLE IF EXISTS user_sessions CASCADE;
-DROP TABLE IF EXISTS clients CASCADE;
-DROP TABLE IF EXISTS oauth_clients CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS tenants CASCADE;
-
--- Drop functions
-DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
-
--- ============================================================
--- 1. Tenants Table (Base isolation unit)
+-- 1. Tenants (base isolation unit)
 -- ============================================================
 
 CREATE TABLE tenants (
@@ -55,12 +70,11 @@ COMMENT ON TABLE tenants IS 'Multi-tenant isolation boundary. Each tenant repres
 COMMENT ON COLUMN tenants.slug IS 'URL-friendly unique identifier for tenant';
 COMMENT ON COLUMN tenants.settings IS 'Tenant-specific configuration (email verification, password policy, session timeout, etc.)';
 
--- Insert default tenant
 INSERT INTO tenants (name, slug, description, active)
 VALUES ('Default Tenant', 'default', 'Default tenant for multi-tenant mode', true);
 
 -- ============================================================
--- 2. Users Table (with tenant_id from the start)
+-- 2. Users (tenant-scoped from the start)
 -- ============================================================
 
 CREATE TABLE users (
@@ -94,7 +108,7 @@ COMMENT ON COLUMN users.tenant_id IS 'Tenant isolation - users belong to exactly
 COMMENT ON COLUMN users.provider IS 'Authentication provider: local, google, github';
 
 -- ============================================================
--- 3. Clients Table (OAuth 2.0 clients with tenant_id)
+-- 3. Clients (OAuth 2.0 clients, tenant-scoped)
 -- ============================================================
 
 CREATE TABLE clients (
@@ -138,7 +152,7 @@ COMMENT ON COLUMN clients.google_oauth_enabled IS 'If true, use client-specific 
 COMMENT ON COLUMN clients.github_oauth_enabled IS 'If true, use client-specific GitHub OAuth; otherwise use Authway common settings';
 
 -- ============================================================
--- 4. Sessions Table (with tenant_id for SSO verification)
+-- 4. Sessions (tenant_id carried for SSO verification)
 -- ============================================================
 
 CREATE TABLE sessions (
@@ -160,7 +174,7 @@ COMMENT ON TABLE sessions IS 'User sessions with tenant_id for SSO verification'
 COMMENT ON COLUMN sessions.tenant_id IS 'Tenant context - SSO check: session.tenant_id == client.tenant_id';
 
 -- ============================================================
--- 5. Email Verification Table
+-- 5. Email verification
 -- ============================================================
 
 CREATE TABLE email_verifications (
@@ -179,7 +193,7 @@ CREATE INDEX idx_email_verifications_token ON email_verifications(token);
 COMMENT ON TABLE email_verifications IS 'Email verification tokens for user registration';
 
 -- ============================================================
--- 6. Password Reset Table
+-- 6. Password reset
 -- ============================================================
 
 CREATE TABLE password_resets (
@@ -198,7 +212,7 @@ CREATE INDEX idx_password_resets_token ON password_resets(token);
 COMMENT ON TABLE password_resets IS 'Password reset tokens for user recovery';
 
 -- ============================================================
--- 7. Admin Sessions Table
+-- 7. Admin sessions
 -- ============================================================
 
 CREATE TABLE admin_sessions (
@@ -216,16 +230,20 @@ COMMENT ON COLUMN admin_sessions.token IS 'Session token for admin console authe
 COMMENT ON COLUMN admin_sessions.expires_at IS 'Token expiration time (24 hours default)';
 
 -- ============================================================
--- 8. Trigger for updated_at
+-- 8. updated_at trigger
 -- ============================================================
 
+-- The function body uses its own dollar-quote tag, distinct from the one that
+-- opens the guard above. Reusing that tag anywhere in here (even inside a
+-- comment — dollar quoting is lexical and ignores comment syntax) would close
+-- the guard early and leave the rest of the file as bare, broken SQL.
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$fn$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -239,14 +257,5 @@ CREATE TRIGGER update_clients_updated_at BEFORE UPDATE ON clients
 CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE ON sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMIT;
-
--- ============================================================
--- Migration Complete
--- ============================================================
---
--- Verification queries:
--- SELECT * FROM tenants;
--- SELECT COUNT(*) FROM users;
--- SELECT COUNT(*) FROM clients;
--- SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+END
+$do$;

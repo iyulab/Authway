@@ -1,7 +1,30 @@
 # Database Migrations Guide
 
 **Version**: 0.2.0+
-**Last Updated**: 2025-11-17
+**Last Updated**: 2026-07-20
+
+> **How migrations actually run today**
+>
+> The Go migrator in `apps/central/api/internal/database/migrate.go` applies
+> every migration at API startup, inside **one transaction for the whole run**.
+> It is the only live path. The psql-driven flow described in
+> "Migration Execution Methods" below is **deprecated** —
+> `Invoke-AutoMigration` throws, and the deploy scripts no longer call it.
+>
+> Three consequences that contradict older sections of this document:
+>
+> 1. **Migration files must not contain `BEGIN;` / `COMMIT;`.** A nested COMMIT
+>    commits the migrator's outer transaction early and voids the
+>    all-or-nothing guarantee. (004 and 005 did exactly this until 2026-07-20.)
+> 2. **`schema_migrations.version` holds migration versions only.** The
+>    `('000', 'init_migration_system')` bookkeeping row shown below is gone: it
+>    collided with `000_initial_schema.sql`, so the initial schema was skipped
+>    on every database and no blank database could be provisioned.
+> 3. **A blank database needs no manual step.** Start the API against it;
+>    `000_initial_schema.sql` builds the base schema and 001..NNN evolve it.
+>
+> The authoritative, current reference is
+> [`apps/central/api/internal/database/migrations/README.md`](../apps/central/api/internal/database/migrations/README.md).
 
 ## Overview
 
@@ -168,6 +191,11 @@ WHERE column IS NULL;
 ```
 
 ## Migration Execution Methods
+
+> **Deprecated except for §2.** Only the Go migration runner (§2) still runs.
+> The psql-based methods below are kept as a record of how migrations were
+> applied before v0.4.0; `Invoke-AutoMigration` now throws if called.
+> Their `BEGIN;`/`COMMIT;` templates do **not** apply to migration files.
 
 ### 1. PowerShell Script (Azure CLI)
 
