@@ -1,15 +1,23 @@
-# Changelog
-
-All notable changes to Authway will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
----
-
 ## [Unreleased]
 
 ### Security
+
+- **Bound parameters no longer reach the logs.** The GORM logger was pinned to
+  `Info` in every environment, which prints each statement with its values
+  inlined. Live secrets went to the container console that way — an invitation
+  token (which grants account creation) and a magic-link token (which is a login
+  factor on its own) were both read out of staging logs. Outside development the
+  logger now runs at `Warn` with `ParameterizedQueries`, because the level alone
+  is not enough: GORM still prints full SQL for slow queries and for errors, so
+  redaction is what actually closes it. Development keeps the values, since
+  that is the whole point of them there.
+
+- **Magic-link tokens are hashed at rest** (migration 019). The 010/013/014 pass
+  hashed admin sessions, password resets and email verifications but missed
+  `magic_link_tokens.token` — the one table where a plain read of the column is
+  a working login for any pending link. Stored as a SHA-256 digest now, via the
+  shared `pkg/tokenhash`. Existing links are invalidated by the migration; they
+  live fifteen minutes, so the cost is one retry.
 
 - **Social sign-in no longer creates accounts for uninvited people.** Google,
   GitHub, Microsoft and Apple all provisioned a user on first sign-in, so
@@ -61,6 +69,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Emailed links now point at the auth UI instead of the API.** Invitation
+  accept, magic link, email verification and password reset URLs were all built
+  from `app.base_url`, which is this API's own address — the value the discovery
+  document advertises as `api_server`, and the value the deploy script hardwires
+  to `API_URL`. Every one of those links returned 404, in every environment, and
+  no configuration could fix it because no frontend URL setting existed. Under
+  invitation-only onboarding that left no way for a person to get an account at
+  all; only a consumer able to call `POST /api/v1/invitations/accept` directly
+  could get through. There is now a separate `app.frontend_url`
+  (`AUTHWAY_APP_FRONTEND_URL`), and startup fails if it is missing, equal to
+  `base_url`, or a loopback address in production — the last case because Viper
+  ignores an empty environment variable and silently falls back to the localhost
+  default. Reported by VibeBase.
+
 - **A fresh instance can be given its first user.** Onboarding is
   invitation-only and the sole admin-side surface for creating a user is
   `POST /api/v1/invitations` — but that endpoint required an existing user as
@@ -99,6 +121,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/magic-link`.
 
 ### Added
+
+- **Deploys check that emailed links are reachable.** `publish-api.core.ps1`
+  reads `auth_ui` back from `/api/v1/config` to confirm the running binary got
+  the URL that was meant for it, then requests all four link paths and requires
+  200. No mail is sent, so it leaves no test accounts or bounces behind.
+
+- **`pkg/maillink`** holds the mail link paths in one place, and a contract test
+  checks each one against the routes the auth UI actually declares. The deploy
+  check cannot do this: a single-page app served with a 200-rewrite answers
+  *every* path with the same shell, so a link to a route that does not exist
+  still returns 200. That is not hypothetical — magic-link mail once pointed at
+  `/auth/magic-link/verify`, a route only the API has.
 
 - **A schema contract test** (`internal/database/schema_contract_test.go`) writes
   one row per feature model against the real migrated schema. Every defect above

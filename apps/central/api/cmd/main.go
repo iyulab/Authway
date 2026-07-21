@@ -70,7 +70,7 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := database.Connect(cfg.Database)
+	db, err := database.Connect(cfg.Database, cfg.App.Environment)
 	if err != nil {
 		zapLogger.Fatal("Failed to connect to database", zap.Error(err))
 	}
@@ -165,7 +165,7 @@ func main() {
 			ProfileID:   cfg.Email.AzureProfile,
 			FromEmail:   cfg.Email.FromEmail,
 			FromName:    cfg.Email.FromName,
-			FrontendURL: cfg.App.BaseURL,
+			FrontendURL: cfg.App.FrontendURL,
 		}
 		emailService = email.NewAzureEmailService(azureConfig, zapLogger)
 	} else {
@@ -180,7 +180,7 @@ func main() {
 			SMTPPassword: cfg.Email.SMTPPassword,
 			FromEmail:    cfg.Email.FromEmail,
 			FromName:     cfg.Email.FromName,
-			FrontendURL:  cfg.App.BaseURL,
+			FrontendURL:  cfg.App.FrontendURL,
 		}
 		emailService = email.NewService(smtpConfig, zapLogger)
 	}
@@ -231,6 +231,10 @@ func main() {
 			"issuer":      cfg.Hydra.PublicURL,
 			"auth_server": cfg.Hydra.PublicURL,
 			"api_server":  cfg.App.BaseURL,
+			// The auth UI's public address. Advertised so consumers can link to
+			// it, and so the deploy gate can read back the value this instance
+			// actually got — a wrong one here means every emailed link 404s.
+			"auth_ui": cfg.App.FrontendURL,
 			"version":     cfg.App.Version,
 		})
 	})
@@ -239,7 +243,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.BaseURL)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.FrontendURL)
 
 	// Admin handler depends on audit.Service so auth failures surface in
 	// audit_logs (see pkg/admin/handler.go logAuthFailure).

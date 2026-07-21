@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
 	"github.com/google/uuid"
@@ -45,18 +46,18 @@ type service struct {
 	tenantService *tenant.Service
 	emailSender   EmailSender
 	logger        *zap.Logger
-	baseURL       string
+	frontendURL   string
 	expiry        time.Duration
 }
 
-func NewService(db *gorm.DB, userService user.Service, tenantService *tenant.Service, emailSender EmailSender, logger *zap.Logger, baseURL string) Service {
+func NewService(db *gorm.DB, userService user.Service, tenantService *tenant.Service, emailSender EmailSender, logger *zap.Logger, frontendURL string) Service {
 	return &service{
 		db:            db,
 		userService:   userService,
 		tenantService: tenantService,
 		emailSender:   emailSender,
 		logger:        logger,
-		baseURL:       baseURL,
+		frontendURL:   frontendURL,
 		expiry:        7 * 24 * time.Hour,
 	}
 }
@@ -119,7 +120,7 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	invitation.TenantName = t.Name
 	invitation.InviterName = inviterName
 	if s.emailSender != nil {
-		inviteURL := fmt.Sprintf("%s/invitation/accept?token=%s", s.baseURL, invitation.Token)
+		inviteURL := maillink.InvitationAccept(s.frontendURL, invitation.Token)
 		if err := s.emailSender.SendInvitationEmail(req.Email, inviterName, t.Name, req.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to send invitation email", zap.Error(err), zap.String("email", req.Email))
 		}
@@ -325,7 +326,7 @@ func (s *service) Resend(id uuid.UUID) error {
 		return fmt.Errorf("failed to update invitation: %w", err)
 	}
 	if s.emailSender != nil {
-		inviteURL := fmt.Sprintf("%s/invitation/accept?token=%s", s.baseURL, inv.Token)
+		inviteURL := maillink.InvitationAccept(s.frontendURL, inv.Token)
 		if err := s.emailSender.SendInvitationEmail(inv.Email, inv.InviterName, inv.TenantName, inv.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to resend invitation email", zap.Error(err), zap.String("email", inv.Email))
 		}

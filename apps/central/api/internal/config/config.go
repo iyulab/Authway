@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -46,7 +48,15 @@ type AppConfig struct {
 	Version     string `mapstructure:"version"`
 	Environment string `mapstructure:"environment"`
 	Port        string `mapstructure:"port"`
-	BaseURL     string `mapstructure:"base_url"`
+	// BaseURL is this API's own public address. It is what discovery advertises
+	// as api_server — it is NOT where humans go. Anything a person clicks
+	// belongs on FrontendURL.
+	BaseURL string `mapstructure:"base_url"`
+	// FrontendURL is the auth UI's public address, the host for every link we
+	// put in an email: invitation accept, magic link, verify email, reset
+	// password. These used to be built from BaseURL, which pointed at the API,
+	// so every emailed link 404'd in every environment.
+	FrontendURL string `mapstructure:"frontend_url"`
 }
 
 type DatabaseConfig struct {
@@ -414,6 +424,22 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Fail-closed: emailed links must point at the auth UI, never at this API.
+	// Checked in every environment because the failure is silent — a wrong value
+	// compiles, boots, sends mail, and only the recipient ever sees the 404.
+	if c.App.FrontendURL == "" {
+		errors = append(errors, "app.frontend_url (AUTHWAY_APP_FRONTEND_URL) is required — the auth UI's public URL, used for invitation/magic-link/verify-email/reset-password links")
+	} else if c.App.FrontendURL == c.App.BaseURL {
+		errors = append(errors, "app.frontend_url must not equal app.base_url — base_url is this API's own address, and emailed links pointing at it return 404")
+	} else if c.App.Environment == "production" && isLoopbackURL(c.App.FrontendURL) {
+		// The required-check above cannot catch this on its own: viper's
+		// AutomaticEnv ignores an empty environment variable (allowEmptyEnv is
+		// false), so AUTHWAY_APP_FRONTEND_URL= silently falls back to the
+		// localhost default instead of failing. Production would then mail out
+		// links to a host only the container can reach.
+		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL in production, got %q — emailed links would point at the container itself", c.App.FrontendURL))
+	}
+
 	// Warn about missing admin password in all environments
 	if c.Admin.Password == "" {
 		errors = append(errors, "WARNING: admin.password is not set - admin console will be inaccessible")
@@ -426,6 +452,24 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// isLoopbackURL reports whether u points at the machine running the process.
+// Parsing rather than substring-matching so that a legitimate public host that
+// merely contains "localhost" in a path or query is not rejected.
+func isLoopbackURL(u string) bool {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsUnspecified()
+	}
+	return false
+}
+
 func setDefaults() {
 	// App defaults
 	viper.SetDefault("app.name", "Authway")
@@ -433,6 +477,8 @@ func setDefaults() {
 	viper.SetDefault("app.environment", "development")
 	viper.SetDefault("app.port", "8080")
 	viper.SetDefault("app.base_url", "http://localhost:8080")
+	// The auth UI's vite dev server, not the API port — see AppConfig.FrontendURL.
+	viper.SetDefault("app.frontend_url", "http://localhost:3001")
 
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")

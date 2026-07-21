@@ -7,6 +7,7 @@ import (
 	"net/smtp"
 	"strings"
 
+	"authway/apps/central/api/pkg/maillink"
 	"go.uber.org/zap"
 )
 
@@ -49,7 +50,7 @@ func NewService(config Config, logger *zap.Logger) *Service {
 
 // SendVerificationEmail sends an email verification link
 func (s *Service) SendVerificationEmail(toEmail, token string) error {
-	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", s.frontendURL, token)
+	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
 	subject := "Authway - 이메일 인증"
 	body := s.renderVerificationTemplate(verificationLink)
@@ -59,7 +60,7 @@ func (s *Service) SendVerificationEmail(toEmail, token string) error {
 
 // SendPasswordResetEmail sends a password reset link
 func (s *Service) SendPasswordResetEmail(toEmail, token string) error {
-	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
+	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
 	subject := "Authway - 비밀번호 재설정"
 	body := s.renderPasswordResetTemplate(resetLink)

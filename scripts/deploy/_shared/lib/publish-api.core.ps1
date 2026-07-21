@@ -124,6 +124,7 @@ try {
             "PORT=8080" `
             "AUTHWAY_APP_PORT=8080" `
             "AUTHWAY_APP_BASE_URL=$($envVars['API_URL'])" `
+            "AUTHWAY_APP_FRONTEND_URL=$($envVars['AUTH_UI_URL'])" `
             "AUTHWAY_ADMIN_PASSWORD=$($envVars['AUTHWAY_ADMIN_PASSWORD'])" `
             "AUTHWAY_DATABASE_HOST=$($envVars['AUTHWAY_DATABASE_HOST'])" `
             "AUTHWAY_DATABASE_PORT=$($envVars['AUTHWAY_DATABASE_PORT'])" `
@@ -231,6 +232,72 @@ try {
         Write-Host "   배포된 빌드가 adminAuth를 적용하지 않거나 API key env-var가 주입되지 않았습니다." -ForegroundColor Yellow
         Write-Host "   즉시 롤백 권고: az containerapp revision set-mode --mode single" -ForegroundColor Yellow
         throw "adminAuth smoke 검증 실패"
+    }
+
+    # ------------------------------------------------------------
+    # Mail-link smoke: can a human actually reach what we email them?
+    # ------------------------------------------------------------
+    # ISSUE-Authway-20260721-170000-frontend-url-config-missing 재발 방지 게이트.
+    # 초대·매직링크·인증·재설정 링크는 전부 auth UI 호스트로 만들어진다. 그 호스트가
+    # 틀리거나(구성) 딥링크를 서빙하지 않으면(CDN SPA fallback) 발송은 성공하는데
+    # 수신자만 404 를 본다 — 어떤 API 응답으로도 드러나지 않는 침묵형 고장이다.
+    #   1. /api/v1/config.auth_ui == AUTH_UI_URL  → 배포된 바이너리가 받은 값이 맞나
+    #   2. 링크 4종 cold GET == 200               → 그 호스트가 딥링크를 서빙하나
+    # 메일을 실제로 보내지 않으므로 테스트 계정·bounce 를 남기지 않는다.
+
+    $AuthUiUrl = $envVars['AUTH_UI_URL']
+    Write-Host "✉️  mail-link smoke test..." -ForegroundColor Yellow
+
+    if (-not $AuthUiUrl) {
+        Write-Host "  ❌ AUTH_UI_URL 이 .env 에 없음" -ForegroundColor Red
+        throw "mail-link smoke 검증 실패: AUTH_UI_URL 미설정"
+    }
+
+    try {
+        $discovery = Invoke-RestMethod -Uri "$ApiUrl/api/v1/config" -Method Get -TimeoutSec 10 -ErrorAction Stop
+    } catch {
+        throw "mail-link smoke 검증 실패: /api/v1/config 조회 불가 ($_)"
+    }
+
+    if ($discovery.auth_ui -ne $AuthUiUrl) {
+        Write-Host "  ❌ 배포된 auth_ui = '$($discovery.auth_ui)' (기대 '$AuthUiUrl')" -ForegroundColor Red
+        Write-Host "     AUTHWAY_APP_FRONTEND_URL 주입이 누락됐거나 빈 값입니다." -ForegroundColor Yellow
+        Write-Host "     빈 값은 viper 가 무시하고 기본값(localhost)으로 되돌립니다." -ForegroundColor Yellow
+        throw "mail-link smoke 검증 실패: auth_ui 불일치"
+    }
+    Write-Host "  ✓ auth_ui = $AuthUiUrl (일치)" -ForegroundColor Green
+
+    # 메일 템플릿이 만드는 경로 전부. 하나라도 404 면 그 메일은 도착해도 무용지물이다.
+    $linkPaths = @(
+        '/invitation/accept?token=deploy-probe',
+        '/magic-link?token=deploy-probe',
+        '/verify-email?token=deploy-probe',
+        '/reset-password?token=deploy-probe'
+    )
+    $linkFailures = @()
+    foreach ($path in $linkPaths) {
+        try {
+            $resp = Invoke-WebRequest -Uri "$AuthUiUrl$path" -Method Get -TimeoutSec 15 `
+                -SkipHttpErrorCheck -ErrorAction Stop
+            $code = [int]$resp.StatusCode
+        } catch {
+            $code = 0
+            if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+        }
+        if ($code -eq 200) {
+            Write-Host "  ✓ $path → 200" -ForegroundColor Green
+        } else {
+            Write-Host "  ❌ $path → $code (200 기대)" -ForegroundColor Red
+            $linkFailures += "$path=$code"
+        }
+    }
+
+    if ($linkFailures.Count -gt 0) {
+        Write-Host ""
+        Write-Host "❌ mail-link smoke 실패: $($linkFailures -join ', ')" -ForegroundColor Red
+        Write-Host "   auth UI 가 배포되지 않았거나, SPA 딥링크 fallback(_redirects 200 rewrite)이" -ForegroundColor Yellow
+        Write-Host "   설정되지 않았습니다. 이 상태로는 초대 메일을 받은 사용자가 전원 404 를 봅니다." -ForegroundColor Yellow
+        throw "mail-link smoke 검증 실패"
     }
 
     Write-Host ""

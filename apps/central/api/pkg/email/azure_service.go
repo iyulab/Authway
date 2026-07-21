@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"authway/apps/central/api/pkg/maillink"
 	"go.uber.org/zap"
 )
 
@@ -74,7 +75,7 @@ func NewAzureEmailService(config AzureEmailConfig, logger *zap.Logger) *AzureEma
 
 // SendVerificationEmail sends an email verification link via Azure Functions
 func (s *AzureEmailService) SendVerificationEmail(toEmail, token string) error {
-	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", s.frontendURL, token)
+	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
 	req := AzureEmailRequest{
 		To:       []string{toEmail},
@@ -92,7 +93,7 @@ func (s *AzureEmailService) SendVerificationEmail(toEmail, token string) error {
 
 // SendPasswordResetEmail sends a password reset link via Azure Functions
 func (s *AzureEmailService) SendPasswordResetEmail(toEmail, token string) error {
-	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
+	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
 	req := AzureEmailRequest{
 		To:       []string{toEmail},

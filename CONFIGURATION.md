@@ -96,8 +96,15 @@ AUTHWAY_APP_NAME=Authway                    # Display name
 AUTHWAY_APP_VERSION=1.0.0                   # Version number
 AUTHWAY_APP_ENVIRONMENT=development         # development|staging|production
 AUTHWAY_APP_PORT=8080                       # HTTP port
-AUTHWAY_APP_BASE_URL=http://localhost:8080  # Public URL for redirects
+AUTHWAY_APP_BASE_URL=http://localhost:8080      # This API's own public URL (discovery `api_server`)
+AUTHWAY_APP_FRONTEND_URL=http://localhost:3001  # The auth UI's public URL
 ```
+
+`BASE_URL` and `FRONTEND_URL` are different hosts and must not be set to the
+same value — startup fails if they are. Everything a person clicks is built from
+`FRONTEND_URL`: invitation accept, magic link, email verification, password
+reset. Pointing those at the API returns 404, and nothing else in the system
+notices — only the recipient of the mail does.
 
 ### Database Configuration
 
