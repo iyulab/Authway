@@ -9,6 +9,7 @@ import (
 	"authway/apps/central/api/internal/database"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
+	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
@@ -104,6 +105,15 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			UserID: userID, TenantID: tenantID,
 			ClaimKey: "contract-" + uuid.New().String()[:8], ClaimValue: map[string]any{"v": true},
 		}, "user_claims"},
+		// password_resets/email_verifications drifted the same way (000 never
+		// had used_at/updated_at, 013/014 only renamed the token column), so
+		// forgot-password 500'd in prod on the very first real call.
+		{"password_reset", &email.PasswordReset{
+			UserID: userID, TokenHash: uuid.New().String(), ExpiresAt: future,
+		}, "password_resets"},
+		{"email_verification", &email.EmailVerification{
+			UserID: userID, TokenHash: uuid.New().String(), ExpiresAt: future,
+		}, "email_verifications"},
 		{"audit_log", &audit.AuditLog{
 			TenantID: tenantID, ActorEmail: "c@example.com", ActorType: "system",
 			Action: audit.ActionAdminAction, Severity: audit.SeverityInfo,
@@ -146,6 +156,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 	tables := []string{
 		"invitations", "impersonation_sessions", "magic_link_tokens",
 		"webhooks", "user_claims", "audit_logs",
+		"password_resets", "email_verifications",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
 	for _, table := range tables {
