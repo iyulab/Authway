@@ -46,8 +46,11 @@ Exemple de configuration complète avec fonctionnalités avancées. Ce fichier s
 
 ### Configuration Hydra
 
-#### `hydra.yml`
-Configuration pour le serveur Ory Hydra OAuth2.
+Hydra n'a pas de fichier de configuration ici. Il est configuré uniquement par
+variables d'environnement — dans `docker-compose.yml` en local, et par
+`scripts/deploy/_shared/lib/publish-hydra.core.ps1` en production. Un `hydra.yml`
+monté serait une deuxième source de vérité silencieusement écrasée, puisque les
+variables d'environnement ont priorité sur le fichier.
 
 ### Configuration Monitoring
 

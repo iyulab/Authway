@@ -195,16 +195,17 @@ Uses environment variables from `.env` file:
 ./start-dev.ps1
 ```
 
-### Full Docker Mode (Everything in Docker)
+### Backing Services Only
 
-Override environment variables:
+`docker-compose.yml` provides Postgres, Redis, MailHog and Hydra. The APIs and
+UIs run natively, so their environment comes from `.env` (or the shell), not
+from compose:
 
 ```bash
-# Use default values from docker-compose.dev.yml
-docker-compose -f docker-compose.dev.yml --profile full up
+docker compose up -d
 
-# Override with custom values
-AUTHWAY_ADMIN_PASSWORD=mypassword docker-compose -f docker-compose.dev.yml --profile full up
+# Override for a single run
+AUTHWAY_ADMIN_PASSWORD=mypassword go run ./cmd/
 ```
 
 ## Production Deployment

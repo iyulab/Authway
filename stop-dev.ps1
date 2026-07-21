@@ -69,7 +69,7 @@ Write-Host ""
 
 # Stop Docker infrastructure
 Write-Host "📦 Stopping Docker services..." -ForegroundColor Yellow
-docker-compose -f docker-compose.dev.yml down
+docker compose down
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ Docker services stopped" -ForegroundColor Green

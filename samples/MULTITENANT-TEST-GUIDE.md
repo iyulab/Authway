@@ -221,7 +221,7 @@ Get-NetTCPConnection -LocalPort 9001,9002,9003 -State Listen
 docker ps | findstr hydra
 
 # Hydra 재시작
-docker-compose -f docker-compose.dev.yml restart hydra
+docker compose restart hydra
 ```
 
 ### SSO가 작동하지 않음

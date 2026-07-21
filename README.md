@@ -39,9 +39,8 @@ See [CHANGELOG.md](./CHANGELOG.md) for complete release notes.
 ### Prerequisites
 
 - Node.js 18+, pnpm 9+
-- Go 1.21+
-- PostgreSQL 15+
-- Docker (for Hydra)
+- Go 1.25+
+- Docker (for the backing services)
 
 ### Installation
 
@@ -53,28 +52,40 @@ cd authway
 # Install dependencies
 pnpm install
 
-# Setup environment
-cp .env.example .env
-# Edit .env with your configuration
+# Each Go service reads a .env next to itself; the defaults match compose
+cp apps/central/api/.env.example apps/central/api/.env
+cp apps/branding/auth-api/.env.example apps/branding/auth-api/.env
+# Fill in GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET — the Auth Backend requires them
 
-# Start Hydra (Docker)
-docker run -d --name hydra -p 4444:4444 -p 4445:4445 \
-  oryd/hydra:v26.2.0 serve all --dev
+# Start the backing services: Postgres, Redis, MailHog, Hydra
+# (Postgres is published on 5433 and Redis on 6380 — the .env files point there)
+docker compose up -d
+```
 
-# Start Central API (port 8080)
-cd apps/central/api
-go run cmd/main.go
+On Windows, `.\start-dev.ps1` starts everything below in one step. Otherwise run
+each in its own shell:
 
-# Start Auth Backend (port 8081)
-cd apps/branding/auth-api
-go run cmd/main.go
+```bash
+# Central API (port 8080) — applies database migrations on startup
+cd apps/central/api && go run ./cmd/
 
-# Start sample app (port 9004)
-cd samples/react-sdk-sample
-pnpm dev
+# Auth Backend (port 8081)
+cd apps/branding/auth-api && go run ./cmd/
+
+# Login UI (port 3001) — Hydra redirects here for login and consent
+cd apps/branding/auth-ui && npm run dev
+
+# Admin console (port 3000)
+cd apps/central/admin && npm run dev
+
+# Sample app (port 9004)
+cd samples/react-sdk-sample && pnpm dev
 ```
 
 Access: http://localhost:9004
+
+The APIs and UIs deliberately run natively rather than in containers — see the
+comment at the top of `docker-compose.yml`.
 
 ## SDK Usage
 

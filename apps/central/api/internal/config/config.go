@@ -149,26 +149,19 @@ type ApplicationInsightsConfig struct {
 }
 
 func Load() (*Config, error) {
-	// Load .env file if it exists (silently ignore if not found)
-	// Try multiple locations
-	envLoaded := false
-	if err := godotenv.Load("../../.env"); err == nil {
-		fmt.Println("✓ Loaded .env from ../../.env")
-		envLoaded = true
-	}
-	if !envLoaded {
-		if err := godotenv.Load(".env"); err == nil {
-			fmt.Println("✓ Loaded .env from .env")
-			envLoaded = true
-		}
-	}
-	if !envLoaded {
-		if err := godotenv.Load(); err == nil {
-			fmt.Println("✓ Loaded .env from default location")
-			envLoaded = true
-		}
-	}
-	if !envLoaded {
+	// Load .env from the working directory, i.e. apps/central/api when the API is
+	// started the documented way. Absence is fine — the process environment alone
+	// is how every deployment configures this service.
+	//
+	// This used to probe "../../.env" first, meaning apps/.env: the intent was the
+	// repo root, but from apps/central/api that is three levels up, so the branch
+	// could never fire. Rather than repair the probe, it is gone — the repo root
+	// holds no .env, and reintroducing one would give two files a say over the
+	// same settings with the winner decided by which directory you happened to
+	// start from. See .env.example next to this app.
+	if err := godotenv.Load(); err == nil {
+		fmt.Println("✓ Loaded .env")
+	} else {
 		fmt.Println("⚠ No .env file found, using environment variables only")
 	}
 

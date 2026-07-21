@@ -1,5 +1,31 @@
+# Backing services for local development.
+#
+# This file provides ONLY the infrastructure Authway talks to — Postgres, Redis,
+# MailHog and Ory Hydra. The Go APIs and the two Vite apps are NOT services here;
+# they run natively on the host:
+#
+#   cd apps/central/api      && go run ./cmd/      # http://localhost:8080
+#   cd apps/branding/auth-api && go run ./cmd/     # http://localhost:8081
+#   cd apps/branding/auth-ui  && npm run dev       # http://localhost:3001
+#   cd apps/central/admin     && npm run dev       # http://localhost:3000
+#
+# `.\start-dev.ps1` does all of the above in one step.
+#
+# There used to be three compose files. docker-compose.dev.yml and
+# docker-compose.prod.yml also defined the APIs and the UIs as containers, but
+# every one of those definitions had been broken for a long time: the UI build
+# contexts pointed at packages/web/*, renamed to apps/* long ago; Dockerfile.dev
+# copied a src/ tree that no longer exists; and the "production" stack had no
+# Hydra service at all, so it could not have served OAuth even if it built.
+# Nothing was lost by deleting them — real deployments run on Azure Container
+# Apps (see scripts/deploy/), and local development has always run the apps
+# natively, which is also the only place Vite HMR and Go rebuilds are fast.
+#
+# Ports are deliberately offset from the Postgres/Redis defaults so this stack
+# can coexist with other local projects. Copy .env.example to .env to pick them
+# up; the API's built-in defaults are 5432/6379 and will NOT find these.
+
 services:
-  # PostgreSQL Database (Shared)
   postgres:
     image: postgres:15-alpine
     container_name: authway-postgres
@@ -8,12 +34,10 @@ services:
       POSTGRES_USER: authway
       POSTGRES_PASSWORD: authway
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      # No init-db mount: the schema is owned by the Go migrator, which applies
-      # migrations/000..NNN on API start. (This previously mounted a
-      # scripts/init-db.sql that did not exist — Docker silently created it as a
-      # directory, so the entrypoint found nothing and the database came up bare.)
+      # No init script is mounted: the schema belongs to the Go migrator, which
+      # applies internal/database/migrations/000..NNN when the API starts.
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U authway -d authway"]
@@ -23,12 +47,11 @@ services:
     networks:
       - authway-network
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: authway-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,89 +62,79 @@ services:
     networks:
       - authway-network
 
-  # Ory Hydra (OAuth2 Core)
+  # Captures outgoing mail instead of sending it. Web UI on :8025.
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: authway-mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+    networks:
+      - authway-network
+
+  # Hydra owns its own tables inside the same `authway` database the API uses.
+  # That mirrors production, where publish-hydra.core.ps1 builds Hydra's DSN
+  # from AUTHWAY_DATABASE_NAME — the same database as the API's. Giving Hydra a
+  # separate database locally would make the local topology diverge from the one
+  # every deployment actually runs.
   hydra-migrate:
     image: oryd/hydra:v26.2.0
     container_name: authway-hydra-migrate
     environment:
-      DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"
-    command: migrate sql up -c /etc/config/hydra/hydra.yml -e --yes
-    volumes:
-      - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
+      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
+    command: migrate sql up -e --yes
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - authway-network
+    restart: on-failure
 
+  # Configured entirely through environment variables, exactly as production is.
+  # A mounted hydra.yml would be a second, silently-overridden source of truth:
+  # Hydra lets env vars win over the config file, so the two drift without
+  # anything failing.
   hydra:
     image: oryd/hydra:v26.2.0
     container_name: authway-hydra
     environment:
-      DSN: "postgres://authway:authway@postgres:5432/authway?sslmode=disable"
-      URLS_SELF_ISSUER: "http://localhost:4444"
-      URLS_CONSENT: "http://localhost:8080/consent"
-      URLS_LOGIN: "http://localhost:8080/login"
-      URLS_LOGOUT: "http://localhost:8080/logout"
-      SERVE_COOKIES_SECURE: false
-      SERVE_PUBLIC_CORS_ENABLED: true
+      DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
+      URLS_SELF_ISSUER: http://localhost:4444
+      # These point at auth-ui (:3001), not the API — the branding app renders
+      # the login and consent screens. Production points them at the same app
+      # (LOGIN_URL=https://auth.authway.in/login in scripts/deploy/prod/.env).
+      URLS_LOGIN: http://localhost:3001/login
+      URLS_CONSENT: http://localhost:3001/consent
+      URLS_LOGOUT: http://localhost:3001/logout
+      URLS_ERROR: http://localhost:3001/error
+      SECRETS_SYSTEM: youReallyNeedToChangeThis
+      OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES: public,pairwise
+      OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT: youReallyNeedToChangeThis
+      # Multi-tenant clients come from arbitrary origins; OAuth2 security rests
+      # on redirect_uri validation, not on the CORS allow-list. Same stance as
+      # production.
+      SERVE_PUBLIC_CORS_ENABLED: "true"
       SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "*"
-      SERVE_ADMIN_CORS_ENABLED: true
-      SERVE_ADMIN_CORS_ALLOWED_ORIGINS: "*"
-    command: serve -c /etc/config/hydra/hydra.yml all --dev
-    volumes:
-      - ./configs/hydra.yml:/etc/config/hydra/hydra.yml:ro
+      SERVE_ADMIN_CORS_ENABLED: "true"
+      SERVE_ADMIN_CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:8080"
+      TTL_ACCESS_TOKEN: 1h
+      TTL_REFRESH_TOKEN: 720h
+      TTL_ID_TOKEN: 1h
+      TTL_AUTH_CODE: 10m
+      LOG_LEVEL: debug
+      LOG_FORMAT: json
     ports:
-      - "4444:4444" # Public port
-      - "4445:4445" # Admin port
+      - "4444:4444" # Public API
+      - "4445:4445" # Admin API
+    command: serve all --dev
     depends_on:
-      - hydra-migrate
-    networks:
-      - authway-network
-
-  # Authway API (User Management Layer)
-  authway-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: authway-api
-    environment:
-      AUTHWAY_APP_ENVIRONMENT: development
-      AUTHWAY_APP_PORT: 8080
-      AUTHWAY_DATABASE_HOST: postgres
-      AUTHWAY_DATABASE_PORT: 5432
-      AUTHWAY_DATABASE_USER: authway
-      AUTHWAY_DATABASE_PASSWORD: authway
-      AUTHWAY_DATABASE_NAME: authway
-      AUTHWAY_REDIS_HOST: redis
-      AUTHWAY_REDIS_PORT: 6379
-      AUTHWAY_HYDRA_PUBLIC_URL: "http://hydra:4444"
-      AUTHWAY_HYDRA_ADMIN_URL: "http://hydra:4445"
-    ports:
-      - "8080:8080"
-    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      hydra:
-        condition: service_started
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: ["air", "-c", ".air.toml"]
     networks:
       - authway-network
-
-  # The two Vite apps are NOT services here. They ran as containers built from
-  # ./packages/web/{admin-dashboard,login-ui} long after those directories were
-  # renamed to apps/central/admin and apps/branding/auth-ui, so `docker compose up`
-  # failed on a missing build context for anyone who tried. Rather than restore a
-  # second definition of the frontend dev environment, compose now provides only
-  # the backing services; run the UIs natively, which is also where Vite HMR works:
-  #
-  #   cd apps/central/admin   && npm run dev   # http://localhost:3000
-  #   cd apps/branding/auth-ui && npm run dev  # http://localhost:3001
+    restart: unless-stopped
 
 volumes:
   postgres_data:

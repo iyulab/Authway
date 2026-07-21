@@ -93,7 +93,7 @@ if (-not $servicesHealthy) {
     Write-Host "   2. Run: .\start-dev.ps1" -ForegroundColor Gray
     Write-Host ""
     Write-Host "   Or manually start Docker services:" -ForegroundColor Yellow
-    Write-Host "   docker-compose -f docker-compose.dev.yml up -d" -ForegroundColor Gray
+    Write-Host "   docker compose up -d" -ForegroundColor Gray
     Write-Host ""
     exit 1
 }

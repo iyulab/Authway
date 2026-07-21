@@ -99,7 +99,7 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host ""
 
 Write-Host "🐘 Starting PostgreSQL, Redis, and MailHog..." -ForegroundColor Yellow
-docker-compose -f docker-compose.dev.yml up -d postgres redis mailhog
+docker compose up -d postgres redis mailhog
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Failed to start infrastructure services" -ForegroundColor Red
@@ -114,7 +114,7 @@ Start-Sleep -Seconds 3
 
 # Start Ory Hydra (migration will run first due to depends_on)
 Write-Host "🌊 Starting Ory Hydra OAuth Server..." -ForegroundColor Yellow
-docker-compose -f docker-compose.dev.yml up -d hydra-migrate hydra
+docker compose up -d hydra-migrate hydra
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Failed to start Ory Hydra" -ForegroundColor Red
@@ -340,8 +340,8 @@ Write-Host "   Auth Backend:     http://localhost:8081" -ForegroundColor White
 Write-Host "   MailHog UI:       http://localhost:8025 (Email Testing)" -ForegroundColor White
 Write-Host ""
 Write-Host "📦 Infrastructure Services:" -ForegroundColor Cyan
-Write-Host "   PostgreSQL:       localhost:5432 (Database)" -ForegroundColor White
-Write-Host "   Redis:            localhost:6379 (Cache/Sessions)" -ForegroundColor White
+Write-Host "   PostgreSQL:       localhost:5433 (Database)" -ForegroundColor White
+Write-Host "   Redis:            localhost:6380 (Cache/Sessions)" -ForegroundColor White
 Write-Host "   Ory Hydra:        http://localhost:4444 (Public API)" -ForegroundColor White
 Write-Host "                     http://localhost:4445 (Admin API)" -ForegroundColor White
 Write-Host ""
@@ -355,8 +355,7 @@ Write-Host ""
 Write-Host "📝 Management Commands:" -ForegroundColor Yellow
 Write-Host "   Stop all services:    .\stop-dev.ps1" -ForegroundColor Gray
 Write-Host "   View DB migrations:   Check backend server window" -ForegroundColor Gray
-Write-Host "   Docker logs:          docker-compose -f docker-compose.dev.yml logs -f" -ForegroundColor Gray
-Write-Host "   Manual migration:     .\scripts\deploy\run-migration.ps1" -ForegroundColor Gray
+Write-Host "   Docker logs:          docker compose logs -f" -ForegroundColor Gray
 Write-Host ""
 Write-Host "💡 Tips:" -ForegroundColor Yellow
 Write-Host "   - All services are running in Windows Terminal tabs" -ForegroundColor Gray

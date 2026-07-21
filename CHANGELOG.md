@@ -62,6 +62,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already escaped through. CI now runs a Postgres service, and a follow-up step
   fails the build if any of those tests stops actually running.
 
+- **Nothing in `docker-compose` could run the application.** Three compose files
+  disagreed about how to start Authway locally and every one of them was broken:
+  the UI services built from `packages/web/*`, renamed to `apps/*` long ago; the
+  dev API image copied a `src/` tree that no longer exists; the "production"
+  stack had no Hydra service at all, so it could not have served OAuth even if
+  it had built; and the root file overrode a production image with `air`, which
+  that image does not contain. What did work — and what `start-dev.ps1` has
+  always used — is the backing services with the apps run natively.
+
+  There is now one `docker-compose.yml`, providing Postgres, Redis, MailHog and
+  Hydra and nothing else; the rest are gone. Hydra shares the application
+  database and is configured purely through environment variables, matching how
+  every deployment already runs it. Verified end to end: the stack comes up,
+  both Hydra health endpoints return 200, and the API applies all 16 migrations
+  onto the shared database and serves.
+
+- **The README's Quick Start could not be followed.** It told you to copy a
+  `.env.example` that did not exist, and to start the Central API with
+  `go run cmd/main.go`, which does not compile — that command excludes
+  `services.go` from the same package. It now says `go run ./cmd/`, and each Go
+  service ships an accurate `.env.example` next to itself. The Central API's
+  probe for a repo-root `.env` is also gone: it looked two directories up from
+  `apps/central/api`, which is `apps/`, so it could never have found one.
+
 ### Removed
 
 - Four unused deploy scripts that converted a long-gone `schema_migrations`
@@ -73,6 +97,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `packages/web/*`, renamed long ago, so `docker compose up` failed on a missing
   build context. Compose now provides the backing services only; run the UIs
   with `npm run dev`, where Vite HMR works properly anyway.
+- Self-hosting the full stack with Docker Compose, which never worked in this
+  repository layout: `docker-compose.dev.yml`, `docker-compose.prod.yml`,
+  `docker-compose.proxy.yml`, `Dockerfile.dev`, the UI Dockerfiles (both UIs
+  deploy as static bundles, not containers), `.air.toml`, the Traefik and Hydra
+  config files nothing mounted any more, and `DOCKER-GUIDE.md`, whose opening
+  one-line command failed immediately. Real deployments run on Azure Container
+  Apps and Cloudflare Pages; see `scripts/deploy/`.
 
 ## [0.4.0] - 2026-07-20
 

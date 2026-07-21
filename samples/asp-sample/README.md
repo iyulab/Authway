@@ -56,7 +56,7 @@ cd D:\data\Authway
 .\start-dev.ps1
 
 # 또는 Docker Compose 직접 실행
-docker-compose -f docker-compose.dev.yml up -d
+docker compose up -d
 ```
 
 ## 빠른 시작 (Quick Start)
@@ -478,7 +478,7 @@ cd D:\data\Authway
 .\start-dev.ps1
 
 # 또는 Docker Compose 직접 실행
-docker-compose -f docker-compose.dev.yml up -d
+docker compose up -d
 
 # 서비스 상태 확인
 docker ps
