@@ -1,13 +1,12 @@
 package invitation
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"time"
 
 	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -62,12 +61,12 @@ func NewService(db *gorm.DB, userService user.Service, tenantService *tenant.Ser
 	}
 }
 
+// generateToken defers to the shared primitive, which emits unpadded base64url.
+// The old local version used padded encoding, so every token ended in "=" — a
+// character that has to be escaped in the URL path the accept page reads it
+// from. See handler.GetInvitationByToken.
 func generateToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	return tokenhash.Generate()
 }
 
 func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {

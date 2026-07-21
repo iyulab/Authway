@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"net/url"
 )
 
 // Handler handles invitation HTTP requests
@@ -120,7 +121,16 @@ func (h *Handler) GetInvitation(c *fiber.Ctx) error {
 // GetInvitationByToken gets invitation details by token (public endpoint)
 // GET /api/v1/invitations/token/:token
 func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
+	// Fiber hands back path params exactly as they appear in the URL — it does
+	// not percent-decode them. Invitation tokens are base64 and end in "=",
+	// which any correct client encodes as %3D, so the raw param never matched
+	// and every invitation opened from an email reported "not found". Decoding
+	// here (rather than flipping Fiber's global UnescapePath) keeps the change
+	// to the one route that carries an opaque token in its path.
 	token := c.Params("token")
+	if decoded, err := url.PathUnescape(token); err == nil {
+		token = decoded
+	}
 	if token == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
 	}
