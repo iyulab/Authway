@@ -14,6 +14,7 @@ import (
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"authway/apps/central/api/pkg/webhook"
 	"github.com/google/uuid"
@@ -94,7 +95,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			Active: true, StartedAt: time.Now(), ExpiresAt: future,
 		}, "impersonation_sessions"},
 		{"magic_link", &passwordless.MagicLink{
-			TenantID: tenantID, Email: "c@example.com", Token: uuid.New().String(),
+			TenantID: tenantID, Email: "c@example.com", TokenHash: tokenhash.Hash(uuid.New().String()),
 			TokenType: passwordless.TokenTypeLogin, ExpiresAt: future,
 		}, "magic_link_tokens"},
 		{"webhook", &webhook.Webhook{

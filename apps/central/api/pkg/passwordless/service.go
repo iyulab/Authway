@@ -1,12 +1,12 @@
 package passwordless
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"time"
 
+	"authway/apps/central/api/pkg/maillink"
+	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -48,31 +48,27 @@ type service struct {
 	invitations InvitationGate
 	emailSender EmailSender
 	logger      *zap.Logger
-	baseURL     string
+	frontendURL string
 	tokenExpiry time.Duration
 }
 
 // NewService wires the passwordless flow. invitations must not be nil — a nil
 // gate is treated as "provisioning denied" rather than "no policy", so a wiring
 // mistake fails closed instead of silently restoring self-registration.
-func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, baseURL string) Service {
+func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, frontendURL string) Service {
 	return &service{
 		db:          db,
 		userService: userService,
 		invitations: invitations,
 		emailSender: emailSender,
 		logger:      logger,
-		baseURL:     baseURL,
+		frontendURL: frontendURL,
 		tokenExpiry: 15 * time.Minute,
 	}
 }
 
 func generateToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	return tokenhash.Generate()
 }
 
 // mayProvision reports whether a user may be created for this address. It fails
@@ -117,7 +113,7 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	magicLink := &MagicLink{
 		TenantID:    tenantID,
 		Email:       req.Email,
-		Token:       token,
+		TokenHash:   tokenhash.Hash(token),
 		TokenType:   tokenType,
 		ClientID:    req.ClientID,
 		RedirectURI: req.RedirectURI,
@@ -129,11 +125,11 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	if err := s.db.Create(magicLink).Error; err != nil {
 		return nil, fmt.Errorf("failed to create magic link: %w", err)
 	}
-	// baseURL is the auth UI, not the API — this link is opened by a human, and
+	// frontendURL is the auth UI, not the API — this link is opened by a human, and
 	// the page then POSTs the token to /auth/magic-link/verify. It previously
 	// pointed at /auth/magic-link/verify on the UI, a route that does not exist
 	// there (the page is mounted at /magic-link), so every emailed link 404'd.
-	linkURL := fmt.Sprintf("%s/magic-link?token=%s", s.baseURL, url.QueryEscape(token))
+	linkURL := maillink.MagicLink(s.frontendURL, token)
 	if req.State != "" {
 		linkURL = fmt.Sprintf("%s&state=%s", linkURL, url.QueryEscape(req.State))
 	}
@@ -153,7 +149,7 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 
 func (s *service) InspectMagicLink(token string) (*MagicLink, error) {
 	var magicLink MagicLink
-	if err := s.db.Where("token = ?", token).First(&magicLink).Error; err != nil {
+	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&magicLink).Error; err != nil {
 		return nil, fmt.Errorf("invalid or expired token")
 	}
 	if magicLink.IsExpired() {
@@ -172,7 +168,7 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 	// error as any stale token.
 	now := time.Now()
 	claim := s.db.Model(&MagicLink{}).
-		Where("token = ? AND used_at IS NULL AND expires_at > ?", token, now).
+		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenhash.Hash(token), now).
 		Update("used_at", now)
 	if claim.Error != nil {
 		return nil, nil, fmt.Errorf("failed to mark token as used: %w", claim.Error)
@@ -182,7 +178,7 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 	}
 
 	var magicLink MagicLink
-	if err := s.db.Where("token = ?", token).First(&magicLink).Error; err != nil {
+	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&magicLink).Error; err != nil {
 		return nil, nil, fmt.Errorf("invalid or expired token")
 	}
 	var u *user.User
