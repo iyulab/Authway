@@ -170,17 +170,10 @@ func (s *service) hydrate(invs ...*Invitation) {
 	}
 }
 
+// HasValidInvitation delegates to Gate so the policy has exactly one
+// implementation, whichever way a caller reaches it.
 func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error) {
-	var count int64
-	if err := s.db.Model(&Invitation{}).
-		Where("tenant_id = ? AND email = ? AND status = ? AND expires_at > ?",
-			tenantID, email, StatusPending, time.Now()).
-		Count(&count).Error; err != nil {
-		// Fail closed: an unreadable invitation table must not be treated as
-		// "no policy", which would silently re-open self-registration.
-		return false, fmt.Errorf("failed to check invitations: %w", err)
-	}
-	return count > 0, nil
+	return NewGate(s.db).HasValidInvitation(tenantID, email)
 }
 
 func (s *service) GetByToken(token string) (*Invitation, error) {

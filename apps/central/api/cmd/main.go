@@ -20,6 +20,7 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/email"
+	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
@@ -136,10 +137,14 @@ func main() {
 	// Initialize services
 	userService := user.NewService(db, zapLogger)
 	clientService := client.NewService(db, zapLogger, hydraClient)
-	googleService := social.NewGoogleService(&cfg.Google, userService, clientService, zapLogger)
-	githubService := social.NewGitHubService(&cfg.GitHub, userService, clientService, zapLogger)
-	microsoftService := social.NewMicrosoftService(&cfg.Microsoft, userService, clientService, zapLogger)
-	appleService := social.NewAppleService(&cfg.Apple, userService, clientService, zapLogger)
+	// Social sign-in may only create an account for an invited address
+	// (invitation-only onboarding). The gate is a read-only view of the
+	// invitations table, so it exists well before the invitation service does.
+	invitationGate := invitation.NewGate(db)
+	googleService := social.NewGoogleService(&cfg.Google, userService, invitationGate, clientService, zapLogger)
+	githubService := social.NewGitHubService(&cfg.GitHub, userService, invitationGate, clientService, zapLogger)
+	microsoftService := social.NewMicrosoftService(&cfg.Microsoft, userService, invitationGate, clientService, zapLogger)
+	appleService := social.NewAppleService(&cfg.Apple, userService, invitationGate, clientService, zapLogger)
 
 	// Initialize Claims Service
 	claimsRepo := claims.NewRepository(db, redisClient)
@@ -246,7 +251,7 @@ func main() {
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
-	internalAuthHandler := handler.NewInternalAuthHandler(userService, clientService, zapLogger, newFeatureServices.AuditService)
+	internalAuthHandler := handler.NewInternalAuthHandler(userService, invitationGate, clientService, zapLogger, newFeatureServices.AuditService)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 
 	// Initialize MFA Service and Handler

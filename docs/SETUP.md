@@ -110,7 +110,9 @@ attributed to them instead of to the system.
 
 > Magic links and social login do **not** provide a way around this. A magic
 > link is only issued for an address that already has a pending invitation (or
-> an existing account), so it cannot be used to self-register.
+> an existing account), and a first-time Google/GitHub/Microsoft/Apple sign-in
+> is refused unless that address was invited into the tenant. Signing in to an
+> account that already exists is unaffected.
 
 ---
 

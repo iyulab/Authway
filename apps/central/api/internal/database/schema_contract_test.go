@@ -112,8 +112,6 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			// JSON. The service always marshals a map, hence at minimum "{}".
 			Details: "{}",
 		}, "audit_logs"},
-		// accountlink.LinkedAccount is deliberately absent: its table does not
-		// exist in any migration. See TestSchemaContract_LinkedAccountsHasNoTable.
 	}
 
 	for _, tc := range cases {
@@ -132,26 +130,31 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 	}
 }
 
-// TestSchemaContract_LinkedAccountsHasNoTable records a gap rather than a
-// contract: pkg/accountlink maps to linked_accounts, no migration ever creates
-// that table, and its routes are registered anyway — so /account/linked and
-// /account/providers fail at runtime. Nothing calls LinkAccount either, so no
-// row could exist even if the table did.
+// TestNoModelMapsToAMissingTable is the generalised form of the accountlink
+// defect: that package mapped to `linked_accounts`, no migration ever created
+// it, and its routes were registered regardless — so the endpoints failed at
+// runtime while looking perfectly wired. The package has since been removed
+// (users.google_id/github_id/... already record the same thing, and nothing
+// ever wrote a link row), but the class of mistake outlives it.
 //
-// Whether to create the table or retire the feature is a product decision
-// (users already carry google_id/github_id/... as the de-facto link record),
-// so this test pins the current reality instead of pretending either way.
-// DELETE THIS TEST once that decision lands — a failure here means the gap was
-// closed and this file is stale.
-func TestSchemaContract_LinkedAccountsHasNoTable(t *testing.T) {
+// Rather than name tables one by one, this walks every table the models above
+// declare and asserts it exists. Adding a model to the table-driven test also
+// enrols it here.
+func TestNoModelMapsToAMissingTable(t *testing.T) {
 	db := setup(t)
 
-	var exists bool
-	if err := db.Raw(`SELECT to_regclass('public.linked_accounts') IS NOT NULL`).Scan(&exists).Error; err != nil {
-		t.Fatalf("probe: %v", err)
+	tables := []string{
+		"invitations", "impersonation_sessions", "magic_link_tokens",
+		"webhooks", "user_claims", "audit_logs",
+		// Retired: linked_accounts. Do not re-add without a migration.
 	}
-	if exists {
-		t.Fatal("linked_accounts now exists — resolve the accountlink decision and replace this test with a real contract case")
+	for _, table := range tables {
+		var exists bool
+		if err := db.Raw(`SELECT to_regclass('public.' || ?) IS NOT NULL`, table).Scan(&exists).Error; err != nil {
+			t.Fatalf("probe %s: %v", table, err)
+		}
+		if !exists {
+			t.Errorf("%s is mapped by a model but no migration creates it", table)
+		}
 	}
-	t.Log("known gap: pkg/accountlink has registered routes but no table (see claudedocs/issues)")
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"time"
 
-	"authway/apps/central/api/pkg/accountlink"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/impersonation"
@@ -23,8 +22,6 @@ type NewFeatureServices struct {
 	AuditHandler         *audit.Handler
 	WebhookService       webhook.Service
 	WebhookHandler       *webhook.Handler
-	AccountLinkService   accountlink.Service
-	AccountLinkHandler   *accountlink.Handler
 	InvitationService    invitation.Service
 	InvitationHandler    *invitation.Handler
 	PasswordlessService  passwordless.Service
@@ -49,10 +46,6 @@ func InitNewFeatureServices(
 	// Webhook Service
 	webhookService := webhook.NewService(db, logger)
 	webhookHandler := webhook.NewHandler(webhookService, logger, auditService)
-
-	// Account Linking Service
-	accountLinkService := accountlink.NewService(db, userService, logger)
-	accountLinkHandler := accountlink.NewHandler(accountLinkService, logger)
 
 	// Invitation Service
 	invitationEmailAdapter := &invitationEmailAdapterImpl{
@@ -79,8 +72,6 @@ func InitNewFeatureServices(
 		AuditHandler:         auditHandler,
 		WebhookService:       webhookService,
 		WebhookHandler:       webhookHandler,
-		AccountLinkService:   accountLinkService,
-		AccountLinkHandler:   accountLinkHandler,
 		InvitationService:    invitationService,
 		InvitationHandler:    invitationHandler,
 		PasswordlessService:  passwordlessService,
@@ -97,9 +88,6 @@ func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth 
 
 	// Invitation routes (mixed public/protected)
 	s.InvitationHandler.RegisterRoutes(v1, jwtAuth, adminAuth)
-
-	// Account linking routes (authenticated)
-	s.AccountLinkHandler.RegisterRoutes(v1, jwtAuth)
 
 	// Webhook management routes (admin only)
 	s.WebhookHandler.RegisterRoutes(v1, jwtAuth, adminAuth)

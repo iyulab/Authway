@@ -24,6 +24,7 @@ import (
 type AppleService struct {
 	config        *config.AppleOAuthConfig
 	userService   user.Service
+	invitations   InvitationGate
 	clientService client.Service
 	logger        *zap.Logger
 	httpClient    *http.Client
@@ -42,10 +43,11 @@ type AppleTokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
-func NewAppleService(cfg *config.AppleOAuthConfig, userService user.Service, clientService client.Service, logger *zap.Logger) *AppleService {
+func NewAppleService(cfg *config.AppleOAuthConfig, userService user.Service, invitations InvitationGate, clientService client.Service, logger *zap.Logger) *AppleService {
 	return &AppleService{
 		config:        cfg,
 		userService:   userService,
+		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
@@ -215,6 +217,12 @@ func (a *AppleService) HandleCallbackForClient(ctx context.Context, code, state 
 		}
 		a.logger.Info("Updated existing user with Apple account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
 		return existingUser, nil
+	}
+	// Onboarding is invitation-only: a first-time sign-in may create an account
+	// only for an address that was invited into this tenant.
+	if !mayProvision(a.invitations, a.logger, clientTenantID, appleUser.Email) {
+		a.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", appleUser.Email))
+		return nil, fmt.Errorf("%s", ErrNotInvited)
 	}
 	createReq := &user.CreateUserRequest{Email: appleUser.Email, Password: "", Name: ""}
 	newUser, err := a.userService.Create(clientTenantID, createReq)

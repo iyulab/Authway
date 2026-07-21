@@ -20,6 +20,7 @@ import (
 type GitHubService struct {
 	config        *config.GitHubOAuthConfig
 	userService   user.Service
+	invitations   InvitationGate
 	clientService client.Service
 	logger        *zap.Logger
 	httpClient    *http.Client
@@ -45,10 +46,11 @@ type GitHubTokenResponse struct {
 	Scope       string `json:"scope"`
 }
 
-func NewGitHubService(cfg *config.GitHubOAuthConfig, userService user.Service, clientService client.Service, logger *zap.Logger) *GitHubService {
+func NewGitHubService(cfg *config.GitHubOAuthConfig, userService user.Service, invitations InvitationGate, clientService client.Service, logger *zap.Logger) *GitHubService {
 	return &GitHubService{
 		config:        cfg,
 		userService:   userService,
+		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
@@ -245,6 +247,12 @@ func (g *GitHubService) HandleCallbackForClient(ctx context.Context, code, state
 		}
 		g.logger.Info("Updated existing user with GitHub account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
 		return existingUser, nil
+	}
+	// Onboarding is invitation-only: a first-time sign-in may create an account
+	// only for an address that was invited into this tenant.
+	if !mayProvision(g.invitations, g.logger, clientTenantID, githubUser.Email) {
+		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", githubUser.Email))
+		return nil, fmt.Errorf("%s", ErrNotInvited)
 	}
 	fullName := githubUser.Name
 	if fullName == "" {

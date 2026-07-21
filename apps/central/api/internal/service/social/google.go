@@ -20,6 +20,7 @@ import (
 type GoogleService struct {
 	config        *config.GoogleOAuthConfig
 	userService   user.Service
+	invitations   InvitationGate
 	clientService client.Service
 	logger        *zap.Logger
 	httpClient    *http.Client
@@ -45,10 +46,11 @@ type GoogleTokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
-func NewGoogleService(cfg *config.GoogleOAuthConfig, userService user.Service, clientService client.Service, logger *zap.Logger) *GoogleService {
+func NewGoogleService(cfg *config.GoogleOAuthConfig, userService user.Service, invitations InvitationGate, clientService client.Service, logger *zap.Logger) *GoogleService {
 	return &GoogleService{
 		config:        cfg,
 		userService:   userService,
+		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
 		httpClient: &http.Client{
@@ -285,6 +287,12 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		return existingUser, nil
 	}
 
+	// Onboarding is invitation-only: a first-time sign-in may create an account
+	// only for an address that was invited into this tenant.
+	if !mayProvision(g.invitations, g.logger, clientTenantID, googleUser.Email) {
+		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", googleUser.Email))
+		return nil, fmt.Errorf("%s", ErrNotInvited)
+	}
 	// Create new user account in this tenant
 	fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)
 	createReq := &user.CreateUserRequest{

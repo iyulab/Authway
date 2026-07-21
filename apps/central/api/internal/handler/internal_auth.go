@@ -8,11 +8,13 @@ import (
 	"authway/apps/central/api/pkg/user"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type InternalAuthHandler struct {
 	userService   user.Service
+	invitations   InvitationGate
 	clientService client.Service
 	logger        *zap.Logger
 	auditService  audit.Service
@@ -20,12 +22,14 @@ type InternalAuthHandler struct {
 
 func NewInternalAuthHandler(
 	userService user.Service,
+	invitations InvitationGate,
 	clientService client.Service,
 	logger *zap.Logger,
 	auditService audit.Service,
 ) *InternalAuthHandler {
 	return &InternalAuthHandler{
 		userService:   userService,
+		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
 		auditService:  auditService,
@@ -149,6 +153,15 @@ func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
 		})
 	}
 
+	// Onboarding is invitation-only: a first-time sign-in may create an account
+	// only for an address that was invited into this tenant.
+	if !h.mayProvision(clientTenantID, req.Email) {
+		h.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", req.Email))
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{
+			"error": "no account for this address; ask an administrator for an invitation",
+		})
+	}
+
 	// User doesn't exist, create new user
 	h.logger.Info("Creating new user from Google account",
 		zap.String("email", req.Email),
@@ -197,4 +210,25 @@ func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
 		TenantID: clientTenantID.String(),
 		Email:    newUser.Email,
 	})
+}
+
+// InvitationGate reports whether an email has been invited into a tenant.
+// Satisfied by *invitation.Gate.
+type InvitationGate interface {
+	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+}
+
+// mayProvision fails closed on a missing gate or a lookup error: a wiring
+// mistake must not silently reopen self-registration through social login.
+func (h *InternalAuthHandler) mayProvision(tenantID uuid.UUID, email string) bool {
+	if h.invitations == nil {
+		h.logger.Error("Invitation gate not wired; denying social provisioning")
+		return false
+	}
+	invited, err := h.invitations.HasValidInvitation(tenantID, email)
+	if err != nil {
+		h.logger.Error("Invitation check failed; denying provisioning", zap.Error(err))
+		return false
+	}
+	return invited
 }

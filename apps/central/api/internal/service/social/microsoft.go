@@ -20,6 +20,7 @@ import (
 type MicrosoftService struct {
 	config        *config.MicrosoftOAuthConfig
 	userService   user.Service
+	invitations   InvitationGate
 	clientService client.Service
 	logger        *zap.Logger
 	httpClient    *http.Client
@@ -43,10 +44,11 @@ type MicrosoftTokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
-func NewMicrosoftService(cfg *config.MicrosoftOAuthConfig, userService user.Service, clientService client.Service, logger *zap.Logger) *MicrosoftService {
+func NewMicrosoftService(cfg *config.MicrosoftOAuthConfig, userService user.Service, invitations InvitationGate, clientService client.Service, logger *zap.Logger) *MicrosoftService {
 	return &MicrosoftService{
 		config:        cfg,
 		userService:   userService,
+		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
@@ -200,6 +202,12 @@ func (m *MicrosoftService) HandleCallbackForClient(ctx context.Context, code, st
 		}
 		m.logger.Info("Updated existing user with Microsoft account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
 		return existingUser, nil
+	}
+	// Onboarding is invitation-only: a first-time sign-in may create an account
+	// only for an address that was invited into this tenant.
+	if !mayProvision(m.invitations, m.logger, clientTenantID, email) {
+		m.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", email))
+		return nil, fmt.Errorf("%s", ErrNotInvited)
 	}
 	fullName := msUser.DisplayName
 	if fullName == "" {

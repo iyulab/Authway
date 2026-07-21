@@ -11,6 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Social sign-in no longer creates accounts for uninvited people.** Google,
+  GitHub, Microsoft and Apple all provisioned a user on first sign-in, so
+  anyone holding an account with one of those providers could join a tenant
+  nobody had invited them to — the last path that ignored invitation-only
+  onboarding. First-time sign-in now requires a pending invitation for that
+  address in that tenant, and the check fails closed on a lookup error or a
+  missing gate. Signing in to an account that already exists never consults it,
+  so current members are unaffected. Verified against production before the
+  change: all nine accounts are password accounts, none is linked to any
+  provider, and no account has been created in the last thirty days — so no
+  live onboarding path depended on this.
+
+### Removed
+
+- **Account linking (`pkg/accountlink`) is gone.** It mapped to a
+  `linked_accounts` table that no migration has ever created, and its routes
+  were registered regardless, so `/account/linked` and `/account/providers`
+  failed at runtime. Nothing ever called the code that would have written a
+  link row either — social sign-in records the provider on the user itself
+  (`users.google_id`, `github_id`, …), which is the de-facto link record.
+  Reviving the feature would have meant maintaining a second answer to "which
+  providers is this account attached to", so the dead half is removed instead.
+  The schema contract test now checks that every model maps to a table that
+  exists, which is what surfaced this.
+
 - **Magic links no longer let anyone register themselves.** Onboarding has been
   invitation-only since 0.4.0, but the policy lived in a comment: the public,
   unauthenticated `POST /api/v1/auth/magic-link/send` provisioned a user for any
