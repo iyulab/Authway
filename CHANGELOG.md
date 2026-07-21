@@ -69,6 +69,24 @@
 
 ### Fixed
 
+- **Accepting an invitation from its email link now works.** Once the links
+  pointed at the auth UI, the accept page reported that valid, unexpired
+  invitations did not exist. The page validates through
+  `GET /api/v1/invitations/token/:token`, and Fiber returns path params exactly
+  as they appear in the URL — it does not percent-decode them. Tokens were
+  padded base64, so every one ended in `=`, which a browser sends as `%3D`; the
+  handler compared that literal against the stored value and found nothing.
+  The handler decodes its path param now, so invitations already in flight work
+  without being reissued, and new tokens come from `pkg/tokenhash` (unpadded
+  base64url), so nothing in them needs escaping in the first place.
+
+  This predates the link fix rather than following from it. The page reads the
+  token with `searchParams` and re-encodes it with `encodeURIComponent`, so the
+  request was byte-identical whether or not the emailed URL escaped anything.
+  Accepting an invitation through its email link had never worked. Earlier
+  verification went through `POST /invitations/accept`, which carries the token
+  in a JSON body and so never crosses a path segment.
+
 - **Emailed links now point at the auth UI instead of the API.** Invitation
   accept, magic link, email verification and password reset URLs were all built
   from `app.base_url`, which is this API's own address — the value the discovery
