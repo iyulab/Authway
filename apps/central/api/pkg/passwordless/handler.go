@@ -131,13 +131,15 @@ func (h *Handler) GetMagicLinkStatus(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
 	}
 
-	// We just check if the verify would work
-	// This is a read-only operation
-	magicLink, _, err := h.service.VerifyMagicLink(token)
+	// Read-only for real: this used to call VerifyMagicLink, which marks the
+	// token used and provisions a user — so an email scanner prefetching the
+	// link burned it (or silently signed the recipient in) before they ever
+	// clicked.
+	magicLink, err := h.service.InspectMagicLink(token)
 	if err != nil {
 		return c.JSON(fiber.Map{
-			"valid":   false,
-			"error":   err.Error(),
+			"valid": false,
+			"error": err.Error(),
 		})
 	}
 
@@ -153,7 +155,9 @@ func (h *Handler) GetMagicLinkStatus(c *fiber.Ctx) error {
 func (h *Handler) RegisterRoutes(app fiber.Router) {
 	magicLink := app.Group("/auth/magic-link")
 	magicLink.Post("/send", h.SendMagicLink)
+	// Consuming the token is a state change, so it is POST-only. The GET twin
+	// that used to exist made the token traversable by prefetchers, proxies and
+	// Referer headers — email clients follow links before a human does.
 	magicLink.Post("/verify", h.VerifyMagicLink)
-	magicLink.Get("/verify", h.VerifyMagicLink) // Support GET for email links
 	magicLink.Get("/status", h.GetMagicLinkStatus)
 }

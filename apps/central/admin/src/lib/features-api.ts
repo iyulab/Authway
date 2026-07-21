@@ -51,9 +51,13 @@ export interface Invitation {
   tenant_id: string
   email: string
   role: string
-  inviter_id: string
-  inviter_email?: string
-  status: 'pending' | 'accepted' | 'expired' | 'revoked'
+  // null when the invitation was issued by the system actor (admin API key),
+  // which has no user behind it.
+  inviter_id: string | null
+  // Display name derived by the API — 'system' for system-actor invitations.
+  inviter_name: string
+  tenant_name: string
+  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked'
   message?: string
   expires_at: string
   accepted_at?: string
@@ -64,7 +68,9 @@ export interface Invitation {
 // Impersonation types
 export interface ImpersonationSession {
   id: string
-  admin_id: string
+  // null when the session was started by the system actor (admin API key);
+  // admin_email then reads 'system'.
+  admin_id: string | null
   admin_email: string
   target_user_id: string
   target_user_email: string

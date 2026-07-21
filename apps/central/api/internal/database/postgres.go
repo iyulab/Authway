@@ -36,11 +36,3 @@ func Connect(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
-func Migrate(db *gorm.DB, models ...any) error {
-	for _, model := range models {
-		if err := db.AutoMigrate(model); err != nil {
-			return fmt.Errorf("failed to migrate %T: %w", model, err)
-		}
-	}
-	return nil
-}

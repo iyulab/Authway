@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // EventType represents the type of webhook event
@@ -36,7 +37,11 @@ type Webhook struct {
 	Name        string     `json:"name" gorm:"size:255;not null"`
 	URL         string     `json:"url" gorm:"size:2048;not null"`
 	Secret      string     `json:"-" gorm:"size:255;not null"`
-	Events      []string   `json:"events" gorm:"type:text[];not null"`
+	// pq.StringArray, not []string: the column is Postgres text[], and a plain
+	// []string is handed to the driver as a bare value it cannot encode
+	// ("malformed array literal"), so every webhook insert failed. Clients
+	// already use pq.StringArray for the same reason.
+	Events      pq.StringArray `json:"events" gorm:"type:text[];not null"`
 	Enabled     bool       `json:"enabled" gorm:"default:true"`
 	RetryCount  int        `json:"retry_count" gorm:"default:3"`
 	TimeoutSecs int        `json:"timeout_secs" gorm:"default:30"`

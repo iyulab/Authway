@@ -255,7 +255,7 @@ const InvitationsPage: React.FC = () => {
                       {getStatusBadge(invitation.status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {invitation.inviter_email || '-'}
+                      {invitation.inviter_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(invitation.expires_at).toLocaleString()}

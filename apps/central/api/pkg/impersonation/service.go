@@ -15,7 +15,9 @@ import (
 
 // Service provides user impersonation functionality
 type Service interface {
-	StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpersonationRequest, ipAddress, userAgent string) (*ImpersonationTokenResponse, error)
+	// StartImpersonation begins a session. adminID is nil when the caller is the
+	// system actor (admin API key) rather than a signed-in admin user.
+	StartImpersonation(tenantID uuid.UUID, adminID *uuid.UUID, req *StartImpersonationRequest, ipAddress, userAgent string) (*ImpersonationTokenResponse, error)
 	ValidateToken(token string) (*ImpersonationSession, error)
 	EndImpersonation(sessionID uuid.UUID) error
 	GetActiveSessions(tenantID uuid.UUID) ([]ImpersonationSession, error)
@@ -48,13 +50,19 @@ func generateToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpersonationRequest, ipAddress, userAgent string) (*ImpersonationTokenResponse, error) {
-	admin, err := s.userService.GetByID(adminID)
-	if err != nil {
-		return nil, fmt.Errorf("admin not found: %w", err)
-	}
-	if admin.TenantID != tenantID {
-		return nil, fmt.Errorf("admin does not belong to tenant")
+func (s *service) StartImpersonation(tenantID uuid.UUID, adminID *uuid.UUID, req *StartImpersonationRequest, ipAddress, userAgent string) (*ImpersonationTokenResponse, error) {
+	// A nil admin is the system actor (admin API key): there is no user row to
+	// look up, and demanding one made the admin-key path impossible.
+	adminEmail := SystemActorEmail
+	if adminID != nil {
+		admin, err := s.userService.GetByID(*adminID)
+		if err != nil {
+			return nil, fmt.Errorf("admin not found: %w", err)
+		}
+		if admin.TenantID != tenantID {
+			return nil, fmt.Errorf("admin does not belong to tenant")
+		}
+		adminEmail = admin.Email
 	}
 	targetUser, err := s.userService.GetByID(req.TargetUserID)
 	if err != nil {
@@ -63,7 +71,7 @@ func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpe
 	if targetUser.TenantID != tenantID {
 		return nil, fmt.Errorf("target user does not belong to tenant")
 	}
-	if targetUser.ID == adminID {
+	if adminID != nil && targetUser.ID == *adminID {
 		return nil, fmt.Errorf("cannot impersonate yourself")
 	}
 	duration := time.Duration(req.Duration) * time.Minute
@@ -77,7 +85,7 @@ func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpe
 	session := &ImpersonationSession{
 		TenantID:        tenantID,
 		AdminID:         adminID,
-		AdminEmail:      admin.Email,
+		AdminEmail:      adminEmail,
 		TargetUserID:    targetUser.ID,
 		TargetUserEmail: targetUser.Email,
 		Reason:          req.Reason,
@@ -93,8 +101,8 @@ func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpe
 	}
 	s.auditService.LogAsync(&audit.AuditEntry{
 		TenantID:     tenantID,
-		ActorID:      &adminID,
-		ActorEmail:   admin.Email,
+		ActorID:      adminID,
+		ActorEmail:   adminEmail,
 		ActorType:    "admin",
 		Action:       audit.ActionAdminAction,
 		Severity:     audit.SeverityWarning,
@@ -105,7 +113,8 @@ func (s *service) StartImpersonation(tenantID, adminID uuid.UUID, req *StartImpe
 		Details:      map[string]any{"action": "impersonation_started", "reason": req.Reason, "target_email": targetUser.Email},
 		Success:      true,
 	})
-	s.logger.Info("Impersonation started", zap.String("admin_id", adminID.String()), zap.String("target_user_id", targetUser.ID.String()), zap.String("reason", req.Reason))
+	// adminID may be nil (system actor) — calling String() on it would panic.
+	s.logger.Info("Impersonation started", zap.String("admin", adminEmail), zap.String("target_user_id", targetUser.ID.String()), zap.String("reason", req.Reason))
 	resp := &ImpersonationTokenResponse{
 		Token:     token,
 		ExpiresAt: session.ExpiresAt,
@@ -144,7 +153,7 @@ func (s *service) EndImpersonation(sessionID uuid.UUID) error {
 	}
 	s.auditService.LogAsync(&audit.AuditEntry{
 		TenantID:     session.TenantID,
-		ActorID:      &session.AdminID,
+		ActorID:      session.AdminID,
 		ActorEmail:   session.AdminEmail,
 		ActorType:    "admin",
 		Action:       audit.ActionAdminAction,

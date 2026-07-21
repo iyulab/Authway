@@ -267,7 +267,14 @@ func main() {
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
 
 	// Onboarding is invitation-only — public self-registration removed (D-a/B).
-	// Users are created via POST /api/v1/invitations/accept or by an admin.
+	// Users are created by accepting an invitation (POST
+	// /api/v1/invitations/accept). There is deliberately no admin "create user"
+	// endpoint: an admin onboards someone by issuing an invitation with the
+	// admin API key (system-actor invite, NULL inviter_id — migration 016).
+	//
+	// Note that this policy is not yet enforced on every path: the magic-link
+	// and social-login flows still auto-provision users.
+	// See claudedocs/issues/ISSUE-Authway-20260721-magic-link-bypasses-invitation-only.md
 
 	// Social login routes - Google
 	app.Get("/auth/google/login", socialHandler.GoogleLogin)

@@ -18,26 +18,48 @@ type EmailSender interface {
 	SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error
 }
 
+// InvitationGate reports whether an email has been invited into a tenant.
+//
+// Onboarding is invitation-only (decision D-a/B), but this endpoint is public
+// and unauthenticated: without a gate, anyone who knows a tenant id could send
+// themselves a magic link and be provisioned into that tenant on verify — i.e.
+// public self-registration under another name. Because invitations are keyed on
+// (tenant_id, email), checking one here also closes the arbitrary-tenant_id
+// hole: an attacker-chosen tenant has no matching invitation.
+type InvitationGate interface {
+	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+}
+
 // Service provides passwordless authentication functionality
 type Service interface {
 	SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, ipAddress, userAgent string) (*MagicLinkResponse, error)
+	// VerifyMagicLink consumes the token: it marks the link used and may
+	// provision a user. It is not idempotent and must never back a GET.
 	VerifyMagicLink(token string) (*MagicLink, *user.User, error)
+	// InspectMagicLink reports whether a token is currently redeemable without
+	// consuming it or touching any user state.
+	InspectMagicLink(token string) (*MagicLink, error)
 	CleanupExpired() (int64, error)
 }
 
 type service struct {
 	db          *gorm.DB
 	userService user.Service
+	invitations InvitationGate
 	emailSender EmailSender
 	logger      *zap.Logger
 	baseURL     string
 	tokenExpiry time.Duration
 }
 
-func NewService(db *gorm.DB, userService user.Service, emailSender EmailSender, logger *zap.Logger, baseURL string) Service {
+// NewService wires the passwordless flow. invitations must not be nil — a nil
+// gate is treated as "provisioning denied" rather than "no policy", so a wiring
+// mistake fails closed instead of silently restoring self-registration.
+func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, baseURL string) Service {
 	return &service{
 		db:          db,
 		userService: userService,
+		invitations: invitations,
 		emailSender: emailSender,
 		logger:      logger,
 		baseURL:     baseURL,
@@ -53,6 +75,22 @@ func generateToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
+// mayProvision reports whether a user may be created for this address. It fails
+// closed on a missing gate or a lookup error: the safe answer to "is this
+// address allowed in?" is no.
+func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
+	if s.invitations == nil {
+		s.logger.Error("Invitation gate not wired; denying magic-link provisioning")
+		return false
+	}
+	invited, err := s.invitations.HasValidInvitation(tenantID, email)
+	if err != nil {
+		s.logger.Error("Invitation check failed; denying provisioning", zap.Error(err))
+		return false
+	}
+	return invited
+}
+
 func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, ipAddress, userAgent string) (*MagicLinkResponse, error) {
 	token, err := generateToken()
 	if err != nil {
@@ -60,8 +98,20 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	}
 	expiresAt := time.Now().Add(s.tokenExpiry)
 	tokenType := TokenTypeLogin
-	_, err = s.userService.GetByEmailAndTenant(tenantID, req.Email)
-	if err != nil {
+	if _, err := s.userService.GetByEmailAndTenant(tenantID, req.Email); err != nil {
+		// No user yet — this link would provision one, which the
+		// invitation-only policy allows solely for an invited address.
+		if !s.mayProvision(tenantID, req.Email) {
+			// Deliberately indistinguishable from success: a differing response
+			// would turn this public endpoint into a membership oracle. No link
+			// is created, so there is nothing to verify later.
+			s.logger.Warn("Magic link suppressed for uninvited address",
+				zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
+			return &MagicLinkResponse{
+				Message:   "Magic link sent to your email",
+				ExpiresAt: expiresAt,
+			}, nil
+		}
 		tokenType = TokenTypeRegister
 	}
 	magicLink := &MagicLink{
@@ -79,7 +129,11 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	if err := s.db.Create(magicLink).Error; err != nil {
 		return nil, fmt.Errorf("failed to create magic link: %w", err)
 	}
-	linkURL := fmt.Sprintf("%s/auth/magic-link/verify?token=%s", s.baseURL, url.QueryEscape(token))
+	// baseURL is the auth UI, not the API — this link is opened by a human, and
+	// the page then POSTs the token to /auth/magic-link/verify. It previously
+	// pointed at /auth/magic-link/verify on the UI, a route that does not exist
+	// there (the page is mounted at /magic-link), so every emailed link 404'd.
+	linkURL := fmt.Sprintf("%s/magic-link?token=%s", s.baseURL, url.QueryEscape(token))
 	if req.State != "" {
 		linkURL = fmt.Sprintf("%s&state=%s", linkURL, url.QueryEscape(req.State))
 	}
@@ -97,25 +151,50 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 	}, nil
 }
 
+func (s *service) InspectMagicLink(token string) (*MagicLink, error) {
+	var magicLink MagicLink
+	if err := s.db.Where("token = ?", token).First(&magicLink).Error; err != nil {
+		return nil, fmt.Errorf("invalid or expired token")
+	}
+	if magicLink.IsExpired() {
+		return nil, fmt.Errorf("magic link has expired")
+	}
+	if magicLink.IsUsed() {
+		return nil, fmt.Errorf("magic link has already been used")
+	}
+	return &magicLink, nil
+}
+
 func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) {
+	// Claim the token with a single conditional UPDATE. Read-then-write let two
+	// concurrent requests both pass the "not used" check and both redeem the
+	// same link; here exactly one UPDATE can match, and the loser sees the same
+	// error as any stale token.
+	now := time.Now()
+	claim := s.db.Model(&MagicLink{}).
+		Where("token = ? AND used_at IS NULL AND expires_at > ?", token, now).
+		Update("used_at", now)
+	if claim.Error != nil {
+		return nil, nil, fmt.Errorf("failed to mark token as used: %w", claim.Error)
+	}
+	if claim.RowsAffected == 0 {
+		return nil, nil, fmt.Errorf("invalid, expired or already used token")
+	}
+
 	var magicLink MagicLink
 	if err := s.db.Where("token = ?", token).First(&magicLink).Error; err != nil {
 		return nil, nil, fmt.Errorf("invalid or expired token")
-	}
-	if magicLink.IsExpired() {
-		return nil, nil, fmt.Errorf("magic link has expired")
-	}
-	if magicLink.IsUsed() {
-		return nil, nil, fmt.Errorf("magic link has already been used")
-	}
-	now := time.Now()
-	if err := s.db.Model(&magicLink).Update("used_at", now).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to mark token as used: %w", err)
 	}
 	var u *user.User
 	var err error
 	u, err = s.userService.GetByEmailAndTenant(magicLink.TenantID, magicLink.Email)
 	if err != nil {
+		// Re-check at the moment of creation, not just at send time: the
+		// invitation may have been revoked or expired in between, and the link
+		// itself is not proof of eligibility.
+		if !s.mayProvision(magicLink.TenantID, magicLink.Email) {
+			return nil, nil, fmt.Errorf("no account for this address; ask an administrator for an invitation")
+		}
 		createReq := &user.CreateUserRequest{
 			Email:    magicLink.Email,
 			Password: "",

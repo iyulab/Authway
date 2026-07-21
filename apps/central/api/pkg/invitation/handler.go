@@ -33,20 +33,23 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
 	}
 
-	// For Admin Console requests, use a system UUID for inviter
-	// For regular user requests, use the authenticated user's ID
-	var inviterID uuid.UUID
+	// A signed-in user is attributed as the inviter. The Admin Console
+	// authenticates with the admin API key and has no user behind it, so it
+	// invites as the system actor — inviterID stays nil, which the schema now
+	// expresses as a NULL inviter_id. (It previously pointed at a hard-coded
+	// UUID that no users row ever had, which failed every admin-key invite.)
+	var inviterID *uuid.UUID
 	isAdminConsole := c.Locals("is_admin_console")
 	userIDStr := c.Locals("user_id")
 
 	if userIDStr != nil {
-		inviterID, err = uuid.Parse(userIDStr.(string))
+		parsed, err := uuid.Parse(userIDStr.(string))
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 		}
+		inviterID = &parsed
 	} else if isAdminConsole != nil && isAdminConsole.(bool) {
-		// Admin Console request - use a deterministic system UUID for admin
-		inviterID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		// system actor — nil inviter
 	} else {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - user_id required"})
 	}

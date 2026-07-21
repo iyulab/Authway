@@ -9,6 +9,7 @@ Complete guide to install, configure, and integrate Authway authentication.
 
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
+- [Creating the First User](#creating-the-first-user)
 - [Client Registration](#client-registration)
 - [SDK Integration](#sdk-integration)
 - [Configuration](#configuration)
@@ -75,6 +76,41 @@ cd samples/react-sdk-sample && pnpm dev
 ```
 
 Access sample app: http://localhost:9004
+
+---
+
+## Creating the First User
+
+Authway is **invitation-only**: there is no public sign-up form, and no admin
+endpoint that creates a user directly. Every user comes into existence by
+accepting an invitation. On a brand-new instance or a brand-new tenant nobody
+exists yet, so the first invitation is issued by the *system actor* — the admin
+API key rather than a signed-in person.
+
+```bash
+# 1. Issue the invitation (admin API key, no user required)
+curl -X POST http://localhost:8080/api/v1/invitations   -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY"   -H "X-Tenant-ID: <tenant-id>"   -H "Content-Type: application/json"   -d '{"email":"first.user@example.com","role":"member"}'
+# 201 — inviter_id is null and inviter_name reads "system"
+```
+
+The invitee receives an email with an accept link. In local development the mail
+goes to MailHog; if no mail is configured, read the token from the database:
+
+```bash
+docker exec authway-postgres psql -U authway -d authway -t -A   -c "SELECT token FROM invitations WHERE email='first.user@example.com'"
+```
+
+```bash
+# 2. Accept it — this is what creates the user
+curl -X POST http://localhost:8080/api/v1/invitations/accept   -H "Content-Type: application/json"   -d '{"token":"<token>","name":"First User","password":"<password>"}'
+```
+
+Once that user exists, they can invite others normally and those invitations are
+attributed to them instead of to the system.
+
+> Magic links and social login do **not** provide a way around this. A magic
+> link is only issued for an address that already has a pending invitation (or
+> an existing account), so it cannot be used to self-register.
 
 ---
 

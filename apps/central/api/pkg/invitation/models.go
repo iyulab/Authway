@@ -17,23 +17,38 @@ const (
 	StatusRevoked  InvitationStatus = "revoked"
 )
 
-// Invitation represents an organization/tenant invitation
+// SystemInviterName is the display name used when an invitation was created by
+// the system actor (admin API key) rather than by a signed-in user. Such an
+// invitation has a NULL inviter_id — there is no user row behind it.
+const SystemInviterName = "system"
+
+// Invitation represents an organization/tenant invitation.
+//
+// Column mapping is authoritative in migrations/006 (+ 016); the struct follows
+// it. TenantName/InviterName are NOT columns — they are derived at read time
+// from tenants/users, so the invitation row never carries a second, drifting
+// copy of a name that lives elsewhere.
 type Invitation struct {
-	ID          uuid.UUID        `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	TenantID    uuid.UUID        `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	TenantName  string           `json:"tenant_name" gorm:"size:255"`
-	InviterID   uuid.UUID        `json:"inviter_id" gorm:"type:uuid;not null"`
-	InviterName string           `json:"inviter_name" gorm:"size:255"`
-	Email       string           `json:"email" gorm:"size:255;not null;index"`
-	Role        string           `json:"role" gorm:"size:50;default:member"`
-	Token       string           `json:"-" gorm:"size:255;uniqueIndex"`
-	Status      InvitationStatus `json:"status" gorm:"size:20;default:pending;index"`
-	Message     string           `json:"message" gorm:"type:text"`
-	AcceptedAt  *time.Time       `json:"accepted_at"`
-	AcceptedBy  *uuid.UUID       `json:"accepted_by" gorm:"type:uuid"`
-	ExpiresAt   time.Time        `json:"expires_at" gorm:"not null"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	TenantID uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	// InviterID is NULL for invitations created by the system actor (admin API
+	// key). The FK is ON DELETE SET NULL, so deleting a user orphans their
+	// invitations rather than destroying them.
+	InviterID  *uuid.UUID       `json:"inviter_id" gorm:"type:uuid"`
+	Email      string           `json:"email" gorm:"size:255;not null;index"`
+	Role       string           `json:"role" gorm:"size:50;default:member"`
+	Token      string           `json:"-" gorm:"type:text;uniqueIndex"`
+	Status     InvitationStatus `json:"status" gorm:"size:20;default:pending;index"`
+	Message    string           `json:"message" gorm:"type:text"`
+	AcceptedAt *time.Time       `json:"accepted_at"`
+	AcceptedBy *uuid.UUID       `json:"accepted_by" gorm:"column:accepted_user_id;type:uuid"`
+	ExpiresAt  time.Time        `json:"expires_at" gorm:"not null"`
+	CreatedAt  time.Time        `json:"created_at"`
+	UpdatedAt  time.Time        `json:"updated_at"`
+
+	// Derived, never persisted — hydrated by the service on read.
+	TenantName  string `json:"tenant_name" gorm:"-"`
+	InviterName string `json:"inviter_name" gorm:"-"`
 }
 
 // IsExpired checks if the invitation has expired

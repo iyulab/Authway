@@ -20,7 +20,14 @@ type EmailSender interface {
 
 // Service provides organization invitation functionality
 type Service interface {
-	Create(tenantID, inviterID uuid.UUID, req *CreateInvitationRequest) (*Invitation, error)
+	// Create issues an invitation. inviterID is nil when the caller is the
+	// system actor (admin API key) rather than a signed-in user.
+	Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error)
+	// HasValidInvitation reports whether (tenantID, email) has a pending,
+	// unexpired invitation. Auto-provisioning paths (magic link, social login)
+	// use this to enforce the invitation-only onboarding policy, which would
+	// otherwise exist only in comments.
+	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
 	GetByToken(token string) (*Invitation, error)
 	GetByID(id uuid.UUID) (*Invitation, error)
 	ListByTenant(tenantID uuid.UUID) ([]Invitation, error)
@@ -62,14 +69,23 @@ func generateToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-func (s *service) Create(tenantID, inviterID uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {
+func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {
 	t, err := s.tenantService.GetTenantByID(tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("tenant not found: %w", err)
 	}
-	inviter, err := s.userService.GetByID(inviterID)
-	if err != nil {
-		return nil, fmt.Errorf("inviter not found: %w", err)
+	// A nil inviter is the system actor (admin API key): there is no user row to
+	// look up, and requiring one is what made a fresh instance un-bootstrappable.
+	inviterName := SystemInviterName
+	if inviterID != nil {
+		inviter, err := s.userService.GetByID(*inviterID)
+		if err != nil {
+			return nil, fmt.Errorf("inviter not found: %w", err)
+		}
+		if inviter.TenantID != tenantID {
+			return nil, fmt.Errorf("inviter belongs to a different organization")
+		}
+		inviterName = displayName(inviter)
 	}
 	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, req.Email)
 	if existingUser != nil {
@@ -87,25 +103,21 @@ func (s *service) Create(tenantID, inviterID uuid.UUID, req *CreateInvitationReq
 	if role == "" {
 		role = "member"
 	}
-	inviterName := inviter.Email
-	if inviter.Name != nil && *inviter.Name != "" {
-		inviterName = *inviter.Name
-	}
 	invitation := &Invitation{
-		TenantID:    tenantID,
-		TenantName:  t.Name,
-		InviterID:   inviterID,
-		InviterName: inviterName,
-		Email:       req.Email,
-		Role:        role,
-		Token:       token,
-		Status:      StatusPending,
-		Message:     req.Message,
-		ExpiresAt:   time.Now().Add(s.expiry),
+		TenantID:  tenantID,
+		InviterID: inviterID,
+		Email:     req.Email,
+		Role:      role,
+		Token:     token,
+		Status:    StatusPending,
+		Message:   req.Message,
+		ExpiresAt: time.Now().Add(s.expiry),
 	}
 	if err := s.db.Create(invitation).Error; err != nil {
 		return nil, fmt.Errorf("failed to create invitation: %w", err)
 	}
+	invitation.TenantName = t.Name
+	invitation.InviterName = inviterName
 	if s.emailSender != nil {
 		inviteURL := fmt.Sprintf("%s/invitation/accept?token=%s", s.baseURL, invitation.Token)
 		if err := s.emailSender.SendInvitationEmail(req.Email, inviterName, t.Name, req.Message, inviteURL); err != nil {
@@ -116,11 +128,67 @@ func (s *service) Create(tenantID, inviterID uuid.UUID, req *CreateInvitationReq
 	return invitation, nil
 }
 
+// displayName prefers the user's name and falls back to their email, which is
+// the only field guaranteed to be present.
+func displayName(u *user.User) string {
+	if u.Name != nil && *u.Name != "" {
+		return *u.Name
+	}
+	return u.Email
+}
+
+// hydrate fills the derived TenantName/InviterName fields, which are not
+// columns. Lookup failures are non-fatal: a missing tenant or a deleted inviter
+// must not turn a readable invitation into an error, so the field is simply
+// left at its zero value (inviter falls back to "system", matching a NULL
+// inviter_id).
+func (s *service) hydrate(invs ...*Invitation) {
+	tenantNames := map[uuid.UUID]string{}
+	inviterNames := map[uuid.UUID]string{}
+	for _, inv := range invs {
+		if _, ok := tenantNames[inv.TenantID]; !ok {
+			if t, err := s.tenantService.GetTenantByID(inv.TenantID); err == nil {
+				tenantNames[inv.TenantID] = t.Name
+			} else {
+				tenantNames[inv.TenantID] = ""
+			}
+		}
+		inv.TenantName = tenantNames[inv.TenantID]
+
+		inv.InviterName = SystemInviterName
+		if inv.InviterID == nil {
+			continue
+		}
+		if _, ok := inviterNames[*inv.InviterID]; !ok {
+			if u, err := s.userService.GetByID(*inv.InviterID); err == nil {
+				inviterNames[*inv.InviterID] = displayName(u)
+			} else {
+				inviterNames[*inv.InviterID] = SystemInviterName
+			}
+		}
+		inv.InviterName = inviterNames[*inv.InviterID]
+	}
+}
+
+func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&Invitation{}).
+		Where("tenant_id = ? AND email = ? AND status = ? AND expires_at > ?",
+			tenantID, email, StatusPending, time.Now()).
+		Count(&count).Error; err != nil {
+		// Fail closed: an unreadable invitation table must not be treated as
+		// "no policy", which would silently re-open self-registration.
+		return false, fmt.Errorf("failed to check invitations: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (s *service) GetByToken(token string) (*Invitation, error) {
 	var inv Invitation
 	if err := s.db.Where("token = ?", token).First(&inv).Error; err != nil {
 		return nil, fmt.Errorf("invitation not found")
 	}
+	s.hydrate(&inv)
 	return &inv, nil
 }
 
@@ -129,6 +197,7 @@ func (s *service) GetByID(id uuid.UUID) (*Invitation, error) {
 	if err := s.db.Where("id = ?", id).First(&inv).Error; err != nil {
 		return nil, fmt.Errorf("invitation not found")
 	}
+	s.hydrate(&inv)
 	return &inv, nil
 }
 
@@ -137,6 +206,7 @@ func (s *service) ListByTenant(tenantID uuid.UUID) ([]Invitation, error) {
 	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&invitations).Error; err != nil {
 		return nil, fmt.Errorf("failed to list invitations: %w", err)
 	}
+	s.hydrateAll(invitations)
 	return invitations, nil
 }
 
@@ -145,7 +215,17 @@ func (s *service) ListPendingByEmail(email string) ([]Invitation, error) {
 	if err := s.db.Where("email = ? AND status = ? AND expires_at > ?", email, StatusPending, time.Now()).Find(&invitations).Error; err != nil {
 		return nil, fmt.Errorf("failed to list invitations: %w", err)
 	}
+	s.hydrateAll(invitations)
 	return invitations, nil
+}
+
+// hydrateAll hydrates a slice in place (the elements, not copies).
+func (s *service) hydrateAll(invs []Invitation) {
+	ptrs := make([]*Invitation, len(invs))
+	for i := range invs {
+		ptrs[i] = &invs[i]
+	}
+	s.hydrate(ptrs...)
 }
 
 func (s *service) Accept(token string, userID *uuid.UUID, name, password string) (*user.User, error) {

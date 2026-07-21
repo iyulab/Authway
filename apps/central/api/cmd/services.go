@@ -65,7 +65,9 @@ func InitNewFeatureServices(
 	passwordlessEmailAdapter := &passwordlessEmailAdapterImpl{
 		emailService: emailService,
 	}
-	passwordlessService := passwordless.NewService(db, userService, passwordlessEmailAdapter, logger, frontendURL)
+	// invitationService doubles as the passwordless invitation gate — magic-link
+	// provisioning is allowed only for an invited address (invitation-only).
+	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL)
 	passwordlessHandler := passwordless.NewHandler(passwordlessService, logger)
 
 	// Impersonation Service

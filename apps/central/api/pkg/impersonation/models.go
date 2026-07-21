@@ -6,11 +6,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// SystemActorEmail is recorded as admin_email when a session was started by the
+// system actor (admin API key), which has no user row and therefore no address.
+// admin_email stays NOT NULL so the audit trail always names an actor.
+const SystemActorEmail = "system"
+
 // ImpersonationSession represents an active impersonation session
 type ImpersonationSession struct {
 	ID              uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	TenantID        uuid.UUID  `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	AdminID         uuid.UUID  `json:"admin_id" gorm:"type:uuid;not null;index"`
+	// AdminID is NULL when the session was started by the system actor (admin
+	// API key), which has no user row. AdminEmail then reads SystemActorEmail
+	// so the audit trail still names who acted.
+	AdminID         *uuid.UUID `json:"admin_id" gorm:"type:uuid;index"`
 	AdminEmail      string     `json:"admin_email" gorm:"size:255;not null"`
 	TargetUserID    uuid.UUID  `json:"target_user_id" gorm:"type:uuid;not null;index"`
 	TargetUserEmail string     `json:"target_user_email" gorm:"size:255;not null"`

@@ -35,19 +35,23 @@ func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
 	}
 
-	// For Admin Console requests, use a system UUID for admin
-	var adminID uuid.UUID
+	// A signed-in admin is attributed by id. The Admin Console authenticates
+	// with the admin API key and has no user behind it, so it acts as the
+	// system actor — adminID stays nil, which migration 017 lets the column
+	// express. (It previously pointed at a hard-coded UUID with no users row,
+	// which the NOT NULL foreign key rejected outright.)
+	var adminID *uuid.UUID
 	isAdminConsole := c.Locals("is_admin_console")
 	adminIDStr := c.Locals("user_id")
 
 	if adminIDStr != nil {
-		adminID, err = uuid.Parse(adminIDStr.(string))
+		parsed, err := uuid.Parse(adminIDStr.(string))
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid admin ID"})
 		}
+		adminID = &parsed
 	} else if isAdminConsole != nil && isAdminConsole.(bool) {
-		// Admin Console request - use a deterministic system UUID for admin
-		adminID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		// system actor — nil admin
 	} else {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - admin_id required"})
 	}
@@ -72,14 +76,14 @@ func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 	if err != nil {
 		h.logger.Warn("Failed to start impersonation",
 			zap.Error(err),
-			zap.String("admin_id", adminID.String()),
+			zap.String("admin_id", adminIDForLog(adminID)),
 			zap.String("target_user_id", req.TargetUserID.String()),
 		)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	h.logger.Info("Impersonation started",
-		zap.String("admin_id", adminID.String()),
+		zap.String("admin_id", adminIDForLog(adminID)),
 		zap.String("target_user_id", req.TargetUserID.String()),
 		zap.String("reason", req.Reason),
 	)
@@ -115,7 +119,9 @@ func (h *Handler) ValidateImpersonationToken(c *fiber.Ctx) error {
 		"valid":      true,
 		"session_id": session.ID.String(),
 		"admin": fiber.Map{
-			"id":    session.AdminID.String(),
+			// Serializes to null for a system-actor session rather than
+			// inventing a UUID-shaped string in a UUID-typed field.
+			"id":    session.AdminID,
 			"email": session.AdminEmail,
 		},
 		"target_user": fiber.Map{
@@ -211,4 +217,15 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	impersonate.Post("/:sessionId/end", h.EndImpersonation)
 	impersonate.Get("/sessions", h.GetActiveSessions)
 	impersonate.Get("/history", h.GetSessionHistory)
+}
+
+// adminIDForLog renders a possibly-nil admin id. A nil id means the system
+// actor (admin API key), and uuid.UUID is an array type — calling String() on a
+// nil *uuid.UUID panics, which is exactly how the first cut of this change
+// returned 500 after having already written the session row.
+func adminIDForLog(id *uuid.UUID) string {
+	if id == nil {
+		return SystemActorEmail
+	}
+	return id.String()
 }

@@ -9,7 +9,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Magic links no longer let anyone register themselves.** Onboarding has been
+  invitation-only since 0.4.0, but the policy lived in a comment: the public,
+  unauthenticated `POST /api/v1/auth/magic-link/send` provisioned a user for any
+  address on verify — and the tenant came from the request, so an attacker who
+  knew a tenant id could plant an account in someone else's organisation.
+  Provisioning now requires a pending invitation for that exact
+  (tenant, address); because invitations are keyed on both, the arbitrary-tenant
+  hole closes with it. Eligibility is re-checked at verify, so revoking an
+  invitation invalidates links already sent, and the gate fails closed if it is
+  ever left unwired. The response to an uninvited address is deliberately
+  identical to the invited one — differing replies would turn the endpoint into
+  a membership oracle. Social login still auto-provisions and is tracked
+  separately.
+
+- **Checking a magic link no longer spends it.** `GET /auth/magic-link/status`
+  called the verification path, so it marked the token used and created the
+  user — an email scanner that prefetches links consumed them before the
+  recipient clicked. Status is now a genuine read. Redemption is also a single
+  conditional update rather than read-then-write, so one link cannot be redeemed
+  twice concurrently, and the `GET` twin of `/verify` is gone: consuming a token
+  is a state change and does not belong in a URL that proxies, prefetchers and
+  `Referer` headers pass around.
+
 ### Fixed
+
+- **A fresh instance can be given its first user.** Onboarding is
+  invitation-only and the sole admin-side surface for creating a user is
+  `POST /api/v1/invitations` — but that endpoint required an existing user as
+  the inviter. Called with the admin API key it attributed the invitation to a
+  hard-coded UUID that no `users` row ever had, so it failed with
+  `inviter not found` on any instance or tenant that had no users yet: creating
+  a user needed an invitation, and an invitation needed a user.
+
+  `invitations.inviter_id` is now nullable and expresses what was already true —
+  the inviter may be the system rather than a person (migration 016). The
+  hard-coded UUID is gone. Deleting a user no longer destroys the invitations
+  they sent, either: the foreign key was `ON DELETE CASCADE` and is now
+  `SET NULL`, so the history survives and only the attribution drops.
+
+- **Invitations could never be created at all.** Behind the inviter check sat a
+  second wall: the model declared `tenant_name`, `inviter_name` and
+  `accepted_by` columns that no migration creates, so every insert failed on the
+  column name. Those two names are copies of data that lives on `tenants` and
+  `users`, so they are now derived at read time instead of stored, and
+  `accepted_by` maps to the column that actually exists. Verified end to end
+  against a real database: a tenant with zero users now goes invitation → accept
+  → first user.
+
+- **Impersonation was unusable with the admin API key.** The same defect in a
+  second place — `impersonation_sessions.admin_id` was `NOT NULL REFERENCES
+  users(id)` while the handler supplied the same phantom UUID. It is nullable
+  now (migration 017), with `admin_email` recording `system` so the audit trail
+  still names an actor.
+
+- **Webhooks could not be created.** `webhooks.events` is a Postgres `text[]`,
+  but the model typed it as a plain `[]string`, which the driver cannot encode —
+  every `POST /api/v1/webhooks` failed with `malformed array literal`.
+
+- **Emailed magic links pointed at a page that does not exist.** The link was
+  built against `/auth/magic-link/verify` on the auth UI, whose route is
+  `/magic-link`.
+
+### Added
+
+- **A schema contract test** (`internal/database/schema_contract_test.go`) writes
+  one row per feature model against the real migrated schema. Every defect above
+  is the same kind — a Go model and its SQL table drifting apart — and the
+  existing service tests are structurally blind to it, because they build their
+  schema with AutoMigrate *from the same struct*. The new test found the webhook
+  bug and the fact that `pkg/accountlink` maps to a table no migration creates
+  while its routes are registered regardless (tracked as an open decision).
 
 - **Admin console reloaded forever once the session expired.** `/dashboard`
   bounced between itself and `/login` in an endless full-page refresh that only
