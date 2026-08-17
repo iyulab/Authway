@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  # Root Go module (includes apps/central/api — no go.work, but the module
+  # itself is rooted here).
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # apps/branding/auth-api is its own Go module (separate go.mod/go.sum).
+  - package-ecosystem: "gomod"
+    directory: "/apps/branding/auth-api"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # pnpm workspace: packages/client, packages/react, samples/*.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      workspace-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # apps/central/admin has its own package-lock.json (npm, not part of the
+  # pnpm workspace — see pnpm-workspace.yaml).
+  - package-ecosystem: "npm"
+    directory: "/apps/central/admin"
+    schedule:
+      interval: "weekly"
+    groups:
+      admin-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # apps/branding/auth-ui — same as admin, its own package-lock.json.
+  - package-ecosystem: "npm"
+    directory: "/apps/branding/auth-ui"
+    schedule:
+      interval: "weekly"
+    groups:
+      auth-ui-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

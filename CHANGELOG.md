@@ -2,6 +2,15 @@
 
 ### Security
 
+- **Updated axios in both frontend apps (admin console, auth UI) past a run
+  of known vulnerabilities** — SSRF via proxy handling, several prototype-
+  pollution paths that could allow response tampering or credential theft,
+  and a couple of denial-of-service issues, the most recent fixed only in
+  1.18.0. Both apps had drifted onto different, both-vulnerable versions;
+  both now run 1.19.0. Neither app sends attacker-controlled input into
+  axios configuration, so exploitability here was limited, but there was no
+  reason to leave the exposure in place once found.
+
 - **Bound parameters no longer reach the logs.** The GORM logger was pinned to
   `Info` in every environment, which prints each statement with its values
   inlined. Live secrets went to the container console that way — an invitation
