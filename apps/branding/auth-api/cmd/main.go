@@ -25,9 +25,10 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize logger
+	// Initialize logger. Staging gets the structured production logger too — it's
+	// a real deployed environment, not local development.
 	var zapLogger *zap.Logger
-	if cfg.App.Environment == "production" {
+	if config.IsProduction(cfg.App.Environment) {
 		zapLogger, err = zap.NewProduction()
 	} else {
 		zapLogger, err = zap.NewDevelopment()

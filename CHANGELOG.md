@@ -40,6 +40,17 @@
   provider, and no account has been created in the last thirty days — so no
   live onboarding path depended on this.
 
+- **Staging now gets the same fail-closed configuration checks as production.**
+  Every safety check that rejects a weak admin password, a missing admin/TOTP
+  key, or a frontend URL pointing at the container itself was gated on the
+  literal environment name `production` — any other deployed environment,
+  staging included, silently took the relaxed local-development path instead:
+  missing keys were auto-generated on the fly rather than failing to boot. The
+  gate is now "development or not", so any real deployment gets the strict
+  checks. Verified against the current values a staging deploy actually
+  injects, so this does not change staging's boot behavior today — it closes
+  the gap for the next time one of those values is accidentally left unset.
+
 - **Logout redirect wildcard matching now checks the actual host.** With
   wildcard post-logout redirects enabled for a client, the match ran against
   the raw request URI as a string, so a `*.example.com` whitelist entry was
@@ -51,6 +62,14 @@
   that had explicitly opted into wildcard redirects were exposed.
 
 ### Removed
+
+- **Unused JWT secret configuration is gone.** `jwt.access_token_secret` and
+  `jwt.refresh_token_secret` were never read anywhere outside their own
+  validation check — token signing has always been Hydra's job — so the check
+  guarded a value nothing used, while defaulting to a hardcoded placeholder.
+  The admin session store's own hand-rolled SHA-256 hashing and token
+  generation are also gone in favor of the shared `pkg/tokenhash`; the digest
+  format is unchanged, so existing sessions are unaffected.
 
 - **Account linking (`pkg/accountlink`) is gone.** It mapped to a
   `linked_accounts` table that no migration has ever created, and its routes

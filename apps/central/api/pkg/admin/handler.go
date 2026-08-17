@@ -1,12 +1,11 @@
 package admin
 
 import (
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"strings"
 
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/tokenhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -16,8 +15,7 @@ import (
 // non-reversible identifier for audit logs so operators can distinguish
 // which provisioned key performed an action without ever storing the key.
 func apiKeyHint(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:])[:8]
+	return tokenhash.Hash(key)[:8]
 }
 
 type Handler struct {

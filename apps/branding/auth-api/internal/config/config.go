@@ -14,6 +14,20 @@ type Config struct {
 	Hydra       HydraConfig
 }
 
+// IsDevelopment reports whether env selects the relaxed local/dev codepath.
+// Unset defaults to development.
+func IsDevelopment(env string) bool {
+	return env == "" || env == "development"
+}
+
+// IsProduction reports whether env requires production-grade behavior —
+// everything that is not development, including staging. Unrecognized values
+// fail closed on purpose — a typo in the environment name must not silently
+// relax production-only handling.
+func IsProduction(env string) bool {
+	return !IsDevelopment(env)
+}
+
 type AppConfig struct {
 	Port        string
 	Environment string

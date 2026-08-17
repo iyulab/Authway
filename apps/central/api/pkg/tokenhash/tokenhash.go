@@ -1,10 +1,7 @@
 // Package tokenhash provides SHA-256 hashing and secure generation for
-// opaque bearer-style tokens (password reset, magic link, etc.) so that only
-// the hash is persisted at rest — a database read never yields a usable token.
-//
-// The admin session store (pkg/admin) uses the same SHA-256 hex scheme; this
-// package is the shared primitive new call sites should use, and admin can be
-// migrated onto it later.
+// opaque bearer-style tokens (password reset, magic link, admin session,
+// etc.) so that only the hash is persisted at rest — a database read never
+// yields a usable token.
 package tokenhash
 
 import (

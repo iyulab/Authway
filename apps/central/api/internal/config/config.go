@@ -24,11 +24,24 @@ func generateRandomKey(bytes int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
+// IsDevelopment reports whether env selects the relaxed local/dev codepath —
+// auto-generated admin keys, verbose debug output. Unset defaults to development.
+func IsDevelopment(env string) bool {
+	return env == "" || env == "development"
+}
+
+// IsProduction reports whether env requires production-grade safety (fail-closed
+// secret validation, no debug output): everything that is not development,
+// including staging. Unrecognized values fail closed on purpose — a typo in the
+// environment name must not silently relax a security gate.
+func IsProduction(env string) bool {
+	return !IsDevelopment(env)
+}
+
 type Config struct {
 	App                 AppConfig                 `mapstructure:"app"`
 	Database            DatabaseConfig            `mapstructure:"database"`
 	Redis               RedisConfig               `mapstructure:"redis"`
-	JWT                 JWTConfig                 `mapstructure:"jwt"`
 	OAuth               OAuthConfig               `mapstructure:"oauth"`
 	Hydra               HydraConfig               `mapstructure:"hydra"`
 	CORS                CORSConfig                `mapstructure:"cors"`
@@ -74,16 +87,6 @@ type RedisConfig struct {
 	Password   string `mapstructure:"password"`
 	DB         int    `mapstructure:"db"`
 	TLSEnabled bool   `mapstructure:"tls_enabled"`
-}
-
-type JWTConfig struct {
-	AccessTokenSecret  string `mapstructure:"access_token_secret"`
-	RefreshTokenSecret string `mapstructure:"refresh_token_secret"`
-	AccessTokenExpiry  string `mapstructure:"access_token_expiry"`
-	RefreshTokenExpiry string `mapstructure:"refresh_token_expiry"`
-	Issuer             string `mapstructure:"issuer"`
-	PrivateKeyPath     string `mapstructure:"private_key_path"`
-	PublicKeyPath      string `mapstructure:"public_key_path"`
 }
 
 type OAuthConfig struct {
@@ -292,11 +295,12 @@ func Load() (*Config, error) {
 		config.Admin.APIKey = adminAPIKey
 	}
 
-	// Dev-mode fallback: auto-generate the admin/internal API keys when running
-	// outside production so the admin console + auth-api integration remain
-	// usable without manual setup. Production fails validation (below) to force
-	// explicit keys.
-	if config.App.Environment != "production" {
+	// Dev-mode fallback: auto-generate the admin/internal API keys in local
+	// development so the admin console + auth-api integration remain usable
+	// without manual setup. Every other environment — including staging — fails
+	// validation (below) to force explicit keys instead of silently minting
+	// ephemeral ones that a peer service can't know.
+	if IsDevelopment(config.App.Environment) {
 		if config.Admin.APIKey == "" {
 			key, err := generateRandomKey(32)
 			if err != nil {
@@ -356,9 +360,10 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Config 적용 확인용 stdout 출력 — production은 침묵
-	// (운영 환경은 zap logger가 별도로 startup state를 남기므로 중복).
-	if config.App.Environment != "production" {
+	// Config 적용 확인용 stdout 출력 — development에서만 출력
+	// (staging 이상은 zap logger가 별도로 startup state를 남기므로 중복이며,
+	// staging도 실배포 환경이라 설정값을 stdout에 남기지 않는다).
+	if IsDevelopment(config.App.Environment) {
 		fmt.Printf("🔍 Database Config: Host=%s, Port=%d, User=%s, Name=%s\n",
 			config.Database.Host, config.Database.Port, config.Database.User, config.Database.Name)
 		fmt.Printf("🔍 Redis Config: Host=%s, Port=%d\n",
@@ -393,30 +398,26 @@ func (c *Config) Validate() error {
 		errors = append(errors, "database.name is required")
 	}
 
-	// Warn about insecure JWT secrets in production
-	if c.App.Environment == "production" {
-		if c.JWT.AccessTokenSecret == "your-secret-key-change-in-production" {
-			errors = append(errors, "CRITICAL: jwt.access_token_secret must be changed in production")
-		}
-		if c.JWT.RefreshTokenSecret == "your-refresh-secret-key-change-in-production" {
-			errors = append(errors, "CRITICAL: jwt.refresh_token_secret must be changed in production")
-		}
+	// Fail-closed checks below apply to every environment that is not local
+	// development — staging is a real deployed, internet-facing environment and
+	// gets the same guarantees as production, not the relaxed dev fallback.
+	if IsProduction(c.App.Environment) {
 		if c.Admin.Password == "" || c.Admin.Password == "admin123" {
-			errors = append(errors, "CRITICAL: admin.password must be set to a strong password in production")
+			errors = append(errors, "CRITICAL: admin.password must be set to a strong password outside development")
 		}
-		// Fail-closed: admin API key is required in production. Without it, every
+		// Fail-closed: admin API key is required. Without it, every
 		// adminAuth-protected endpoint rejects all traffic (and previously — before
 		// 0.2.1 — it silently bypassed auth).
 		if c.Admin.APIKey == "" {
-			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set in production — required for /api/v1/clients/* and other admin endpoints")
+			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set outside development — required for /api/v1/clients/* and other admin endpoints")
 		}
 		if c.Admin.InternalAPIKey == "" {
-			errors = append(errors, "CRITICAL: admin.internal_api_key (AUTHWAY_ADMIN_INTERNAL_API_KEY) must be set in production — required for branding auth-api → central /internal/* calls")
+			errors = append(errors, "CRITICAL: admin.internal_api_key (AUTHWAY_ADMIN_INTERNAL_API_KEY) must be set outside development — required for branding auth-api → central /internal/* calls")
 		}
-		// Fail-closed: TOTP secrets must be encrypted at rest in production. An
-		// absent or malformed key would silently fall back to plaintext storage.
+		// Fail-closed: TOTP secrets must be encrypted at rest. An absent or
+		// malformed key would silently fall back to plaintext storage.
 		if c.Security.TOTPEncryptionKey == "" {
-			errors = append(errors, "CRITICAL: security.totp_encryption_key (AUTHWAY_TOTP_ENCRYPTION_KEY) must be set in production — a base64-encoded 32-byte key for TOTP secret encryption at rest")
+			errors = append(errors, "CRITICAL: security.totp_encryption_key (AUTHWAY_TOTP_ENCRYPTION_KEY) must be set outside development — a base64-encoded 32-byte key for TOTP secret encryption at rest")
 		} else if key, err := base64.StdEncoding.DecodeString(c.Security.TOTPEncryptionKey); err != nil {
 			errors = append(errors, "CRITICAL: security.totp_encryption_key must be valid base64")
 		} else if len(key) != 32 {
@@ -431,13 +432,14 @@ func (c *Config) Validate() error {
 		errors = append(errors, "app.frontend_url (AUTHWAY_APP_FRONTEND_URL) is required — the auth UI's public URL, used for invitation/magic-link/verify-email/reset-password links")
 	} else if c.App.FrontendURL == c.App.BaseURL {
 		errors = append(errors, "app.frontend_url must not equal app.base_url — base_url is this API's own address, and emailed links pointing at it return 404")
-	} else if c.App.Environment == "production" && isLoopbackURL(c.App.FrontendURL) {
+	} else if IsProduction(c.App.Environment) && isLoopbackURL(c.App.FrontendURL) {
 		// The required-check above cannot catch this on its own: viper's
 		// AutomaticEnv ignores an empty environment variable (allowEmptyEnv is
 		// false), so AUTHWAY_APP_FRONTEND_URL= silently falls back to the
-		// localhost default instead of failing. Production would then mail out
-		// links to a host only the container can reach.
-		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL in production, got %q — emailed links would point at the container itself", c.App.FrontendURL))
+		// localhost default instead of failing. A deployed environment — staging
+		// included — would then mail out links to a host only the container can
+		// reach.
+		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL outside development, got %q — emailed links would point at the container itself", c.App.FrontendURL))
 	}
 
 	// Warn about missing admin password in all environments
@@ -494,13 +496,6 @@ func setDefaults() {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("redis.tls_enabled", false)
-
-	// JWT defaults
-	viper.SetDefault("jwt.access_token_secret", "your-secret-key-change-in-production")
-	viper.SetDefault("jwt.refresh_token_secret", "your-refresh-secret-key-change-in-production")
-	viper.SetDefault("jwt.access_token_expiry", "15m")
-	viper.SetDefault("jwt.refresh_token_expiry", "7d")
-	viper.SetDefault("jwt.issuer", "authway")
 
 	// OAuth defaults
 	viper.SetDefault("oauth.authorize_code_expiry", "10m")
