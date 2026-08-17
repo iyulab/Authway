@@ -2,8 +2,11 @@
 
 Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with JavaScript/TypeScript SDKs.
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/iyulab/authway)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+See [CHANGELOG.md](./CHANGELOG.md) for the current release. The apps and
+packages in this repo are versioned independently — the SDK badges below
+track their actual published versions.
 
 **NPM Packages:**
 
@@ -17,22 +20,21 @@ Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with 
 ## Features
 
 - **OAuth 2.0 / OIDC** - Standards-compliant authentication with PKCE support
-- **Auto-Discovery** - Apps only need Auth Backend URL, rest is auto-discovered
+- **Invitation-only onboarding** - No public sign-up; every account starts from an admin- or peer-issued invitation
+- **Magic-link and social sign-in** - Passwordless email links and Google/GitHub/Microsoft/Apple, gated by the same invitation policy
+- **MFA (TOTP)** - Time-based one-time passcodes with encrypted secrets and backup codes
+- **Admin impersonation** - Support staff can act as a user, fully audited
+- **Audit logging** - Auth, admin and webhook actions recorded per tenant
+- **Webhooks** - Subscribe to account and session lifecycle events
+- **Auto-Discovery** - Apps only need the Auth Backend URL, the rest is auto-discovered
 - **Dynamic Claims** - Runtime user claims management
 - **Multi-Tenancy** - Fully isolated tenant support
 - **Popup Login** - No-redirect authentication flow with Google OAuth support
 - **i18n Support** - Multi-language UI (Korean, English)
 - **TypeScript SDKs** - `@authway/client` and `@authway/react`
 
-### What's New in v0.2.0
-
-- ✅ **i18n (Internationalization)** - Multi-language support for Auth UI (Korean, English)
-- ✅ **Language Switcher** - User-selectable language with browser detection
-- ✅ **Auto-executing Popup Callback** - `@authway/client/popup-callback` module for seamless popup flow
-- ✅ **Enhanced Logout** - OIDC logout with `post_logout_redirect_uri` support
-- ✅ **Next.js Sample** - Complete integration example with `@authway/react`
-
-See [CHANGELOG.md](./CHANGELOG.md) for complete release notes.
+See [CHANGELOG.md](./CHANGELOG.md) for complete release notes, including
+recent security fixes.
 
 ## Quick Start
 
@@ -142,12 +144,9 @@ const user = await client.getUser()
 
 ## Documentation
 
-- **[Getting Started Guide](./docs/GETTING_STARTED.md)** - Complete setup and integration guide
-- **[Backend Integration Guide](./docs/BACKEND_INTEGRATION_GUIDE.md)** - ASP.NET, Node.js, Go backend integration
-- **[Client Registration](./docs/CLIENT_REGISTRATION.md)** - OAuth 2.0 client setup for Public and Confidential clients
-- **[SDK Reference](./docs/SDK_REFERENCE.md)** - API documentation for both SDKs
-- **[OAuth Best Practices](./docs/features/OAUTH_JWT_BEST_PRACTICES.md)** - Security guidelines and common patterns
-- **[Popup Login Guide](./docs/features/POPUP_LOGIN_GUIDE.md)** - Popup authentication with external OAuth providers
+**[docs/README.md](./docs/README.md)** is the documentation hub — setup,
+SDK reference, feature guides, backend integration, deployment and database.
+
 - **[Samples](./samples/)** - Example applications
   - [React SDK Sample](./samples/react-sdk-sample/) - Full-featured React demo
   - [Next.js Sample](./samples/nextjs-sample/) - Next.js App Router integration
@@ -221,8 +220,9 @@ cd packages/react && pnpm build
 # SDK tests
 pnpm test
 
-# Backend tests
+# Backend tests (two separate Go modules)
 cd apps/central/api && go test ./...
+cd apps/branding/auth-api && go test ./...
 ```
 
 ## Contributing

@@ -245,6 +245,28 @@
   probe for a repo-root `.env` is also gone: it looked two directories up from
   `apps/central/api`, which is `apps/`, so it could never have found one.
 
+### Documentation
+
+- **Consolidated three competing documentation entry points into one.** The
+  README, a root documentation index, and `docs/README.md` each claimed to be
+  the place to start, and the root index had drifted furthest — the vast
+  majority of the paths it listed no longer existed. Removed the root index;
+  `docs/README.md` is now the single hub, linked from the README. Its feature
+  list and "what's new" now reflect what actually shipped (invitation-only
+  onboarding, magic links, MFA, admin impersonation, audit logging,
+  webhooks) instead of a snapshot from several releases back.
+- Replaced the static project-version badge with a pointer to the
+  changelog: the apps and packages in this repo version independently, so a
+  single hardcoded number was never accurate for long.
+- Fixed several links pointing at guides that had moved to an archive
+  directory or never existed under the referenced name, including the setup
+  guide's quick-start section (which had also drifted from the README's and
+  referenced a Hydra dev-mode flag this project doesn't use in any shared
+  environment) and a feature doc that incorrectly said wildcard logout
+  redirects were unsupported.
+- Added `CONTRIBUTING.md` — it was referenced from the README but did not
+  exist.
+
 ### Removed
 
 - Four unused deploy scripts that converted a long-gone `schema_migrations`

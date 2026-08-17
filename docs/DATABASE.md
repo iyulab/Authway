@@ -693,5 +693,4 @@ SELECT * FROM pg_locks WHERE relation = 'table_name'::regclass;
 ## See Also
 
 - [Deployment Guide](./DEPLOYMENT.md)
-- [Logout Implementation](./LOGOUT_IMPLEMENTATION.md)
-- [Database Schema](./DATABASE_SCHEMA.md)
+- [Logout & Redirect Policies](./FEATURES.md#logout--redirect-policies)

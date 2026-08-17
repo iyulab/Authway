@@ -1,9 +1,7 @@
 # Authway Setup Guide
 
-**Version**: 0.2.0
-**Last Updated**: 2025-11-17
-
 Complete guide to install, configure, and integrate Authway authentication.
+See [CHANGELOG.md](../CHANGELOG.md) for the current release.
 
 ## Table of Contents
 
@@ -20,62 +18,18 @@ Complete guide to install, configure, and integrate Authway authentication.
 ## Prerequisites
 
 - **Node.js** 18+ and **pnpm** 9+
-- **Go** 1.21+ (for backend development)
-- **PostgreSQL** 15+
-- **Docker** (for running Hydra)
+- **Go** 1.25+ (for backend development)
+- **Docker** (for the backing services: PostgreSQL, Redis, MailHog, Hydra)
 
 ---
 
 ## Quick Start
 
-### 1. Clone and Install
-
-```bash
-git clone https://github.com/iyulab/authway.git
-cd authway
-pnpm install
-```
-
-### 2. Environment Setup
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` file:
-
-```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/authway
-
-# Hydra
-HYDRA_ADMIN_URL=http://localhost:4445
-HYDRA_PUBLIC_URL=http://localhost:4444
-
-# Ports
-CENTRAL_API_PORT=8080
-AUTH_BACKEND_PORT=8081
-```
-
-### 3. Start Services
-
-```bash
-# Terminal 1: Start Hydra
-docker run -d --name hydra \
-  -p 4444:4444 -p 4445:4445 \
-  oryd/hydra:v26.2.0 serve all --dev
-
-# Terminal 2: Start Central API
-cd apps/central/api && go run cmd/main.go
-
-# Terminal 3: Start Auth Backend
-cd apps/branding/auth-api && go run cmd/main.go
-
-# Terminal 4: Start sample app
-cd samples/react-sdk-sample && pnpm dev
-```
-
-Access sample app: http://localhost:9004
+See the [README Quick Start](../README.md#quick-start) — it is the single
+source for cloning, installing, starting the backing services (Postgres,
+Redis, MailHog and Hydra together via `docker compose up -d`), and running
+each app. Keeping one copy here would drift from it the way this section
+previously did.
 
 ---
 

@@ -407,12 +407,14 @@ Notify all applications when user logs out:
    }
    ```
 
-2. **Exact URI Matching**:
+2. **Prefer Exact URI Matching**:
    ```javascript
-   // ✅ Good - exact match
+   // ✅ Good - exact match, no configuration needed
    "https://app.example.com/logged-out"
 
-   // ❌ Bad - wildcards not supported
+   // ⚠️ Wildcard patterns are supported (opt-in via allow_wildcard_logout)
+   // for cases like preview/staging subdomains, but widen what an attacker
+   // can redirect to — prefer an explicit whitelist where possible.
    "https://*.example.com/logged-out"
    ```
 

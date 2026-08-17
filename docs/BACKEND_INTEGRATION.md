@@ -763,8 +763,8 @@ options.Events = new JwtBearerEvents
 
 ## Next Steps
 
-- **[OAuth Best Practices](./features/OAUTH_JWT_BEST_PRACTICES.md)** - Security guidelines
-- **[Client Registration](./CLIENT_REGISTRATION.md)** - Register OAuth clients
+- **[OAuth Best Practices](./FEATURES.md#oauth--jwt-best-practices)** - Security guidelines
+- **[Client Registration](./SETUP.md#client-registration)** - Register OAuth clients
 - **[SDK Reference](./SDK_REFERENCE.md)** - Frontend integration
 - **[Samples](../samples/)** - Working examples
 

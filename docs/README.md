@@ -1,29 +1,33 @@
 # Authway Documentation
 
-**Latest Version**: 0.2.0 (2025-12-03)
+See [CHANGELOG.md](../CHANGELOG.md) for the current release and full history.
 
-## 🆕 What's New in v0.2.0
+## Recent additions
 
-- ✅ **i18n (Internationalization)** - Multi-language support for Auth UI (Korean, English)
-- ✅ **Language Switcher** - User-selectable language with automatic browser detection
-- ✅ **Auto-executing Popup Callback** - `@authway/client/popup-callback` module for seamless popup flow
-- ✅ **Enhanced Logout** - OIDC logout with `post_logout_redirect_uri` support
-- ✅ **Next.js Sample** - Complete integration example with `@authway/react`
-- ✅ **Intelligent Auto-Migration System** - Fast detection (1-2s) with PostgreSQL advisory locks
+Since the feature set below was last written up, these have shipped —
+covered in the CHANGELOG rather than a dedicated guide for now:
 
-See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
+- **Invitation-only onboarding** - no public sign-up; every account starts
+  from an invitation
+- **Magic-link sign-in** - passwordless email links, gated by the same
+  invitation policy as password and social accounts
+- **MFA (TOTP)** - encrypted secrets, backup codes
+- **Admin impersonation** - audited "sign in as this user" for support
+- **Audit logging** - auth, admin and webhook actions per tenant
+- **Webhooks** - subscribe to account and session lifecycle events
 
 ---
 
 ## Core Documentation
 
 ### Getting Started
-- **[Setup Guide](./SETUP.md)** - Complete installation, configuration, and SDK integration
+- **[Setup Guide](./SETUP.md)** - Installation, first-user invitation flow, client registration, SDK integration
 - **[SDK Reference](./SDK_REFERENCE.md)** - Full API documentation for React and Vanilla JS SDKs
 
 ### Features & Integration
 - **[Features Guide](./FEATURES.md)** - Dynamic Claims, Popup Login, Logout Policies, OAuth/JWT Best Practices
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
+- **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
 
 ### Operations
 - **[Deployment Guide](./DEPLOYMENT.md)** - Azure, Docker, CORS, production checklist
