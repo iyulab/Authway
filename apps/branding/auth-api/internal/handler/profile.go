@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
@@ -48,7 +49,7 @@ func (h *ProfileHandler) GetProfile(c *fiber.Ctx) error {
 	req.Header.Set("Authorization", authHeader)
 	req.Header.Set("X-Internal-API-Key", h.internalAPIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		h.logger.Error("Failed to proxy request to Central API", zap.Error(err))

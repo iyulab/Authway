@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ func (h *ConsentHandler) GetConsentInfo(c *fiber.Ctx) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-API-Key", h.internalAPIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		h.logger.Error("Failed to proxy request to Central API", zap.Error(err))
@@ -98,7 +99,7 @@ func (h *ConsentHandler) AcceptConsent(c *fiber.Ctx) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-API-Key", h.internalAPIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		h.logger.Error("Failed to proxy request to Central API", zap.Error(err))
@@ -144,7 +145,7 @@ func (h *ConsentHandler) RejectConsent(c *fiber.Ctx) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-API-Key", h.internalAPIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		h.logger.Error("Failed to proxy request to Central API", zap.Error(err))

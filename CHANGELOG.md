@@ -61,6 +61,15 @@
   and compares against its host. The feature defaults off, so only clients
   that had explicitly opted into wildcard redirects were exposed.
 
+### Fixed
+
+- **Proxy requests to Hydra and the Central API could hang indefinitely.**
+  Several of the auth backend's own HTTP clients (login, consent, claims,
+  profile) were constructed with no timeout, so a slow or unresponsive
+  upstream would tie up the handling goroutine and connection with it. They
+  now share the same 30-second timeout the service-layer clients already
+  used.
+
 ### Removed
 
 - **Unused JWT secret configuration is gone.** `jwt.access_token_secret` and
