@@ -18,6 +18,13 @@ type GoogleService struct {
 	config     *config.GoogleOAuthConfig
 	logger     *zap.Logger
 	httpClient *http.Client
+
+	// Google's own endpoints. Fixed in production (there is only one Google),
+	// but held as fields rather than inline literals so tests can point a
+	// GoogleService at a local server instead of the real accounts.google.com.
+	authBaseURL string
+	tokenURL    string
+	userInfoURL string
 }
 
 type GoogleUserInfo struct {
@@ -47,12 +54,26 @@ func NewGoogleService(cfg *config.GoogleOAuthConfig, logger *zap.Logger) *Google
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		authBaseURL: "https://accounts.google.com/o/oauth2/v2/auth",
+		tokenURL:    "https://oauth2.googleapis.com/token",
+		userInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
 	}
+}
+
+// NewGoogleServiceForTesting builds a GoogleService pointed at caller-supplied
+// endpoints (e.g. httptest servers) instead of the real Google ones. Exported
+// only so tests in other packages (internal/handler) can construct a fake
+// GoogleService for OAuthHandler — never call this outside a test.
+func NewGoogleServiceForTesting(cfg *config.GoogleOAuthConfig, logger *zap.Logger, authBaseURL, tokenURL, userInfoURL string) *GoogleService {
+	svc := NewGoogleService(cfg, logger)
+	svc.authBaseURL = authBaseURL
+	svc.tokenURL = tokenURL
+	svc.userInfoURL = userInfoURL
+	return svc
 }
 
 // GetAuthURL returns the Google OAuth authorization URL
 func (g *GoogleService) GetAuthURL(state string) string {
-	baseURL := "https://accounts.google.com/o/oauth2/v2/auth"
 	params := url.Values{}
 	params.Add("client_id", g.config.ClientID)
 	params.Add("redirect_uri", g.config.RedirectURL)
@@ -62,12 +83,12 @@ func (g *GoogleService) GetAuthURL(state string) string {
 	params.Add("access_type", "offline")
 	params.Add("prompt", "consent")
 
-	return fmt.Sprintf("%s?%s", baseURL, params.Encode())
+	return fmt.Sprintf("%s?%s", g.authBaseURL, params.Encode())
 }
 
 // ExchangeCode exchanges authorization code for access token
 func (g *GoogleService) ExchangeCode(ctx context.Context, code string) (*GoogleTokenResponse, error) {
-	tokenURL := "https://oauth2.googleapis.com/token"
+	tokenURL := g.tokenURL
 
 	data := url.Values{}
 	data.Set("client_id", g.config.ClientID)
@@ -104,9 +125,7 @@ func (g *GoogleService) ExchangeCode(ctx context.Context, code string) (*GoogleT
 
 // GetUserInfo retrieves user information from Google
 func (g *GoogleService) GetUserInfo(ctx context.Context, accessToken string) (*GoogleUserInfo, error) {
-	userInfoURL := "https://www.googleapis.com/oauth2/v2/userinfo"
-
-	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", g.userInfoURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user info request: %w", err)
 	}

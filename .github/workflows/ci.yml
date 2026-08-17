@@ -78,6 +78,34 @@ jobs:
             fi
           done
 
+  # auth-api is its own Go module (no go.work tying it to the root module), so
+  # the `go` job above — which builds/vets/tests from the repo root — never
+  # touches it. It owns login/consent/logout/OAuth/social-login: exactly the
+  # kind of auth-flow surface where an untested regression is most costly.
+  auth-api:
+    name: auth-api build / vet / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/branding/auth-api
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: apps/branding/auth-api/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
   # The two Vite apps live outside the pnpm workspace (each has its own
   # package-lock.json), so they were invisible to CI — their test suites only ever
   # ran on a developer machine. Build + test them here; no artifacts are uploaded

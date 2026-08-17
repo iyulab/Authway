@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
@@ -29,13 +31,13 @@ func NewLogoutHandler(centralAPIURL, internalKey, hydraAdminURL string, logger *
 
 // LogoutRequest represents Hydra's logout request
 type LogoutRequest struct {
-	Challenge        string `json:"challenge"`
-	Subject          string `json:"subject"`
-	SessionID        string `json:"sid"`
-	RequestURL       string `json:"request_url"`
-	RPInitiated      bool   `json:"rp_initiated"`
-	RequestedAt      string `json:"requested_at"`
-	Client           *LogoutClient `json:"client,omitempty"`
+	Challenge   string        `json:"challenge"`
+	Subject     string        `json:"subject"`
+	SessionID   string        `json:"sid"`
+	RequestURL  string        `json:"request_url"`
+	RPInitiated bool          `json:"rp_initiated"`
+	RequestedAt string        `json:"requested_at"`
+	Client      *LogoutClient `json:"client,omitempty"`
 }
 
 type LogoutClient struct {
@@ -44,13 +46,13 @@ type LogoutClient struct {
 
 // ClientConfig represents client configuration from Central API
 type ClientConfig struct {
-	ID                      string   `json:"id"`
-	ClientID                string   `json:"client_id"`
-	PostLogoutRedirectURIs  []string `json:"post_logout_redirect_uris"`
-	LogoutRedirectPolicy    string   `json:"logout_redirect_policy"`
-	DefaultLogoutURI        *string  `json:"default_logout_uri"`
-	AllowWildcardLogout     bool     `json:"allow_wildcard_logout"`
-	Website                 string   `json:"website"`
+	ID                     string   `json:"id"`
+	ClientID               string   `json:"client_id"`
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	LogoutRedirectPolicy   string   `json:"logout_redirect_policy"`
+	DefaultLogoutURI       *string  `json:"default_logout_uri"`
+	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
+	Website                string   `json:"website"`
 }
 
 // HandleLogout processes logout requests with configurable policy validation
@@ -299,22 +301,32 @@ func (h *LogoutHandler) isWhitelisted(uri string, whitelist []string, allowWildc
 }
 
 // matchesWildcard checks if URI matches wildcard pattern
+//
+// Matching is bound to the parsed host, never the raw URI string: a naive
+// suffix comparison on the full URI lets an attacker satisfy "*.domain.com"
+// with e.g. "https://evil.com/?x=y.domain.com" (the query string, not the
+// host, ends with the suffix). Parsing first closes that off.
 func (h *LogoutHandler) matchesWildcard(uri, pattern string) bool {
-	// Simple wildcard matching for localhost:* and *.domain.com patterns
 	if len(pattern) == 0 {
 		return false
 	}
 
-	// localhost:* pattern
-	if pattern == "http://localhost:*" || pattern == "https://localhost:*" {
-		return len(uri) > len("http://localhost:") &&
-			(uri[:17] == "http://localhost:" || uri[:18] == "https://localhost:")
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Host == "" {
+		return false
 	}
 
-	// *.domain.com pattern
+	// localhost:* pattern — any port, matching scheme, host exactly "localhost"
+	if pattern == "http://localhost:*" || pattern == "https://localhost:*" {
+		wantScheme := strings.TrimSuffix(pattern, "://localhost:*")
+		return parsed.Scheme == wantScheme && parsed.Hostname() == "localhost"
+	}
+
+	// *.domain.com pattern — host equals the domain or is a subdomain of it
 	if pattern[0] == '*' && len(pattern) > 1 {
-		suffix := pattern[1:] // Remove leading *
-		return len(uri) >= len(suffix) && uri[len(uri)-len(suffix):] == suffix
+		domain := strings.TrimPrefix(pattern[1:], ".")
+		host := parsed.Hostname()
+		return host == domain || strings.HasSuffix(host, "."+domain)
 	}
 
 	return false

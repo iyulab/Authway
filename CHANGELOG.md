@@ -31,6 +31,16 @@
   provider, and no account has been created in the last thirty days — so no
   live onboarding path depended on this.
 
+- **Logout redirect wildcard matching now checks the actual host.** With
+  wildcard post-logout redirects enabled for a client, the match ran against
+  the raw request URI as a string, so a `*.example.com` whitelist entry was
+  satisfied by any URI whose query string or fragment happened to end in that
+  suffix — the host itself was never parsed out and checked. A URI like
+  `https://attacker.example/?x=y.example.com` passed the same whitelist entry
+  a real `https://app.example.com` request would. Matching now parses the URI
+  and compares against its host. The feature defaults off, so only clients
+  that had explicitly opted into wildcard redirects were exposed.
+
 ### Removed
 
 - **Account linking (`pkg/accountlink`) is gone.** It mapped to a
