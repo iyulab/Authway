@@ -72,7 +72,7 @@ func (f *fakeUserService) GetByID(id uuid.UUID) (*user.User, error) {
 	}
 	return nil, fmt.Errorf("user not found")
 }
-func (f *fakeUserService) GetByEmail(email string) (*user.User, error) {
+func (f *fakeUserService) GetByEmailUnscoped(email string) (*user.User, error) {
 	for _, u := range f.users {
 		if u.Email == email {
 			return u, nil

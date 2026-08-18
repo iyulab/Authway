@@ -151,7 +151,7 @@ func TestService_GetByID(t *testing.T) {
 	}
 }
 
-func TestService_GetByEmail(t *testing.T) {
+func TestService_GetByEmailUnscoped(t *testing.T) {
 	db := setupTestDB(t)
 	logger := zaptest.NewLogger(t)
 	service := NewService(db, logger)
@@ -186,7 +186,7 @@ func TestService_GetByEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			user, err := service.GetByEmail(tt.email)
+			user, err := service.GetByEmailUnscoped(tt.email)
 
 			if tt.expectError {
 				assert.Error(t, err)

@@ -13,7 +13,16 @@ import (
 type Service interface {
 	Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error)
 	GetByID(id uuid.UUID) (*User, error)
-	GetByEmail(email string) (*User, error) // Deprecated: Use GetByEmailAndTenant
+	// GetByEmailUnscoped matches globally, across every tenant, in undefined
+	// order when the same email exists in more than one tenant
+	// (idx_users_tenant_email allows it). Renamed from GetByEmail (HD-09,
+	// claudedocs/HANDOFF.md) after a "Deprecated" comment alone still let a
+	// live auth path (POST /authenticate, fixed cycle-108) ship unscoped —
+	// the unsafe name is now the only spelling, so grep for it finds every
+	// caller. Only apps/central/api/internal/handler/email.go still calls
+	// it, because those two endpoints have no tenant context to scope by
+	// (HD-10, still open) — everywhere else, use GetByEmailAndTenant.
+	GetByEmailUnscoped(email string) (*User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
 	Update(id uuid.UUID, req *UpdateUserRequest) (*User, error)
@@ -83,7 +92,7 @@ func (s *service) GetByID(id uuid.UUID) (*User, error) {
 	return &user, nil
 }
 
-func (s *service) GetByEmail(email string) (*User, error) {
+func (s *service) GetByEmailUnscoped(email string) (*User, error) {
 	var user User
 	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {

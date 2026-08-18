@@ -85,8 +85,10 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find user by email
-	usr, err := h.userSvc.GetByEmail(req.Email)
+	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
+	// context in its request body or route middleware to scope by (HD-10,
+	// claudedocs/HANDOFF.md — still open, needs an API-contract decision).
+	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)
 		return c.JSON(fiber.Map{
@@ -214,8 +216,10 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find user by email
-	usr, err := h.userSvc.GetByEmail(req.Email)
+	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
+	// context in its request body or route middleware to scope by (HD-10,
+	// claudedocs/HANDOFF.md — still open, needs an API-contract decision).
+	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)
 		return c.JSON(fiber.Map{
