@@ -2,6 +2,13 @@
 
 ### Security
 
+- **Upgraded react-router past two moderate CVEs in both frontend apps** (admin console, auth
+  UI) — an open-redirect bypass in `<Link>`/`useNavigate` and an arbitrary-constructor-injection
+  path in SSR hydration error deserialization. Neither has a fix on the 6.x line; the first
+  patched release is 7.18.0. Migrated both apps to the unified `react-router` package (v7
+  deprecates the separate `-dom` package) — a straight import-path swap, since both apps use only
+  the classic declarative `<Routes>`/`<Route>` API with no loader/data-router surface.
+
 - **Login rate limiting was wired up but never actually counted anything.**
   The middleware that blocks an IP after repeated failed logins existed and
   was attached to the route, but nothing in the login, MFA-verify, or
