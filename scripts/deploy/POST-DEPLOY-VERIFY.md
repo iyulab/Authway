@@ -186,7 +186,7 @@ echo "$TOKEN" | awk -F. '{print NF" segments"}'
 
 ---
 
-## 5. Hydra 배포 스크립트 env 전달 (PowerShell 배열 splat) — ⚠️ 남은 배포-전용 항목
+## 5. Hydra 배포 스크립트 env 전달 (PowerShell 배열 splat) — 스크립트로 자동화됨 (cycle-109)
 
 > `publish-hydra.core.ps1`이 `$TokenEnv` 배열을 `az ... --set-env-vars` 뒤에 넘긴다.
 > **PowerShell 측 인자 구성은 실측 확인됐다** — 각 env가 개별 인자로 전개되고,
@@ -194,19 +194,26 @@ echo "$TOKEN" | awk -F. '{print NF" segments"}'
 > **남은 미검증은 `az` 자체가 그 인자들을(특히 값에 쉼표가 든 `kind,tenant`) 받아들이는지**뿐이며,
 > 이건 로컬로 닫을 수 없다. 배포 직후 아래로 확인한다.
 
-```bash
-az containerapp show -n <hydra-app> -g <rg> \
-  --query "properties.template.containers[0].env[?name=='STRATEGIES_ACCESS_TOKEN']"
+```powershell
+scripts/deploy/verify/verify-hydra-env.ps1 -Target staging   # 또는 -Target prod
 ```
-- 기대: `[{"name":"STRATEGIES_ACCESS_TOKEN","value":"opaque"}]`.
-- 값이 비어 있거나 항목이 없으면 배열 전개가 의도대로 되지 않은 것 → 개별 문자열 인자로 되돌린다.
-- public / admin 두 컨테이너 **모두** 확인.
+- public·admin 두 Container App 모두 `STRATEGIES_ACCESS_TOKEN=opaque`인지 확인하고 fail-closed로
+  종료 코드를 반환한다(값이 비어 있거나 env 자체가 없으면 배열 전개 실패로 간주).
+- 커스텀 클레임 미러링(§4, `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS`)은 배포마다 값이 달라 스크립트 대상이
+  아니다 — 필요하면 위 스크립트가 호출하는 `az containerapp show`를 직접 실행해 전체 env를 본다.
 
 ---
 
-## 6. 회귀 스모크 (기존 기능)
+## 6. 회귀 스모크 (기존 기능) — 로그인·consent·콜백은 스크립트로 자동화됨 (cycle-109)
 
-- 로그인 → consent → 콜백 정상 (auth-ui).
-- 로그아웃 정상.
-- `audit_logs` smoke: `scripts/deploy/_shared/smoke-audit.ps1`.
-- Admin 콘솔에서 기존 클라이언트 열기 → 저장 → 값 손실 없음(특히 `redirect_uris`, consent 토글).
+```powershell
+scripts/deploy/verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 테넌트 UUID>
+```
+- 검증용 client·user를 매 실행 새로 만들고 끝에 항상 삭제한다(성공/실패 무관).
+- authorization_code 플로우 전 구간(로그인 challenge → 비밀번호 로그인 → consent → 콜백 → 토큰
+  교환)을 실제로 구동해 access token 발급까지 확인한다.
+- `-SkipAuditSmoke`가 없으면 `_shared/smoke-audit.ps1`을 이어서 자동 실행한다(별도 실행 불필요).
+- **로그아웃 정상**은 자동화 범위 밖 — Hydra RP-initiated logout의 파라미터 계약을 아직 실측하지
+  않아 계속 사람이 확인한다.
+- **Admin 콘솔에서 기존 클라이언트 열기 → 저장 → 값 손실 없음**(특히 `redirect_uris`, consent
+  토글)도 UI 조작이라 범위 밖 — 계속 사람이 확인한다.

@@ -62,11 +62,11 @@ function Invoke-FastQuery {
 
     # PostgreSQL 환경 변수 설정
     $env:PGHOST = $EnvVars['AUTHWAY_DATABASE_HOST']
-    $env:PGPORT = "5432"
+    $env:PGPORT = if ($EnvVars['AUTHWAY_DATABASE_PORT']) { $EnvVars['AUTHWAY_DATABASE_PORT'] } else { "5432" }
     $env:PGDATABASE = $EnvVars['AUTHWAY_DATABASE_NAME']
     $env:PGUSER = $EnvVars['AUTHWAY_DATABASE_USER']
     $env:PGPASSWORD = $EnvVars['AUTHWAY_DATABASE_PASSWORD']
-    $env:PGSSLMODE = "require"
+    $env:PGSSLMODE = if ($EnvVars['AUTHWAY_DATABASE_SSL_MODE']) { $EnvVars['AUTHWAY_DATABASE_SSL_MODE'] } else { "require" }
 
     try {
         # BOM 없는 UTF-8로 임시 파일 생성
