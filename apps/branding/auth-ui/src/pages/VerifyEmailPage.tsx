@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
