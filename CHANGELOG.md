@@ -2,6 +2,20 @@
 
 ### Security
 
+- **Login now authenticates against the right tenant, not just the right
+  email.** The schema has always allowed the same email address to exist in
+  more than one tenant (a composite unique index on `tenant_id, email`, not
+  `email` alone), but the password-verification query ignored tenant
+  entirely and matched on email with no defined ordering — if the same
+  address existed in two tenants, which one a login attempt actually
+  checked the password against was undefined. Login now resolves the
+  requesting OAuth client's tenant first (the same lookup a sibling
+  handler already did for its own SSO check) and scopes the user lookup to
+  it. Two related endpoints (email verification resend, password reset
+  request) share the same underlying pattern but have no tenant identifier
+  anywhere in their request — fixing those needs an API contract change,
+  not just a query swap, and is tracked separately.
+
 - **TOTP-based MFA now actually protects login — it did not, in two
   independent ways.** First, every management endpoint for setting up,
   verifying, or checking MFA status (`/api/v1/users/mfa/*`) panicked into a

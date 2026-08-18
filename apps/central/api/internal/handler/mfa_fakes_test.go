@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"authway/apps/central/api/pkg/claims"
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/user"
 )
@@ -49,39 +50,43 @@ func (f *fakeMFAService) GetStatus(uuid.UUID) (*mfa.MFAStatusResponse, error) {
 	return &mfa.MFAStatusResponse{Enabled: true}, nil
 }
 
-// fakeUserService is a minimal in-memory user.Service — only GetByEmail and
-// GetByID are exercised by AuthHandler; the rest are unused stubs.
+// fakeUserService is a minimal in-memory user.Service — a flat slice, not a
+// map keyed by email, because the whole point of GetByEmailAndTenant's
+// regression coverage is two users sharing an email across tenants.
 type fakeUserService struct {
-	byEmail map[string]*user.User
-	byID    map[uuid.UUID]*user.User
+	users []*user.User
 }
 
 func newFakeUserService(users ...*user.User) *fakeUserService {
-	f := &fakeUserService{byEmail: map[string]*user.User{}, byID: map[uuid.UUID]*user.User{}}
-	for _, u := range users {
-		f.byEmail[u.Email] = u
-		f.byID[u.ID] = u
-	}
-	return f
+	return &fakeUserService{users: users}
 }
 
 func (f *fakeUserService) Create(uuid.UUID, *user.CreateUserRequest) (*user.User, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 func (f *fakeUserService) GetByID(id uuid.UUID) (*user.User, error) {
-	if u, ok := f.byID[id]; ok {
-		return u, nil
+	for _, u := range f.users {
+		if u.ID == id {
+			return u, nil
+		}
 	}
 	return nil, fmt.Errorf("user not found")
 }
 func (f *fakeUserService) GetByEmail(email string) (*user.User, error) {
-	if u, ok := f.byEmail[email]; ok {
-		return u, nil
+	for _, u := range f.users {
+		if u.Email == email {
+			return u, nil
+		}
 	}
 	return nil, fmt.Errorf("user not found")
 }
-func (f *fakeUserService) GetByEmailAndTenant(uuid.UUID, string) (*user.User, error) {
-	return nil, fmt.Errorf("not implemented")
+func (f *fakeUserService) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*user.User, error) {
+	for _, u := range f.users {
+		if u.Email == email && u.TenantID == tenantID {
+			return u, nil
+		}
+	}
+	return nil, fmt.Errorf("user not found")
 }
 func (f *fakeUserService) GetByTenant(uuid.UUID, int, int) ([]*user.User, int64, error) {
 	return nil, 0, fmt.Errorf("not implemented")
@@ -100,6 +105,52 @@ func (f *fakeUserService) ChangePassword(uuid.UUID, *user.ChangePasswordRequest)
 func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error           { return nil }
 func (f *fakeUserService) UpdateEmailVerified(uuid.UUID, bool) error { return nil }
 func (f *fakeUserService) UpdatePassword(uuid.UUID, string) error    { return nil }
+
+// fakeClientService is a minimal in-memory client.Service — only
+// GetByClientID is exercised by AuthHandler.Login.
+type fakeClientService struct {
+	byClientID map[string]*client.Client
+}
+
+func newFakeClientService(clients ...*client.Client) *fakeClientService {
+	f := &fakeClientService{byClientID: map[string]*client.Client{}}
+	for _, cl := range clients {
+		f.byClientID[cl.ClientID] = cl
+	}
+	return f
+}
+
+func (f *fakeClientService) Create(*client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) GetByID(uuid.UUID) (*client.Client, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) GetByClientID(clientID string) (*client.Client, error) {
+	if c, ok := f.byClientID[clientID]; ok {
+		return c, nil
+	}
+	return nil, fmt.Errorf("client not found")
+}
+func (f *fakeClientService) GetByTenant(uuid.UUID, int, int) ([]*client.Client, int64, error) {
+	return nil, 0, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) Update(uuid.UUID, *client.UpdateClientRequest) (*client.Client, client.SyncStatus, error) {
+	return nil, client.SyncStatus{}, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) Delete(uuid.UUID) (client.SyncStatus, error) {
+	return client.SyncStatus{}, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) List(int, int) ([]*client.Client, int64, error) {
+	return nil, 0, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) ValidateClient(string, string) (*client.Client, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) RegenerateSecret(uuid.UUID) (*client.ClientCredentials, client.SyncStatus, error) {
+	return nil, client.SyncStatus{}, fmt.Errorf("not implemented")
+}
+func (f *fakeClientService) SyncAllClientsToHydra() (int, int, error) { return 0, 0, nil }
 
 // fakeClaimsService is a no-op claims.Service — Login/completeLogin only call
 // GetClaimsForLogin, and its result is merely logged (count), never branched

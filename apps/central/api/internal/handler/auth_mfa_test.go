@@ -13,8 +13,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
 )
+
+const testClientID = "test-client"
 
 // newTestHydraServer stands in for Hydra's admin API — just enough of
 // GetLoginRequest/AcceptLoginRequest for AuthHandler.Login and completeLogin
@@ -27,7 +30,10 @@ func newTestHydraServer(t *testing.T) (client *hydra.Client, acceptCount *int) {
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/requests/login"):
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(hydra.LoginRequest{Challenge: r.URL.Query().Get("challenge")})
+			json.NewEncoder(w).Encode(hydra.LoginRequest{
+				Challenge: r.URL.Query().Get("challenge"),
+				Client:    &hydra.OAuth2Client{ClientID: testClientID},
+			})
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/requests/login/accept"):
 			count++
 			w.Header().Set("Content-Type", "application/json")
@@ -62,9 +68,10 @@ func newAuthTestApp(t *testing.T, password string, totpEnabled bool, totpCode, r
 	t.Helper()
 	u := buildTestUser(t, password, totpEnabled)
 	users := newFakeUserService(u)
+	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID})
 	hydraClient, acceptCount := newTestHydraServer(t)
 
-	h := NewAuthHandler(users, nil, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil)
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil)
 
 	app := fiber.New()
 	app.Post("/authenticate", h.Login)
@@ -221,6 +228,52 @@ func TestVerifyMFARecoveryLogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	}
 	if *acceptCount != 1 {
 		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
+	}
+}
+
+// TestLogin_TenantScoped_SameEmailDifferentTenant is the regression this
+// cycle exists for (ISSUE-Authway-20260817-115815): the schema explicitly
+// allows the same email in more than one tenant
+// (idx_users_tenant_email), so Login must authenticate against the
+// requesting OAuth client's tenant, not match the email globally.
+func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
+	otherTenantHash, err := bcrypt.GenerateFromPassword([]byte("other-tenant-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	rightUser := buildTestUser(t, "correct-horse", false)
+	wrongTenantUser := &user.User{
+		ID:           uuid.New(),
+		TenantID:     uuid.New(), // deliberately different tenant, same email
+		Email:        rightUser.Email,
+		PasswordHash: string(otherTenantHash),
+	}
+
+	users := newFakeUserService(rightUser, wrongTenantUser)
+	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID})
+	hydraClient, acceptCount := newTestHydraServer(t)
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil)
+	app := fiber.New()
+	app.Post("/authenticate", h.Login)
+
+	// The other tenant's password must NOT authenticate this login — if
+	// Login matched by email alone (GetByEmail, deprecated), an
+	// undefined-order global lookup could authenticate against either row.
+	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"`+rightUser.Email+`","password":"other-tenant-password"}`)
+	if status != fiber.StatusOK {
+		t.Fatalf("status = %d, body = %v", status, body)
+	}
+	if body["error"] != "Invalid email or password" {
+		t.Errorf("error = %v, want rejection — wrong-tenant password must not authenticate", body["error"])
+	}
+	if *acceptCount != 0 {
+		t.Errorf("hydra accept called %d times, want 0", *acceptCount)
+	}
+
+	// The requesting client's own tenant's password succeeds.
+	status, body = doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"`+rightUser.Email+`","password":"correct-horse"}`)
+	if status != fiber.StatusOK || body["redirect_to"] != "https://example.com/callback" {
+		t.Fatalf("status = %d, body = %v", status, body)
 	}
 }
 

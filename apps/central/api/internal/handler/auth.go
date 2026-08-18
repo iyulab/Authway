@@ -293,15 +293,28 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// Get login request from Hydra
-	_, err := h.hydraClient.GetLoginRequest(req.Challenge)
+	loginReq, err := h.hydraClient.GetLoginRequest(req.Challenge)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to get login request",
 		})
 	}
 
+	// Resolve the requesting client's tenant first — GetByEmail (deprecated)
+	// matches globally in undefined order, but the schema allows the same
+	// email to exist in more than one tenant (idx_users_tenant_email). The
+	// sibling LoginPage handler already does this same lookup for its SSO
+	// tenant check; Login needs it too since it is the one that actually
+	// verifies the password.
+	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
+	if err != nil {
+		h.logger.Error("Failed to resolve OAuth client for login",
+			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to resolve OAuth client"})
+	}
+
 	// Authenticate user
-	user, err := h.userService.GetByEmail(req.Email)
+	user, err := h.userService.GetByEmailAndTenant(requestedClient.TenantID, req.Email)
 	if err != nil {
 		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
 		// Reject login request
