@@ -213,7 +213,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         {...register('logout_redirect_policy')}
         label="Logout Redirect Policy"
         options={LOGOUT_REDIRECT_POLICIES}
-        helperText="Strict: Required + validation (production). Lenient: Optional + validation. Disabled: No validation (dev only)."
+        helperText="Strict: Required + validation (production). Lenient: Optional + validation. Disabled: No validation (dev only). Enforced by the auth-api login/logout service, not by this admin API — this panel only stores the value."
         error={errors.logout_redirect_policy?.message}
       />
 
