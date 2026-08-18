@@ -48,19 +48,22 @@
   fail-closed basis — a new, unreviewed error path defaults to the generic
   message rather than to leaking.
 
-- **Login now authenticates against the right tenant, not just the right
-  email.** The schema has always allowed the same email address to exist in
-  more than one tenant (a composite unique index on `tenant_id, email`, not
-  `email` alone), but the password-verification query ignored tenant
-  entirely and matched on email with no defined ordering — if the same
-  address existed in two tenants, which one a login attempt actually
-  checked the password against was undefined. Login now resolves the
-  requesting OAuth client's tenant first (the same lookup a sibling
-  handler already did for its own SSO check) and scopes the user lookup to
-  it. Two related endpoints (email verification resend, password reset
-  request) share the same underlying pattern but have no tenant identifier
-  anywhere in their request — fixing those needs an API contract change,
-  not just a query swap, and is tracked separately.
+- **Login, email verification resend, and password reset now all authenticate
+  against the right tenant, not just the right email.** The schema has
+  always allowed the same email address to exist in more than one tenant (a
+  composite unique index on `tenant_id, email`, not `email` alone), but all
+  three endpoints' user lookups ignored tenant entirely and matched on email
+  with no defined ordering — if the same address existed in two tenants,
+  which one an attempt actually checked was undefined. Login resolves the
+  requesting OAuth client's tenant first (the same lookup a sibling handler
+  already did for its own SSO check) and scopes the user lookup to it. The
+  other two endpoints had no tenant identifier anywhere in their request, so
+  fixing them needed a small API contract change: both now accept an
+  optional `client_id`, used the same way, that a caller supplies when it
+  has one (the login screen now links to both with it attached) and that
+  falls back to the previous unscoped lookup when omitted, so a caller with
+  no OAuth context in flight — a bookmarked link, for instance — keeps
+  working exactly as before.
 
 - **TOTP-based MFA now actually protects login — it did not, in two
   independent ways.** First, every management endpoint for setting up,
@@ -142,6 +145,22 @@
   a real `https://app.example.com` request would. Matching now parses the URI
   and compares against its host. The feature defaults off, so only clients
   that had explicitly opted into wildcard redirects were exposed.
+
+- **Logging out no longer leaves previously issued tokens usable.** Accepting
+  a standard OIDC RP-initiated logout request only ends the browser's Hydra
+  login session — by itself it does not invalidate any access or refresh
+  token issued before that point, so a token captured earlier (or held open
+  in another tab) kept working past the point a user believed they had
+  logged out everywhere, despite that being exactly what this project's
+  "Single Logout" feature advertises. The logout handler that real traffic
+  actually reaches now also revokes every one of that session's login and
+  consent grants across all clients right after Hydra accepts the request,
+  matching the scope the feature name promises. This is best-effort — a
+  revocation failure is logged but does not block the redirect the user is
+  waiting on — since the browser-facing contract here is "end the session
+  and send the user back", not revocation for its own sake; an existing,
+  separately authenticated logout endpoint whose whole purpose is revocation
+  already fails hard if Hydra can't be reached.
 
 ### Fixed
 
@@ -393,6 +412,13 @@
   redirects were unsupported.
 - Added `CONTRIBUTING.md` — it was referenced from the README but did not
   exist.
+- **Clarified who actually enforces a client's logout redirect policy.**
+  A client's `logout_redirect_policy`, `default_logout_uri`, and
+  `allow_wildcard_logout` are stored and returned by this API, but this API
+  never validated anything with them — only the separate login/logout
+  service that reads its response does. The admin console's field help
+  text, the API's own field comments, and the logout policy guide all now
+  say so explicitly; the fields themselves are unchanged.
 
 ### Removed
 

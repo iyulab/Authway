@@ -270,6 +270,12 @@ Access-Control-Allow-Credentials: true
 
 Control where users are redirected after logout with flexible validation policies.
 
+> **Where each rule is enforced**: `post_logout_redirect_uris` is a whitelist Hydra itself checks on
+> every RP-initiated logout (Authway syncs it into the Hydra client on create/update). The other
+> three fields — `logout_redirect_policy`, `default_logout_uri`, `allow_wildcard_logout` — are
+> stored and returned by the central API, but the central API does not itself validate anything with
+> them; the auth service's logout handler is what reads and enforces them.
+
 ### Overview
 
 Authway supports:
@@ -308,8 +314,14 @@ curl -X POST http://localhost:8080/api/v1/clients \
 
 ```
 App → /logout?post_logout_redirect_uri=https://app.example.com →
-  Hydra Logout → Clear Session → Redirect to URI
+  Hydra Logout (accept) → Revoke Sessions & Tokens (all clients) → Redirect to URI
 ```
+
+Accepting the Hydra logout request only ends the browser's login session; by itself it does not
+invalidate previously issued access/refresh tokens. The logout handler also revokes every one of
+that session's login and consent grants across all clients right after Hydra accepts, which is what
+actually invalidates them. This step is best-effort — a failure is logged but does not block the
+redirect.
 
 ### Redirect URI Policies
 
