@@ -93,6 +93,65 @@ func TestAuthenticate_ForwardsBackendErrorStatus(t *testing.T) {
 	}
 }
 
+func TestVerifyMFA_ProxiesToMFAVerifyEndpoint(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"redirect_to":"https://example.com/callback"}`))
+	}))
+	defer backend.Close()
+
+	h := &AuthHandler{centralAPIURL: backend.URL, internalAPIKey: "k", logger: zap.NewNop()}
+	app := fiber.New()
+	app.Post("/auth/mfa/verify", h.VerifyMFA)
+
+	req := httptest.NewRequest("POST", "/auth/mfa/verify", strings.NewReader(`{"challenge":"c1","code":"123456"}`))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test error: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if gotPath != "/mfa/verify" {
+		t.Errorf("backend received path %q, want /mfa/verify", gotPath)
+	}
+	if string(gotBody) != `{"challenge":"c1","code":"123456"}` {
+		t.Errorf("backend received body %q, want request body forwarded unchanged", gotBody)
+	}
+}
+
+func TestVerifyMFARecovery_ProxiesToMFARecoveryEndpoint(t *testing.T) {
+	var gotPath string
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"redirect_to":"https://example.com/callback"}`))
+	}))
+	defer backend.Close()
+
+	h := &AuthHandler{centralAPIURL: backend.URL, internalAPIKey: "k", logger: zap.NewNop()}
+	app := fiber.New()
+	app.Post("/auth/mfa/recovery", h.VerifyMFARecovery)
+
+	req := httptest.NewRequest("POST", "/auth/mfa/recovery", strings.NewReader(`{"challenge":"c1","code":"AAAA-BBBB-CCCC"}`))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test error: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if gotPath != "/mfa/recovery" {
+		t.Errorf("backend received path %q, want /mfa/recovery", gotPath)
+	}
+}
+
 func TestAuthenticate_BackendUnreachable(t *testing.T) {
 	// Port 1 is unassigned/privileged and refuses connections immediately on
 	// loopback, giving a deterministic "backend down" case with no real network.

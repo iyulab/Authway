@@ -84,13 +84,9 @@ func (h *MFAHandler) logMFAFailure(c *fiber.Ctx, userID uuid.UUID, action audit.
 // SetupMFA initiates TOTP setup
 // POST /api/v1/users/mfa/setup
 func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	resp, err := h.mfaService.SetupTOTP(userID)
 	if err != nil {
@@ -105,13 +101,9 @@ func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 // VerifyMFA verifies TOTP code and enables MFA
 // POST /api/v1/users/mfa/verify
 func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	var req VerifyMFARequest
 	if err := c.BodyParser(&req); err != nil {
@@ -132,13 +124,9 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 // DisableMFA disables MFA for the user
 // DELETE /api/v1/users/mfa
 func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	if err := h.mfaService.Disable(userID); err != nil {
 		h.logger.Error("MFA disable failed", zap.Error(err), zap.String("user_id", userID.String()))
@@ -151,13 +139,9 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 // GetMFAStatus returns MFA status
 // GET /api/v1/users/mfa/status
 func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	status, err := h.mfaService.GetStatus(userID)
 	if err != nil {
@@ -169,13 +153,9 @@ func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
 // VerifyRecoveryCode verifies and consumes a recovery code
 // POST /api/v1/users/mfa/recovery
 func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	var req VerifyRecoveryCodeRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -203,13 +183,9 @@ func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
 // RegenerateRecoveryCodes generates new recovery codes
 // POST /api/v1/users/mfa/recovery/regenerate
 func (h *MFAHandler) RegenerateRecoveryCodes(c *fiber.Ctx) error {
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	userID, err := uuid.Parse(userIDStr.(string))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 	resp, err := h.mfaService.RegenerateRecoveryCodes(userID)
 	if err != nil {

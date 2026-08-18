@@ -86,7 +86,7 @@ func main() {
 
 	// Health check endpoint
 	app.Get("/health", healthHandler.Health)
-	
+
 	// Config endpoint for clients
 	app.Get("/.well-known/authway-config", healthHandler.Config)
 
@@ -112,6 +112,8 @@ func main() {
 	// Auth endpoints (proxy to Central API)
 	// /register removed — onboarding is invitation-only (D-a/B).
 	app.Post("/authenticate", authHandler.Authenticate)
+	app.Post("/auth/mfa/verify", authHandler.VerifyMFA)
+	app.Post("/auth/mfa/recovery", authHandler.VerifyMFARecovery)
 
 	// Consent endpoints (proxy to Central API)
 	app.Post("/consent", consentHandler.GetConsentInfo)

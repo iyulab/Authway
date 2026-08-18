@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/mfa"
+	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -20,19 +23,23 @@ type AuthHandler struct {
 	userService   user.Service
 	clientService client.Service
 	claimsService claims.Service
+	mfaService    mfa.Service
 	hydraClient   *hydra.Client
 	logger        *zap.Logger
 	auditService  audit.Service
+	mfaStore      *MFAChallengeStore
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service) *AuthHandler {
 	return &AuthHandler{
 		userService:   userService,
 		clientService: clientService,
 		claimsService: claimsService,
+		mfaService:    mfaService,
 		hydraClient:   hydraClient,
 		logger:        logger,
 		auditService:  auditService,
+		mfaStore:      NewMFAChallengeStore(),
 	}
 }
 
@@ -298,7 +305,10 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
 		// Reject login request
-		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		if rejectErr != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to reject login request"})
+		}
 		return c.JSON(fiber.Map{
 			"error":       "Invalid email or password",
 			"redirect_to": resp.RedirectTo,
@@ -311,60 +321,183 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			"user_id": user.ID.String(),
 		})
 		// Reject login request
-		resp, _ := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
+		if rejectErr != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to reject login request"})
+		}
 		return c.JSON(fiber.Map{
 			"error":       "Invalid email or password",
 			"redirect_to": resp.RedirectTo,
 		})
 	}
 
-	// Get and store claims for this login session
-	userClaims, err := h.claimsService.GetClaimsForLogin(c.Context(), user.ID, user.TenantID, req.Challenge)
-	if err != nil {
-		h.logger.Warn("Failed to get claims for login",
-			zap.String("user_id", user.ID.String()),
-			zap.Error(err))
-		// Continue without claims
-		userClaims = nil
-	}
-
-	// Accept login request
 	rememberFor := 0
 	if req.Remember {
 		rememberFor = 3600 // 1 hour
 	}
 
+	// A password alone is not enough for a TOTP-enabled user — park the
+	// verified-but-not-yet-accepted login and hand the client a fresh
+	// mfa_challenge instead of touching Hydra. Verify()/VerifyRecoveryCode()
+	// complete the accept once the second factor checks out.
+	if user.TOTPEnabled {
+		challenge, err := tokenhash.Generate()
+		if err != nil {
+			h.logger.Error("Failed to generate mfa_challenge", zap.Error(err))
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to start MFA challenge"})
+		}
+		h.mfaStore.Set(challenge, &pendingMFALogin{
+			HydraChallenge: req.Challenge,
+			UserID:         user.ID,
+			Remember:       req.Remember,
+			RememberFor:    rememberFor,
+			CreatedAt:      time.Now(),
+		})
+		h.logger.Info("Password verified, MFA required", zap.String("user_id", user.ID.String()))
+		return c.JSON(fiber.Map{
+			"mfa_required":  true,
+			"mfa_challenge": challenge,
+		})
+	}
+
+	return h.completeLogin(c, req.Challenge, user, req.Remember, rememberFor, "password")
+}
+
+// completeLogin accepts the Hydra login request for an already-authenticated
+// user (password alone, or password + a verified second factor) and records
+// the login audit entry. Shared by Login and the two MFA-verify handlers so
+// none of them duplicate the accept/audit/response tail.
+func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User, remember bool, rememberFor int, method string) error {
+	userClaims, err := h.claimsService.GetClaimsForLogin(c.Context(), u.ID, u.TenantID, challenge)
+	if err != nil {
+		h.logger.Warn("Failed to get claims for login",
+			zap.String("user_id", u.ID.String()),
+			zap.Error(err))
+		// Continue without claims
+		userClaims = nil
+	}
+
 	acceptBody := &hydra.AcceptLoginRequest{
-		Subject:     user.ID.String(),
-		Remember:    req.Remember,
+		Subject:     u.ID.String(),
+		Remember:    remember,
 		RememberFor: rememberFor,
 		Context: map[string]any{
-			"email":     user.Email,
-			"name":      user.Name,
-			"tenant_id": user.TenantID.String(),
+			"email":     u.Email,
+			"name":      u.Name,
+			"tenant_id": u.TenantID.String(),
 		},
 	}
 
 	h.logger.Info("Accepting login request",
-		zap.String("user_id", user.ID.String()),
+		zap.String("user_id", u.ID.String()),
 		zap.Int("claims_count", len(userClaims)))
 
-	resp, err := h.hydraClient.AcceptLoginRequest(req.Challenge, acceptBody)
+	resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to accept login request",
 		})
 	}
 
-	h.logUserAudit(c, user, audit.ActionUserLogin, map[string]any{
-		"challenge": req.Challenge,
-		"remember":  req.Remember,
-		"method":    "password",
+	h.logUserAudit(c, u, audit.ActionUserLogin, map[string]any{
+		"challenge": challenge,
+		"remember":  remember,
+		"method":    method,
 	})
 
 	return c.JSON(fiber.Map{
 		"redirect_to": resp.RedirectTo,
 	})
+}
+
+// VerifyMFALoginRequest is the body for the two login-time MFA endpoints
+// below. Code holds either a 6-digit TOTP code or a recovery code depending
+// on which endpoint is called.
+type VerifyMFALoginRequest struct {
+	Challenge string `json:"challenge"`
+	Code      string `json:"code"`
+}
+
+// VerifyMFALogin completes a login that Login() parked pending TOTP.
+// POST /mfa/verify — unauthenticated: the mfa_challenge itself is the bearer
+// credential for this one-shot exchange, same trust model as a Hydra
+// login_challenge.
+func (h *AuthHandler) VerifyMFALogin(c *fiber.Ctx) error {
+	var req VerifyMFALoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	pending, ok := h.mfaStore.Get(req.Challenge)
+	if !ok {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+	}
+
+	u, err := h.userService.GetByID(pending.UserID)
+	if err != nil || u == nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+	}
+
+	valid, err := h.mfaService.Verify(pending.UserID, req.Code)
+	if err != nil || !valid {
+		h.logMFALoginFailure(c, u, "totp")
+		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
+			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
+		}
+		return c.Status(401).JSON(fiber.Map{"error": "invalid verification code"})
+	}
+
+	h.mfaStore.Delete(req.Challenge)
+	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, "password+totp")
+}
+
+// VerifyMFARecoveryLogin is VerifyMFALogin's recovery-code counterpart.
+// POST /mfa/recovery
+func (h *AuthHandler) VerifyMFARecoveryLogin(c *fiber.Ctx) error {
+	var req VerifyMFALoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	pending, ok := h.mfaStore.Get(req.Challenge)
+	if !ok {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+	}
+
+	u, err := h.userService.GetByID(pending.UserID)
+	if err != nil || u == nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+	}
+
+	valid, err := h.mfaService.VerifyRecoveryCode(pending.UserID, req.Code)
+	if err != nil || !valid {
+		h.logMFALoginFailure(c, u, "recovery_code")
+		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
+			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
+		}
+		return c.Status(401).JSON(fiber.Map{"error": "invalid recovery code"})
+	}
+
+	h.mfaStore.Delete(req.Challenge)
+	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, "password+recovery_code")
+}
+
+// logMFALoginFailure emits a sync audit entry for a failed login-time MFA
+// attempt — mirrors MFAHandler.logMFAFailure (internal/handler/mfa.go) for
+// the self-service MFA API, kept separate because AuthHandler has no
+// tenantForUser lookup helper and already has the user record in hand here.
+func (h *AuthHandler) logMFALoginFailure(c *fiber.Ctx, u *user.User, phase string) {
+	if h.auditService == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, u.TenantID, audit.ActionUserMFAFailed, "user_mfa", u.ID.String())
+	entry.Severity = audit.SeverityWarning
+	entry.Success = false
+	entry.ErrorMsg = "invalid code"
+	entry.Details["phase"] = phase
+	if err := h.auditService.Log(c.UserContext(), entry); err != nil {
+		h.logger.Error("Failed to write MFA login-failure audit log", zap.Error(err), zap.String("user_id", u.ID.String()))
+	}
 }
 
 // ConsentPageRequest for POST request body
@@ -636,11 +769,11 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 		zap.String("user_id", user.ID.String()))
 
 	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]any{
-		"challenge":    req.Challenge,
-		"grant_scope":  req.GrantScope,
-		"audience":     consentReq.RequestedAudience,
-		"client_id":    consentReq.Client.ClientID,
-		"remember":     req.Remember,
+		"challenge":   req.Challenge,
+		"grant_scope": req.GrantScope,
+		"audience":    consentReq.RequestedAudience,
+		"client_id":   consentReq.Client.ClientID,
+		"remember":    req.Remember,
 	})
 
 	return c.JSON(fiber.Map{

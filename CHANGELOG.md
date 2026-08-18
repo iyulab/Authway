@@ -2,6 +2,28 @@
 
 ### Security
 
+- **TOTP-based MFA now actually protects login — it did not, in two
+  independent ways.** First, every management endpoint for setting up,
+  verifying, or checking MFA status (`/api/v1/users/mfa/*`) panicked into a
+  500 on every call: the handlers read the authenticated user ID out of
+  request context as a string, but the JWT middleware had already switched
+  to storing it as a typed UUID in an earlier hardening pass, and the two
+  never got reconciled. There was no way to turn MFA on through the API at
+  all. Second, even a user enabled directly in the database was never
+  challenged for a code — the login handler verified the password and
+  accepted the session with Hydra without ever calling the (fully
+  implemented, fully untested-in-production) TOTP verification. Password
+  alone was sufficient for every account, MFA enabled or not. Both are fixed
+  together, since fixing only one leaves the other half still fully bypassed:
+  the management handlers now read the UUID directly, and a TOTP-enabled
+  account's login now stops after the password check, hands the client a
+  short-lived challenge instead of a session, and only accepts the login once
+  a correct code (or recovery code) comes back — capped at five attempts
+  before the challenge is discarded. Verified against a real Hydra instance,
+  not just unit tests: a TOTP-enabled test account's login now visibly stalls
+  at the password step, a wrong code is rejected without touching Hydra, and
+  the correct code completes the same OAuth flow a non-MFA login would.
+
 - **Updated axios in both frontend apps (admin console, auth UI) past a run
   of known vulnerabilities** — SSRF via proxy handling, several prototype-
   pollution paths that could allow response tampering or credential theft,

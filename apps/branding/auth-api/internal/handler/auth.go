@@ -37,13 +37,31 @@ func NewAuthHandler(centralAPIURL string, internalAPIKey string, logger *zap.Log
 
 // Authenticate proxies POST /authenticate to Central API
 func (h *AuthHandler) Authenticate(c *fiber.Ctx) error {
-	h.logger.Info("Proxying authenticate request to Central API")
+	return h.proxyToCentralAPI(c, "/authenticate", "authenticate")
+}
 
-	// Forward to Central API
-	url := fmt.Sprintf("%s/authenticate", h.centralAPIURL)
+// VerifyMFA proxies POST /auth/mfa/verify to Central API — the TOTP-code leg
+// of a login that Authenticate parked pending a second factor.
+func (h *AuthHandler) VerifyMFA(c *fiber.Ctx) error {
+	return h.proxyToCentralAPI(c, "/mfa/verify", "mfa verify")
+}
+
+// VerifyMFARecovery proxies POST /auth/mfa/recovery to Central API — the
+// recovery-code counterpart of VerifyMFA.
+func (h *AuthHandler) VerifyMFARecovery(c *fiber.Ctx) error {
+	return h.proxyToCentralAPI(c, "/mfa/recovery", "mfa recovery")
+}
+
+// proxyToCentralAPI forwards the request body as-is to path on Central API
+// and relays its response (status, content type, body) unchanged. Shared by
+// every unauthenticated login-flow endpoint this handler proxies.
+func (h *AuthHandler) proxyToCentralAPI(c *fiber.Ctx, path, label string) error {
+	h.logger.Info("Proxying request to Central API", zap.String("endpoint", label))
+
+	url := fmt.Sprintf("%s%s", h.centralAPIURL, path)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(c.Body()))
 	if err != nil {
-		h.logger.Error("Failed to create request", zap.Error(err))
+		h.logger.Error("Failed to create request", zap.String("endpoint", label), zap.Error(err))
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create proxy request",
 		})
@@ -56,7 +74,7 @@ func (h *AuthHandler) Authenticate(c *fiber.Ctx) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		h.logger.Error("Failed to proxy request to Central API", zap.Error(err))
+		h.logger.Error("Failed to proxy request to Central API", zap.String("endpoint", label), zap.Error(err))
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to proxy request to Central API",
 		})
@@ -66,14 +84,14 @@ func (h *AuthHandler) Authenticate(c *fiber.Ctx) error {
 	// Read response
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		h.logger.Error("Failed to read response body", zap.Error(err))
+		h.logger.Error("Failed to read response body", zap.String("endpoint", label), zap.Error(err))
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to read response from Central API",
 		})
 	}
 
-	h.logger.Info("Successfully proxied authenticate request",
-		zap.Int("status_code", resp.StatusCode))
+	h.logger.Info("Successfully proxied request",
+		zap.String("endpoint", label), zap.Int("status_code", resp.StatusCode))
 
 	// Forward response with same status code and content type
 	c.Set("Content-Type", resp.Header.Get("Content-Type"))

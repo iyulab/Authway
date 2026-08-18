@@ -235,7 +235,7 @@ func main() {
 			// it, and so the deploy gate can read back the value this instance
 			// actually got — a wrong one here means every emailed link 404s.
 			"auth_ui": cfg.App.FrontendURL,
-			"version":     cfg.App.Version,
+			"version": cfg.App.Version,
 		})
 	})
 
@@ -249,23 +249,26 @@ func main() {
 	// audit_logs (see pkg/admin/handler.go logAuthFailure).
 	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey, newFeatureServices.AuditService)
 
+	// Initialize MFA Service — constructed before authHandler because Login()
+	// now needs it to gate acceptance on TOTPEnabled.
+	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
+
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, hydraClient, zapLogger, newFeatureServices.AuditService)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService)
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	internalAuthHandler := handler.NewInternalAuthHandler(userService, invitationGate, clientService, zapLogger, newFeatureServices.AuditService)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
-
-	// Initialize MFA Service and Handler
-	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
-	app.Post("/login", authHandler.LoginPage)    // Support POST for long login_challenge
-	app.Post("/authenticate", authHandler.Login) // Actual login submission
+	app.Post("/login", authHandler.LoginPage)                     // Support POST for long login_challenge
+	app.Post("/authenticate", authHandler.Login)                  // Actual login submission
+	app.Post("/mfa/verify", authHandler.VerifyMFALogin)           // Second factor for a TOTP-pending login
+	app.Post("/mfa/recovery", authHandler.VerifyMFARecoveryLogin) // Recovery-code counterpart
 	app.Get("/consent", authHandler.ConsentPage)
 	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
 	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission

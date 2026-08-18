@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,6 +28,8 @@ interface LoginRequest {
 interface LoginResponse {
   redirect_to?: string
   error?: string
+  mfa_required?: boolean
+  mfa_challenge?: string
 }
 
 interface ClientAuthConfig {
@@ -51,6 +53,7 @@ interface LoginPageInfo {
 const LoginPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -267,7 +270,10 @@ const LoginPage: React.FC = () => {
       return response.json()
     },
     onSuccess: (data) => {
-      if (data.redirect_to) {
+      if (data.mfa_required && data.mfa_challenge) {
+        console.log('[LoginPage] Password verified, MFA required — navigating to verify page')
+        navigate(`/mfa/verify?mfa_challenge=${encodeURIComponent(data.mfa_challenge)}`)
+      } else if (data.redirect_to) {
         console.log('[LoginPage] Email/password login successful, redirecting...')
         console.log('[LoginPage] redirect_to URL:', data.redirect_to)
 

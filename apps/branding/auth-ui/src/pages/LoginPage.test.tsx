@@ -275,6 +275,26 @@ describe('LoginPage', () => {
       })
     })
 
+    it('navigates to the MFA verify page when the server requires a second factor', async () => {
+      server.use(
+        http.post('http://localhost:8080/authenticate', () => {
+          return HttpResponse.json({ mfa_required: true, mfa_challenge: 'chal-123' })
+        })
+      )
+
+      const emailInput = screen.getByLabelText('이메일')
+      const passwordInput = screen.getByLabelText('비밀번호')
+      const submitButton = screen.getByRole('button', { name: '로그인' })
+
+      await user.type(emailInput, 'test@example.com')
+      await user.type(passwordInput, 'password123')
+      await user.click(submitButton)
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('/mfa/verify?mfa_challenge=chal-123')
+      })
+    })
+
     it('sends correct request data', async () => {
       let requestBody: any
 
