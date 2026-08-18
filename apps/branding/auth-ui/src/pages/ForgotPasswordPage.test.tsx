@@ -27,10 +27,10 @@ const renderAt = (path: string, ui: React.ReactElement) => {
   )
 }
 
-// Regression coverage for ISSUE-Authway-20260817-115815 (HD-10): the
-// forgot-password request must carry client_id through to the API when the
-// page was reached with one, so the backend can scope the lookup to the
-// right tenant instead of matching the email globally.
+// Regression coverage: the forgot-password request must carry client_id
+// through to the API when the page was reached with one, so the backend can
+// scope the lookup to the right tenant instead of matching the email
+// globally.
 describe('ForgotPasswordPage', () => {
   const user = userEvent.setup()
 

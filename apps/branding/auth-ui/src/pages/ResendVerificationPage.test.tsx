@@ -27,9 +27,8 @@ const renderAt = (path: string, ui: React.ReactElement) => {
   )
 }
 
-// Regression coverage for ISSUE-Authway-20260817-115815 (HD-10): same
-// tenant-scoping contract as ForgotPasswordPage, for the other endpoint
-// (email.go:89) the issue flagged.
+// Regression coverage: same tenant-scoping contract as ForgotPasswordPage,
+// for the resend-verification endpoint.
 describe('ResendVerificationPage', () => {
   const user = userEvent.setup()
 

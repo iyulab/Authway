@@ -400,8 +400,7 @@ func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, postLogoutRedirect
 
 	// Accepting the Hydra logout request only ends the browser's login
 	// session — it does not invalidate access/refresh tokens issued before
-	// this point (ISSUE-Authway-20260818-oidc-logout-does-not-revoke-issued-
-	// tokens). Revoke every one of the subject's sessions across all clients
+	// this point. Revoke every one of the subject's sessions across all clients
 	// (&all=true — matching the "Single Logout" feature name) so tokens
 	// issued to other tabs/clients stop working too. Best-effort: a
 	// revocation failure must not block the browser redirect the user is

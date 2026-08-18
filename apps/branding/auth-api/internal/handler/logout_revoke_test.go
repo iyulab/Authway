@@ -14,14 +14,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestHandleLogout_RevokesSessionsAfterAccept is the regression this cycle
-// exists for (ISSUE-Authway-20260818-oidc-logout-does-not-revoke-issued-
-// tokens, HD-12): accepting a Hydra RP-initiated logout only ends the
-// browser's login session — it does not by itself invalidate previously
-// issued access/refresh tokens. HandleLogout must revoke the subject's
-// sessions (login + consent, all=true) after a successful accept, on the
-// exact path real browser traffic takes (VITE_AUTH_BACKEND_URL points auth-ui
-// at this handler, not central-api's own unused LogoutPage).
+// TestHandleLogout_RevokesSessionsAfterAccept: accepting a Hydra RP-initiated
+// logout only ends the browser's login session — it does not by itself
+// invalidate previously issued access/refresh tokens. HandleLogout must
+// revoke the subject's sessions (login + consent, all=true) after a
+// successful accept, on the exact path real browser traffic takes.
 func TestHandleLogout_RevokesSessionsAfterAccept(t *testing.T) {
 	var mu sync.Mutex
 	var revokedLogin, revokedConsent string

@@ -166,9 +166,8 @@ describe('LoginPage', () => {
     })
 
     it('links "forgot password" to the forgot-password page carrying the client_id', async () => {
-      // Regression (ISSUE-Authway-20260817-115815, HD-10): this link did not
-      // exist at all before, so /forgot-password had no way to learn which
-      // tenant's user to scope the reset to.
+      // Regression: this link did not exist at all before, so /forgot-password
+      // had no way to learn which tenant's user to scope the reset to.
       render(<LoginPage />)
 
       await waitFor(() => {

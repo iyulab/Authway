@@ -10,12 +10,11 @@ import (
 	"authway/apps/central/api/pkg/user"
 )
 
-// TestResolveUserByEmail_ScopesByClientTenant is the regression this cycle
-// exists for (ISSUE-Authway-20260817-115815, HD-10): the schema explicitly
-// allows the same email in more than one tenant (idx_users_tenant_email), so
-// the email self-service flows (send-verification, forgot-password) must
-// resolve the requesting OAuth client's tenant when one is provided, not
-// match the email globally.
+// TestResolveUserByEmail_ScopesByClientTenant: the schema explicitly allows
+// the same email in more than one tenant (idx_users_tenant_email), so the
+// email self-service flows (send-verification, forgot-password) must resolve
+// the requesting OAuth client's tenant when one is provided, not match the
+// email globally.
 func TestResolveUserByEmail_ScopesByClientTenant(t *testing.T) {
 	rightUser := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
 	wrongTenantUser := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
