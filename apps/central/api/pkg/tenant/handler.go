@@ -3,6 +3,7 @@ package tenant
 import (
 	"errors"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -101,7 +102,7 @@ func (h *Handler) ListTenants(c *fiber.Ctx) error {
 	tenants, err := h.service.ListTenants()
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": apierror.Message(err, "failed to list tenants"),
 		})
 	}
 
@@ -128,7 +129,7 @@ func (h *Handler) GetTenant(c *fiber.Ctx) error {
 	tenant, err := h.service.GetTenantByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": apierror.Message(err, "tenant not found"),
 		})
 	}
 

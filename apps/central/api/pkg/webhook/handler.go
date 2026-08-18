@@ -3,6 +3,7 @@ package webhook
 import (
 	"strconv"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 
 	"github.com/gofiber/fiber/v2"
@@ -70,7 +71,7 @@ func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
 	webhook, err := h.service.Create(tenantID, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create webhook", zap.Error(err), zap.String("name", req.Name))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to create webhook")})
 	}
 
 	h.logger.Info("Webhook created",
@@ -150,7 +151,7 @@ func (h *Handler) UpdateWebhook(c *fiber.Ctx) error {
 	webhook, err := h.service.Update(id, &req)
 	if err != nil {
 		h.logger.Warn("Failed to update webhook", zap.Error(err), zap.String("webhook_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to update webhook")})
 	}
 
 	h.logger.Info("Webhook updated", zap.String("webhook_id", webhook.ID.String()))
@@ -180,7 +181,7 @@ func (h *Handler) DeleteWebhook(c *fiber.Ctx) error {
 
 	if err := h.service.Delete(id); err != nil {
 		h.logger.Warn("Failed to delete webhook", zap.Error(err), zap.String("webhook_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to delete webhook")})
 	}
 
 	h.logger.Info("Webhook deleted", zap.String("webhook_id", idStr))

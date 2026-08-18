@@ -1,10 +1,12 @@
 package invitation
 
 import (
+	"net/url"
+
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"net/url"
 )
 
 // Handler handles invitation HTTP requests
@@ -67,7 +69,7 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 	invitation, err := h.service.Create(tenantID, inviterID, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to create invitation")})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -189,7 +191,7 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 	user, err := h.service.Accept(req.Token, userID, req.Name, req.Password)
 	if err != nil {
 		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.String("token_length", string(rune(len(req.Token)))))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation")})
 	}
 
 	h.logger.Info("Invitation accepted", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
@@ -221,7 +223,7 @@ func (h *Handler) DeclineInvitation(c *fiber.Ctx) error {
 
 	if err := h.service.Decline(token); err != nil {
 		h.logger.Warn("Failed to decline invitation", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to decline invitation")})
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation declined"})
@@ -238,7 +240,7 @@ func (h *Handler) RevokeInvitation(c *fiber.Ctx) error {
 
 	if err := h.service.Revoke(id); err != nil {
 		h.logger.Warn("Failed to revoke invitation", zap.Error(err), zap.String("invitation_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to revoke invitation")})
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation revoked"})
@@ -255,7 +257,7 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 
 	if err := h.service.Resend(id); err != nil {
 		h.logger.Warn("Failed to resend invitation", zap.Error(err), zap.String("invitation_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to resend invitation")})
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation resent"})

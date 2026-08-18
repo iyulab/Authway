@@ -1,6 +1,7 @@
 package impersonation
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -57,22 +58,22 @@ func (s *service) StartImpersonation(tenantID uuid.UUID, adminID *uuid.UUID, req
 	if adminID != nil {
 		admin, err := s.userService.GetByID(*adminID)
 		if err != nil {
-			return nil, fmt.Errorf("admin not found: %w", err)
+			return nil, apierror.NewPublic("admin not found")
 		}
 		if admin.TenantID != tenantID {
-			return nil, fmt.Errorf("admin does not belong to tenant")
+			return nil, apierror.NewPublic("admin does not belong to tenant")
 		}
 		adminEmail = admin.Email
 	}
 	targetUser, err := s.userService.GetByID(req.TargetUserID)
 	if err != nil {
-		return nil, fmt.Errorf("target user not found: %w", err)
+		return nil, apierror.NewPublic("target user not found")
 	}
 	if targetUser.TenantID != tenantID {
-		return nil, fmt.Errorf("target user does not belong to tenant")
+		return nil, apierror.NewPublic("target user does not belong to tenant")
 	}
 	if adminID != nil && targetUser.ID == *adminID {
-		return nil, fmt.Errorf("cannot impersonate yourself")
+		return nil, apierror.NewPublic("cannot impersonate yourself")
 	}
 	duration := time.Duration(req.Duration) * time.Minute
 	if duration <= 0 || duration > s.maxDuration {
@@ -121,21 +122,23 @@ func (s *service) StartImpersonation(tenantID uuid.UUID, adminID *uuid.UUID, req
 	}
 	resp.TargetUser.ID = targetUser.ID.String()
 	resp.TargetUser.Email = targetUser.Email
-	if targetUser.Name != nil { resp.TargetUser.Name = *targetUser.Name }
+	if targetUser.Name != nil {
+		resp.TargetUser.Name = *targetUser.Name
+	}
 	return resp, nil
 }
 
 func (s *service) ValidateToken(token string) (*ImpersonationSession, error) {
 	var session ImpersonationSession
 	if err := s.db.Where("token = ? AND active = true", token).First(&session).Error; err != nil {
-		return nil, fmt.Errorf("invalid impersonation token")
+		return nil, apierror.NewPublic("invalid impersonation token")
 	}
 	if session.IsExpired() {
 		session.Active = false
 		now := time.Now()
 		session.EndedAt = &now
 		s.db.Save(&session)
-		return nil, fmt.Errorf("impersonation session expired")
+		return nil, apierror.NewPublic("impersonation session expired")
 	}
 	return &session, nil
 }
@@ -143,7 +146,7 @@ func (s *service) ValidateToken(token string) (*ImpersonationSession, error) {
 func (s *service) EndImpersonation(sessionID uuid.UUID) error {
 	var session ImpersonationSession
 	if err := s.db.Where("id = ? AND active = true", sessionID).First(&session).Error; err != nil {
-		return fmt.Errorf("session not found or already ended")
+		return apierror.NewPublic("session not found or already ended")
 	}
 	now := time.Now()
 	session.Active = false

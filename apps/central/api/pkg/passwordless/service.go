@@ -1,6 +1,7 @@
 package passwordless
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"fmt"
 	"net/url"
 	"time"
@@ -150,13 +151,13 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 func (s *service) InspectMagicLink(token string) (*MagicLink, error) {
 	var magicLink MagicLink
 	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&magicLink).Error; err != nil {
-		return nil, fmt.Errorf("invalid or expired token")
+		return nil, apierror.NewPublic("invalid or expired token")
 	}
 	if magicLink.IsExpired() {
-		return nil, fmt.Errorf("magic link has expired")
+		return nil, apierror.NewPublic("magic link has expired")
 	}
 	if magicLink.IsUsed() {
-		return nil, fmt.Errorf("magic link has already been used")
+		return nil, apierror.NewPublic("magic link has already been used")
 	}
 	return &magicLink, nil
 }
@@ -174,12 +175,12 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 		return nil, nil, fmt.Errorf("failed to mark token as used: %w", claim.Error)
 	}
 	if claim.RowsAffected == 0 {
-		return nil, nil, fmt.Errorf("invalid, expired or already used token")
+		return nil, nil, apierror.NewPublic("invalid, expired or already used token")
 	}
 
 	var magicLink MagicLink
 	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&magicLink).Error; err != nil {
-		return nil, nil, fmt.Errorf("invalid or expired token")
+		return nil, nil, apierror.NewPublic("invalid or expired token")
 	}
 	var u *user.User
 	var err error
@@ -189,7 +190,7 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 		// invitation may have been revoked or expired in between, and the link
 		// itself is not proof of eligibility.
 		if !s.mayProvision(magicLink.TenantID, magicLink.Email) {
-			return nil, nil, fmt.Errorf("no account for this address; ask an administrator for an invitation")
+			return nil, nil, apierror.NewPublic("no account for this address; ask an administrator for an invitation")
 		}
 		createReq := &user.CreateUserRequest{
 			Email:    magicLink.Email,

@@ -1,6 +1,7 @@
 package mfa
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
@@ -18,6 +19,7 @@ import (
 	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/user"
 )
+
 // Service provides MFA/TOTP functionality
 type Service interface {
 	SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error)
@@ -40,6 +42,7 @@ type service struct {
 func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issuer string, cipher crypto.Cipher) Service {
 	return &service{db: db, userService: userService, logger: logger, issuer: issuer, cipher: cipher}
 }
+
 type TOTPSetupResponse struct {
 	Secret        string `json:"secret"`
 	QRCodeDataURL string `json:"qr_code_data_url"`
@@ -57,10 +60,11 @@ type MFAStatusResponse struct {
 	EnabledAt         *time.Time `json:"enabled_at,omitempty"`
 	RecoveryCodesLeft int        `json:"recovery_codes_left"`
 }
+
 func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, apierror.NewPublic("user not found")
 	}
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: s.issuer, AccountName: u.Email, SecretSize: 32})
 	if err != nil {
@@ -85,13 +89,13 @@ func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodesResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, apierror.NewPublic("user not found")
 	}
 	if u.TOTPSecret == nil || *u.TOTPSecret == "" {
-		return nil, fmt.Errorf("TOTP not set up for this user")
+		return nil, apierror.NewPublic("TOTP not set up for this user")
 	}
 	if u.TOTPEnabled {
-		return nil, fmt.Errorf("MFA is already enabled")
+		return nil, apierror.NewPublic("MFA is already enabled")
 	}
 	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
 	if err != nil {
@@ -99,7 +103,7 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 	}
 	if !totp.Validate(code, secret) {
 		s.logger.Warn("Invalid TOTP code during setup", zap.String("user_id", userID.String()))
-		return nil, fmt.Errorf("invalid TOTP code")
+		return nil, apierror.NewPublic("invalid TOTP code")
 	}
 	recoveryCodes, hashedCodes, err := generateRecoveryCodes(8)
 	if err != nil {
@@ -117,10 +121,10 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return false, fmt.Errorf("user not found: %w", err)
+		return false, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled || u.TOTPSecret == nil {
-		return false, fmt.Errorf("MFA is not enabled")
+		return false, apierror.NewPublic("MFA is not enabled")
 	}
 	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
 	if err != nil {
@@ -132,10 +136,10 @@ func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 func (s *service) Disable(userID uuid.UUID) error {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
+		return apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return fmt.Errorf("MFA is not enabled")
+		return apierror.NewPublic("MFA is not enabled")
 	}
 	updates := map[string]any{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "recovery_codes": nil}
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
@@ -147,13 +151,13 @@ func (s *service) Disable(userID uuid.UUID) error {
 func (s *service) VerifyRecoveryCode(userID uuid.UUID, code string) (bool, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return false, fmt.Errorf("user not found: %w", err)
+		return false, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return false, fmt.Errorf("MFA is not enabled")
+		return false, apierror.NewPublic("MFA is not enabled")
 	}
 	if u.RecoveryCodes == nil || *u.RecoveryCodes == "" {
-		return false, fmt.Errorf("no recovery codes")
+		return false, apierror.NewPublic("no recovery codes")
 	}
 	var hashedCodes []string
 	if err := json.Unmarshal([]byte(*u.RecoveryCodes), &hashedCodes); err != nil {
@@ -181,10 +185,10 @@ func (s *service) VerifyRecoveryCode(userID uuid.UUID, code string) (bool, error
 func (s *service) RegenerateRecoveryCodes(userID uuid.UUID) (*RecoveryCodesResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return nil, fmt.Errorf("MFA is not enabled")
+		return nil, apierror.NewPublic("MFA is not enabled")
 	}
 	recoveryCodes, hashedCodes, err := generateRecoveryCodes(8)
 	if err != nil {
@@ -200,7 +204,7 @@ func (s *service) RegenerateRecoveryCodes(userID uuid.UUID) (*RecoveryCodesRespo
 func (s *service) GetStatus(userID uuid.UUID) (*MFAStatusResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, apierror.NewPublic("user not found")
 	}
 	status := &MFAStatusResponse{Enabled: u.TOTPEnabled, EnabledAt: u.TOTPVerifiedAt}
 	if u.TOTPEnabled && u.RecoveryCodes != nil && *u.RecoveryCodes != "" {

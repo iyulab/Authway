@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/user"
@@ -91,7 +92,7 @@ func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 	resp, err := h.mfaService.SetupTOTP(userID)
 	if err != nil {
 		h.logger.Error("MFA setup failed", zap.Error(err), zap.String("user_id", userID.String()))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to set up MFA")})
 	}
 	// Setup alone does not enable MFA — the audit event fires on VerifyMFA
 	// success. Logging setup separately would just double every enablement.
@@ -115,7 +116,7 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
 			"phase": "enable",
 		})
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify MFA setup")})
 	}
 	h.logMFASuccess(c, userID, audit.ActionUserMFAEnabled, audit.SeverityWarning, nil)
 	return c.JSON(resp)
@@ -130,7 +131,7 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 	}
 	if err := h.mfaService.Disable(userID); err != nil {
 		h.logger.Error("MFA disable failed", zap.Error(err), zap.String("user_id", userID.String()))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to disable MFA")})
 	}
 	h.logMFASuccess(c, userID, audit.ActionUserMFADisabled, audit.SeverityWarning, nil)
 	return c.JSON(fiber.Map{"message": "MFA disabled successfully"})
@@ -145,7 +146,7 @@ func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
 	}
 	status, err := h.mfaService.GetStatus(userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": apierror.Message(err, "failed to get MFA status")})
 	}
 	return c.JSON(status)
 }
@@ -166,7 +167,7 @@ func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
 		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
 			"phase": "recovery_code",
 		})
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify recovery code")})
 	}
 	if !valid {
 		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, "invalid recovery code", map[string]any{
@@ -189,7 +190,7 @@ func (h *MFAHandler) RegenerateRecoveryCodes(c *fiber.Ctx) error {
 	}
 	resp, err := h.mfaService.RegenerateRecoveryCodes(userID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to regenerate recovery codes")})
 	}
 	return c.JSON(resp)
 }

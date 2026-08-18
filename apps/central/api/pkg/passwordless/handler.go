@@ -1,6 +1,7 @@
 package passwordless
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -62,7 +63,7 @@ func (h *Handler) SendMagicLink(c *fiber.Ctx) error {
 	response, err := h.service.SendMagicLink(tenantID, &req, ipAddress, userAgent)
 	if err != nil {
 		h.logger.Warn("Failed to send magic link", zap.Error(err), zap.String("email", req.Email))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to send magic link")})
 	}
 
 	h.logger.Info("Magic link sent", zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
@@ -89,7 +90,7 @@ func (h *Handler) VerifyMagicLink(c *fiber.Ctx) error {
 	magicLink, user, err := h.service.VerifyMagicLink(token)
 	if err != nil {
 		h.logger.Warn("Failed to verify magic link", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify magic link")})
 	}
 
 	h.logger.Info("Magic link verified",
@@ -139,7 +140,7 @@ func (h *Handler) GetMagicLinkStatus(c *fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(fiber.Map{
 			"valid": false,
-			"error": err.Error(),
+			"error": apierror.Message(err, "invalid or expired token"),
 		})
 	}
 

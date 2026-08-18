@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tokenhash"
@@ -72,7 +73,7 @@ func generateToken() (string, error) {
 func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {
 	t, err := s.tenantService.GetTenantByID(tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("tenant not found: %w", err)
+		return nil, apierror.NewPublic("tenant not found")
 	}
 	// A nil inviter is the system actor (admin API key): there is no user row to
 	// look up, and requiring one is what made a fresh instance un-bootstrappable.
@@ -80,20 +81,20 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	if inviterID != nil {
 		inviter, err := s.userService.GetByID(*inviterID)
 		if err != nil {
-			return nil, fmt.Errorf("inviter not found: %w", err)
+			return nil, apierror.NewPublic("inviter not found")
 		}
 		if inviter.TenantID != tenantID {
-			return nil, fmt.Errorf("inviter belongs to a different organization")
+			return nil, apierror.NewPublic("inviter belongs to a different organization")
 		}
 		inviterName = displayName(inviter)
 	}
 	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, req.Email)
 	if existingUser != nil {
-		return nil, fmt.Errorf("user already exists in this organization")
+		return nil, apierror.NewPublic("user already exists in this organization")
 	}
 	var existing Invitation
 	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, req.Email, StatusPending).First(&existing).Error; err == nil {
-		return nil, fmt.Errorf("pending invitation already exists for this email")
+		return nil, apierror.NewPublic("pending invitation already exists for this email")
 	}
 	token, err := generateToken()
 	if err != nil {
@@ -179,7 +180,7 @@ func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, er
 func (s *service) GetByToken(token string) (*Invitation, error) {
 	var inv Invitation
 	if err := s.db.Where("token = ?", token).First(&inv).Error; err != nil {
-		return nil, fmt.Errorf("invitation not found")
+		return nil, apierror.NewPublic("invitation not found")
 	}
 	s.hydrate(&inv)
 	return &inv, nil
@@ -188,7 +189,7 @@ func (s *service) GetByToken(token string) (*Invitation, error) {
 func (s *service) GetByID(id uuid.UUID) (*Invitation, error) {
 	var inv Invitation
 	if err := s.db.Where("id = ?", id).First(&inv).Error; err != nil {
-		return nil, fmt.Errorf("invitation not found")
+		return nil, apierror.NewPublic("invitation not found")
 	}
 	s.hydrate(&inv)
 	return &inv, nil
@@ -228,26 +229,26 @@ func (s *service) Accept(token string, userID *uuid.UUID, name, password string)
 	}
 	if !inv.CanBeAccepted() {
 		if inv.IsExpired() {
-			return nil, fmt.Errorf("invitation has expired")
+			return nil, apierror.NewPublic("invitation has expired")
 		}
-		return nil, fmt.Errorf("invitation cannot be accepted (status: %s)", inv.Status)
+		return nil, apierror.NewPublic(fmt.Sprintf("invitation cannot be accepted (status: %s)", inv.Status))
 	}
 	var u *user.User
 	if userID != nil {
 		u, err = s.userService.GetByID(*userID)
 		if err != nil {
-			return nil, fmt.Errorf("user not found: %w", err)
+			return nil, apierror.NewPublic("user not found")
 		}
 		if u.TenantID != inv.TenantID {
-			return nil, fmt.Errorf("user belongs to a different organization")
+			return nil, apierror.NewPublic("user belongs to a different organization")
 		}
 	} else {
 		existingUser, _ := s.userService.GetByEmailAndTenant(inv.TenantID, inv.Email)
 		if existingUser != nil {
-			return nil, fmt.Errorf("user already exists, please log in to accept")
+			return nil, apierror.NewPublic("user already exists, please log in to accept")
 		}
 		if password == "" {
-			return nil, fmt.Errorf("password is required for new users")
+			return nil, apierror.NewPublic("password is required for new users")
 		}
 		userName := name
 		if userName == "" {
@@ -281,7 +282,7 @@ func (s *service) Decline(token string) error {
 		return err
 	}
 	if inv.Status != StatusPending {
-		return fmt.Errorf("invitation cannot be declined (status: %s)", inv.Status)
+		return apierror.NewPublic(fmt.Sprintf("invitation cannot be declined (status: %s)", inv.Status))
 	}
 	inv.Status = StatusDeclined
 	if err := s.db.Save(inv).Error; err != nil {
@@ -297,7 +298,7 @@ func (s *service) Revoke(id uuid.UUID) error {
 		return err
 	}
 	if inv.Status != StatusPending {
-		return fmt.Errorf("only pending invitations can be revoked")
+		return apierror.NewPublic("only pending invitations can be revoked")
 	}
 	inv.Status = StatusRevoked
 	if err := s.db.Save(inv).Error; err != nil {
@@ -313,7 +314,7 @@ func (s *service) Resend(id uuid.UUID) error {
 		return err
 	}
 	if inv.Status != StatusPending {
-		return fmt.Errorf("only pending invitations can be resent")
+		return apierror.NewPublic("only pending invitations can be resent")
 	}
 	token, err := generateToken()
 	if err != nil {

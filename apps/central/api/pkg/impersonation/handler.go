@@ -3,6 +3,7 @@ package impersonation
 import (
 	"strconv"
 
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -79,7 +80,7 @@ func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 			zap.String("admin_id", adminIDForLog(adminID)),
 			zap.String("target_user_id", req.TargetUserID.String()),
 		)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to start impersonation")})
 	}
 
 	h.logger.Info("Impersonation started",
@@ -112,7 +113,7 @@ func (h *Handler) ValidateImpersonationToken(c *fiber.Ctx) error {
 
 	session, err := h.service.ValidateToken(body.Token)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": apierror.Message(err, "invalid impersonation token")})
 	}
 
 	return c.JSON(fiber.Map{
@@ -143,7 +144,7 @@ func (h *Handler) EndImpersonation(c *fiber.Ctx) error {
 
 	if err := h.service.EndImpersonation(sessionID); err != nil {
 		h.logger.Warn("Failed to end impersonation", zap.Error(err), zap.String("session_id", sessionIDStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to end impersonation")})
 	}
 
 	h.logger.Info("Impersonation ended", zap.String("session_id", sessionIDStr))
