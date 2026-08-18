@@ -86,8 +86,9 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	}
 
 	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
-	// context in its request body or route middleware to scope by (HD-10,
-	// claudedocs/HANDOFF.md — still open, needs an API-contract decision).
+	// context in its request body or route middleware to scope by. Resolving
+	// that is an open API-contract decision (single- vs multi-tenant email
+	// uniqueness), not a bug in this handler.
 	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)
@@ -217,8 +218,9 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
-	// context in its request body or route middleware to scope by (HD-10,
-	// claudedocs/HANDOFF.md — still open, needs an API-contract decision).
+	// context in its request body or route middleware to scope by. Resolving
+	// that is an open API-contract decision (single- vs multi-tenant email
+	// uniqueness), not a bug in this handler.
 	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)

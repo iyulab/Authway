@@ -87,8 +87,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 // TestLoginRateLimit_BlocksAfterMaxAttemptsThenResetsOnSuccess exercises the
 // full loop a real login handler drives: RateLimit as gate, then the
-// handler-side Increment/Reset calls that the previous implementation never
-// made (LoginRateLimit had zero callers before this cycle — see HD-01).
+// handler-side Increment/Reset calls that make the counting actually happen.
 func TestLoginRateLimit_BlocksAfterMaxAttemptsThenResetsOnSuccess(t *testing.T) {
 	redisClient := newTestRedis(t)
 	cfg := RateLimitConfig{

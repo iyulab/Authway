@@ -1,8 +1,8 @@
-// Package apierror is the API-boundary error-exposure convention (HD-03,
-// claudedocs/HANDOFF.md): domain/validation errors are safe to return to a
-// caller verbatim, but infrastructure errors (GORM, the Postgres driver, an
-// HTTP client to another service) can leak schema/column/query internals if
-// their raw .Error() text reaches an HTTP response.
+// Package apierror is the API-boundary error-exposure convention:
+// domain/validation errors are safe to return to a caller verbatim, but
+// infrastructure errors (GORM, the Postgres driver, an HTTP client to
+// another service) can leak schema/column/query internals if their raw
+// .Error() text reaches an HTTP response.
 //
 // Public marks an error's message as author-reviewed and safe to expose. A
 // handler that renders err.Error() unconditionally is fail-open — a new,

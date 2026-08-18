@@ -49,11 +49,11 @@ type StateData struct {
 // prior in-memory implementation's cleanup window.
 const stateTTL = 10 * time.Minute
 
-// StateStore manages OAuth state data in Redis (HD-04, claudedocs/HANDOFF.md
-// — same instance central-api already uses, "oauth:state:"-prefixed so keys
-// don't collide with its "mfa_challenge:"/"ratelimit:" namespaces). A
-// single-instance in-memory map couldn't survive the authorize→callback
-// round-trip landing on a different Container Apps replica.
+// StateStore manages OAuth state data in Redis — same instance central-api
+// already uses, "oauth:state:"-prefixed so keys don't collide with its
+// "mfa_challenge:"/"ratelimit:" namespaces. A single-instance in-memory map
+// couldn't survive the authorize→callback round-trip landing on a different
+// Container Apps replica.
 type StateStore struct {
 	redis  *redis.Client
 	prefix string

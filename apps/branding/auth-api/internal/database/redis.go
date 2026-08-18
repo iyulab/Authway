@@ -10,9 +10,9 @@ import (
 )
 
 // ConnectRedis mirrors apps/central/api/internal/database/redis.go — same
-// shared Redis instance (HD-04, claudedocs/HANDOFF.md), same connection
-// shape, kept identical across the two modules since there is nothing
-// module-specific about how to open the connection.
+// shared Redis instance, same connection shape, kept identical across the
+// two modules since there is nothing module-specific about how to open the
+// connection.
 func ConnectRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),

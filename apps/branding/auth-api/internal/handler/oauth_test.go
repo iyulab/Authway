@@ -10,9 +10,9 @@ import (
 
 // StateStore is the CSRF-protection primitive for the OAuth flow: a state
 // value is single-use and unguessable, or the callback can't be trusted to
-// belong to the login attempt that started it. Backed by Redis since HD-04
-// (claudedocs/HANDOFF.md) — tests run against an in-process miniredis so the
-// real HSET/TTL path is exercised, not a mock.
+// belong to the login attempt that started it. Backed by Redis — tests run
+// against an in-process miniredis so the real HSET/TTL path is exercised,
+// not a mock.
 
 // newTestRedisClient spins up an in-process miniredis instance shared by
 // every test in this package that needs a *redis.Client (StateStore here,

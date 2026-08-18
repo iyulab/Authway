@@ -53,12 +53,12 @@ type HydraConfig struct {
 	PublicURL string
 }
 
-// RedisConfig points at the same Redis instance central-api already uses
-// (HD-04, claudedocs/HANDOFF.md) — shared, prefix-namespaced ("oauth:state:"
-// here vs. central-api's "mfa_challenge:"/"ratelimit:"), not a separate
-// deployment. Reuses the AUTHWAY_REDIS_* env var names central-api's own
-// staging/prod .env files already define, so the deploy scripts can pass
-// the existing values through instead of provisioning new secrets.
+// RedisConfig points at the same Redis instance central-api already uses —
+// shared, prefix-namespaced ("oauth:state:" here vs. central-api's
+// "mfa_challenge:"/"ratelimit:"), not a separate deployment. Reuses the
+// AUTHWAY_REDIS_* env var names central-api's own staging/prod .env files
+// already define, so the deploy scripts can pass the existing values
+// through instead of provisioning new secrets.
 type RedisConfig struct {
 	Host       string
 	Port       int

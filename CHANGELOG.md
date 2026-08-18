@@ -2,6 +2,39 @@
 
 ### Security
 
+- **Login rate limiting was wired up but never actually counted anything.**
+  The middleware that blocks an IP after repeated failed logins existed and
+  was attached to the route, but nothing in the login, MFA-verify, or
+  MFA-recovery handlers ever called its increment-on-failure or
+  reset-on-success hooks — the counter never moved, so the block never
+  triggered, on any of those three endpoints. It now does. Fixed alongside
+  it: the IP the limiter keyed on was the leftmost address in
+  `X-Forwarded-For`, which a client fully controls by prepending an
+  arbitrary value to that header — every request could claim a fresh IP and
+  bypass the limit entirely. Behind this deployment's edge proxy, only the
+  rightmost entry in that header is proxy-appended and trustworthy, so the
+  limiter now keys on that instead.
+
+- **A server restart, or a request landing on a different replica, could
+  silently break an in-progress login.** OAuth state (used to validate the
+  provider callback) and password-verified-but-MFA-pending sessions were
+  both held in a single instance's memory, but both services run multiple
+  replicas behind a load balancer — a state created on one replica was
+  invisible to another, so a callback or an MFA verification could hit a
+  process that had never heard of it and fail with no clear cause. Both now
+  live in the shared Redis instance the services already depend on, with the
+  same expiry behavior as before.
+
+- **Internal database and upstream-service error text could reach an API
+  caller verbatim.** A raw driver or ORM error can contain schema, column,
+  or query detail that has no business leaving the service boundary — several
+  handlers returned `err.Error()` directly wherever an internal service call
+  failed. Errors a service has explicitly reviewed as safe (a validation
+  failure, a "not found", a business-rule rejection) still surface their own
+  text; everything else now gets a fixed, generic message instead, on a
+  fail-closed basis — a new, unreviewed error path defaults to the generic
+  message rather than to leaking.
+
 - **Login now authenticates against the right tenant, not just the right
   email.** The schema has always allowed the same email address to exist in
   more than one tenant (a composite unique index on `tenant_id, email`, not
@@ -98,6 +131,14 @@
   that had explicitly opted into wildcard redirects were exposed.
 
 ### Fixed
+
+- **The admin console's settings page showed a fabricated admin profile.**
+  A name, email, role, and join date were hardcoded in the frontend and
+  rendered as if they came from the signed-in session — there is no
+  individual admin identity behind them (admin access is a single shared
+  credential), so the fields could not have been real. The card now shows
+  what the session actually is: authentication status and the running
+  server version, both read from the API.
 
 - **Proxy requests to Hydra and the Central API could hang indefinitely.**
   Several of the auth backend's own HTTP clients (login, consent, claims,

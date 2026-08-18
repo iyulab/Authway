@@ -13,9 +13,9 @@ import (
 // verify stage: which Hydra login request to accept, as whom, and with what
 // "remember me" settings — plus a bounded retry counter so a stolen or
 // guessed mfa_challenge cannot be used to brute-force the 6-digit TOTP space
-// (the IP-based rate limiter also covers /mfa/verify and /mfa/recovery now —
-// see HD-01 in claudedocs/HANDOFF.md — this per-challenge cap is a second,
-// independent layer).
+// (the IP-based rate limiter also covers /mfa/verify and /mfa/recovery —
+// this per-challenge cap is a second, independent layer, since the two
+// limits key off different identities: IP vs. challenge).
 type pendingMFALogin struct {
 	HydraChallenge string
 	UserID         uuid.UUID
@@ -55,10 +55,10 @@ return 0
 // MFAChallengeStore holds password-verified, MFA-pending logins in Redis,
 // keyed by an opaque challenge handed to the client. Same shape as
 // apps/branding/auth-api's StateStore (separate Go module, so not directly
-// shared) — both moved off in-memory storage together (HD-04,
-// claudedocs/HANDOFF.md): central-api's Container App scales to
-// maxReplicas=5, so a challenge created on one replica must be readable by
-// whichever replica serves the follow-up /mfa/verify request.
+// shared) — both moved off in-memory storage together: central-api's
+// Container App scales to maxReplicas=5, so a challenge created on one
+// replica must be readable by whichever replica serves the follow-up
+// /mfa/verify request.
 type MFAChallengeStore struct {
 	redis  *redis.Client
 	prefix string

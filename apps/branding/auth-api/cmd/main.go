@@ -53,9 +53,9 @@ func main() {
 	centralAPI := service.NewCentralAPIClient(&cfg.CentralAPI, zapLogger)
 	hydraClient := service.NewHydraClient(&cfg.Hydra, zapLogger)
 
-	// Redis — shared with central-api (HD-04, claudedocs/HANDOFF.md), backs
-	// the OAuth StateStore so it survives a replica switch between the
-	// authorize redirect and the provider's callback.
+	// Redis — shared with central-api, backs the OAuth StateStore so it
+	// survives a replica switch between the authorize redirect and the
+	// provider's callback.
 	redisClient, err := database.ConnectRedis(cfg.Redis)
 	if err != nil {
 		zapLogger.Fatal("Failed to connect to Redis", zap.Error(err))
