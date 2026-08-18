@@ -69,9 +69,6 @@ export interface Client {
   logo?: string
   redirect_uris: string[]
   post_logout_redirect_uris?: string[]
-  logout_redirect_policy?: 'strict' | 'lenient' | 'disabled'
-  default_logout_uri?: string
-  allow_wildcard_logout?: boolean
   grant_types: string[]
   scopes: string[]
   public: boolean
@@ -165,9 +162,6 @@ export const clientsApi = {
     logo?: string
     redirect_uris: string[]
     post_logout_redirect_uris?: string[]
-    logout_redirect_policy?: 'strict' | 'lenient' | 'disabled'
-    default_logout_uri?: string
-    allow_wildcard_logout?: boolean
     grant_types: string[]
     scopes: string[]
     public: boolean

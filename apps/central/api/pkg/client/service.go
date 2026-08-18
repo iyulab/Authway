@@ -152,17 +152,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 				} else if len(req.RedirectURIs) > 0 {
 					existingClient.PostLogoutRedirectURIs = req.RedirectURIs
 				}
-				if req.LogoutRedirectPolicy != "" {
-					existingClient.LogoutRedirectPolicy = req.LogoutRedirectPolicy
-				} else if existingClient.LogoutRedirectPolicy == "" {
-					existingClient.LogoutRedirectPolicy = "strict"
-				}
-				if req.DefaultLogoutURI != "" {
-					existingClient.DefaultLogoutURI = &req.DefaultLogoutURI
-				} else if existingClient.DefaultLogoutURI == nil && len(req.RedirectURIs) > 0 {
-					defaultURI := req.RedirectURIs[0]
-					existingClient.DefaultLogoutURI = &defaultURI
-				}
 
 				if err := s.db.Save(&existingClient).Error; err != nil {
 					return nil, nil, fmt.Errorf("failed to update restored client: %w", err)
@@ -301,24 +290,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 			zap.String("client_id", clientID),
 			zap.Strings("uris", req.RedirectURIs))
 	}
-
-	// Set logout redirect policy (default: "strict" for production safety)
-	if req.LogoutRedirectPolicy != "" {
-		client.LogoutRedirectPolicy = req.LogoutRedirectPolicy
-	} else {
-		client.LogoutRedirectPolicy = "strict"
-	}
-
-	// Set default logout URI - use first redirect URI if not provided
-	if req.DefaultLogoutURI != "" {
-		client.DefaultLogoutURI = &req.DefaultLogoutURI
-	} else if len(req.RedirectURIs) > 0 {
-		defaultURI := req.RedirectURIs[0]
-		client.DefaultLogoutURI = &defaultURI
-	}
-
-	// Allow wildcard logout (default: false for security)
-	client.AllowWildcardLogout = req.AllowWildcardLogout
 
 	// Consent flow configuration (default: false — consent/logout screens shown)
 	client.SkipConsent = req.SkipConsent
@@ -512,21 +483,6 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if req.PostLogoutRedirectURIs != nil {
 		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
 	}
-	if req.LogoutRedirectPolicy != nil {
-		client.LogoutRedirectPolicy = *req.LogoutRedirectPolicy
-	}
-	// DefaultLogoutURI: nil = not provided, empty string = clear value (set to nil)
-	if req.DefaultLogoutURI != nil {
-		if *req.DefaultLogoutURI == "" {
-			client.DefaultLogoutURI = nil // Clear the value
-		} else {
-			client.DefaultLogoutURI = req.DefaultLogoutURI
-		}
-	}
-	if req.AllowWildcardLogout != nil {
-		client.AllowWildcardLogout = *req.AllowWildcardLogout
-	}
-
 	// Consent flow configuration
 	if req.SkipConsent != nil {
 		client.SkipConsent = *req.SkipConsent

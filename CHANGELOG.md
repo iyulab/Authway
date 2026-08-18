@@ -1,5 +1,21 @@
 ## [Unreleased]
 
+### Removed
+
+- **Three client-config fields that looked like they controlled logout
+  redirect validation never actually did.** `logout_redirect_policy`,
+  `default_logout_uri`, and `allow_wildcard_logout` were stored and echoed
+  back by the client API and editable from the admin console, but nothing
+  read them — the OAuth provider validates `post_logout_redirect_uri`
+  against the client's registered `post_logout_redirect_uris` allowlist
+  directly, and that was already the only enforcement point. Setting
+  `logout_redirect_policy: "lenient"` on a client changed nothing about its
+  actual logout behavior; the API and the admin form both made it look like
+  it did. All three are now dropped (API fields, DB columns, admin form) so
+  `post_logout_redirect_uris` is the one true source. No functional change
+  for any client — none of the removed fields had done anything since they
+  were added.
+
 ### Security
 
 - **Login rate limiting was wired up but never actually counted anything.**

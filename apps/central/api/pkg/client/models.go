@@ -40,12 +40,10 @@ type Client struct {
 	// Used to validate browser requests to /oauth2/token endpoint
 	AllowedOrigins pq.StringArray `json:"allowed_origins" gorm:"type:text[];column:allowed_origins;default:'{}'"`
 
-	// Logout Redirect Policy Configuration
-	// Controls validation strictness for post_logout_redirect_uri parameter
+	// Post-logout redirect allowlist. Hydra itself validates the RP-supplied
+	// post_logout_redirect_uri against this list at logout time — it is the
+	// only enforcement point, so no other field here changes what happens.
 	PostLogoutRedirectURIs pq.StringArray `json:"post_logout_redirect_uris" gorm:"type:text[];column:post_logout_redirect_uris;default:'{}'"`
-	LogoutRedirectPolicy   string         `json:"logout_redirect_policy" gorm:"column:logout_redirect_policy;default:'strict'"` // strict, lenient, disabled
-	DefaultLogoutURI       *string        `json:"default_logout_uri" gorm:"column:default_logout_uri;null"`
-	AllowWildcardLogout    bool           `json:"allow_wildcard_logout" gorm:"column:allow_wildcard_logout;default:false"`
 
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
@@ -118,11 +116,9 @@ type PublicClient struct {
 	// CORS Allowed Origins
 	AllowedOrigins []string `json:"allowed_origins"`
 
-	// Logout Redirect Policy
+	// Post-logout redirect allowlist (see Client struct comment — Hydra is the
+	// sole enforcement point).
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	LogoutRedirectPolicy   string   `json:"logout_redirect_policy"` // strict, lenient, disabled
-	DefaultLogoutURI       *string  `json:"default_logout_uri"`
-	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
@@ -169,9 +165,6 @@ func (c *Client) ToPublic() PublicClient {
 
 		// Logout policy
 		PostLogoutRedirectURIs: c.PostLogoutRedirectURIs,
-		LogoutRedirectPolicy:   c.LogoutRedirectPolicy,
-		DefaultLogoutURI:       c.DefaultLogoutURI,
-		AllowWildcardLogout:    c.AllowWildcardLogout,
 
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
@@ -231,11 +224,9 @@ type CreateClientRequest struct {
 	// Example: ["https://app.example.com", "https://staging.example.com"]
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 
-	// Logout Redirect Policy Configuration
+	// Post-logout redirect allowlist (see Client struct comment — Hydra is the
+	// sole enforcement point).
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
-	LogoutRedirectPolicy   string   `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
-	DefaultLogoutURI       string   `json:"default_logout_uri" validate:"omitempty,url"`
-	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
@@ -289,13 +280,9 @@ type UpdateClientRequest struct {
 	// CORS Allowed Origins
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 
-	// Logout Redirect Policy Configuration
-	// PostLogoutRedirectURIs: empty array means "clear", nil means "not provided"
+	// Post-logout redirect allowlist: empty array means "clear", nil means "not
+	// provided" (see Client struct comment — Hydra is the sole enforcement point).
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
-	LogoutRedirectPolicy   *string  `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
-	// DefaultLogoutURI: empty string means "clear", nil means "not provided"
-	DefaultLogoutURI    *string `json:"default_logout_uri" validate:"omitempty"`
-	AllowWildcardLogout *bool   `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
