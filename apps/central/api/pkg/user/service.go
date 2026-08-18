@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -15,13 +16,13 @@ type Service interface {
 	GetByID(id uuid.UUID) (*User, error)
 	// GetByEmailUnscoped matches globally, across every tenant, in undefined
 	// order when the same email exists in more than one tenant
-	// (idx_users_tenant_email allows it). Renamed from GetByEmail (HD-09,
-	// claudedocs/HANDOFF.md) after a "Deprecated" comment alone still let a
-	// live auth path (POST /authenticate, fixed cycle-108) ship unscoped —
+	// (idx_users_tenant_email allows it). Renamed from GetByEmail after a
+	// "Deprecated" comment alone still let a live auth path ship unscoped —
 	// the unsafe name is now the only spelling, so grep for it finds every
 	// caller. Only apps/central/api/internal/handler/email.go still calls
 	// it, because those two endpoints have no tenant context to scope by
-	// (HD-10, still open) — everywhere else, use GetByEmailAndTenant.
+	// (an open API-contract decision) — everywhere else, use
+	// GetByEmailAndTenant.
 	GetByEmailUnscoped(email string) (*User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
@@ -85,7 +86,7 @@ func (s *service) GetByID(id uuid.UUID) (*User, error) {
 	var user User
 	if err := s.db.Where("id = ?", id).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("user not found")
+			return nil, apierror.NewPublic("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -96,7 +97,7 @@ func (s *service) GetByEmailUnscoped(email string) (*User, error) {
 	var user User
 	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("user not found")
+			return nil, apierror.NewPublic("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -107,7 +108,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
 	var user User
 	if err := s.db.Where("id = ?", id).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("user not found")
+			return nil, apierror.NewPublic("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -137,7 +138,7 @@ func (s *service) Delete(id uuid.UUID) error {
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("user not found")
+		return apierror.NewPublic("user not found")
 	}
 
 	s.logger.Info("User deleted successfully", zap.String("id", id.String()))
@@ -239,7 +240,7 @@ func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, 
 	var user User
 	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("user not found")
+			return nil, apierror.NewPublic("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}

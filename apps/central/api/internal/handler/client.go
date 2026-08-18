@@ -5,6 +5,7 @@ import (
 
 	"authway/apps/central/api/internal/config"
 	"authway/apps/central/api/internal/service"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"github.com/go-playground/validator/v10"
@@ -126,7 +127,7 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 			})
 		}
 		h.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name))
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return fiber.NewError(fiber.StatusInternalServerError, apierror.Message(err, "failed to create client"))
 	}
 
 	h.logger.Info("Client created successfully", zap.String("client_id", newClient.ClientID))
@@ -217,7 +218,7 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 			})
 		}
 		h.logger.Error("Failed to update client", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
 
 	auditDetails := map[string]any{
@@ -273,7 +274,7 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 	syncStatus, err := h.services.ClientService.Delete(id)
 	if err != nil {
 		h.logger.Error("Failed to delete client", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
 
 	if beforeClient != nil {
@@ -308,7 +309,7 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 	credentials, syncStatus, err := h.services.ClientService.RegenerateSecret(id)
 	if err != nil {
 		h.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
 
 	// Secret rotation is a security-critical event — use Warning so it
@@ -385,7 +386,7 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 	updatedClient, _, err := h.services.ClientService.Update(id, updateReq)
 	if err != nil {
 		h.logger.Error("Failed to update client Google OAuth", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
 
 	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]any{
@@ -424,7 +425,7 @@ func (h *ClientHandler) DisableGoogleOAuth(c *fiber.Ctx) error {
 	updatedClient, _, err := h.services.ClientService.Update(id, updateReq)
 	if err != nil {
 		h.logger.Error("Failed to disable client Google OAuth", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
 
 	h.logAudit(c, updatedClient.TenantID, audit.ActionClientUpdated, updatedClient.ID.String(), map[string]any{
@@ -484,7 +485,7 @@ func (h *ClientHandler) SyncToHydra(c *fiber.Ctx) error {
 	synced, failed, err := h.services.ClientService.SyncAllClientsToHydra()
 	if err != nil {
 		h.logger.Error("Failed to sync clients to Hydra", zap.Error(err))
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to sync clients: "+err.Error())
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to sync clients: "+apierror.Message(err, "sync failed"))
 	}
 
 	h.logger.Info("Hydra sync completed",

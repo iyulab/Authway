@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"authway/apps/central/api/internal/service"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
@@ -139,7 +140,7 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 	updatedUser, err := h.services.UserService.Update(id, &req)
 	if err != nil {
 		h.logger.Error("Failed to update user", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "user not found"))
 	}
 
 	h.logger.Info("User updated successfully", zap.String("id", idStr))
@@ -179,7 +180,7 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 
 	if err := h.services.UserService.Delete(id); err != nil {
 		h.logger.Error("Failed to delete user", zap.Error(err), zap.String("id", idStr))
-		return fiber.NewError(fiber.StatusNotFound, err.Error())
+		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "user not found"))
 	}
 
 	h.logger.Info("User deleted successfully", zap.String("id", idStr))

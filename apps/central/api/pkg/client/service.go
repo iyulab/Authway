@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -64,7 +65,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		return nil, nil, fmt.Errorf("failed to verify tenant: %w", err)
 	}
 	if !tenantExists {
-		return nil, nil, fmt.Errorf("tenant not found or inactive")
+		return nil, nil, apierror.NewPublic("tenant not found or inactive")
 	}
 
 	// Use provided credentials or generate new ones
@@ -398,7 +399,7 @@ func (s *service) GetByID(id uuid.UUID) (*Client, error) {
 	var client Client
 	if err := s.db.Where("id = ?", id).First(&client).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("client not found")
+			return nil, apierror.NewPublic("client not found")
 		}
 		return nil, fmt.Errorf("failed to get client: %w", err)
 	}
@@ -409,7 +410,7 @@ func (s *service) GetByClientID(clientID string) (*Client, error) {
 	var client Client
 	if err := s.db.Where("client_id = ?", clientID).First(&client).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("client not found")
+			return nil, apierror.NewPublic("client not found")
 		}
 		return nil, fmt.Errorf("failed to get client: %w", err)
 	}
@@ -420,7 +421,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	var client Client
 	if err := s.db.Where("id = ?", id).First(&client).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, SyncStatus{}, fmt.Errorf("client not found")
+			return nil, SyncStatus{}, apierror.NewPublic("client not found")
 		}
 		return nil, SyncStatus{}, fmt.Errorf("failed to get client: %w", err)
 	}
@@ -661,7 +662,7 @@ func (s *service) Delete(id uuid.UUID) (SyncStatus, error) {
 	}
 
 	if result.RowsAffected == 0 {
-		return syncStatus, fmt.Errorf("client not found")
+		return syncStatus, apierror.NewPublic("client not found")
 	}
 
 	s.logger.Info("Client deleted from database",
@@ -694,7 +695,7 @@ func (s *service) ValidateClient(clientID, clientSecret string) (*Client, error)
 	}
 
 	if !client.Active {
-		return nil, fmt.Errorf("client is not active")
+		return nil, apierror.NewPublic("client is not active")
 	}
 
 	// For public clients, don't validate secret
@@ -704,7 +705,7 @@ func (s *service) ValidateClient(clientID, clientSecret string) (*Client, error)
 
 	// Validate client secret for confidential clients
 	if client.ClientSecret != clientSecret {
-		return nil, fmt.Errorf("invalid client credentials")
+		return nil, apierror.NewPublic("invalid client credentials")
 	}
 
 	return client, nil

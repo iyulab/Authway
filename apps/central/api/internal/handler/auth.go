@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
@@ -135,7 +136,7 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 			zap.Error(err))
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "Failed to get login request from Hydra",
-			"details": err.Error(),
+			"details": apierror.Message(err, "unable to reach Hydra"),
 			"hint":    "Verify that Ory Hydra is running and accessible. Check the HYDRA_ADMIN_URL environment variable.",
 			"debug": fiber.Map{
 				"hydra_admin_url": h.hydraClient.AdminURL,
@@ -153,7 +154,7 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 			zap.Error(err))
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "OAuth client not registered in Authway",
-			"details": err.Error(),
+			"details": apierror.Message(err, "client lookup failed"),
 			"hint":    "Register this OAuth client in Authway Admin Console before using it. Each client must be associated with a tenant.",
 			"solution": fiber.Map{
 				"step_1": "Go to Admin Console: http://localhost:3000",
@@ -552,7 +553,7 @@ func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "Failed to get consent request from Hydra",
-			"details": err.Error(),
+			"details": apierror.Message(err, "unable to reach Hydra"),
 			"hint":    "Verify that Ory Hydra is running and the consent_challenge is valid. The challenge may have expired or been used already.",
 			"debug": fiber.Map{
 				"hydra_admin_url": h.hydraClient.AdminURL,
@@ -873,7 +874,7 @@ func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "Failed to get logout request",
 			"guide":   "Hydra might be unavailable or the challenge may have expired. Try logging out again.",
-			"details": err.Error(),
+			"details": apierror.Message(err, "unable to reach Hydra"),
 		})
 	}
 
@@ -891,7 +892,7 @@ func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{
 			"error":   "Failed to accept logout request",
 			"guide":   "Hydra logout acceptance failed. Try again or contact support.",
-			"details": err.Error(),
+			"details": apierror.Message(err, "unable to reach Hydra"),
 		})
 	}
 
@@ -961,7 +962,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 			"success": false,
 			"error":   "Failed to revoke sessions",
 			"guide":   "This could be a temporary Hydra connection issue. Try again or use OIDC logout flow.",
-			"details": err.Error(),
+			"details": apierror.Message(err, "unable to reach Hydra"),
 		})
 	}
 

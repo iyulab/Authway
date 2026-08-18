@@ -10,6 +10,7 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service/social"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
@@ -192,7 +193,7 @@ func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error":             "failed_to_get_login_request",
 				"error_description": "Failed to retrieve OAuth client information",
-				"details":           err.Error(),
+				"details":           apierror.Message(err, "unable to reach Hydra"),
 			})
 		}
 		clientID = loginReq.Client.ClientID
@@ -386,7 +387,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Google OAuth callback",
-			"details":           err.Error(),
+			"details":           apierror.Message(err, "OAuth callback failed"),
 			"hint":              "Verify Google OAuth configuration. Check client_id, client_secret, and redirect_uri in your environment variables.",
 			"debug": fiber.Map{
 				"client_id": retrievedClientID,
@@ -434,7 +435,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "hydra_login_failed",
 			"error_description": "Failed to complete OAuth login with Hydra",
-			"details":           err.Error(),
+			"details":           apierror.Message(err, "unable to reach Hydra"),
 			"hint":              "Verify Hydra is accessible and the login_challenge is still valid",
 			"debug": fiber.Map{
 				"hydra_admin_url": s.hydraClient.AdminURL,
@@ -682,7 +683,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process GitHub OAuth callback",
-			"details":           err.Error(),
+			"details":           apierror.Message(err, "OAuth callback failed"),
 		})
 	}
 
@@ -881,7 +882,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Microsoft OAuth callback",
-			"details":           err.Error(),
+			"details":           apierror.Message(err, "OAuth callback failed"),
 		})
 	}
 
@@ -1092,7 +1093,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "oauth_callback_failed",
 			"error_description": "Failed to process Apple OAuth callback",
-			"details":           err.Error(),
+			"details":           apierror.Message(err, "OAuth callback failed"),
 		})
 	}
 
