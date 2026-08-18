@@ -53,7 +53,7 @@ const ConsentPage: React.FC = () => {
         sessionStorage.removeItem('authway_popup_mode')
         return false // Use normal redirect
       }
-    } catch (e) {
+    } catch {
       // URL parsing failed, continue with popup check
     }
 

@@ -40,7 +40,7 @@ export default function ResetPasswordPage() {
         } else {
           setError(data.error || t('password:reset.errors.tokenExpired'));
         }
-      } catch (err) {
+      } catch {
         setError(t('password:reset.errors.serverError'));
       } finally {
         setIsValidating(false);
@@ -92,7 +92,7 @@ export default function ResetPasswordPage() {
       } else {
         setError(data.error || t('password:reset.errors.resetFailed'));
       }
-    } catch (err) {
+    } catch {
       setError(t('password:reset.errors.serverError'));
     } finally {
       setIsLoading(false);

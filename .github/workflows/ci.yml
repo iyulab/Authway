@@ -111,7 +111,7 @@ jobs:
   # ran on a developer machine. Build + test them here; no artifacts are uploaded
   # (CI verifies, the release pipeline publishes).
   apps:
-    name: UI apps build / test
+    name: UI apps build / test / lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -139,6 +139,14 @@ jobs:
       - name: Test
         working-directory: ${{ matrix.app }}
         run: npx vitest run
+
+      # eslint had no working config until the eslint 9 flat-config migration
+      # (no .eslintrc file existed — `npm run lint` failed outright with
+      # "ESLint couldn't find a configuration file"), so this step was never
+      # meaningfully checkable before now.
+      - name: Lint
+        working-directory: ${{ matrix.app }}
+        run: npm run lint
 
   packages:
     name: TS packages build / typecheck / tarball verify

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 
@@ -14,7 +14,7 @@ const LogoutPage: React.FC = () => {
   const redirectTimerRef = useRef<number | null>(null)
 
   // Extract origin from URL for fallback
-  const extractOrigin = (url: string): string => {
+  const extractOrigin = useCallback((url: string): string => {
     try {
       const parsed = new URL(url)
       return parsed.origin
@@ -23,10 +23,10 @@ const LogoutPage: React.FC = () => {
       const matches = url.match(/^(https?:\/\/[^/]+)/)
       return matches ? matches[1] : url
     }
-  }
+  }, [])
 
   // Determine fallback redirect URL
-  const getFallbackUrl = (data: Record<string, unknown>): string | null => {
+  const getFallbackUrl = useCallback((data: Record<string, unknown>): string | null => {
     // Priority: fallback_redirect from API > post_logout_redirect_uri param > referrer origin
     if (data.fallback_redirect && typeof data.fallback_redirect === 'string') {
       return data.fallback_redirect
@@ -42,7 +42,7 @@ const LogoutPage: React.FC = () => {
     }
 
     return null
-  }
+  }, [searchParams, extractOrigin])
 
   // Handle redirect with countdown
   useEffect(() => {
@@ -146,7 +146,7 @@ const LogoutPage: React.FC = () => {
     }
 
     performLogout()
-  }, [searchParams])
+  }, [searchParams, extractOrigin, getFallbackUrl])
 
   if (error) {
     return (

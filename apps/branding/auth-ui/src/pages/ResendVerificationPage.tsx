@@ -36,7 +36,7 @@ export default function ResendVerificationPage() {
         setStatus('error');
         setMessage(data.error || t('auth:resendVerification.error.failed'));
       }
-    } catch (error) {
+    } catch {
       setStatus('error');
       setMessage(t('auth:resendVerification.error.failed'));
     } finally {

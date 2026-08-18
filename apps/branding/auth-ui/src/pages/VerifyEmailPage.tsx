@@ -32,7 +32,7 @@ export default function VerifyEmailPage() {
           setStatus('error');
           setMessage(data.error || t('auth:verifyEmail.error.failed'));
         }
-      } catch (error) {
+      } catch {
         setStatus('error');
         setMessage(t('auth:verifyEmail.error.serverError'));
       }
