@@ -2,6 +2,12 @@
 
 ### Security
 
+- **Cleared an esbuild CVE reachable through the frontend build/test toolchain** (admin console,
+  auth UI) — flagged via vite (<=6.4.2) and, transitively, vitest / `@vitest/coverage-v8` /
+  `@vitest/ui`. Both apps move to vite 7 and vitest 4, which already clear the vulnerable range;
+  the newest major (vite 8) replaces the underlying bundler entirely and was judged out of scope
+  for a vulnerability fix.
+
 - **Upgraded react-router past two moderate CVEs in both frontend apps** (admin console, auth
   UI) — an open-redirect bypass in `<Link>`/`useNavigate` and an arbitrary-constructor-injection
   path in SSR hydration error deserialization. Neither has a fix on the 6.x line; the first
