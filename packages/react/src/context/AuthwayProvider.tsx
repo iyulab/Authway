@@ -38,8 +38,10 @@ export function AuthwayProvider({
       try {
         // Wait for config to be loaded
         await client.waitForReady()
-        // Check if we're handling a callback
-        if (!skipRedirectCallback && window.location.search.includes('code=')) {
+        // OAuth error redirects (e.g. access_denied) carry `error=` without `code=`,
+        // so both must route into handleRedirectCallback for it to surface in AuthState.error.
+        const callbackParams = new URLSearchParams(window.location.search)
+        if (!skipRedirectCallback && (callbackParams.has('code') || callbackParams.has('error'))) {
           // Prevent duplicate processing
           if (isProcessingCallback.current) {
             return

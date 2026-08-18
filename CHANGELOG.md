@@ -164,6 +164,17 @@
 
 ### Fixed
 
+- **`@authway/react` dropped OAuth error redirects on the floor.** The
+  provider's callback handler only ran when the return URL carried a
+  `code=` parameter, but a spec-compliant OAuth error response (e.g.
+  `error=access_denied` — the redirect an invitation-only deployment sends
+  an uninvited account) carries no `code` at all. Those redirects fell
+  straight through to "not authenticated", leaving `AuthContextValue.error`
+  `null` with no way for a consuming app to tell a rejected login from one
+  that simply hadn't happened yet. The handler now also runs when the URL
+  carries an `error` parameter, matching the parsing the popup callback
+  path already did.
+
 - **The admin console's settings page showed a fabricated admin profile.**
   A name, email, role, and join date were hardcoded in the frontend and
   rendered as if they came from the signed-in session — there is no
