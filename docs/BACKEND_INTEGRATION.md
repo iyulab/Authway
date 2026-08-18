@@ -518,9 +518,13 @@ await logout({ returnTo: 'https://yourdomain.com' })
 
 ### Backend Logout Policy Configuration
 
-`post_logout_redirect_uri` validation happens at the OAuth provider (Hydra), against the
-client's registered `post_logout_redirect_uris` — an exact-match allowlist, always enforced.
-There is no separate strict/lenient/disabled policy to configure.
+Authway v0.1.5+ supports configurable logout redirect validation:
+
+| Policy | Behavior | Recommended For |
+|--------|----------|----------------|
+| **Strict** | `post_logout_redirect_uri` required | Production |
+| **Lenient** | `post_logout_redirect_uri` optional | Development/Staging |
+| **Disabled** | No validation | Local development only |
 
 **Example Client Configuration**:
 ```json
@@ -529,7 +533,10 @@ There is no separate strict/lenient/disabled policy to configure.
   "post_logout_redirect_uris": [
     "https://yourdomain.com",
     "https://yourdomain.com/signout-callback"
-  ]
+  ],
+  "logout_redirect_policy": "lenient",
+  "default_logout_uri": "https://yourdomain.com",
+  "allow_wildcard_logout": false
 }
 ```
 
@@ -539,7 +546,10 @@ There is no separate strict/lenient/disabled policy to configure.
   "post_logout_redirect_uris": [
     "http://localhost:*",
     "https://*.dev.example.com"
-  ]
+  ],
+  "logout_redirect_policy": "lenient",
+  "default_logout_uri": "http://localhost:3000",
+  "allow_wildcard_logout": true
 }
 ```
 

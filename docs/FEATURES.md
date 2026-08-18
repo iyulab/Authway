@@ -268,13 +268,13 @@ Access-Control-Allow-Credentials: true
 
 ## Logout & Redirect Policies
 
-Control where users are redirected after logout via an exact-match allowlist.
+Control where users are redirected after logout with flexible validation policies.
 
 ### Overview
 
 Authway supports:
 - ✅ **Single Logout**: Logout from all sessions
-- ✅ **Redirect Policies**: Exact-match whitelist, enforced by the OAuth provider
+- ✅ **Redirect Policies**: Whitelist, custom validation
 - ✅ **Front-Channel Logout**: Notify all apps
 - ✅ **Session Cleanup**: Clear all tokens and sessions
 - ✅ **Smart Defaults**: Auto-populate logout URIs from redirect URIs
@@ -286,6 +286,9 @@ Authway minimizes configuration by automatically setting logout URIs:
 | Field | Smart Default | When |
 |-------|---------------|------|
 | `post_logout_redirect_uris` | Copies from `redirect_uris` | Not explicitly set |
+| `logout_redirect_policy` | `"strict"` | Not explicitly set |
+| `default_logout_uri` | First `redirect_uri` | Not explicitly set |
+| `allow_wildcard_logout` | `false` | Not explicitly set |
 
 **Minimal Client Creation** (logout works out of the box):
 ```bash
@@ -333,6 +336,19 @@ POST /api/v1/clients
     "https://app.example.com",
     "https://app.example.com/logged-out"
   ]
+}
+```
+
+#### 2. Dynamic Policy (Advanced)
+
+**Custom Validation Function**:
+```go
+func ValidateLogoutRedirect(uri string, clientID string) bool {
+  // Custom logic
+  if strings.HasPrefix(uri, "https://") && strings.HasSuffix(uri, ".example.com") {
+    return true
+  }
+  return false
 }
 ```
 
@@ -391,13 +407,14 @@ Notify all applications when user logs out:
    }
    ```
 
-2. **Register Every Redirect URI Explicitly**:
+2. **Prefer Exact URI Matching**:
    ```javascript
    // ✅ Good - exact match, no configuration needed
    "https://app.example.com/logged-out"
 
-   // ❌ Not supported - post_logout_redirect_uris is matched exactly,
-   // list every subdomain/URI you need instead of relying on a pattern.
+   // ⚠️ Wildcard patterns are supported (opt-in via allow_wildcard_logout)
+   // for cases like preview/staging subdomains, but widen what an attacker
+   // can redirect to — prefer an explicit whitelist where possible.
    "https://*.example.com/logged-out"
    ```
 

@@ -118,8 +118,8 @@ func validateAccessTokenStrategy(strategy string) *ConfigError {
 //
 // Requiring it unconditionally forces machine-to-machine registrations
 // (`client_credentials`, which never redirects) to invent a dummy URI. That dummy
-// then propagates into post_logout_redirect_uris and becomes permanent
-// configuration pollution for a URI that is never used.
+// then propagates into post_logout_redirect_uris / default_logout_uri and becomes
+// permanent configuration pollution for a URI that is never used.
 //
 // Runs last so that client-type violations (secret-on-public, wrong grant) are
 // reported first — those describe *what the client is*, this one only describes
