@@ -18,6 +18,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// version is set at build time via -ldflags "-X main.version=<value>"
+// (see Dockerfile.auth-api). Left as "dev" for local builds — see
+// apps/central/api/cmd/main.go for the same pattern.
+var version = "dev"
+
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
@@ -49,7 +54,7 @@ func main() {
 
 	// Initialize handlers
 	oauthHandler := handler.NewOAuthHandler(googleService, centralAPI, hydraClient, zapLogger)
-	healthHandler := handler.NewHealthHandler()
+	healthHandler := handler.NewHealthHandler(version)
 	consentHandler := handler.NewConsentHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	claimsHandler := handler.NewClaimsHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	profileHandler := handler.NewProfileHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)

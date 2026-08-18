@@ -20,8 +20,13 @@ RUN go mod download
 COPY apps/branding/auth-api/ ./
 
 # Build the application with optimizations
+# APP_VERSION build arg is stamped into main.version (→ /.well-known/authway-config)
+# so the deployed binary's version is observable and CD drift is detectable —
+# same pattern as the root Dockerfile (Central API). Defaults to a timestamp
+# when unset (local builds); release pipelines should pass the git tag.
+ARG APP_VERSION
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
-    -ldflags="-w -s -X main.version=$(date +%Y%m%d-%H%M%S)" \
+    -ldflags="-w -s -X main.version=${APP_VERSION:-$(date +%Y%m%d-%H%M%S)}" \
     -o auth-api ./cmd
 
 # Production stage

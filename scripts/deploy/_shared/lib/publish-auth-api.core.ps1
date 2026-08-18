@@ -69,7 +69,12 @@ try {
         Move-Item ".dockerignore" ".dockerignore.backup"
         Copy-Item ".dockerignore.auth-api" ".dockerignore"
 
-        docker build --no-cache -t $ImageName -f Dockerfile.auth-api .
+        # APP_VERSION build-arg stamps ImageTag into main.version (ldflag) →
+        # HealthHandler → /health + /.well-known/authway-config. Same pattern
+        # as publish-api.core.ps1 (Central API).
+        docker build --no-cache `
+            --build-arg APP_VERSION=$ImageTag `
+            -t $ImageName -f Dockerfile.auth-api .
 
         Remove-Item ".dockerignore"
         Move-Item ".dockerignore.backup" ".dockerignore"
@@ -128,18 +133,51 @@ try {
             "GOOGLE_CLIENT_SECRET=$($envVars['GOOGLE_CLIENT_SECRET'])" `
             "GOOGLE_REDIRECT_URI=$($envVars['GOOGLE_REDIRECT_URI'])"
 
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host ""
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-        Write-Host "  ✅ Auth Backend 배포 완료!" -ForegroundColor Green
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "🌐 Auth API URL: $($envVars['AUTH_API_URL'])" -ForegroundColor Cyan
-        Write-Host "🔍 헬스 체크: $($envVars['AUTH_API_URL'])/health" -ForegroundColor Yellow
-        Write-Host ""
-    } else {
+    if ($LASTEXITCODE -ne 0) {
         throw "Container App 업데이트 실패"
     }
+
+    # ============================================================
+    # Post-deploy verification (version parity)
+    # ============================================================
+    # /health.version이 하드코딩 리터럴이던 시절엔 이 체크가 무의미했다 —
+    # 이제 main.version이 실제로 빌드에 stamp되므로 (cycle-110) 의미가 생김.
+    # 같은 패턴: publish-api.core.ps1(Central API).
+
+    $AuthApiUrl = $envVars['AUTH_API_URL']
+    Write-Host ""
+    Write-Host "🩺 post-deploy 검증: Container App 기동 대기(최대 120초)..." -ForegroundColor Yellow
+
+    $healthyVersion = $null
+    for ($i = 1; $i -le 24; $i++) {
+        Start-Sleep -Seconds 5
+        try {
+            $h = Invoke-RestMethod -Uri "$AuthApiUrl/health" -Method Get -TimeoutSec 10 -ErrorAction Stop
+            if ($h.version -eq $ImageTag) {
+                $healthyVersion = $h.version
+                break
+            }
+        } catch {
+            # 기동 중 — 계속 대기
+        }
+    }
+
+    if (-not $healthyVersion) {
+        Write-Host "❌ /health 응답이 새 이미지 버전($ImageTag)을 반환하지 않음" -ForegroundColor Red
+        Write-Host "   이전 revision이 서빙 중이거나 새 revision이 기동 실패했을 가능성." -ForegroundColor Yellow
+        Write-Host "   점검: az containerapp revision list -g $RESOURCE_GROUP -n $CONTAINER_APP_AUTH_API" -ForegroundColor Yellow
+        throw "version-parity 검증 실패"
+    }
+    Write-Host "✓ /health.version = $healthyVersion (일치)" -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+    Write-Host "  ✅ Auth Backend 배포 완료!" -ForegroundColor Green
+    Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "🌐 Auth API URL: $($envVars['AUTH_API_URL'])" -ForegroundColor Cyan
+    Write-Host "🔍 헬스 체크: $($envVars['AUTH_API_URL'])/health" -ForegroundColor Yellow
+    Write-Host ""
 
 } catch {
     Write-Host ""
