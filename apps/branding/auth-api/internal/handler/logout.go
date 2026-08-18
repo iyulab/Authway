@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"authway/apps/branding/auth-api/internal/service"
+
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
@@ -17,14 +19,16 @@ type LogoutHandler struct {
 	centralAPIURL string
 	internalKey   string
 	hydraAdminURL string
+	hydraClient   *service.HydraClient
 	logger        *zap.Logger
 }
 
-func NewLogoutHandler(centralAPIURL, internalKey, hydraAdminURL string, logger *zap.Logger) *LogoutHandler {
+func NewLogoutHandler(centralAPIURL, internalKey, hydraAdminURL string, hydraClient *service.HydraClient, logger *zap.Logger) *LogoutHandler {
 	return &LogoutHandler{
 		centralAPIURL: centralAPIURL,
 		internalKey:   internalKey,
 		hydraAdminURL: hydraAdminURL,
+		hydraClient:   hydraClient,
 		logger:        logger,
 	}
 }
@@ -87,7 +91,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	if clientID == "" {
 		h.logger.Warn("No client_id in logout request", zap.String("challenge", logoutChallenge))
 		// Accept logout without redirect validation if no client
-		return h.acceptLogout(c, logoutChallenge, "")
+		return h.acceptLogout(c, logoutChallenge, "", logoutReq.Subject)
 	}
 
 	// 2. Get client configuration from Central API
@@ -97,7 +101,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 			zap.String("client_id", clientID),
 			zap.Error(err))
 		// If we can't get client config, accept logout without redirect
-		return h.acceptLogout(c, logoutChallenge, "")
+		return h.acceptLogout(c, logoutChallenge, "", logoutReq.Subject)
 	}
 
 	// 3. Parse post_logout_redirect_uri from request
@@ -128,7 +132,7 @@ func (h *LogoutHandler) HandleLogout(c *fiber.Ctx) error {
 	}
 
 	// 5. Accept logout with validated redirect URI
-	return h.acceptLogout(c, logoutChallenge, validatedURI)
+	return h.acceptLogout(c, logoutChallenge, validatedURI, logoutReq.Subject)
 }
 
 // determineFallbackURI determines the best fallback URI for error cases
@@ -333,7 +337,7 @@ func (h *LogoutHandler) matchesWildcard(uri, pattern string) bool {
 }
 
 // acceptLogout accepts the logout request with Hydra, forwarding the validated redirect URI.
-func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, postLogoutRedirectURI string) error {
+func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, postLogoutRedirectURI, subject string) error {
 	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?logout_challenge=%s",
 		h.hydraAdminURL, challenge)
 
@@ -393,6 +397,22 @@ func (h *LogoutHandler) acceptLogout(c *fiber.Ctx, challenge, postLogoutRedirect
 	h.logger.Info("Logout accepted successfully",
 		zap.String("challenge", challenge),
 		zap.String("redirect_to", result.RedirectTo))
+
+	// Accepting the Hydra logout request only ends the browser's login
+	// session — it does not invalidate access/refresh tokens issued before
+	// this point (ISSUE-Authway-20260818-oidc-logout-does-not-revoke-issued-
+	// tokens). Revoke every one of the subject's sessions across all clients
+	// (&all=true — matching the "Single Logout" feature name) so tokens
+	// issued to other tabs/clients stop working too. Best-effort: a
+	// revocation failure must not block the browser redirect the user is
+	// waiting on, unlike the authenticated POST /api/v1/logout endpoint
+	// whose entire purpose is revocation.
+	if subject != "" {
+		if err := h.hydraClient.RevokeUserSessions(subject); err != nil {
+			h.logger.Error("Failed to revoke user sessions during logout",
+				zap.String("subject", subject), zap.Error(err))
+		}
+	}
 
 	// Redirect to Hydra logout completion URL
 	return c.Redirect(result.RedirectTo, fiber.StatusFound)

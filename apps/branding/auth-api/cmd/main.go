@@ -67,7 +67,7 @@ func main() {
 	consentHandler := handler.NewConsentHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	claimsHandler := handler.NewClaimsHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	profileHandler := handler.NewProfileHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
-	logoutHandler := handler.NewLogoutHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, cfg.Hydra.AdminURL, zapLogger)
+	logoutHandler := handler.NewLogoutHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, cfg.Hydra.AdminURL, hydraClient, zapLogger)
 	authHandler := handler.NewAuthHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 
 	// Create Fiber app

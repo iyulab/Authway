@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"authway/apps/branding/auth-api/internal/config"
@@ -192,4 +193,53 @@ func (h *HydraClient) RejectLoginRequest(challenge string, errorCode, errorDescr
 	}
 
 	return &loginResp, nil
+}
+
+// RevokeUserSessions revokes every one of the subject's Hydra login and
+// consent sessions (all=true — every client, matching the "Single Logout"
+// name this revocation is wired for). Accepting a Hydra RP-initiated logout
+// request only ends the browser's login session; it does not by itself
+// invalidate previously issued access/refresh tokens. Hydra does invalidate
+// the opaque tokens tied to a consent session when that session is deleted,
+// which is what actually closes the gap this method exists for.
+func (h *HydraClient) RevokeUserSessions(subject string) error {
+	escapedSubject := url.QueryEscape(subject)
+
+	req, err := http.NewRequest(
+		http.MethodDelete,
+		fmt.Sprintf("%s/admin/oauth2/auth/sessions/login?subject=%s", h.adminURL, escapedSubject),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create revoke login sessions request: %w", err)
+	}
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to revoke login sessions: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to revoke login sessions: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	req, err = http.NewRequest(
+		http.MethodDelete,
+		fmt.Sprintf("%s/admin/oauth2/auth/sessions/consent?subject=%s&all=true", h.adminURL, escapedSubject),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create revoke consent sessions request: %w", err)
+	}
+	resp, err = h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to revoke consent sessions: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to revoke consent sessions: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
