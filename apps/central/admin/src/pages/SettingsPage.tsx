@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   CogIcon,
@@ -11,7 +11,7 @@ import {
   TrashIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi } from '@/lib/api'
+import { tenantsApi, authApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input } from '@/components/ui'
 
@@ -53,14 +53,15 @@ const SettingsPage: React.FC = () => {
     }
   }
 
-  // TODO: Fetch user data from API
-  const user = {
-    first_name: 'Admin',
-    last_name: 'User',
-    email: 'admin@authway.com',
-    email_verified: true,
-    active: true
-  }
+  // The admin console has no per-admin account model — Login() issues a
+  // session token from a single shared AUTHWAY_ADMIN_PASSWORD (pkg/admin
+  // Service.Authenticate), so there is no name/email/verified/active to
+  // fetch for "the current admin". /admin/validate is the one thing the
+  // backend can truthfully say about this session.
+  const { data: adminInfo } = useQuery({
+    queryKey: ['admin-session-info'],
+    queryFn: () => authApi.validate().then((res) => res.data.info),
+  })
 
   const settingSections = [
     {
@@ -203,55 +204,36 @@ const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* 관리자 정보 */}
+      {/* 관리자 세션 정보 */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
           <h3 className="text-lg leading-6 font-medium text-gray-900">
-            관리자 정보
+            관리자 세션
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            현재 로그인한 관리자 계정 정보입니다.
+            Admin Console은 관리자별 계정이 아니라 공유 관리자 비밀번호로 인증합니다 — 세션은
+            "누가"가 아니라 "인증됐는지"만 구분합니다.
           </p>
         </div>
         <div className="px-4 py-5 sm:px-6">
           <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
             <div>
-              <dt className="text-sm font-medium text-gray-500">이름</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {user?.first_name} {user?.last_name}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">이메일</dt>
-              <dd className="mt-1 text-sm text-gray-900">{user?.email}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">이메일 인증</dt>
+              <dt className="text-sm font-medium text-gray-500">인증 상태</dt>
               <dd className="mt-1 text-sm text-gray-900">
                 <span
                   className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user?.email_verified
+                    adminInfo?.authenticated
                       ? 'bg-green-100 text-green-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {user?.email_verified ? '인증됨' : '미인증'}
+                  {adminInfo?.authenticated ? '인증됨' : '확인 중'}
                 </span>
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">계정 상태</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                <span
-                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user?.active
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {user?.active ? '활성' : '비활성'}
-                </span>
-              </dd>
+              <dt className="text-sm font-medium text-gray-500">서버 버전</dt>
+              <dd className="mt-1 text-sm text-gray-900">{adminInfo?.version ?? '-'}</dd>
             </div>
           </dl>
         </div>
