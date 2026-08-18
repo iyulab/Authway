@@ -164,6 +164,37 @@ describe('LoginPage', () => {
         expect(screen.getByText('Google로 로그인 (test-client-id)')).toBeInTheDocument()
       })
     })
+
+    it('links "forgot password" to the forgot-password page carrying the client_id', async () => {
+      // Regression (ISSUE-Authway-20260817-115815, HD-10): this link did not
+      // exist at all before, so /forgot-password had no way to learn which
+      // tenant's user to scope the reset to.
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        const link = screen.getByRole('link', { name: '비밀번호를 잊으셨나요?' })
+        expect(link).toHaveAttribute('href', '/forgot-password?client_id=test-client-id')
+      })
+    })
+
+    it('links "forgot password" without a query string when no client_id is known', async () => {
+      server.use(
+        http.get('http://localhost:8080/auth/google/login', () => {
+          return HttpResponse.json({
+            challenge: 'test-challenge',
+            client_name: 'Test App',
+            requested_scope: ['openid'],
+          })
+        })
+      )
+
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        const link = screen.getByRole('link', { name: '비밀번호를 잊으셨나요?' })
+        expect(link).toHaveAttribute('href', '/forgot-password')
+      })
+    })
   })
 
   describe('Form Validation', () => {

@@ -3,6 +3,7 @@ package handler
 import (
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/user"
 	"net/http"
@@ -17,6 +18,7 @@ type EmailHandler struct {
 	emailRepo    *email.Repository
 	emailSvc     email.EmailService
 	userSvc      user.Service
+	clientSvc    client.Service
 	hydraClient  *hydra.Client
 	validator    *validator.Validate
 	logger       *zap.Logger
@@ -28,6 +30,7 @@ func NewEmailHandler(
 	emailRepo *email.Repository,
 	emailSvc email.EmailService,
 	userSvc user.Service,
+	clientSvc client.Service,
 	hydraClient *hydra.Client,
 	validator *validator.Validate,
 	logger *zap.Logger,
@@ -37,11 +40,32 @@ func NewEmailHandler(
 		emailRepo:    emailRepo,
 		emailSvc:     emailSvc,
 		userSvc:      userSvc,
+		clientSvc:    clientSvc,
 		hydraClient:  hydraClient,
 		validator:    validator,
 		logger:       logger,
 		auditService: auditService,
 	}
+}
+
+// resolveUserByEmail looks up the user for a self-service email flow
+// (verification resend, password reset). When clientID is present, it scopes
+// the lookup to that client's tenant (mirroring AuthHandler.Login's
+// GetByClientID → GetByEmailAndTenant pattern) so a same-email user in a
+// different tenant can never be matched. When clientID is empty — the caller
+// has no OAuth context, e.g. a bookmarked link — it falls back to the
+// unscoped lookup, same as before this tenant-scoping was added.
+func (h *EmailHandler) resolveUserByEmail(clientID, emailAddr string) (*user.User, error) {
+	if clientID == "" {
+		return h.userSvc.GetByEmailUnscoped(emailAddr)
+	}
+	requestedClient, err := h.clientSvc.GetByClientID(clientID)
+	if err != nil {
+		h.logger.Warn("email flow: unknown client_id, falling back to unscoped lookup",
+			zap.String("client_id", clientID), zap.Error(err))
+		return h.userSvc.GetByEmailUnscoped(emailAddr)
+	}
+	return h.userSvc.GetByEmailAndTenant(requestedClient.TenantID, emailAddr)
 }
 
 // logUserAudit records an audit entry for a user self-service flow (anonymous
@@ -85,11 +109,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 		})
 	}
 
-	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
-	// context in its request body or route middleware to scope by. Resolving
-	// that is an open API-contract decision (single- vs multi-tenant email
-	// uniqueness), not a bug in this handler.
-	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
+	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)
 		return c.JSON(fiber.Map{
@@ -217,11 +237,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// GetByEmailUnscoped, not GetByEmailAndTenant — this endpoint has no tenant
-	// context in its request body or route middleware to scope by. Resolving
-	// that is an open API-contract decision (single- vs multi-tenant email
-	// uniqueness), not a bug in this handler.
-	usr, err := h.userSvc.GetByEmailUnscoped(req.Email)
+	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not (security)
 		return c.JSON(fiber.Map{

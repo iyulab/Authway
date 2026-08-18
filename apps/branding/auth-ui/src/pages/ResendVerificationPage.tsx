@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function ResendVerificationPage() {
   const { t } = useTranslation(['auth', 'common']);
+  const [searchParams] = useSearchParams();
+  const clientId = searchParams.get('client_id');
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -23,7 +25,7 @@ export default function ResendVerificationPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify(clientId ? { email, client_id: clientId } : { email }),
         }
       );
 

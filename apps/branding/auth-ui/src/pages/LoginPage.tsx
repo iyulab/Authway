@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useSearchParams, useNavigate, Link } from 'react-router'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -450,16 +450,24 @@ const LoginPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex items-center">
-                  <input
-                    id="remember"
-                    {...register('remember')}
-                    type="checkbox"
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
-                    {t('auth:login.rememberMe')}
-                  </label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <input
+                      id="remember"
+                      {...register('remember')}
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="remember" className="ml-2 block text-sm text-gray-900">
+                      {t('auth:login.rememberMe')}
+                    </label>
+                  </div>
+                  <Link
+                    to={clientId ? `/forgot-password?client_id=${encodeURIComponent(clientId)}` : '/forgot-password'}
+                    className="text-sm text-indigo-600 hover:underline"
+                  >
+                    {t('auth:login.forgotPassword')}
+                  </Link>
                 </div>
               </div>
 

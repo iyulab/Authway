@@ -92,9 +92,14 @@ func (p *PasswordReset) MarkAsUsed() {
 	p.UsedAt = &now
 }
 
-// SendVerificationRequest represents a request to send verification email
+// SendVerificationRequest represents a request to send verification email.
+// ClientID is optional: the OAuth client the request originated from, used to
+// resolve the tenant and avoid matching a same-email user in a different
+// tenant. Omitted when the caller has no OAuth context (e.g. a bookmarked
+// link) — the handler falls back to an unscoped lookup in that case.
 type SendVerificationRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email"`
+	ClientID string `json:"client_id" validate:"omitempty"`
 }
 
 // VerifyEmailRequest represents a request to verify email
@@ -102,9 +107,11 @@ type VerifyEmailRequest struct {
 	Token string `json:"token" validate:"required"`
 }
 
-// ForgotPasswordRequest represents a request to reset password
+// ForgotPasswordRequest represents a request to reset password.
+// ClientID is optional — see SendVerificationRequest.
 type ForgotPasswordRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email"`
+	ClientID string `json:"client_id" validate:"omitempty"`
 }
 
 // ResetPasswordRequest represents a request to reset password with token
