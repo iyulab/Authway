@@ -1,18 +1,21 @@
 package handler
 
 import (
-	"sync"
+	"context"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 // pendingMFALogin is what the password stage of Login hands off to the MFA
 // verify stage: which Hydra login request to accept, as whom, and with what
-// "remember me" settings — plus a bounded local retry counter so a stolen or
+// "remember me" settings — plus a bounded retry counter so a stolen or
 // guessed mfa_challenge cannot be used to brute-force the 6-digit TOTP space
-// (the IP-based rate limiter exists but is not wired to any route yet, see
-// ISSUE-Authway-20260712-security-controls-not-wired.md item B).
+// (the IP-based rate limiter also covers /mfa/verify and /mfa/recovery now —
+// see HD-01 in claudedocs/HANDOFF.md — this per-challenge cap is a second,
+// independent layer).
 type pendingMFALogin struct {
 	HydraChallenge string
 	UserID         uuid.UUID
@@ -31,73 +34,92 @@ const maxMFAAttempts = 5
 // uses for the equivalent short-lived server-side state.
 const mfaChallengeTTL = 10 * time.Minute
 
-// MFAChallengeStore holds password-verified, MFA-pending logins in memory,
+// recordFailureScript atomically increments the attempt counter and, once it
+// reaches maxMFAAttempts, deletes the challenge — mirroring the in-memory
+// implementation's single-mutex-held read-modify-write exactly. A plain
+// HINCRBY would silently resurrect a missing/expired challenge as a
+// one-field hash (attempts=1, no hydra_challenge/user_id, no TTL) instead of
+// reporting "not found", so existence is checked first inside the script.
+var recordFailureScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+	return -1
+end
+local n = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
+if n >= tonumber(ARGV[1]) then
+	redis.call('DEL', KEYS[1])
+	return 1
+end
+return 0
+`)
+
+// MFAChallengeStore holds password-verified, MFA-pending logins in Redis,
 // keyed by an opaque challenge handed to the client. Same shape as
 // apps/branding/auth-api's StateStore (separate Go module, so not directly
-// shared) — in-memory, single-instance. A multi-replica deployment would need
-// this moved to Redis for the same reason Phase L (ROADMAP.md) already
-// tracks for OAuth state.
+// shared) — both moved off in-memory storage together (HD-04,
+// claudedocs/HANDOFF.md): central-api's Container App scales to
+// maxReplicas=5, so a challenge created on one replica must be readable by
+// whichever replica serves the follow-up /mfa/verify request.
 type MFAChallengeStore struct {
-	mu      sync.RWMutex
-	pending map[string]*pendingMFALogin
+	redis  *redis.Client
+	prefix string
 }
 
-func NewMFAChallengeStore() *MFAChallengeStore {
-	store := &MFAChallengeStore{
-		pending: make(map[string]*pendingMFALogin),
-	}
-	go store.cleanupExpired()
-	return store
+func NewMFAChallengeStore(redisClient *redis.Client) *MFAChallengeStore {
+	return &MFAChallengeStore{redis: redisClient, prefix: "mfa_challenge:"}
+}
+
+func (s *MFAChallengeStore) key(challenge string) string {
+	return s.prefix + challenge
 }
 
 func (s *MFAChallengeStore) Set(challenge string, data *pendingMFALogin) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.pending[challenge] = data
+	ctx := context.Background()
+	key := s.key(challenge)
+	pipe := s.redis.TxPipeline()
+	pipe.HSet(ctx, key, map[string]any{
+		"hydra_challenge": data.HydraChallenge,
+		"user_id":         data.UserID.String(),
+		"remember":        data.Remember,
+		"remember_for":    data.RememberFor,
+		"attempts":        data.Attempts,
+	})
+	pipe.Expire(ctx, key, mfaChallengeTTL)
+	pipe.Exec(ctx)
 }
 
 func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	data, exists := s.pending[challenge]
-	return data, exists
+	ctx := context.Background()
+	vals, err := s.redis.HGetAll(ctx, s.key(challenge)).Result()
+	if err != nil || len(vals) == 0 {
+		return nil, false
+	}
+
+	userID, err := uuid.Parse(vals["user_id"])
+	if err != nil {
+		return nil, false
+	}
+	rememberFor, _ := strconv.Atoi(vals["remember_for"])
+	attempts, _ := strconv.Atoi(vals["attempts"])
+
+	return &pendingMFALogin{
+		HydraChallenge: vals["hydra_challenge"],
+		UserID:         userID,
+		Remember:       vals["remember"] == "1",
+		RememberFor:    rememberFor,
+		Attempts:       attempts,
+	}, true
 }
 
 func (s *MFAChallengeStore) Delete(challenge string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.pending, challenge)
+	s.redis.Del(context.Background(), s.key(challenge))
 }
 
 // RecordFailure increments the attempt counter and reports whether the
 // challenge exceeded maxMFAAttempts and was discarded as a result.
 func (s *MFAChallengeStore) RecordFailure(challenge string) (locked bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	data, exists := s.pending[challenge]
-	if !exists {
+	result, err := recordFailureScript.Run(context.Background(), s.redis, []string{s.key(challenge)}, maxMFAAttempts).Int()
+	if err != nil {
 		return false
 	}
-	data.Attempts++
-	if data.Attempts >= maxMFAAttempts {
-		delete(s.pending, challenge)
-		return true
-	}
-	return false
-}
-
-func (s *MFAChallengeStore) cleanupExpired() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		s.mu.Lock()
-		now := time.Now()
-		for challenge, data := range s.pending {
-			if now.Sub(data.CreatedAt) > mfaChallengeTTL {
-				delete(s.pending, challenge)
-			}
-		}
-		s.mu.Unlock()
-	}
+	return result == 1
 }

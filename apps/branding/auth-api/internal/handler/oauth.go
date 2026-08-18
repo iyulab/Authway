@@ -1,15 +1,16 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"authway/apps/branding/auth-api/internal/service"
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -26,13 +27,14 @@ func NewOAuthHandler(
 	centralAPI *service.CentralAPIClient,
 	hydraClient *service.HydraClient,
 	logger *zap.Logger,
+	redisClient *redis.Client,
 ) *OAuthHandler {
 	return &OAuthHandler{
 		googleService:  googleService,
 		centralAPI:     centralAPI,
 		hydraClient:    hydraClient,
 		logger:         logger,
-		stateStore:     NewStateStore(),
+		stateStore:     NewStateStore(redisClient),
 	}
 }
 
@@ -43,54 +45,54 @@ type StateData struct {
 	CreatedAt      time.Time
 }
 
-// StateStore manages OAuth state data with automatic cleanup
+// stateTTL bounds how long an OAuth state token stays valid — matches the
+// prior in-memory implementation's cleanup window.
+const stateTTL = 10 * time.Minute
+
+// StateStore manages OAuth state data in Redis (HD-04, claudedocs/HANDOFF.md
+// — same instance central-api already uses, "oauth:state:"-prefixed so keys
+// don't collide with its "mfa_challenge:"/"ratelimit:" namespaces). A
+// single-instance in-memory map couldn't survive the authorize→callback
+// round-trip landing on a different Container Apps replica.
 type StateStore struct {
-	mu     sync.RWMutex
-	states map[string]*StateData
+	redis  *redis.Client
+	prefix string
 }
 
-func NewStateStore() *StateStore {
-	store := &StateStore{
-		states: make(map[string]*StateData),
-	}
-	// Start cleanup goroutine
-	go store.cleanupExpired()
-	return store
+func NewStateStore(redisClient *redis.Client) *StateStore {
+	return &StateStore{redis: redisClient, prefix: "oauth:state:"}
+}
+
+func (s *StateStore) key(state string) string {
+	return s.prefix + state
 }
 
 func (s *StateStore) Set(state string, data *StateData) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.states[state] = data
+	ctx := context.Background()
+	key := s.key(state)
+	pipe := s.redis.TxPipeline()
+	pipe.HSet(ctx, key, map[string]any{
+		"login_challenge": data.LoginChallenge,
+		"client_id":       data.ClientID,
+	})
+	pipe.Expire(ctx, key, stateTTL)
+	pipe.Exec(ctx)
 }
 
 func (s *StateStore) Get(state string) (*StateData, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	data, exists := s.states[state]
-	return data, exists
+	ctx := context.Background()
+	vals, err := s.redis.HGetAll(ctx, s.key(state)).Result()
+	if err != nil || len(vals) == 0 {
+		return nil, false
+	}
+	return &StateData{
+		LoginChallenge: vals["login_challenge"],
+		ClientID:       vals["client_id"],
+	}, true
 }
 
 func (s *StateStore) Delete(state string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.states, state)
-}
-
-func (s *StateStore) cleanupExpired() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		s.mu.Lock()
-		now := time.Now()
-		for state, data := range s.states {
-			if now.Sub(data.CreatedAt) > 10*time.Minute {
-				delete(s.states, state)
-			}
-		}
-		s.mu.Unlock()
-	}
+	s.redis.Del(context.Background(), s.key(state))
 }
 
 func generateState() (string, error) {

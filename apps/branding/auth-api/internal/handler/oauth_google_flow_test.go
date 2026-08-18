@@ -53,7 +53,8 @@ func newOAuthTestHandler(t *testing.T, google, central, hydra http.HandlerFunc) 
 	centralAPI := service.NewCentralAPIClient(&config.CentralAPIConfig{BaseURL: centralSrv.URL, InternalKey: "internal-key"}, zap.NewNop())
 	hydraClient := service.NewHydraClient(&config.HydraConfig{AdminURL: hydraSrv.URL}, zap.NewNop())
 
-	h := NewOAuthHandler(googleSvc, centralAPI, hydraClient, zap.NewNop())
+	redisClient, _ := newTestRedisClient(t)
+	h := NewOAuthHandler(googleSvc, centralAPI, hydraClient, zap.NewNop(), redisClient)
 	return h, func() {}
 }
 

@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
@@ -16,6 +18,19 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
 )
+
+// newTestRedisClient spins up an in-process miniredis instance so
+// MFAChallengeStore's real Redis-backed behavior (HSET/TTL/the atomic
+// RecordFailure script) runs in these tests, not just a mock.
+func newTestRedisClient(t *testing.T) *redis.Client {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
+}
 
 const testClientID = "test-client"
 
@@ -71,7 +86,7 @@ func newAuthTestApp(t *testing.T, password string, totpEnabled bool, totpCode, r
 	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID})
 	hydraClient, acceptCount := newTestHydraServer(t)
 
-	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil)
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t))
 
 	app := fiber.New()
 	app.Post("/authenticate", h.Login)
@@ -252,7 +267,7 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	users := newFakeUserService(rightUser, wrongTenantUser)
 	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID})
 	hydraClient, acceptCount := newTestHydraServer(t)
-	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil)
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t))
 	app := fiber.New()
 	app.Post("/authenticate", h.Login)
 

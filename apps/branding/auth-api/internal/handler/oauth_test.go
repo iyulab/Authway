@@ -3,14 +3,38 @@ package handler
 import (
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 // StateStore is the CSRF-protection primitive for the OAuth flow: a state
 // value is single-use and unguessable, or the callback can't be trusted to
-// belong to the login attempt that started it.
+// belong to the login attempt that started it. Backed by Redis since HD-04
+// (claudedocs/HANDOFF.md) — tests run against an in-process miniredis so the
+// real HSET/TTL path is exercised, not a mock.
+
+// newTestRedisClient spins up an in-process miniredis instance shared by
+// every test in this package that needs a *redis.Client (StateStore here,
+// the OAuth google-flow tests too).
+func newTestRedisClient(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()}), mr
+}
+
+func newTestStateStore(t *testing.T) (*StateStore, *miniredis.Miniredis) {
+	t.Helper()
+	client, mr := newTestRedisClient(t)
+	return NewStateStore(client), mr
+}
 
 func TestStateStore_SetGetDelete(t *testing.T) {
-	s := NewStateStore()
+	s, _ := newTestStateStore(t)
 	data := &StateData{LoginChallenge: "lc1", ClientID: "client1", CreatedAt: time.Now()}
 	s.Set("state1", data)
 
@@ -29,9 +53,24 @@ func TestStateStore_SetGetDelete(t *testing.T) {
 }
 
 func TestStateStore_UnknownStateNotFound(t *testing.T) {
-	s := NewStateStore()
+	s, _ := newTestStateStore(t)
 	if _, ok := s.Get("never-set"); ok {
 		t.Error("expected Get() on an unknown state to report not-found")
+	}
+}
+
+func TestStateStore_ExpiresAfterTTL(t *testing.T) {
+	s, mr := newTestStateStore(t)
+	s.Set("state1", &StateData{LoginChallenge: "lc1", ClientID: "client1"})
+
+	if _, ok := s.Get("state1"); !ok {
+		t.Fatal("expected state to exist immediately after Set")
+	}
+
+	mr.FastForward(stateTTL + time.Second)
+
+	if _, ok := s.Get("state1"); ok {
+		t.Error("expected state to be expired after TTL elapsed")
 	}
 }
 

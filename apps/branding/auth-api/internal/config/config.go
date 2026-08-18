@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	Google      GoogleOAuthConfig
 	CentralAPI  CentralAPIConfig
 	Hydra       HydraConfig
+	Redis       RedisConfig
 }
 
 // IsDevelopment reports whether env selects the relaxed local/dev codepath.
@@ -51,6 +53,20 @@ type HydraConfig struct {
 	PublicURL string
 }
 
+// RedisConfig points at the same Redis instance central-api already uses
+// (HD-04, claudedocs/HANDOFF.md) — shared, prefix-namespaced ("oauth:state:"
+// here vs. central-api's "mfa_challenge:"/"ratelimit:"), not a separate
+// deployment. Reuses the AUTHWAY_REDIS_* env var names central-api's own
+// staging/prod .env files already define, so the deploy scripts can pass
+// the existing values through instead of provisioning new secrets.
+type RedisConfig struct {
+	Host       string
+	Port       int
+	Password   string
+	DB         int
+	TLSEnabled bool
+}
+
 func Load() (*Config, error) {
 	// Load .env file if exists
 	_ = godotenv.Load()
@@ -74,6 +90,13 @@ func Load() (*Config, error) {
 		Hydra: HydraConfig{
 			AdminURL:  getEnv("HYDRA_ADMIN_URL", "http://localhost:4445"),
 			PublicURL: getEnv("HYDRA_PUBLIC_URL", "http://localhost:4444"),
+		},
+		Redis: RedisConfig{
+			Host:       getEnv("AUTHWAY_REDIS_HOST", "localhost"),
+			Port:       getEnvInt("AUTHWAY_REDIS_PORT", 6379),
+			Password:   getEnv("AUTHWAY_REDIS_PASSWORD", ""),
+			DB:         getEnvInt("AUTHWAY_REDIS_DB", 0),
+			TLSEnabled: getEnvBool("AUTHWAY_REDIS_TLS_ENABLED", false),
 		},
 	}
 
@@ -105,6 +128,24 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if n, err := strconv.Atoi(value); err == nil {
+			return n
+		}
+	}
+	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if b, err := strconv.ParseBool(value); err == nil {
+			return b
+		}
+	}
+	return defaultValue
 }
 
 func getEnv(key, defaultValue string) string {

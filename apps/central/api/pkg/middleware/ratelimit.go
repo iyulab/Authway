@@ -32,6 +32,23 @@ func DefaultRateLimitConfig(redisClient *redis.Client) RateLimitConfig {
 	}
 }
 
+// realClientIP resolves the actual client IP behind Azure Container Apps' ingress.
+//
+// ACA's edge proxy is the only path into the container (no VNet, no direct-connect
+// bypass), so the immediate TCP peer is always trustworthy. But per Azure's own docs,
+// only the RIGHTMOST entry of X-Forwarded-For is appended by ACA itself — anything to
+// its left arrives verbatim from the client and is trivially spoofable. Fiber's built-in
+// c.IP()/ProxyHeader picks the LEFTMOST entry, which would let a caller bypass rate
+// limiting by sending its own X-Forwarded-For header. Falls back to c.IP() (RemoteAddr)
+// when the header is absent, e.g. local dev without a proxy in front.
+func realClientIP(c *fiber.Ctx) string {
+	ips := c.IPs()
+	if len(ips) == 0 {
+		return c.IP()
+	}
+	return ips[len(ips)-1]
+}
+
 // RateLimit creates a rate limiting middleware
 func RateLimit(cfg RateLimitConfig) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -39,7 +56,7 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 			return c.Next()
 		}
 		ctx := context.Background()
-		ip := c.IP()
+		ip := realClientIP(c)
 		path := c.Path()
 		key := fmt.Sprintf("%s%s:%s", cfg.KeyPrefix, path, ip)
 		blockKey := fmt.Sprintf("%sblock:%s:%s", cfg.KeyPrefix, path, ip)

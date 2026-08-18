@@ -11,10 +11,12 @@ import (
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/mfa"
+	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -30,7 +32,7 @@ type AuthHandler struct {
 	mfaStore      *MFAChallengeStore
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client) *AuthHandler {
 	return &AuthHandler{
 		userService:   userService,
 		clientService: clientService,
@@ -39,7 +41,7 @@ func NewAuthHandler(userService user.Service, clientService client.Service, clai
 		hydraClient:   hydraClient,
 		logger:        logger,
 		auditService:  auditService,
-		mfaStore:      NewMFAChallengeStore(),
+		mfaStore:      NewMFAChallengeStore(redisClient),
 	}
 }
 
@@ -317,6 +319,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	user, err := h.userService.GetByEmailAndTenant(requestedClient.TenantID, req.Email)
 	if err != nil {
 		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
+		middleware.IncrementRateLimitOnFailure(c)
 		// Reject login request
 		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
 		if rejectErr != nil {
@@ -333,6 +336,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]any{
 			"user_id": user.ID.String(),
 		})
+		middleware.IncrementRateLimitOnFailure(c)
 		// Reject login request
 		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
 		if rejectErr != nil {
@@ -412,6 +416,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 		})
 	}
 
+	middleware.ResetRateLimitOnSuccess(c)
 	h.logUserAudit(c, u, audit.ActionUserLogin, map[string]any{
 		"challenge": challenge,
 		"remember":  remember,
@@ -454,6 +459,7 @@ func (h *AuthHandler) VerifyMFALogin(c *fiber.Ctx) error {
 	valid, err := h.mfaService.Verify(pending.UserID, req.Code)
 	if err != nil || !valid {
 		h.logMFALoginFailure(c, u, "totp")
+		middleware.IncrementRateLimitOnFailure(c)
 		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
 			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
 		}
@@ -485,6 +491,7 @@ func (h *AuthHandler) VerifyMFARecoveryLogin(c *fiber.Ctx) error {
 	valid, err := h.mfaService.VerifyRecoveryCode(pending.UserID, req.Code)
 	if err != nil || !valid {
 		h.logMFALoginFailure(c, u, "recovery_code")
+		middleware.IncrementRateLimitOnFailure(c)
 		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
 			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
 		}

@@ -131,7 +131,12 @@ try {
             "LOGIN_UI_URL=$($envVars['LOGIN_URL'])" `
             "GOOGLE_CLIENT_ID=$($envVars['GOOGLE_CLIENT_ID'])" `
             "GOOGLE_CLIENT_SECRET=$($envVars['GOOGLE_CLIENT_SECRET'])" `
-            "GOOGLE_REDIRECT_URI=$($envVars['GOOGLE_REDIRECT_URI'])"
+            "GOOGLE_REDIRECT_URI=$($envVars['GOOGLE_REDIRECT_URI'])" `
+            "AUTHWAY_REDIS_HOST=$($envVars['AUTHWAY_REDIS_HOST'])" `
+            "AUTHWAY_REDIS_PORT=$($envVars['AUTHWAY_REDIS_PORT'])" `
+            "AUTHWAY_REDIS_PASSWORD=$($envVars['AUTHWAY_REDIS_PASSWORD'])" `
+            "AUTHWAY_REDIS_DB=$($envVars['AUTHWAY_REDIS_DB'])" `
+            "AUTHWAY_REDIS_TLS_ENABLED=$($envVars['AUTHWAY_REDIS_TLS_ENABLED'])"
 
     if ($LASTEXITCODE -ne 0) {
         throw "Container App 업데이트 실패"

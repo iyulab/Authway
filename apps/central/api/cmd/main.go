@@ -22,6 +22,7 @@ import (
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
+	ratelimitmw "authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
@@ -254,7 +255,7 @@ func main() {
 	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient)
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
@@ -266,9 +267,10 @@ func main() {
 	// Auth routes for Hydra login/consent flow
 	app.Get("/login", authHandler.LoginPage)
 	app.Post("/login", authHandler.LoginPage)                     // Support POST for long login_challenge
-	app.Post("/authenticate", authHandler.Login)                  // Actual login submission
-	app.Post("/mfa/verify", authHandler.VerifyMFALogin)           // Second factor for a TOTP-pending login
-	app.Post("/mfa/recovery", authHandler.VerifyMFARecoveryLogin) // Recovery-code counterpart
+	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
+	app.Post("/authenticate", loginRateLimit, authHandler.Login)                  // Actual login submission
+	app.Post("/mfa/verify", loginRateLimit, authHandler.VerifyMFALogin)           // Second factor for a TOTP-pending login
+	app.Post("/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin) // Recovery-code counterpart
 	app.Get("/consent", authHandler.ConsentPage)
 	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
 	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission

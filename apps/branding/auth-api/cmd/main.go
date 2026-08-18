@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"authway/apps/branding/auth-api/internal/config"
+	"authway/apps/branding/auth-api/internal/database"
 	"authway/apps/branding/auth-api/internal/handler"
 	"authway/apps/branding/auth-api/internal/service"
 
@@ -52,8 +53,16 @@ func main() {
 	centralAPI := service.NewCentralAPIClient(&cfg.CentralAPI, zapLogger)
 	hydraClient := service.NewHydraClient(&cfg.Hydra, zapLogger)
 
+	// Redis — shared with central-api (HD-04, claudedocs/HANDOFF.md), backs
+	// the OAuth StateStore so it survives a replica switch between the
+	// authorize redirect and the provider's callback.
+	redisClient, err := database.ConnectRedis(cfg.Redis)
+	if err != nil {
+		zapLogger.Fatal("Failed to connect to Redis", zap.Error(err))
+	}
+
 	// Initialize handlers
-	oauthHandler := handler.NewOAuthHandler(googleService, centralAPI, hydraClient, zapLogger)
+	oauthHandler := handler.NewOAuthHandler(googleService, centralAPI, hydraClient, zapLogger, redisClient)
 	healthHandler := handler.NewHealthHandler(version)
 	consentHandler := handler.NewConsentHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
 	claimsHandler := handler.NewClaimsHandler(cfg.CentralAPI.BaseURL, cfg.CentralAPI.InternalKey, zapLogger)
