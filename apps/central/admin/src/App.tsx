@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore, selectIsAuthenticated } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
