@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authway — OAuth 2.0 / OIDC Authentication</title>
+  <meta name="description" content="Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra, with TypeScript SDKs for vanilla JS and React." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b0e14;
+      --bg-panel: #131722;
+      --text: #e6e9ef;
+      --text-dim: #9aa4b2;
+      --accent: #5b8def;
+      --border: #232838;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 5rem 1.5rem 4rem;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    header img { width: 40px; height: 40px; }
+    h1 { font-size: 1.75rem; margin: 0; }
+    .tagline {
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      margin: 0 0 2.5rem;
+    }
+    .badges { margin-bottom: 2.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .badges img { height: 20px; }
+    h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin: 0 0 1rem;
+    }
+    .features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 3rem;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem 1.5rem;
+    }
+    .features li {
+      padding: 0.9rem 1rem;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+    .features strong { display: block; margin-bottom: 0.15rem; }
+    .features span { color: var(--text-dim); font-size: 0.85rem; }
+    .links {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+    .links a {
+      display: inline-block;
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .links a.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0b0e14;
+    }
+    footer {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+    footer a { color: inherit; }
+    @media (max-width: 480px) {
+      .features { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="/favicon.svg" alt="" width="40" height="40" />
+      <h1>Authway</h1>
+    </header>
+    <p class="tagline">Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra.</p>
+
+    <div class="badges">
+      <a href="https://github.com/iyulab/authway/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" /></a>
+      <a href="https://www.npmjs.com/package/@authway/client"><img src="https://img.shields.io/npm/v/@authway/client?label=%40authway%2Fclient&color=blue" alt="@authway/client version" /></a>
+      <a href="https://www.npmjs.com/package/@authway/react"><img src="https://img.shields.io/npm/v/@authway/react?label=%40authway%2Freact&color=blue" alt="@authway/react version" /></a>
+    </div>
+
+    <h2>Features</h2>
+    <ul class="features">
+      <li><strong>OAuth 2.0 / OIDC</strong><span>Standards-compliant authentication with PKCE support</span></li>
+      <li><strong>Multi-Tenancy</strong><span>Fully isolated tenant support</span></li>
+      <li><strong>MFA (TOTP)</strong><span>Encrypted secrets and backup codes</span></li>
+      <li><strong>Passwordless</strong><span>Magic-link email and social sign-in</span></li>
+      <li><strong>Webhooks</strong><span>Subscribe to account and session lifecycle events</span></li>
+      <li><strong>TypeScript SDKs</strong><span>@authway/client and @authway/react</span></li>
+    </ul>
+
+    <div class="links">
+      <a class="primary" href="https://github.com/iyulab/authway">GitHub</a>
+      <a href="https://github.com/iyulab/authway/blob/main/docs/README.md">Documentation</a>
+      <a href="https://github.com/iyulab/authway/blob/main/CHANGELOG.md">Changelog</a>
+    </div>
+
+    <footer>
+      Released under the <a href="https://github.com/iyulab/authway/blob/main/LICENSE">MIT License</a>.
+    </footer>
+  </div>
+</body>
+</html>
