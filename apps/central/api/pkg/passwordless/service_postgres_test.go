@@ -2,18 +2,49 @@ package passwordless
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"testing"
 
 	"authway/apps/central/api/internal/database"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// stubEmailSender captures the last magic-link email instead of delivering
+// it. Migration 019 stopped storing the plaintext token (only its hash is
+// persisted — see MagicLink.TokenHash), so a raw DB read can no longer
+// recover the token a test needs to call VerifyMagicLink/InspectMagicLink
+// with. The outbound link is the only place the plaintext still appears.
+type stubEmailSender struct {
+	lastLinkURL string
+}
+
+func (s *stubEmailSender) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
+	s.lastLinkURL = linkURL
+	return nil
+}
+
+// tokenFromLinkURL extracts the token query parameter a magic-link email
+// points at, mirroring what the auth UI does when the link is opened.
+func tokenFromLinkURL(t *testing.T, linkURL string) string {
+	t.Helper()
+	u, err := url.Parse(linkURL)
+	if err != nil {
+		t.Fatalf("parse link URL %q: %v", linkURL, err)
+	}
+	token := u.Query().Get("token")
+	if token == "" {
+		t.Fatalf("link URL %q carried no token", linkURL)
+	}
+	return token
+}
 
 // These tests guard the invitation-only policy on the magic-link path. The
 // endpoint is public and unauthenticated, and before the gate existed it
@@ -44,6 +75,7 @@ type fixture struct {
 	svc        Service
 	invitation invitation.Service
 	tenant     *tenant.Tenant
+	sender     *stubEmailSender
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -63,9 +95,17 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM tenants WHERE id = ?`, tn.ID) })
 
-	// nil emailSender: the gate must hold regardless of mail infrastructure.
-	svc := NewService(db, userService, invService, nil, zap.NewNop(), "http://localhost:3001")
-	return &fixture{db: db, svc: svc, invitation: invService, tenant: tn}
+	sender := &stubEmailSender{}
+	svc := NewService(db, userService, invService, sender, zap.NewNop(), "http://localhost:3001")
+	return &fixture{db: db, svc: svc, invitation: invService, tenant: tn, sender: sender}
+}
+
+// lastToken returns the plaintext token from the most recently sent magic
+// link. It must be read from the outbound email, not the database — see
+// stubEmailSender.
+func (f *fixture) lastToken(t *testing.T) string {
+	t.Helper()
+	return tokenFromLinkURL(t, f.sender.lastLinkURL)
 }
 
 func (f *fixture) linkCount(t *testing.T, email string) int64 {
@@ -125,8 +165,7 @@ func TestMagicLink_InvitedAddress_ProvisionsUser(t *testing.T) {
 		t.Fatalf("expected exactly one magic link, found %d", n)
 	}
 
-	var token string
-	f.db.Raw(`SELECT token FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&token)
+	token := f.lastToken(t)
 
 	_, u, err := f.svc.VerifyMagicLink(token)
 	if err != nil {
@@ -155,8 +194,7 @@ func TestVerifyMagicLink_RevokedInvitation_Denies(t *testing.T) {
 	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	var token string
-	f.db.Raw(`SELECT token FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&token)
+	token := f.lastToken(t)
 
 	if err := f.invitation.Revoke(inv.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -213,8 +251,7 @@ func TestInspectMagicLink_DoesNotConsume(t *testing.T) {
 	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	var token string
-	f.db.Raw(`SELECT token FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&token)
+	token := f.lastToken(t)
 
 	// Inspect repeatedly — a read must be repeatable.
 	for i := range 3 {
@@ -224,7 +261,7 @@ func TestInspectMagicLink_DoesNotConsume(t *testing.T) {
 	}
 
 	var used *string
-	f.db.Raw(`SELECT used_at::text FROM magic_link_tokens WHERE token = ?`, token).Scan(&used)
+	f.db.Raw(`SELECT used_at::text FROM magic_link_tokens WHERE token_hash = ?`, tokenhash.Hash(token)).Scan(&used)
 	if used != nil {
 		t.Errorf("inspecting marked the link used (used_at=%v)", *used)
 	}
@@ -258,8 +295,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	var token string
-	f.db.Raw(`SELECT token FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&token)
+	token := f.lastToken(t)
 
 	_, u, err := f.svc.VerifyMagicLink(token)
 	if err != nil {
