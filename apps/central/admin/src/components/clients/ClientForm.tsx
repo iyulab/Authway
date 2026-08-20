@@ -15,6 +15,10 @@ export const clientFormSchema = z.object({
   // forcing a dummy URI here pollutes its logout configuration.
   redirect_uris: z.string(),
   post_logout_redirect_uris: z.string().optional(),
+  // Required only for a public client using authorization_code — see the
+  // superRefine below, mirroring the server rule
+  // (public_client_missing_allowed_origins).
+  allowed_origins: z.string().optional(),
   logout_redirect_policy: z.enum(['strict', 'lenient', 'disabled']).optional(),
   default_logout_uri: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
   allow_wildcard_logout: z.boolean().optional(),
@@ -41,6 +45,21 @@ export const clientFormSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['redirect_uris'],
       message: 'At least one Redirect URI is required for Authorization Code / Implicit',
+    })
+  }
+
+  // Mirrors the server rule (public_client_missing_allowed_origins): a public
+  // client using authorization_code needs at least one allowed origin, or the
+  // reverse proxy has nothing to validate a browser's cross-origin token
+  // request against.
+  const hasRedirectURIs = data.redirect_uris.trim() !== ''
+  const needsAllowedOrigins =
+    data.public && data.grant_types.includes('authorization_code') && hasRedirectURIs
+  if (needsAllowedOrigins && (data.allowed_origins ?? '').trim() === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['allowed_origins'],
+      message: 'Public clients with Authorization Code need at least one Allowed Origin for browser CORS',
     })
   }
 })
@@ -111,6 +130,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           // M2M clients legitimately have no redirect_uris — the API may omit the field.
           redirect_uris: (initialData.redirect_uris || []).join('\n'),
           post_logout_redirect_uris: (initialData.post_logout_redirect_uris || []).join('\n'),
+          allowed_origins: (initialData.allowed_origins || []).join('\n'),
           logout_redirect_policy: initialData.logout_redirect_policy || 'strict',
           default_logout_uri: initialData.default_logout_uri || '',
           allow_wildcard_logout: initialData.allow_wildcard_logout || false,
@@ -142,9 +162,11 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   const grantTypes = watch('grant_types') || []
   const scopes = watch('scopes') || []
   const enabledAuthProviders = watch('enabled_auth_providers') || []
+  const isPublic = watch('public')
   const redirectsUserAgent = grantTypes.some(
     (g) => g === 'authorization_code' || g === 'implicit'
   )
+  const needsAllowedOrigins = isPublic && grantTypes.includes('authorization_code')
 
   const handleGrantTypeChange = (values: string[]) => {
     setValue('grant_types', values, { shouldValidate: true })
@@ -206,6 +228,20 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         rows={3}
         helperText="Enter each URI on a new line. If empty, Redirect URIs will be used."
         error={errors.post_logout_redirect_uris?.message}
+      />
+
+      {/* Allowed Origins (CORS) */}
+      <Textarea
+        {...register('allowed_origins')}
+        label={needsAllowedOrigins ? 'Allowed Origins (CORS) *' : 'Allowed Origins (CORS)'}
+        placeholder={`http://localhost:3000\nhttps://example.com`}
+        rows={2}
+        helperText={
+          needsAllowedOrigins
+            ? 'Enter each browser origin on a new line (scheme + host + port, no path). Required for a public client using Authorization Code, so the reverse proxy can validate cross-origin token requests.'
+            : 'Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code.'
+        }
+        error={errors.allowed_origins?.message}
       />
 
       {/* Logout Redirect Policy */}

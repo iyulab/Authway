@@ -184,6 +184,18 @@
   carries an `error` parameter, matching the parsing the popup callback
   path already did.
 
+- **The admin console could not register the standard public-client
+  configuration.** The API requires an origin allow-list (`allowed_origins`)
+  for a public client using the authorization_code grant, so it can tell a
+  browser's cross-origin token request apart from a forged one — but the
+  console's client form had no field for it anywhere, on either create or
+  edit. Since a public client with authorization_code is the default,
+  recommended shape for a browser-based application (and the form's own
+  defaults point there), the form could reject its own default configuration
+  with no way to fix it. An "Allowed Origins" field now exists, required
+  exactly when the API requires it, validated inline before submit instead
+  of failing only after the request reaches the server.
+
 - **The admin console's settings page showed a fabricated admin profile.**
   A name, email, role, and join date were hardcoded in the frontend and
   rendered as if they came from the signed-in session — there is no

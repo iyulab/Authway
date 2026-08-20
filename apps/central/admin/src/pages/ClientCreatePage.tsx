@@ -41,6 +41,13 @@ const ClientCreatePage: React.FC = () => {
             .filter((uri) => uri.length > 0)
         : []
 
+      const allowedOrigins = data.allowed_origins
+        ? data.allowed_origins
+            .split('\n')
+            .map((origin) => origin.trim())
+            .filter((origin) => origin.length > 0)
+        : []
+
       return clientsApi.create({
         tenant_id: selectedTenant.id,
         name: data.name,
@@ -49,6 +56,7 @@ const ClientCreatePage: React.FC = () => {
         redirect_uris: redirectUris,
         post_logout_redirect_uris:
           postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,
+        allowed_origins: allowedOrigins.length > 0 ? allowedOrigins : undefined,
         logout_redirect_policy: data.logout_redirect_policy || 'strict',
         default_logout_uri: data.default_logout_uri || undefined,
         allow_wildcard_logout: data.allow_wildcard_logout || false,

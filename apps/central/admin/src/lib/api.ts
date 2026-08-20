@@ -69,6 +69,10 @@ export interface Client {
   logo?: string
   redirect_uris: string[]
   post_logout_redirect_uris?: string[]
+  // CORS allow-list for browser-based OAuth flows. Required by the API for a
+  // public client using authorization_code — without it, the reverse proxy
+  // has nothing to validate a cross-origin token request against.
+  allowed_origins?: string[]
   logout_redirect_policy?: 'strict' | 'lenient' | 'disabled'
   default_logout_uri?: string
   allow_wildcard_logout?: boolean
@@ -165,6 +169,7 @@ export const clientsApi = {
     logo?: string
     redirect_uris: string[]
     post_logout_redirect_uris?: string[]
+    allowed_origins?: string[]
     logout_redirect_policy?: 'strict' | 'lenient' | 'disabled'
     default_logout_uri?: string
     allow_wildcard_logout?: boolean

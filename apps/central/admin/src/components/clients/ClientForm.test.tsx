@@ -76,6 +76,67 @@ describe('ClientForm — redirect_uris is conditional on grant type', () => {
   })
 })
 
+describe('ClientForm — allowed_origins is conditional on public + authorization_code', () => {
+  it('rejects a public authorization_code client with no allowed origin', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+
+    await user.type(screen.getByLabelText('Client Name *'), 'SPA App')
+    await user.type(screen.getByLabelText('Redirect URIs *'), 'https://app.example/cb')
+    await user.click(screen.getByLabelText('Public Client (No Client Secret)'))
+    await submit(user)
+
+    expect(
+      await screen.findByText(
+        'Public clients with Authorization Code need at least one Allowed Origin for browser CORS'
+      )
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('accepts a public authorization_code client once an allowed origin is set', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+
+    await user.type(screen.getByLabelText('Client Name *'), 'SPA App')
+    await user.type(screen.getByLabelText('Redirect URIs *'), 'https://app.example/cb')
+    await user.click(screen.getByLabelText('Public Client (No Client Secret)'))
+    await user.type(screen.getByLabelText('Allowed Origins (CORS) *'), 'https://app.example')
+    await submit(user)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].allowed_origins).toBe('https://app.example')
+  })
+
+  it('does not require an allowed origin for a confidential client', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+
+    await user.type(screen.getByLabelText('Client Name *'), 'Server App')
+    await user.type(screen.getByLabelText('Redirect URIs *'), 'https://app.example/cb')
+    await submit(user)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+  })
+
+  it('preloads an existing client’s allowed origins', () => {
+    const existing = {
+      id: 'c3',
+      client_id: 'spa_app',
+      name: 'SPA App',
+      redirect_uris: ['https://app.example/cb'],
+      allowed_origins: ['https://app.example'],
+      grant_types: ['authorization_code'],
+      scopes: ['openid'],
+      public: true,
+    } as unknown as Client
+
+    renderForm({ initialData: existing })
+
+    expect(screen.getByLabelText('Allowed Origins (CORS) *')).toHaveValue('https://app.example')
+  })
+})
+
 describe('ClientForm — access token strategy', () => {
   it('defaults to inheriting the server setting', async () => {
     const user = userEvent.setup()

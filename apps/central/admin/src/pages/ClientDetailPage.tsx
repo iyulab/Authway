@@ -49,12 +49,20 @@ const ClientDetailPage: React.FC = () => {
             .filter((uri) => uri.length > 0)
         : []
 
+      const allowedOrigins = data.allowed_origins
+        ? data.allowed_origins
+            .split('\n')
+            .map((origin) => origin.trim())
+            .filter((origin) => origin.length > 0)
+        : []
+
       return clientsApi.update(clientId!, {
         name: data.name,
         description: data.description ?? '',
         website: data.website ?? '',
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris,
+        allowed_origins: allowedOrigins,
         logout_redirect_policy: data.logout_redirect_policy || 'strict',
         default_logout_uri: data.default_logout_uri ?? '',
         allow_wildcard_logout: data.allow_wildcard_logout ?? false,
