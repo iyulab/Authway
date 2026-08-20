@@ -86,7 +86,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 	}{
 		{"invitation", &invitation.Invitation{
 			TenantID: tenantID, Email: "c@example.com", Role: "member",
-			Token: uuid.New().String(), Status: invitation.StatusPending, ExpiresAt: future,
+			TokenHash: tokenhash.Hash(uuid.New().String()), Status: invitation.StatusPending, ExpiresAt: future,
 		}, "invitations"},
 		{"impersonation_session", &impersonation.ImpersonationSession{
 			TenantID: tenantID, AdminEmail: impersonation.SystemActorEmail,

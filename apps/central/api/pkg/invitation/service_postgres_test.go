@@ -2,6 +2,7 @@ package invitation
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"testing"
 
@@ -13,6 +14,36 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// stubEmailSender captures the last invitation email instead of delivering
+// it. Migration 020 stopped storing the plaintext token (only its hash is
+// persisted — see Invitation.TokenHash), so a test that needs to call
+// Accept/Decline with the real token can no longer read it back from the
+// database or the returned struct. The outbound link is the only place the
+// plaintext still appears.
+type stubEmailSender struct {
+	lastLinkURL string
+}
+
+func (s *stubEmailSender) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
+	s.lastLinkURL = inviteURL
+	return nil
+}
+
+// tokenFromLinkURL extracts the token query parameter an invitation email
+// points at, mirroring what the auth UI does when the link is opened.
+func tokenFromLinkURL(t *testing.T, linkURL string) string {
+	t.Helper()
+	u, err := url.Parse(linkURL)
+	if err != nil {
+		t.Fatalf("parse link URL %q: %v", linkURL, err)
+	}
+	token := u.Query().Get("token")
+	if token == "" {
+		t.Fatalf("link URL %q carried no token", linkURL)
+	}
+	return token
+}
 
 // These tests run the invitation service against a real Postgres, because every
 // defect they guard lives in the gap between the Go struct and the SQL schema —
@@ -53,6 +84,18 @@ func newTestService(t *testing.T, db *gorm.DB) (Service, *tenant.Service, user.S
 	userService := user.NewService(db, zap.NewNop())
 	svc := NewService(db, userService, tenantService, nil, zap.NewNop(), "http://localhost:3001")
 	return svc, tenantService, userService
+}
+
+// newTestServiceWithSender is newTestService plus a stubEmailSender, for the
+// tests that need to redeem an invitation and so need its plaintext token —
+// which, since migration 020, exists nowhere but the outbound email.
+func newTestServiceWithSender(t *testing.T, db *gorm.DB) (Service, *tenant.Service, user.Service, *stubEmailSender) {
+	t.Helper()
+	tenantService := tenant.NewService(db)
+	userService := user.NewService(db, zap.NewNop())
+	sender := &stubEmailSender{}
+	svc := NewService(db, userService, tenantService, sender, zap.NewNop(), "http://localhost:3001")
+	return svc, tenantService, userService, sender
 }
 
 // freshTenant creates an empty tenant, i.e. one with no users at all — the
@@ -137,7 +180,7 @@ func TestCreate_SystemActor_BootstrapsEmptyTenant(t *testing.T) {
 // exists at the end.
 func TestAccept_SystemActorInvitation_CreatesFirstUser(t *testing.T) {
 	db := setupPostgres(t)
-	svc, ts, us := newTestService(t, db)
+	svc, ts, us, sender := newTestServiceWithSender(t, db)
 	tn := freshTenant(t, ts)
 
 	email := fmt.Sprintf("owner-%s@example.com", uuid.New().String()[:8])
@@ -147,9 +190,11 @@ func TestAccept_SystemActorInvitation_CreatesFirstUser(t *testing.T) {
 	}
 	defer db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
 
-	// Accept needs the raw token, which the struct deliberately does not expose
-	// over JSON but does carry in memory.
-	u, err := svc.Accept(inv.Token, nil, "First Owner", "correct-horse-battery")
+	// Accept needs the raw token. Migration 020 stopped persisting it
+	// (only its hash lives on the row), so it must come from the outbound
+	// email — the same place the auth UI recovers it.
+	token := tokenFromLinkURL(t, sender.lastLinkURL)
+	u, err := svc.Accept(token, nil, "First Owner", "correct-horse-battery")
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}

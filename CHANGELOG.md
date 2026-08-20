@@ -162,6 +162,15 @@
   separately authenticated logout endpoint whose whole purpose is revocation
   already fails hard if Hydra can't be reached.
 
+- **Invitation tokens are hashed at rest**, closing the last table in the
+  010/013/014/019 series — a plain read of the column was usable to create an
+  account in whichever tenant the invitation targeted. Unlike those four,
+  invitation rows carry lasting audit value past the live-token window (who
+  was invited, who accepted, when), so existing rows are not invalidated:
+  existing plaintext is hashed in place on the next boot, via the same
+  shared `pkg/tokenhash` digest the other four use, so an invitation already
+  in someone's inbox keeps working across the upgrade.
+
 ### Fixed
 
 - **`@authway/react` dropped OAuth error redirects on the floor.** The

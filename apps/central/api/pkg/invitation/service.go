@@ -109,7 +109,7 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 		InviterID: inviterID,
 		Email:     req.Email,
 		Role:      role,
-		Token:     token,
+		TokenHash: tokenhash.Hash(token),
 		Status:    StatusPending,
 		Message:   req.Message,
 		ExpiresAt: time.Now().Add(s.expiry),
@@ -120,7 +120,7 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	invitation.TenantName = t.Name
 	invitation.InviterName = inviterName
 	if s.emailSender != nil {
-		inviteURL := maillink.InvitationAccept(s.frontendURL, invitation.Token)
+		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
 		if err := s.emailSender.SendInvitationEmail(req.Email, inviterName, t.Name, req.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to send invitation email", zap.Error(err), zap.String("email", req.Email))
 		}
@@ -179,7 +179,7 @@ func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, er
 
 func (s *service) GetByToken(token string) (*Invitation, error) {
 	var inv Invitation
-	if err := s.db.Where("token = ?", token).First(&inv).Error; err != nil {
+	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&inv).Error; err != nil {
 		return nil, apierror.NewPublic("invitation not found")
 	}
 	s.hydrate(&inv)
@@ -320,13 +320,13 @@ func (s *service) Resend(id uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("failed to generate new token: %w", err)
 	}
-	inv.Token = token
+	inv.TokenHash = tokenhash.Hash(token)
 	inv.ExpiresAt = time.Now().Add(s.expiry)
 	if err := s.db.Save(inv).Error; err != nil {
 		return fmt.Errorf("failed to update invitation: %w", err)
 	}
 	if s.emailSender != nil {
-		inviteURL := maillink.InvitationAccept(s.frontendURL, inv.Token)
+		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
 		if err := s.emailSender.SendInvitationEmail(inv.Email, inv.InviterName, inv.TenantName, inv.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to resend invitation email", zap.Error(err), zap.String("email", inv.Email))
 		}

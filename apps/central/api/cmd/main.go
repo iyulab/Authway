@@ -91,6 +91,14 @@ func main() {
 		zapLogger.Error("TOTP secret backfill failed (non-fatal; validation unaffected)", zap.Error(err))
 	}
 
+	// Backfill: hash any legacy plaintext invitation tokens left over from
+	// before migration 020 (SQL alone could not hash them — see the
+	// migration file). Idempotent and non-fatal — a transient DB error here
+	// must not block the whole IdP from starting; it retries on next boot.
+	if err := invitation.BackfillTokenHashes(db, zapLogger); err != nil {
+		zapLogger.Error("Invitation token backfill failed (non-fatal; retried on next boot)", zap.Error(err))
+	}
+
 	// Initialize Tenant Service
 	tenantService := tenant.NewService(db)
 

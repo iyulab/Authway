@@ -37,7 +37,11 @@ type Invitation struct {
 	InviterID  *uuid.UUID       `json:"inviter_id" gorm:"type:uuid"`
 	Email      string           `json:"email" gorm:"size:255;not null;index"`
 	Role       string           `json:"role" gorm:"size:50;default:member"`
-	Token      string           `json:"-" gorm:"type:text;uniqueIndex"`
+	// TokenHash is the SHA-256 hex digest of the invitation token. The
+	// plaintext never touches the database — an invitation token grants
+	// account-creation capability on its own, so a DB read must not yield a
+	// usable one. See migration 020 and BackfillTokenHashes.
+	TokenHash  string           `json:"-" gorm:"column:token_hash;size:64;not null;uniqueIndex"`
 	Status     InvitationStatus `json:"status" gorm:"size:20;default:pending;index"`
 	Message    string           `json:"message" gorm:"type:text"`
 	AcceptedAt *time.Time       `json:"accepted_at"`

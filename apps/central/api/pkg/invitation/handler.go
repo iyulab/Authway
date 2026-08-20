@@ -190,7 +190,7 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 
 	user, err := h.service.Accept(req.Token, userID, req.Name, req.Password)
 	if err != nil {
-		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.String("token_length", string(rune(len(req.Token)))))
+		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.Int("token_length", len(req.Token)))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation")})
 	}
 

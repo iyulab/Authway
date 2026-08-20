@@ -67,3 +67,21 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip mismatch: stored %q != lookup %q", stored, lookup)
 	}
 }
+
+func TestIsHashed(t *testing.T) {
+	tok, err := Generate()
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if IsHashed(tok) {
+		t.Errorf("a plaintext generated token must not look hashed: %q", tok)
+	}
+	if !IsHashed(Hash(tok)) {
+		t.Errorf("Hash's own output must be recognized as hashed: %q", Hash(tok))
+	}
+	// A pre-020 padded token (see invitation.generateToken's history) ends in
+	// "=" and is 44 chars — must not be mistaken for a 64-char hex digest.
+	if IsHashed("Thb-jaZjfMHEfYxOcg52pvTlhmq6HBJ8MEUjOO5y5UY=") {
+		t.Error("a padded base64url token must not look hashed")
+	}
+}
