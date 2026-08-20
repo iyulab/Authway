@@ -135,6 +135,12 @@ az staticwebapp create \
   --name authway-auth-ui \
   --resource-group authway \
   --location koreacentral
+
+# Landing Page (apex domain marketing site)
+az staticwebapp create \
+  --name authway-landing \
+  --resource-group authway \
+  --location koreacentral
 ```
 
 ### 6. Custom Domains & SSL
@@ -153,6 +159,27 @@ az containerapp hostname bind \
   --hostname auth.authway.in \
   --certificate <certificate-id>
 ```
+
+#### Landing page apex domain (`authway.in`)
+
+Binding a custom domain to the **root/apex** of a DNS zone (as opposed to a
+subdomain like `auth.authway.in`) needs an extra verification step, since
+apex domains can't use a CNAME record:
+
+1. In the Azure Portal, open the `authway-landing` Static Web App →
+   **Custom domains** → **Add** → enter `authway.in`.
+2. Azure shows a TXT record to add for domain ownership verification
+   (record name `@` or `authway.in`, value provided by Azure) — add it at
+   the registrar (GoDaddy) and wait for DNS propagation.
+3. Once verified, Azure shows the apex A/ALIAS record value to point
+   `authway.in` at. Replace the current GoDaddy parking A records
+   (`15.197.148.33` / `3.33.130.190`) with it at the registrar.
+4. Repeat for `www.authway.in` as a CNAME to the Static Web App's default
+   hostname, if a `www` alias is wanted.
+5. Copy the deployment token (**Manage deployment token**) into
+   `scripts/deploy/prod/.env` as `LANDING_DEPLOYMENT_TOKEN`, and the
+   Static Web App name into `STATIC_WEB_APP_LANDING`.
+6. Deploy: `scripts/deploy/prod/publish-landing.ps1`.
 
 ---
 
