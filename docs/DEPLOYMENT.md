@@ -135,13 +135,10 @@ az staticwebapp create \
   --name authway-auth-ui \
   --resource-group authway \
   --location koreacentral
-
-# Landing Page (apex domain marketing site)
-az staticwebapp create \
-  --name authway-landing \
-  --resource-group authway \
-  --location koreacentral
 ```
+
+The landing page (apex domain marketing site) is **not** an Azure Static Web
+App — see the Cloudflare Pages subsection below.
 
 ### 6. Custom Domains & SSL
 
@@ -160,26 +157,41 @@ az containerapp hostname bind \
   --certificate <certificate-id>
 ```
 
-#### Landing page apex domain (`authway.in`)
+#### DNS: `authway.in` is on Cloudflare, not the registrar
 
-Binding a custom domain to the **root/apex** of a DNS zone (as opposed to a
-subdomain like `auth.authway.in`) needs an extra verification step, since
-apex domains can't use a CNAME record:
+As of 2026-08-20, `authway.in`'s nameservers were migrated from the
+registrar (GoDaddy) to Cloudflare — the domain is registered at GoDaddy, but
+Cloudflare is now authoritative for all DNS records (`auth.`, `admin.`,
+`api.`, `oauth.`, `auth-api.`, MX/SPF/DKIM for M365 mail, everything). DNS
+changes for this domain happen in the Cloudflare dashboard/API from now on,
+not at the registrar.
 
-1. In the Azure Portal, open the `authway-landing` Static Web App →
-   **Custom domains** → **Add** → enter `authway.in`.
-2. Azure shows a TXT record to add for domain ownership verification
-   (record name `@` or `authway.in`, value provided by Azure) — add it at
-   the registrar (GoDaddy) and wait for DNS propagation.
-3. Once verified, Azure shows the apex A/ALIAS record value to point
-   `authway.in` at. Replace the existing apex A/ALIAS record at the registrar
-   (GoDaddy) with the value Azure provided.
-4. Repeat for `www.authway.in` as a CNAME to the Static Web App's default
-   hostname, if a `www` alias is wanted.
-5. Copy the deployment token (**Manage deployment token**) into
-   `scripts/deploy/prod/.env` as `LANDING_DEPLOYMENT_TOKEN`, and the
-   Static Web App name into `STATIC_WEB_APP_LANDING`.
-6. Deploy: `scripts/deploy/prod/publish-landing.ps1`.
+#### Landing page apex domain (`authway.in`) — Cloudflare Pages
+
+The landing page is a **Cloudflare Pages** project (`authway-landing`), not
+an Azure Static Web App — Azure's Static Web Apps Free-tier quota was
+exhausted on this subscription when this page was set up, and since the
+zone had just moved to Cloudflare, Cloudflare Pages was the better fit
+anyway (apex domains there just need a CNAME — Cloudflare flattens it
+automatically — no separate TXT-verification dance the way Azure's apex
+binding needs).
+
+Already done (nothing further to set up):
+1. Cloudflare Pages project `authway-landing` created, static site deployed
+   from `apps/marketing/landing/`.
+2. Custom domains `authway.in` and `www.authway.in` bound to the project —
+   both active over HTTPS.
+3. `authway.in`'s DNS record is a proxied `CNAME` → `authway-landing.pages.dev`
+   (the old GoDaddy-parking `A` records were removed).
+4. `scripts/deploy/prod/.env` has `CLOUDFLARE_API_TOKEN`,
+   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_PAGES_PROJECT_LANDING=authway-landing`.
+
+To redeploy after changing `apps/marketing/landing/` content:
+`scripts/deploy/prod/publish-landing.ps1`.
+
+To manage DNS for this zone going forward, use the Cloudflare dashboard
+(dns.cloudflare.com → `authway.in`) or the Cloudflare API — not the GoDaddy
+DNS panel, which is no longer authoritative.
 
 ---
 
