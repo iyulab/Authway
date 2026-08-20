@@ -283,7 +283,6 @@ func main() {
 	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
 	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission
 	app.Post("/consent/reject", authHandler.RejectConsent)
-	app.Get("/logout", authHandler.LogoutPage) // Logout flow (auto-accept)
 
 	// Popup callback for popup-based authentication (@authway/client, @authway/react)
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)

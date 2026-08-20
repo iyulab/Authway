@@ -853,65 +853,6 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 	})
 }
 
-// LogoutPage handles logout flow - auto-accept since skip_logout_consent is true
-func (h *AuthHandler) LogoutPage(c *fiber.Ctx) error {
-	challenge := c.Query("logout_challenge")
-
-	if challenge == "" {
-		h.logger.Warn("Logout request without challenge")
-		return c.Status(400).JSON(fiber.Map{
-			"error": "logout_challenge parameter is required",
-			"guide": "This endpoint should be called by Hydra with a logout_challenge parameter",
-		})
-	}
-
-	// Get logout request from Hydra
-	logoutReq, err := h.hydraClient.GetLogoutRequest(challenge)
-	if err != nil {
-		h.logger.Error("Failed to get logout request from Hydra",
-			zap.String("challenge", challenge),
-			zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error":   "Failed to get logout request",
-			"guide":   "Hydra might be unavailable or the challenge may have expired. Try logging out again.",
-			"details": apierror.Message(err, "unable to reach Hydra"),
-		})
-	}
-
-	h.logger.Info("Processing logout request",
-		zap.String("subject", logoutReq.Subject),
-		zap.String("challenge", challenge))
-
-	// Auto-accept logout (skip_logout_consent is true)
-	resp, err := h.hydraClient.AcceptLogoutRequest(challenge)
-	if err != nil {
-		h.logger.Error("Failed to accept logout request",
-			zap.String("challenge", challenge),
-			zap.String("subject", logoutReq.Subject),
-			zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error":   "Failed to accept logout request",
-			"guide":   "Hydra logout acceptance failed. Try again or contact support.",
-			"details": apierror.Message(err, "unable to reach Hydra"),
-		})
-	}
-
-	h.logger.Info("Logout accepted - redirecting",
-		zap.String("subject", logoutReq.Subject),
-		zap.String("redirect_to", resp.RedirectTo))
-
-	if subjectUUID, parseErr := uuid.Parse(logoutReq.Subject); parseErr == nil {
-		if logoutUser, getErr := h.userService.GetByID(subjectUUID); getErr == nil {
-			h.logUserAudit(c, logoutUser, audit.ActionUserLogout, map[string]any{
-				"flow": "oidc",
-			})
-		}
-	}
-
-	// Redirect to Hydra's logout endpoint (which will then redirect to post_logout_redirect_uri)
-	return c.Redirect(resp.RedirectTo)
-}
-
 // LogoutRequest for direct logout API.
 // NOTE: the subject is NEVER taken from the body — it is derived from the
 // validated bearer token by the jwtAuth middleware. Only non-security-sensitive

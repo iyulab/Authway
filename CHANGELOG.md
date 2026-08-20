@@ -213,6 +213,16 @@
 
 ### Removed
 
+- **The central API's own `GET /logout` route is gone.** It duplicated the
+  branding auth service's OIDC logout flow, which is the endpoint every
+  client actually discovers (via `end_session_endpoint`) and uses — a
+  four-month audit-log history across both the production and staging
+  databases shows zero completed logouts through this route in either
+  environment. The Hydra client methods it alone called
+  (`GetLogoutRequest`/`AcceptLogoutRequest`) are removed with it. The
+  Bearer-token-authenticated `POST /api/v1/logout` (direct session
+  revocation) is unrelated and unaffected.
+
 - **Unused JWT secret configuration is gone.** `jwt.access_token_secret` and
   `jwt.refresh_token_secret` were never read anywhere outside their own
   validation check — token signing has always been Hydra's job — so the check
