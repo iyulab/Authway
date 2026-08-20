@@ -62,6 +62,13 @@ try {
 
     if ($LASTEXITCODE -ne 0) { throw "Azure Static Web Apps 배포 실패" }
 
+    $tempZipFiles = Get-ChildItem -Path $ProjectRoot -Filter "*-app.zip" -ErrorAction SilentlyContinue
+    if ($tempZipFiles) {
+        Write-Host "🧹 임시 파일 정리 중..." -ForegroundColor Yellow
+        $tempZipFiles | Remove-Item -Force
+        Write-Host "✓ $($tempZipFiles.Count)개 임시 파일 삭제됨" -ForegroundColor Green
+    }
+
     Write-Host ""
     Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
     Write-Host "  ✅ Landing Page 배포 완료! (Azure SWA)" -ForegroundColor Green

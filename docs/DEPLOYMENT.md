@@ -172,8 +172,8 @@ apex domains can't use a CNAME record:
    (record name `@` or `authway.in`, value provided by Azure) — add it at
    the registrar (GoDaddy) and wait for DNS propagation.
 3. Once verified, Azure shows the apex A/ALIAS record value to point
-   `authway.in` at. Replace the current GoDaddy parking A records
-   (`15.197.148.33` / `3.33.130.190`) with it at the registrar.
+   `authway.in` at. Replace the existing apex A/ALIAS record at the registrar
+   (GoDaddy) with the value Azure provided.
 4. Repeat for `www.authway.in` as a CNAME to the Static Web App's default
    hostname, if a `www` alias is wanted.
 5. Copy the deployment token (**Manage deployment token**) into
