@@ -176,6 +176,9 @@ export const clientsApi = {
     grant_types: string[]
     scopes: string[]
     public: boolean
+    enabled_auth_providers?: string[]
+    allow_email_signup?: boolean
+    allow_email_login?: boolean
     skip_consent?: boolean
     skip_logout_consent?: boolean
     access_token_strategy?: string

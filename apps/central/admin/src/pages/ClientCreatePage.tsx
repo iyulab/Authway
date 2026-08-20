@@ -63,6 +63,9 @@ const ClientCreatePage: React.FC = () => {
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
+        enabled_auth_providers: data.enabled_auth_providers || ['email', 'google'],
+        allow_email_signup: data.allow_email_signup ?? true,
+        allow_email_login: data.allow_email_login ?? true,
         skip_consent: data.skip_consent || false,
         skip_logout_consent: data.skip_logout_consent || false,
         // '' means "inherit the server setting" — send nothing.

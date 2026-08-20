@@ -196,6 +196,14 @@
   exactly when the API requires it, validated inline before submit instead
   of failing only after the request reaches the server.
 
+- **Creating a client in the admin console silently ignored its
+  authentication-provider settings.** The form collects which providers are
+  enabled and whether email signup/login are allowed, and editing an
+  existing client already sent them — but the create request never included
+  them, so a new client always got the server's defaults regardless of what
+  was chosen in the form. Create now sends the same fields update already
+  did.
+
 - **The admin console's settings page showed a fabricated admin profile.**
   A name, email, role, and join date were hardcoded in the frontend and
   rendered as if they came from the signed-in session — there is no
