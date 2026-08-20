@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Changed
+
+- **Relicensed from MIT to Apache License 2.0.** Applies to the whole repo
+  going forward, including the published `@authway/client` and
+  `@authway/react` npm packages — versions already published under MIT are
+  unaffected.
+
 ### Security
 
 - **Cleared an esbuild CVE reachable through the frontend build/test toolchain** (admin console,

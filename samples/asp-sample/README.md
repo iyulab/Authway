@@ -675,4 +675,4 @@ window.addEventListener('message', (event) => {
 
 ## 라이선스
 
-MIT License
+Apache License 2.0

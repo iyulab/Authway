@@ -2,7 +2,7 @@
 
 Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra with JavaScript/TypeScript SDKs.
 
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 See [CHANGELOG.md](./CHANGELOG.md) for the current release. The apps and
 packages in this repo are versioned independently — the SDK badges below
@@ -231,7 +231,7 @@ Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## Links
 
