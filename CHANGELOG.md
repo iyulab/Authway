@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+### Added
+
+- **Scoped service credentials for consumer-app client provisioning.**
+  Consumer apps that need to programmatically create OAuth clients (e.g. a
+  deploy pipeline registering a new environment's client) previously had
+  only one option: the deployment-wide `ADMIN_API_KEY`, which can do
+  anything to any tenant. `POST /api/v1/tenants/:id/service-clients` now
+  mints a tenant-scoped, revocable `client_credentials` credential (a
+  standard OAuth2 M2M grant against the existing Hydra instance) that can
+  only create OAuth clients — nothing else — in the one tenant it was
+  issued for, and only with a whitelisted field subset (no
+  provider-secret, MFA, or logout-policy fields). Revoke via `DELETE
+  .../service-clients/:id`.
+
 ### Changed
 
 - **Relicensed from MIT to Apache License 2.0.** Applies to the whole repo
