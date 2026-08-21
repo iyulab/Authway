@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS service_clients (
 CREATE INDEX IF NOT EXISTS idx_service_clients_tenant ON service_clients(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_service_clients_hydra_client_id ON service_clients(hydra_client_id);
 
-COMMENT ON TABLE service_clients IS 'Tenant-scoped M2M provisioning credentials (Hydra client_credentials clients), Phase D option A';
+COMMENT ON TABLE service_clients IS 'Maps a Hydra client_credentials OAuth2Client to an Authway tenant with a scope allowlist, for tenant-scoped M2M client provisioning';
 COMMENT ON COLUMN service_clients.hydra_client_id IS 'The client_id of the matching Hydra OAuth2Client (grant_types=[client_credentials]); Hydra itself is the credential store, this row is only the tenant + scope mapping';
 COMMENT ON COLUMN service_clients.granted_scopes IS 'Scope allowlist this credential was provisioned with, e.g. admin.clients:write';
 COMMENT ON COLUMN service_clients.revoked_at IS 'NULL = active. Non-NULL blocks every request even if the Hydra client / an already-issued token is still valid.';

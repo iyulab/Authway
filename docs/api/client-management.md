@@ -1,8 +1,22 @@
 # Client Management API
 
-The `/api/v1/clients/*` endpoints manage OAuth2/OIDC clients. They require admin
-authentication — either the long-lived `AUTHWAY_ADMIN_API_KEY` (via
-`Authorization: Bearer …`) or an admin session token issued by `/admin/login`.
+The `/api/v1/clients/*` endpoints manage OAuth2/OIDC clients. Most of them
+require admin authentication — either the long-lived `AUTHWAY_ADMIN_API_KEY`
+(via `Authorization: Bearer …`) or an admin session token issued by
+`/admin/login`.
+
+`POST /api/v1/clients` (client creation) additionally accepts a third method:
+a scoped **service client** credential — a tenant-scoped `client_credentials`
+bearer token obtained from Hydra. A request authenticated this way may only
+create clients in the tenant the credential was provisioned for, and is
+restricted to a reduced field set (no provider secrets, no MFA/logout policy,
+no custom `client_id`/`client_secret`). See
+[Service Clients](./service-clients.md) for provisioning, token acquisition,
+and the exact request restrictions. Every other `/clients*` route (`GET`,
+`PUT`, `DELETE`, `regenerate-secret`, …) is unchanged and still accepts only
+the two admin methods above — except the public `GET
+/clients/{client_id}/config` endpoint, which requires no authentication at
+all.
 
 This document covers two semantics that are easy to get wrong: **Hydra sync
 visibility** and **client-config validation**.
