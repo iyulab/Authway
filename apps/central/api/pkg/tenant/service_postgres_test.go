@@ -261,6 +261,29 @@ func TestEnsureDefaultTenant_Idempotent(t *testing.T) {
 	}
 }
 
+// TestGetDefaultTenant_FallsBackToSlugWhenSeedIDDiffers reproduces the
+// production bug: 000_initial_schema.sql seeds the default tenant with
+// gen_random_uuid(), never DefaultTenantID, so a plain GetTenantByID(
+// DefaultTenantID) lookup never finds it on any normally-migrated database.
+// EnsureDefaultTenant and IsDefaultTenant() already fall back to the
+// "default" slug (see service.go:194-213, models.go:132) — GetDefaultTenant
+// was the one holdout.
+func TestGetDefaultTenant_FallsBackToSlugWhenSeedIDDiffers(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db)
+
+	dt, err := svc.GetDefaultTenant()
+	if err != nil {
+		t.Fatalf("GetDefaultTenant(): %v", err)
+	}
+	if dt.Slug != "default" {
+		t.Fatalf("expected the migration-seeded 'default' tenant, got slug=%q", dt.Slug)
+	}
+	if dt.ID == DefaultTenantID {
+		t.Fatalf("test assumption violated: seeded default tenant unexpectedly has ID == DefaultTenantID; this test no longer exercises the fallback path")
+	}
+}
+
 // TestDeleteTenant_BlockedByExistingUsersAndClients guards the two guard
 // clauses DeleteTenant runs before it will soft-delete a tenant — without
 // them, deleting a tenant orphans its users/clients (tenant_id pointing at a

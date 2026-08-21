@@ -179,9 +179,23 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 	return nil
 }
 
-// GetDefaultTenant retrieves the default tenant
+// GetDefaultTenant retrieves the default tenant. It looks up by
+// DefaultTenantID first, falling back to the "default" slug — the same
+// dual check EnsureDefaultTenant already performs (below) and IsDefaultTenant
+// already treats as equivalent (models.go), because 000_initial_schema.sql
+// seeds the default tenant with a database-generated UUID, never
+// DefaultTenantID. On any normally-migrated database the ID lookup always
+// misses; only a database that ran a since-removed code path that honored
+// the constant would hit it.
 func (s *Service) GetDefaultTenant() (*Tenant, error) {
-	return s.GetTenantByID(DefaultTenantID)
+	t, err := s.GetTenantByID(DefaultTenantID)
+	if err == nil {
+		return t, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	return s.GetTenantBySlug("default")
 }
 
 // EnsureDefaultTenant ensures the default tenant exists
