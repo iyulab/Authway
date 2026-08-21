@@ -23,6 +23,7 @@ import (
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
 	ratelimitmw "authway/apps/central/api/pkg/middleware"
+	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
@@ -254,6 +255,9 @@ func main() {
 	// constructed.
 	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.FrontendURL)
 
+	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
+	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)
+
 	// Admin handler depends on audit.Service so auth failures surface in
 	// audit_logs (see pkg/admin/handler.go logAuthFailure).
 	adminHandler := admin.NewHandler(adminService, zapLogger, cfg.App.Version, cfg.Admin.APIKey, newFeatureServices.AuditService)
@@ -358,8 +362,12 @@ func main() {
 	// /admin/login (used by the Admin Console UI). Fail-closed on missing key.
 	adminAuth := adminHandler.GetAdminConsoleAuth()
 
+	// Accepts either full admin auth or a scoped service_client credential —
+	// see admin.Handler.GetClientAuth and ClientHandler.createScoped.
+	clientCreateAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.clients:write")
+
 	// Client management routes (admin-only — config changes affect OAuth security posture)
-	v1.Post("/clients", adminAuth, clientHandler.Create)
+	v1.Post("/clients", clientCreateAuth, clientHandler.Create)
 	v1.Get("/clients/:id", adminAuth, clientHandler.Get)
 	v1.Put("/clients/:id", adminAuth, clientHandler.Update)
 	v1.Delete("/clients/:id", adminAuth, clientHandler.Delete)
@@ -411,6 +419,12 @@ func main() {
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
 	tenantHandler.RegisterRoutes(app, adminAuth)
+
+	// Service client provisioning (Phase D option A) — admin-only, since
+	// this mints new M2M credentials. The credentials it mints are what
+	// clientCreateAuth (above) accepts on POST /clients.
+	v1.Post("/tenants/:id/service-clients", adminAuth, serviceClientHandler.Create)
+	v1.Delete("/tenants/:id/service-clients/:service_client_id", adminAuth, serviceClientHandler.Revoke)
 
 	// Admin Console routes
 	adminHandler.RegisterRoutes(app)
