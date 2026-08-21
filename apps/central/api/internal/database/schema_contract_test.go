@@ -13,6 +13,7 @@ import (
 	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
+	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
@@ -122,6 +123,10 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			WebhookID: wh.ID, EventType: "user.created", Payload: "{}",
 			StatusCode: 200, Attempt: 1, DeliveredAt: time.Now(), Success: true,
 		}, "webhook_deliveries"},
+		{"service_client", &serviceclient.ServiceClient{
+			TenantID: tenantID, HydraClientID: "authway_svc_" + uuid.New().String()[:8],
+			Name: "contract", GrantedScopes: []string{"admin.clients:write"},
+		}, "service_clients"},
 		{"user_claim", &claims.UserClaim{
 			UserID: userID, TenantID: tenantID,
 			ClaimKey: "contract-" + uuid.New().String()[:8], ClaimValue: map[string]any{"v": true},
@@ -177,7 +182,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 	tables := []string{
 		"invitations", "impersonation_sessions", "magic_link_tokens",
 		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
-		"password_resets", "email_verifications",
+		"password_resets", "email_verifications", "service_clients",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
 	for _, table := range tables {
