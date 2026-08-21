@@ -218,7 +218,7 @@ func (s *service) GetStatus(userID uuid.UUID) (*MFAStatusResponse, error) {
 func generateRecoveryCodes(count int) ([]string, []string, error) {
 	codes := make([]string, count)
 	hashes := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		bytes := make([]byte, 10)
 		if _, err := rand.Read(bytes); err != nil {
 			return nil, nil, err
@@ -226,7 +226,11 @@ func generateRecoveryCodes(count int) ([]string, []string, error) {
 		encoded := base32.StdEncoding.EncodeToString(bytes)[:12]
 		code := fmt.Sprintf("%s-%s-%s", encoded[:4], encoded[4:8], encoded[8:12])
 		codes[i] = code
-		hashes[i] = hashCode(code)
+		// Hash the same normalized form VerifyRecoveryCode compares against
+		// (dashes stripped, uppercased) — hashing the dashed display form here
+		// made every recovery code unverifiable, since normalizeCode strips
+		// the dashes before hashing the user's input.
+		hashes[i] = hashCode(normalizeCode(code))
 	}
 	return codes, hashes, nil
 }

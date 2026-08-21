@@ -178,6 +178,25 @@
   shared `pkg/tokenhash` digest the other four use, so an invitation already
   in someone's inbox keeps working across the upgrade.
 
+- **Webhook delivery attempts were never actually recorded.** The delivery
+  log table was missing two columns the application writes on every attempt
+  (whether it succeeded, and the error if not), so every insert into that
+  log failed — silently, since the write path did not check the error. The
+  webhooks themselves still reached their target URL correctly; only the
+  audit trail of past attempts was affected. Columns added via migration;
+  newly regression-tested (delivery success, failure, and signature
+  verification, plus a schema-contract check that would have caught this
+  before it shipped).
+
+- **MFA recovery codes could never actually be redeemed.** A recovery code is
+  generated and shown to the user in a dashed, grouped format, but stored
+  hashed in that same dashed form; verifying a submitted code first strips
+  the dashes before hashing it, so the two hashes never matched regardless of
+  what the user typed — every account that ever fell back to a recovery code
+  after losing its authenticator was rejected. Newly regression-tested
+  end to end (issue, verify, single-use consumption, regeneration); generation
+  now hashes the same normalized form verification already used.
+
 ### Fixed
 
 - **`@authway/react` dropped OAuth error redirects on the floor.** The

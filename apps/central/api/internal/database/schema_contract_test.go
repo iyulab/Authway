@@ -79,6 +79,18 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 	tenantID, userID := fixtures(t, db)
 	future := time.Now().Add(time.Hour)
 
+	// WebhookDelivery's FK needs a real webhook row (its own model is already
+	// covered below via the "webhook" case, seeded separately here so this
+	// case can run independently of table ordering).
+	wh := &webhook.Webhook{
+		TenantID: tenantID, Name: "contract-delivery", URL: "https://example.com/hook",
+		Events: []string{"user.created"}, Secret: "s", Enabled: true,
+	}
+	if err := db.Create(wh).Error; err != nil {
+		t.Fatalf("seed webhook for delivery contract case: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM webhooks WHERE id = ?`, wh.ID) })
+
 	cases := []struct {
 		name  string
 		row   any
@@ -102,6 +114,14 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			TenantID: tenantID, Name: "contract", URL: "https://example.com/hook",
 			Events: []string{"user.created"}, Secret: "s", Enabled: true,
 		}, "webhooks"},
+		// Regression case for migration 021: Success/ErrorMessage map to
+		// columns migration 006 never created, so every delivery insert
+		// failed with SQLSTATE 42703 — undetected because this model was
+		// never enrolled here (only the parent Webhook was).
+		{"webhook_delivery", &webhook.WebhookDelivery{
+			WebhookID: wh.ID, EventType: "user.created", Payload: "{}",
+			StatusCode: 200, Attempt: 1, DeliveredAt: time.Now(), Success: true,
+		}, "webhook_deliveries"},
 		{"user_claim", &claims.UserClaim{
 			UserID: userID, TenantID: tenantID,
 			ClaimKey: "contract-" + uuid.New().String()[:8], ClaimValue: map[string]any{"v": true},
@@ -156,7 +176,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 
 	tables := []string{
 		"invitations", "impersonation_sessions", "magic_link_tokens",
-		"webhooks", "user_claims", "audit_logs",
+		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
 		"password_resets", "email_verifications",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
