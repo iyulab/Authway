@@ -4,7 +4,9 @@ import (
 	"crypto/subtle"
 	"strings"
 
+	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tokenhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -238,11 +240,9 @@ func (h *Handler) createAdminAuthHandler() fiber.Handler {
 // non-development environment — this is enforced at config validation.
 func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Fail-closed: missing key indicates misconfiguration.
 		if h.apiKey == "" {
 			h.logger.Warn("AdminConsoleAuth: refusing request — admin API key not configured",
-				zap.String("path", c.Path()),
-			)
+				zap.String("path", c.Path()))
 			h.logAuthFailure(c, "api_key_not_configured", "admin API key missing — fail-closed")
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
@@ -251,73 +251,132 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 
 		token := h.extractToken(c)
 		if token == "" {
-			h.logger.Warn("AdminConsoleAuth: No token provided",
-				zap.String("path", c.Path()),
-			)
+			h.logger.Warn("AdminConsoleAuth: No token provided", zap.String("path", c.Path()))
 			h.logAuthFailure(c, "no_token", "missing or malformed Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "No authorization token provided",
 			})
 		}
 
-		// Programmatic auth: long-lived API key match (constant-time).
-		if subtle.ConstantTimeCompare([]byte(token), []byte(h.apiKey)) == 1 {
-			c.Locals("admin_authenticated", true)
-			c.Locals("is_admin_console", true)
-			c.Locals("auth_method", "api_key")
-			// Actor identity for audit logging (api key carries no user — emit
-			// a non-reversible key fingerprint so multiple provisioned keys
-			// remain distinguishable in audit_logs without leaking secrets).
-			c.Locals("actor_type", "api_key")
-			c.Locals("actor_key_hint", apiKeyHint(h.apiKey))
-
-			// Extract tenant_id from query parameter or header
-			tenantID := c.Query("tenant_id")
-			if tenantID == "" {
-				tenantID = c.Get("X-Tenant-ID")
-			}
-			if tenantID != "" {
-				c.Locals("tenant_id", tenantID)
-			}
-
-			return c.Next()
-		}
-
-		// Session-token auth: Admin Console UI login.
-		valid, err := h.service.ValidateToken(token)
-		if err != nil {
-			h.logger.Error("Failed to validate admin token", zap.Error(err))
+		ok, sessionErr := h.checkAdminAuth(c, token)
+		if sessionErr != nil {
+			h.logger.Error("Failed to validate admin token", zap.Error(sessionErr))
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to validate session",
 			})
 		}
-
-		if !valid {
-			h.logger.Warn("AdminConsoleAuth: Token invalid or expired",
-				zap.String("path", c.Path()),
-			)
+		if !ok {
+			h.logger.Warn("AdminConsoleAuth: Token invalid or expired", zap.String("path", c.Path()))
 			h.logAuthFailure(c, "invalid_or_expired_session", "token rejected by session validator (also covers api_key mismatch)")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid or expired session",
 			})
 		}
-		c.Locals("auth_method", "session")
-		// Admin session is a shared-password login (see AdminSession model) —
-		// no per-user identity is stored. Mark actor_type so audit logs can
-		// distinguish console-driven changes from api_key-driven ones.
-		c.Locals("actor_type", "admin_session")
+		return c.Next()
+	}
+}
 
-		// Extract tenant_id from query parameter or header
-		tenantID := c.Query("tenant_id")
-		if tenantID == "" {
-			tenantID = c.Get("X-Tenant-ID")
-		}
-		if tenantID != "" {
-			c.Locals("tenant_id", tenantID)
-		}
-
+// checkAdminAuth attempts admin API-key or session-token auth for token,
+// WITHOUT writing any response — callers own the response for both the
+// failure and success case, so this can be composed into GetClientAuth's
+// three-way fallback as well as GetAdminConsoleAuth's two-way check. ok=true
+// means c.Locals was already populated (admin_authenticated, is_admin_console,
+// auth_method, actor_type, and tenant_id if present in the request) and it is
+// safe for the caller to call c.Next(). A non-nil error means the session
+// validator itself failed (infra error, not "invalid token") — callers must
+// surface that as 500, not 401.
+func (h *Handler) checkAdminAuth(c *fiber.Ctx, token string) (ok bool, err error) {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.apiKey)) == 1 {
 		c.Locals("admin_authenticated", true)
 		c.Locals("is_admin_console", true)
+		c.Locals("auth_method", "api_key")
+		c.Locals("actor_type", "api_key")
+		c.Locals("actor_key_hint", apiKeyHint(h.apiKey))
+		h.setTenantIDLocal(c)
+		return true, nil
+	}
+
+	valid, err := h.service.ValidateToken(token)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		return false, nil
+	}
+	c.Locals("auth_method", "session")
+	c.Locals("actor_type", "admin_session")
+	h.setTenantIDLocal(c)
+	c.Locals("admin_authenticated", true)
+	c.Locals("is_admin_console", true)
+	return true, nil
+}
+
+func (h *Handler) setTenantIDLocal(c *fiber.Ctx) {
+	tenantID := c.Query("tenant_id")
+	if tenantID == "" {
+		tenantID = c.Get("X-Tenant-ID")
+	}
+	if tenantID != "" {
+		c.Locals("tenant_id", tenantID)
+	}
+}
+
+// GetClientAuth returns middleware for routes that accept EITHER admin auth
+// (API key / session — see GetAdminConsoleAuth) OR a scoped service_client
+// credential validated via Hydra token introspection. requiredScope gates
+// which scope a service_client's granted_scopes must include (e.g.
+// "admin.clients:write"); the admin-auth legs are exempt from this check —
+// an admin caller already has full access.
+//
+// Auth is attempted cheap-to-expensive: constant-time API-key compare,
+// then admin session lookup, then (only if both miss) a Hydra introspection
+// call — so the common admin-caller path costs nothing extra.
+func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Service, requiredScope string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if h.apiKey == "" {
+			h.logger.Warn("GetClientAuth: refusing request — admin API key not configured",
+				zap.String("path", c.Path()))
+			h.logAuthFailure(c, "api_key_not_configured", "admin API key missing — fail-closed")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
+			})
+		}
+
+		token := h.extractToken(c)
+		if token == "" {
+			h.logAuthFailure(c, "no_token", "missing or malformed Authorization header")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "No authorization token provided",
+			})
+		}
+
+		if ok, err := h.checkAdminAuth(c, token); err != nil {
+			h.logger.Error("Failed to validate admin token", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to validate session"})
+		} else if ok {
+			return c.Next()
+		}
+
+		introspectResp, err := hydraClient.IntrospectToken(token)
+		if err != nil || !introspectResp.Active || introspectResp.ClientID == "" || introspectResp.ClientID != introspectResp.Subject {
+			h.logAuthFailure(c, "invalid_credential", "token rejected by api key, admin session, and service-client introspection")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired session"})
+		}
+
+		sc, err := svc.GetByHydraClientID(introspectResp.ClientID)
+		if err != nil || sc.IsRevoked() {
+			h.logAuthFailure(c, "unknown_or_revoked_service_client", "hydra_client_id not found in service_clients, or revoked")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired session"})
+		}
+		if !sc.HasScope(requiredScope) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insufficient scope"})
+		}
+
+		c.Locals("admin_authenticated", false)
+		c.Locals("is_admin_console", false)
+		c.Locals("auth_method", "service_client")
+		c.Locals("actor_type", "service_client")
+		c.Locals("tenant_id", sc.TenantID.String())
 		return c.Next()
 	}
 }

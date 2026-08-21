@@ -2,11 +2,17 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
+	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/serviceclient"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -211,6 +217,163 @@ func TestAdminConsoleAuth_LogsAuditOnFailure(t *testing.T) {
 				if got, _ := e.Details["tenant_id_attempted"].(string); got != tc.tenantHeader {
 					t.Errorf("tenant_id_attempted: want %q, got %q", tc.tenantHeader, got)
 				}
+			}
+		})
+	}
+}
+
+func TestGetClientAuth_AcceptsExistingAdminAPIKey(t *testing.T) {
+	h := newTestHandler("api-key-xyz", nil)
+	app := fiber.New()
+	app.Get("/protected", h.GetClientAuth(nil, nil, "admin.clients:write"), func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer api-key-xyz")
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200 for a valid admin API key", resp.StatusCode)
+	}
+}
+
+func TestGetClientAuth_RejectsGarbageToken(t *testing.T) {
+	h := newTestHandler("api-key-xyz", nil)
+	app := fiber.New()
+	// hydraClient points at an address nothing listens on — IntrospectToken
+	// must fail closed (return an error), not panic or hang.
+	app.Get("/protected", h.GetClientAuth(hydra.NewClient("http://127.0.0.1:1"), nil, "admin.clients:write"), func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer garbage-token")
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for a token that is neither the API key, a valid session, nor introspectable", resp.StatusCode)
+	}
+}
+
+// fakeServiceClientService is a minimal serviceclient.Service test double.
+// Only GetByHydraClientID is consulted by GetClientAuth; Create and Revoke
+// are never called on this path.
+type fakeServiceClientService struct {
+	byHydraClientID map[string]*serviceclient.ServiceClient
+}
+
+func (f *fakeServiceClientService) Create(tenantID uuid.UUID, req *serviceclient.CreateServiceClientRequest) (*serviceclient.ServiceClient, *serviceclient.ClientCredentials, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+
+func (f *fakeServiceClientService) GetByHydraClientID(hydraClientID string) (*serviceclient.ServiceClient, error) {
+	sc, ok := f.byHydraClientID[hydraClientID]
+	if !ok {
+		return nil, fmt.Errorf("service client not found")
+	}
+	return sc, nil
+}
+
+func (f *fakeServiceClientService) Revoke(id uuid.UUID) error {
+	return fmt.Errorf("not implemented")
+}
+
+// newFakeHydraIntrospectServer returns an httptest server that always
+// answers /admin/oauth2/introspect with an active introspection response for
+// clientID, mirroring Hydra's client_credentials convention (verified in
+// Task 3) that sub == client_id for a client_credentials-grant token.
+func newFakeHydraIntrospectServer(t *testing.T, clientID string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(hydra.IntrospectResponse{
+			Active:   true,
+			Subject:  clientID,
+			ClientID: clientID,
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestGetClientAuth_ServiceClient covers the four success/rejection
+// branches of the scoped-service-client introspection path beyond the
+// introspection-error case already covered by
+// TestGetClientAuth_RejectsGarbageToken: correctly-scoped success, an
+// insufficient-scope grant, a revoked credential, and a client_id with no
+// matching service_clients row.
+func TestGetClientAuth_ServiceClient(t *testing.T) {
+	const requiredScope = "admin.clients:write"
+	const clientID = "authway_svc_test-client"
+
+	revokedAt := time.Now()
+
+	cases := []struct {
+		name       string
+		svc        *fakeServiceClientService
+		wantStatus int
+	}{
+		{
+			name: "active_found_correctly_scoped",
+			svc: &fakeServiceClientService{byHydraClientID: map[string]*serviceclient.ServiceClient{
+				clientID: {
+					ID:            uuid.New(),
+					TenantID:      uuid.New(),
+					HydraClientID: clientID,
+					GrantedScopes: []string{requiredScope},
+				},
+			}},
+			wantStatus: fiber.StatusOK,
+		},
+		{
+			name: "active_found_insufficient_scope",
+			svc: &fakeServiceClientService{byHydraClientID: map[string]*serviceclient.ServiceClient{
+				clientID: {
+					ID:            uuid.New(),
+					TenantID:      uuid.New(),
+					HydraClientID: clientID,
+					GrantedScopes: []string{"some.other.scope"},
+				},
+			}},
+			wantStatus: fiber.StatusForbidden,
+		},
+		{
+			name: "active_found_revoked",
+			svc: &fakeServiceClientService{byHydraClientID: map[string]*serviceclient.ServiceClient{
+				clientID: {
+					ID:            uuid.New(),
+					TenantID:      uuid.New(),
+					HydraClientID: clientID,
+					GrantedScopes: []string{requiredScope},
+					RevokedAt:     &revokedAt,
+				},
+			}},
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "active_not_found",
+			svc:        &fakeServiceClientService{byHydraClientID: map[string]*serviceclient.ServiceClient{}},
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hydraSrv := newFakeHydraIntrospectServer(t, clientID)
+
+			h := newTestHandler("api-key-xyz", nil)
+			app := fiber.New()
+			app.Get("/protected", h.GetClientAuth(hydra.NewClient(hydraSrv.URL), tc.svc, requiredScope), func(c *fiber.Ctx) error {
+				return c.SendStatus(fiber.StatusOK)
+			})
+
+			req := httptest.NewRequest("GET", "/protected", nil)
+			req.Header.Set("Authorization", "Bearer anything")
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("app.Test: %v", err)
+			}
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
 			}
 		})
 	}
