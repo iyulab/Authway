@@ -110,6 +110,7 @@ func (f *fakeUserService) UpdatePassword(uuid.UUID, string) error    { return ni
 // GetByClientID is exercised by AuthHandler.Login.
 type fakeClientService struct {
 	byClientID map[string]*client.Client
+	createFn   func(*client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error)
 }
 
 func newFakeClientService(clients ...*client.Client) *fakeClientService {
@@ -120,7 +121,10 @@ func newFakeClientService(clients ...*client.Client) *fakeClientService {
 	return f
 }
 
-func (f *fakeClientService) Create(*client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error) {
+func (f *fakeClientService) Create(req *client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error) {
+	if f.createFn != nil {
+		return f.createFn(req)
+	}
 	return nil, nil, fmt.Errorf("not implemented")
 }
 func (f *fakeClientService) GetByID(uuid.UUID) (*client.Client, error) {

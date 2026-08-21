@@ -271,6 +271,40 @@ type CreateClientRequest struct {
 	ApplePrivateKey   string `json:"apple_private_key"`
 }
 
+// ScopedCreateClientRequest is the reduced client-creation surface exposed
+// to service_client credentials (pkg/serviceclient) via the GetClientAuth
+// middleware. It deliberately excludes every field a full admin caller can
+// set — Apple/Google/GitHub/Microsoft secrets, MFA, logout policy, custom
+// client_id/client_secret — so a leaked service credential cannot escalate
+// beyond "create an OAuth client with these public-facing settings, in the
+// tenant the credential is scoped to." GrantTypes additionally excludes
+// client_credentials/implicit: a scoped credential must never be able to
+// mint another M2M credential.
+type ScopedCreateClientRequest struct {
+	Name           string   `json:"name" validate:"required"`
+	Public         bool     `json:"public"`
+	RedirectURIs   []string `json:"redirect_uris" validate:"omitempty,dive,url"`
+	GrantTypes     []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token"`
+	Scopes         []string `json:"scopes" validate:"required,min=1"`
+	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
+}
+
+// ToCreateClientRequest maps the whitelisted fields into the full request
+// client.Service.Create accepts, forcing tenantID from the caller's
+// validated scope (never the request body) and leaving every
+// non-whitelisted field at its zero value.
+func (r *ScopedCreateClientRequest) ToCreateClientRequest(tenantID string) *CreateClientRequest {
+	return &CreateClientRequest{
+		TenantID:       tenantID,
+		Name:           r.Name,
+		Public:         r.Public,
+		RedirectURIs:   r.RedirectURIs,
+		GrantTypes:     r.GrantTypes,
+		Scopes:         r.Scopes,
+		AllowedOrigins: r.AllowedOrigins,
+	}
+}
+
 // UpdateClientRequest represents the request to update an OAuth client
 type UpdateClientRequest struct {
 	Name         string   `json:"name"`

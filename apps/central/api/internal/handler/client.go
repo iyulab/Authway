@@ -103,8 +103,17 @@ func (h *ClientHandler) List(c *fiber.Ctx) error {
 	})
 }
 
-// Create handles creating a new OAuth client
+// Create handles creating a new OAuth client. actor_type == "service_client"
+// (set by admin.Handler.GetClientAuth) routes to createScoped, which accepts
+// only a whitelisted field subset and forces tenant_id from the validated
+// credential; every other caller (admin API key / admin session — no
+// actor_type Local, or actor_type != "service_client") keeps the existing
+// full-request behavior unchanged.
 func (h *ClientHandler) Create(c *fiber.Ctx) error {
+	if actorType, _ := c.Locals("actor_type").(string); actorType == "service_client" {
+		return h.createScoped(c)
+	}
+
 	var req client.CreateClientRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
@@ -138,6 +147,52 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 		"public":        newClient.Public,
 		"grant_types":   []string(newClient.GrantTypes),
 		"redirect_uris": []string(newClient.RedirectURIs),
+	})
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"message":     "Client created successfully",
+		"client":      newClient.ToPublic(),
+		"credentials": credentials,
+	})
+}
+
+// createScoped is the service_client branch of Create — see the doc comment
+// above.
+func (h *ClientHandler) createScoped(c *fiber.Ctx) error {
+	var scoped client.ScopedCreateClientRequest
+	if err := c.BodyParser(&scoped); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+	if err := h.validator.Struct(&scoped); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+	}
+
+	tenantID, _ := c.Locals("tenant_id").(string)
+	req := scoped.ToCreateClientRequest(tenantID)
+
+	newClient, credentials, err := h.services.ClientService.Create(req)
+	if err != nil {
+		if cerr, ok := err.(*client.ConfigError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": cerr.Message,
+				"code":  cerr.Code,
+				"field": cerr.Field,
+				"hint":  cerr.Hint,
+			})
+		}
+		h.logger.Error("Failed to create client (scoped)", zap.Error(err), zap.String("name", scoped.Name), zap.String("tenant_id", tenantID))
+		return fiber.NewError(fiber.StatusInternalServerError, apierror.Message(err, "failed to create client"))
+	}
+
+	h.logger.Info("Client created successfully via service_client", zap.String("client_id", newClient.ClientID), zap.String("tenant_id", tenantID))
+
+	h.logAudit(c, newClient.TenantID, audit.ActionClientCreated, newClient.ID.String(), map[string]any{
+		"client_id":     newClient.ClientID,
+		"name":          newClient.Name,
+		"public":        newClient.Public,
+		"grant_types":   []string(newClient.GrantTypes),
+		"redirect_uris": []string(newClient.RedirectURIs),
+		"actor_type":    "service_client",
 	})
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
