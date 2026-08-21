@@ -76,7 +76,7 @@ func TestCreate_RegistersInHydraAndDB(t *testing.T) {
 	svc := NewService(db, zap.NewNop(), hydraClient)
 
 	sc, creds, err := svc.Create(tenantID, &CreateServiceClientRequest{
-		Name: "vibebase-provisioning", Scopes: []string{"admin.clients:write"},
+		Name: "scoped-service-provisioning", Scopes: []string{"admin.clients:write"},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)

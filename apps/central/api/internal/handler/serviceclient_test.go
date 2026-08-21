@@ -32,7 +32,7 @@ func (f *fakeServiceClientService) Revoke(id uuid.UUID) error {
 
 func TestServiceClientHandler_Create_ReturnsCredentialsOnce(t *testing.T) {
 	tenantID := uuid.New()
-	wantSC := &serviceclient.ServiceClient{ID: uuid.New(), TenantID: tenantID, Name: "vibebase", GrantedScopes: []string{"admin.clients:write"}}
+	wantSC := &serviceclient.ServiceClient{ID: uuid.New(), TenantID: tenantID, Name: "scoped-svc", GrantedScopes: []string{"admin.clients:write"}}
 	wantCreds := &serviceclient.ClientCredentials{ClientID: "authway_svc_abc", ClientSecret: "s3cr3t"}
 
 	fake := &fakeServiceClientService{
@@ -48,7 +48,7 @@ func TestServiceClientHandler_Create_ReturnsCredentialsOnce(t *testing.T) {
 	app := fiber.New()
 	app.Post("/api/v1/tenants/:id/service-clients", h.Create)
 
-	body, _ := json.Marshal(map[string]any{"name": "vibebase", "scopes": []string{"admin.clients:write"}})
+	body, _ := json.Marshal(map[string]any{"name": "scoped-svc", "scopes": []string{"admin.clients:write"}})
 	req := httptest.NewRequest("POST", "/api/v1/tenants/"+tenantID.String()+"/service-clients", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
