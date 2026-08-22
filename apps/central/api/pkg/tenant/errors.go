@@ -21,4 +21,8 @@ var (
 
 	// ErrHasClients is returned when attempting to delete a tenant with existing clients
 	ErrHasClients = errors.New("cannot delete tenant with existing clients")
+
+	// ErrHasServiceClients is returned when attempting to delete a tenant with
+	// active (non-revoked) scoped service_client credentials
+	ErrHasServiceClients = errors.New("cannot delete tenant with active service clients")
 )

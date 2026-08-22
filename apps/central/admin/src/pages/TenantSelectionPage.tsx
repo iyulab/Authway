@@ -7,10 +7,10 @@ import {
   CheckIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi, Tenant } from '@/lib/api'
+import { tenantsApi, Tenant, TenantSettings } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
-import { Button, Modal, Input } from '@/components/ui'
+import { Button, Modal, Input, Checkbox } from '@/components/ui'
 
 const TenantSelectionPage: React.FC = () => {
   const queryClient = useQueryClient()
@@ -20,6 +20,9 @@ const TenantSelectionPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newTenantName, setNewTenantName] = useState('')
   const [newTenantSlug, setNewTenantSlug] = useState('')
+  // Default (unchecked) is invite-only — the server's own default when
+  // signup_mode is omitted, so leaving this off changes nothing.
+  const [openSignup, setOpenSignup] = useState(false)
 
   // Fetch tenants
   const { data: tenants = [], isLoading } = useQuery({
@@ -32,12 +35,14 @@ const TenantSelectionPage: React.FC = () => {
 
   // Create tenant mutation
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; slug: string }) => tenantsApi.create(data),
+    mutationFn: (data: { name: string; slug: string; settings?: TenantSettings }) =>
+      tenantsApi.create(data),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
       setShowCreateModal(false)
       setNewTenantName('')
       setNewTenantSlug('')
+      setOpenSignup(false)
       // Auto-select the newly created tenant
       setSelectedTenant(response.data)
       toast.success('Tenant created successfully')
@@ -61,7 +66,11 @@ const TenantSelectionPage: React.FC = () => {
       toast.error('Please fill in all fields')
       return
     }
-    createMutation.mutate({ name: newTenantName, slug: newTenantSlug })
+    createMutation.mutate({
+      name: newTenantName,
+      slug: newTenantSlug,
+      ...(openSignup ? { settings: { signup_mode: 'open' } } : {}),
+    })
   }
 
   const handleLogout = () => {
@@ -224,6 +233,14 @@ const TenantSelectionPage: React.FC = () => {
             value={newTenantSlug}
             onChange={(e) => setNewTenantSlug(e.target.value)}
             helperText="URL-friendly identifier (auto-generated from name)"
+          />
+          <Checkbox
+            label="Allow public sign-up"
+            description="Anyone signing in with Google/GitHub/Microsoft/Apple or a magic
+              link is provisioned automatically. Off (default) requires an administrator
+              to invite each address first."
+            checked={openSignup}
+            onChange={(e) => setOpenSignup(e.target.checked)}
           />
           <div className="flex justify-end gap-3 pt-4">
             <Button

@@ -12,7 +12,17 @@
   only create OAuth clients — nothing else — in the one tenant it was
   issued for, and only with a whitelisted field subset (no
   provider-secret, MFA, or logout-policy fields). Revoke via `DELETE
-  .../service-clients/:id`.
+  .../service-clients/:id`, list a tenant's credentials via `GET
+  .../service-clients` (paginated; never returns a secret — the raw
+  secret is shown once, at creation).
+
+- **Per-tenant open sign-up.** Onboarding was invite-only for every tenant,
+  with no way to relax it: a first-time social or magic-link sign-in for an
+  uninvited address was always rejected, which rules out a self-service,
+  public-signup product built on Authway. A tenant can now opt into open
+  sign-up (the admin console's tenant creation form has an "Allow public
+  sign-up" toggle, off by default) — every other tenant keeps the existing
+  invite-only behavior unchanged.
 
 ### Changed
 
@@ -212,6 +222,22 @@
   now hashes the same normalized form verification already used.
 
 ### Fixed
+
+- **Revoking a scoped service credential did not check which tenant it
+  belonged to.** `DELETE .../service-clients/:id` parsed the tenant ID from
+  the URL but never checked it against the credential being revoked, so an
+  admin credential could revoke a different tenant's service credential
+  without error, and the audit trail recorded the caller's tenant rather
+  than the credential's actual owner. Revocation is now scoped to the URL's
+  tenant — a mismatched tenant is reported as not-found.
+
+- **Deleting a tenant did not check for active scoped service credentials.**
+  Tenant deletion already refused to proceed while the tenant still had
+  active users or OAuth clients; a scoped service credential could reach the
+  same state (tenant soft-deleted, credential still working) because it
+  wasn't covered by the same check. Deletion is now blocked while any of the
+  tenant's service credentials remain unrevoked, matching the existing
+  users/clients guards.
 
 - **`@authway/react` dropped OAuth error redirects on the floor.** The
   provider's callback handler only ran when the return URL carried a

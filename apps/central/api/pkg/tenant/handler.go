@@ -242,6 +242,11 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 				"error": "Cannot delete tenant with existing clients",
 			})
 		}
+		if errors.Is(err, ErrHasServiceClients) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "Cannot delete tenant with active service clients",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to delete tenant",
 		})

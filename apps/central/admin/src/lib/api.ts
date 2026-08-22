@@ -98,12 +98,23 @@ export interface Client {
   updated_at: string
 }
 
+export interface TenantSettings {
+  require_email_verification?: boolean
+  password_min_length?: number
+  session_timeout?: number
+  allowed_domains?: string[]
+  // signup_mode: 'invite_only' (default — a first-time sign-in needs a
+  // pending invitation) or 'open' (any address auto-provisions). Absent,
+  // empty, or any other value behaves as 'invite_only'.
+  signup_mode?: 'invite_only' | 'open' | string
+}
+
 export interface Tenant {
   id: string
   name: string
   slug: string
   description?: string
-  settings?: Record<string, any>
+  settings?: TenantSettings
   active: boolean
   created_at: string
   updated_at: string
@@ -215,7 +226,7 @@ export const tenantsApi = {
     name: string
     slug: string
     description?: string
-    settings?: Record<string, any>
+    settings?: TenantSettings
   }) =>
     api.post<Tenant>('/api/v1/tenants', data),
 

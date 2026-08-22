@@ -51,12 +51,19 @@ type Service interface {
 	// client_id extracted from a validated introspection response. Used by
 	// the scoped-service-auth middleware path.
 	GetByHydraClientID(hydraClientID string) (*ServiceClient, error)
+	// ListByTenant returns a tenant's service_client credentials, paginated,
+	// newest first. Never carries a secret — ServiceClient itself has no
+	// secret field; the raw secret exists only transiently in the
+	// ClientCredentials Create returns once.
+	ListByTenant(tenantID uuid.UUID, limit, offset int) ([]*ServiceClient, int64, error)
 	// Revoke marks the credential revoked (blocking every future request
 	// through GetByHydraClientID's caller regardless of Hydra state) and
 	// best-effort deletes the underlying Hydra client so no new token can be
 	// minted against it. The DB write is authoritative and always applied
 	// even if the Hydra delete fails — see the comment on Revoke below.
-	Revoke(id uuid.UUID) error
+	// tenantID scopes the lookup: a service_client belonging to a different
+	// tenant is reported not-found, never revoked.
+	Revoke(tenantID, id uuid.UUID) error
 }
 
 type service struct {
@@ -137,9 +144,24 @@ func (s *service) GetByHydraClientID(hydraClientID string) (*ServiceClient, erro
 	return &sc, nil
 }
 
-func (s *service) Revoke(id uuid.UUID) error {
+func (s *service) ListByTenant(tenantID uuid.UUID, limit, offset int) ([]*ServiceClient, int64, error) {
+	var scs []*ServiceClient
+	var total int64
+
+	if err := s.db.Model(&ServiceClient{}).Where("tenant_id = ?", tenantID).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count service clients: %w", err)
+	}
+
+	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&scs).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list service clients: %w", err)
+	}
+
+	return scs, total, nil
+}
+
+func (s *service) Revoke(tenantID, id uuid.UUID) error {
 	var sc ServiceClient
-	if err := s.db.First(&sc, "id = ?", id).Error; err != nil {
+	if err := s.db.Where("tenant_id = ?", tenantID).First(&sc, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("service client not found: %w", err)
 	}
 

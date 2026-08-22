@@ -19,16 +19,19 @@ type EmailSender interface {
 	SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error
 }
 
-// InvitationGate reports whether an email has been invited into a tenant.
+// InvitationGate reports whether a magic-link sign-in may create a new
+// account for (tenantID, email) — invited, or the tenant allows open signup.
 //
-// Onboarding is invitation-only (decision D-a/B), but this endpoint is public
-// and unauthenticated: without a gate, anyone who knows a tenant id could send
-// themselves a magic link and be provisioned into that tenant on verify — i.e.
-// public self-registration under another name. Because invitations are keyed on
-// (tenant_id, email), checking one here also closes the arbitrary-tenant_id
-// hole: an attacker-chosen tenant has no matching invitation.
+// Onboarding is invitation-only by default (decision D-a/B), but this
+// endpoint is public and unauthenticated: without a gate, anyone who knows a
+// tenant id could send themselves a magic link and be provisioned into that
+// tenant on verify — i.e. public self-registration under another name. A
+// tenant may opt into open signup (tenant.SignupModeOpen); every other
+// tenant keeps the invite-only default, and because invitations are keyed on
+// (tenant_id, email), that default also closes the arbitrary-tenant_id hole:
+// an attacker-chosen tenant has no matching invitation.
 type InvitationGate interface {
-	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 }
 
 // Service provides passwordless authentication functionality
@@ -80,12 +83,12 @@ func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
 		s.logger.Error("Invitation gate not wired; denying magic-link provisioning")
 		return false
 	}
-	invited, err := s.invitations.HasValidInvitation(tenantID, email)
+	allowed, err := s.invitations.MayProvision(tenantID, email)
 	if err != nil {
-		s.logger.Error("Invitation check failed; denying provisioning", zap.Error(err))
+		s.logger.Error("Provisioning check failed; denying provisioning", zap.Error(err))
 		return false
 	}
-	return invited
+	return allowed
 }
 
 func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, ipAddress, userAgent string) (*MagicLinkResponse, error) {

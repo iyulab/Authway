@@ -273,8 +273,12 @@ func (f *fakeServiceClientService) GetByHydraClientID(hydraClientID string) (*se
 	return sc, nil
 }
 
-func (f *fakeServiceClientService) Revoke(id uuid.UUID) error {
+func (f *fakeServiceClientService) Revoke(tenantID, id uuid.UUID) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (f *fakeServiceClientService) ListByTenant(tenantID uuid.UUID, limit, offset int) ([]*serviceclient.ServiceClient, int64, error) {
+	return nil, 0, fmt.Errorf("not implemented")
 }
 
 // newFakeHydraIntrospectServer returns an httptest server that always

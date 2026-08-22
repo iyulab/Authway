@@ -5,18 +5,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// InvitationGate reports whether an email has been invited into a tenant.
+// InvitationGate reports whether a social sign-in may create a new account
+// for (tenantID, email) — invited, or the tenant allows open signup.
 //
-// Onboarding is invitation-only (decision D-a/B), and social login was the last
-// path that ignored it: a first-time OAuth sign-in provisioned an account for
-// whoever completed the flow, so anyone with a Google account could join a
-// tenant they were never invited to. Just-in-time provisioning is normal for a
-// general-purpose IdP, but Authway is an internal identity provider whose
-// membership is supposed to be by invitation only.
+// Onboarding is invitation-only by default (decision D-a/B), and social login
+// was the last path that ignored it: a first-time OAuth sign-in provisioned
+// an account for whoever completed the flow, so anyone with a Google account
+// could join a tenant they were never invited to. A tenant may opt into open
+// signup (tenant.SignupModeOpen); every other tenant keeps the invite-only
+// default. Just-in-time provisioning is normal for a general-purpose IdP,
+// but Authway defaults to invitation-only membership.
 //
-// Satisfied by invitation.Service.
+// Satisfied by invitation.Service and invitation.Gate.
 type InvitationGate interface {
-	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 }
 
 // mayProvision reports whether a social sign-in may create a new account. It
@@ -31,12 +33,12 @@ func mayProvision(gate InvitationGate, logger *zap.Logger, tenantID uuid.UUID, e
 		logger.Error("Invitation gate not wired; denying social provisioning")
 		return false
 	}
-	invited, err := gate.HasValidInvitation(tenantID, email)
+	allowed, err := gate.MayProvision(tenantID, email)
 	if err != nil {
-		logger.Error("Invitation check failed; denying social provisioning", zap.Error(err))
+		logger.Error("Provisioning check failed; denying social provisioning", zap.Error(err))
 		return false
 	}
-	return invited
+	return allowed
 }
 
 // ErrNotInvited is returned when a social sign-in would have to create an

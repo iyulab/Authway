@@ -424,6 +424,7 @@ func main() {
 	// this mints new M2M credentials. The credentials it mints are what
 	// clientCreateAuth (above) accepts on POST /clients.
 	v1.Post("/tenants/:id/service-clients", adminAuth, serviceClientHandler.Create)
+	v1.Get("/tenants/:id/service-clients", adminAuth, serviceClientHandler.List)
 	v1.Delete("/tenants/:id/service-clients/:service_client_id", adminAuth, serviceClientHandler.Revoke)
 
 	// Admin Console routes

@@ -33,7 +33,26 @@ type TenantSettings struct {
 	PasswordMinLength        int      `json:"password_min_length"`
 	SessionTimeout           int      `json:"session_timeout"` // in minutes
 	AllowedDomains           []string `json:"allowed_domains"`
+	// SignupMode governs whether a first-time social/magic-link sign-in may
+	// auto-provision an account for this tenant. Checked by
+	// invitation.Gate.MayProvision, whitelist-style: only the literal value
+	// SignupModeOpen relaxes the invite-only default, so a missing key
+	// (every tenant created before this field existed), an empty string, or
+	// any unrecognized value all resolve to the safe invite-only behavior
+	// with no separate validation required.
+	SignupMode string `json:"signup_mode"`
 }
+
+const (
+	// SignupModeInviteOnly is the default: a first-time sign-in may only
+	// create an account for an address that already holds a valid
+	// invitation into this tenant.
+	SignupModeInviteOnly = "invite_only"
+	// SignupModeOpen allows a first-time social/magic-link sign-in to
+	// auto-provision an account for any address, bypassing the invitation
+	// check — for tenants running a public, self-service signup flow.
+	SignupModeOpen = "open"
+)
 
 // Scan implements sql.Scanner for TenantSettings (JSONB support)
 func (s *TenantSettings) Scan(value any) error {
@@ -76,17 +95,21 @@ func (t *Tenant) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// PublicTenant returns tenant data safe for public consumption
+// PublicTenant returns tenant data safe for public consumption. Settings
+// carries nothing sensitive (no secrets — verification/password/session/
+// domain/signup policy only), so it is included in full rather than
+// re-filtered field by field.
 type PublicTenant struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Slug         string    `json:"slug"`
-	Description  string    `json:"description"`
-	Logo         string    `json:"logo"`
-	PrimaryColor string    `json:"primary_color"`
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           uuid.UUID      `json:"id"`
+	Name         string         `json:"name"`
+	Slug         string         `json:"slug"`
+	Description  string         `json:"description"`
+	Settings     TenantSettings `json:"settings"`
+	Logo         string         `json:"logo"`
+	PrimaryColor string         `json:"primary_color"`
+	Active       bool           `json:"active"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 // ToPublic converts Tenant to PublicTenant
@@ -96,6 +119,7 @@ func (t *Tenant) ToPublic() PublicTenant {
 		Name:         t.Name,
 		Slug:         t.Slug,
 		Description:  t.Description,
+		Settings:     t.Settings,
 		Logo:         t.Logo,
 		PrimaryColor: t.PrimaryColor,
 		Active:       t.Active,

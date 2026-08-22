@@ -171,6 +171,20 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 		return ErrHasClients
 	}
 
+	// Check if tenant has active (non-revoked) scoped service_client
+	// credentials. These are the same kind of standing access ErrHasClients
+	// guards against — soft-deleting the tenant here without also revoking
+	// them would leave a working credential for a tenant that no longer
+	// admin-manages it (the create-time existence check other packages run
+	// is a raw `active = true` query that a soft delete alone doesn't clear).
+	var serviceClientCount int64
+	if err := s.db.Table("service_clients").Where("tenant_id = ? AND revoked_at IS NULL", id).Count(&serviceClientCount).Error; err != nil {
+		return fmt.Errorf("failed to check service client count: %w", err)
+	}
+	if serviceClientCount > 0 {
+		return ErrHasServiceClients
+	}
+
 	// Soft delete
 	if err := s.db.Delete(tenant).Error; err != nil {
 		return fmt.Errorf("failed to delete tenant: %w", err)

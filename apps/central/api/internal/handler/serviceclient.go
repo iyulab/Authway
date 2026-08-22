@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -62,18 +64,56 @@ func (h *ServiceClientHandler) Create(c *fiber.Ctx) error {
 	})
 }
 
-// Revoke revokes the service_client identified by :service_client_id.
+// List returns the tenant's service_client credentials, paginated. Never
+// includes a secret — ServiceClient carries none; Create is the only place
+// the raw secret is ever exposed, exactly once.
+// Admin-only, for the same reason as Create.
+func (h *ServiceClientHandler) List(c *fiber.Ctx) error {
+	tenantID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+	}
+
+	limit, err := strconv.Atoi(c.Query("limit", "20"))
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset, err := strconv.Atoi(c.Query("offset", "0"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	scs, total, err := h.service.ListByTenant(tenantID, limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to list service clients", zap.Error(err), zap.String("tenant_id", tenantID.String()))
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve service clients")
+	}
+
+	return c.JSON(fiber.Map{
+		"service_clients": scs,
+		"total":           total,
+		"limit":           limit,
+		"offset":          offset,
+	})
+}
+
+// Revoke revokes the service_client identified by :service_client_id, scoped
+// to the tenant in :id — a service_client belonging to a different tenant is
+// reported not-found rather than revoked.
 // Admin-only, for the same reason as Create.
 func (h *ServiceClientHandler) Revoke(c *fiber.Ctx) error {
+	tenantID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+	}
+
 	id, err := uuid.Parse(c.Params("service_client_id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid service client ID")
 	}
 
-	tenantID, _ := uuid.Parse(c.Params("id"))
-
-	if err := h.service.Revoke(id); err != nil {
-		h.logger.Error("Failed to revoke service client", zap.Error(err), zap.String("id", id.String()))
+	if err := h.service.Revoke(tenantID, id); err != nil {
+		h.logger.Error("Failed to revoke service client", zap.Error(err), zap.String("id", id.String()), zap.String("tenant_id", tenantID.String()))
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "service client not found"))
 	}
 

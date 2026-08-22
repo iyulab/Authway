@@ -1,9 +1,11 @@
 package invitation
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 
+	"authway/apps/central/api/pkg/tenant"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -37,4 +39,34 @@ func (g *Gate) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error
 		return false, fmt.Errorf("failed to check invitations: %w", err)
 	}
 	return count > 0, nil
+}
+
+// MayProvision reports whether a first-time sign-in for (tenantID, email) may
+// create a new account: either the tenant's signup_mode is "open" (any
+// address may auto-provision), or the address holds a valid invitation. This
+// is the single policy decision every auto-provisioning path (social login,
+// magic link) must consult — previously each caller re-implemented it as a
+// direct HasValidInvitation check, which had no way to honor a per-tenant
+// open-signup setting without editing every call site.
+func (g *Gate) MayProvision(tenantID uuid.UUID, email string) (bool, error) {
+	open, err := g.signupIsOpen(tenantID)
+	if err != nil {
+		return false, err
+	}
+	if open {
+		return true, nil
+	}
+	return g.HasValidInvitation(tenantID, email)
+}
+
+// signupIsOpen reads the tenant's settings.signup_mode directly (a scalar
+// JSONB extraction, not a full Settings decode) — Gate depends on nothing
+// but a database read (see the type doc above), and a tenant lookup by ID is
+// the same shape of dependency HasValidInvitation already has.
+func (g *Gate) signupIsOpen(tenantID uuid.UUID) (bool, error) {
+	var mode sql.NullString
+	if err := g.db.Raw(`SELECT settings->>'signup_mode' FROM tenants WHERE id = ?`, tenantID).Scan(&mode).Error; err != nil {
+		return false, fmt.Errorf("failed to check tenant signup mode: %w", err)
+	}
+	return mode.String == tenant.SignupModeOpen, nil
 }

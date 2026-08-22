@@ -184,6 +184,45 @@ func TestUpdateTenant_UpdatesFields(t *testing.T) {
 	}
 }
 
+// TestUpdateTenant_SignupModeRoundTripsThroughToPublic guards the two things
+// that make SignupMode actually usable: UpdateTenant persists it (Settings is
+// a JSONB blob GORM otherwise has no per-field awareness of), and ToPublic
+// — every read path the tenant API has — actually returns it. Without the
+// latter, an operator could set signup_mode but never verify it stuck.
+func TestUpdateTenant_SignupModeRoundTripsThroughToPublic(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db)
+	slug := freshSlug(t)
+
+	tn, err := svc.CreateTenant(newCreateReq(slug))
+	if err != nil {
+		t.Fatalf("CreateTenant: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM tenants WHERE id = ?`, tn.ID) })
+
+	if got := tn.ToPublic().Settings.SignupMode; got != "" {
+		t.Fatalf("SignupMode on a freshly created tenant = %q, want empty (invite-only default)", got)
+	}
+
+	updated, err := svc.UpdateTenant(tn.ID, UpdateTenantRequest{
+		Settings: &TenantSettings{SignupMode: SignupModeOpen},
+	})
+	if err != nil {
+		t.Fatalf("UpdateTenant: %v", err)
+	}
+	if got := updated.ToPublic().Settings.SignupMode; got != SignupModeOpen {
+		t.Fatalf("SignupMode after update = %q, want %q", got, SignupModeOpen)
+	}
+
+	refetched, err := svc.GetTenantByID(tn.ID)
+	if err != nil {
+		t.Fatalf("GetTenantByID: %v", err)
+	}
+	if got := refetched.ToPublic().Settings.SignupMode; got != SignupModeOpen {
+		t.Fatalf("SignupMode after re-fetch = %q, want %q (must persist, not just reflect the in-memory update)", got, SignupModeOpen)
+	}
+}
+
 // TestDefaultTenant_CannotBeDeactivatedOrDeleted guards the two protections
 // UpdateTenant/DeleteTenant carve out for the default tenant — losing either
 // would let an operator accidentally lock every backward-compatible,
@@ -284,10 +323,12 @@ func TestGetDefaultTenant_FallsBackToSlugWhenSeedIDDiffers(t *testing.T) {
 	}
 }
 
-// TestDeleteTenant_BlockedByExistingUsersAndClients guards the two guard
+// TestDeleteTenant_BlockedByExistingUsersAndClients guards the three guard
 // clauses DeleteTenant runs before it will soft-delete a tenant — without
-// them, deleting a tenant orphans its users/clients (tenant_id pointing at a
-// row that no longer resolves through any scoped lookup).
+// them, deleting a tenant orphans its users/clients/service_clients
+// (tenant_id pointing at a row that no longer resolves through any scoped
+// lookup, or — for service_clients — a still-usable credential for a tenant
+// no admin can see or manage anymore).
 func TestDeleteTenant_BlockedByExistingUsersAndClients(t *testing.T) {
 	db := setupPostgres(t)
 	svc := NewService(db)
@@ -330,7 +371,24 @@ func TestDeleteTenant_BlockedByExistingUsersAndClients(t *testing.T) {
 		t.Fatalf("cleanup client: %v", err)
 	}
 
+	scID := uuid.New()
+	if err := db.Exec(
+		`INSERT INTO service_clients (id, tenant_id, hydra_client_id, name) VALUES (?, ?, ?, ?)`,
+		scID, tn.ID, "authway_svc_guard_"+scID.String()[:8], "Guard Service Client",
+	).Error; err != nil {
+		t.Fatalf("seed service client: %v", err)
+	}
+
+	if err := svc.DeleteTenant(tn.ID); !errors.Is(err, ErrHasServiceClients) {
+		t.Fatalf("expected ErrHasServiceClients while an active service client exists, got %v", err)
+	}
+
+	if err := db.Exec(`UPDATE service_clients SET revoked_at = NOW() WHERE id = ?`, scID).Error; err != nil {
+		t.Fatalf("revoke service client: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM service_clients WHERE id = ?`, scID) })
+
 	if err := svc.DeleteTenant(tn.ID); err != nil {
-		t.Fatalf("DeleteTenant (after clearing users and clients): %v", err)
+		t.Fatalf("DeleteTenant (after clearing users, clients, and revoking the service client): %v", err)
 	}
 }

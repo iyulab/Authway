@@ -25,10 +25,14 @@ type Service interface {
 	// system actor (admin API key) rather than a signed-in user.
 	Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error)
 	// HasValidInvitation reports whether (tenantID, email) has a pending,
-	// unexpired invitation. Auto-provisioning paths (magic link, social login)
-	// use this to enforce the invitation-only onboarding policy, which would
-	// otherwise exist only in comments.
+	// unexpired invitation.
 	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+	// MayProvision reports whether a first-time sign-in for (tenantID, email)
+	// may create a new account — the invitation check above, plus the
+	// tenant's signup_mode. Auto-provisioning paths (magic link, social
+	// login) use this to enforce the onboarding policy, which would
+	// otherwise exist only in comments.
+	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 	GetByToken(token string) (*Invitation, error)
 	GetByID(id uuid.UUID) (*Invitation, error)
 	ListByTenant(tenantID uuid.UUID) ([]Invitation, error)
@@ -175,6 +179,11 @@ func (s *service) hydrate(invs ...*Invitation) {
 // implementation, whichever way a caller reaches it.
 func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error) {
 	return NewGate(s.db).HasValidInvitation(tenantID, email)
+}
+
+// MayProvision delegates to Gate, same as HasValidInvitation above.
+func (s *service) MayProvision(tenantID uuid.UUID, email string) (bool, error) {
+	return NewGate(s.db).MayProvision(tenantID, email)
 }
 
 func (s *service) GetByToken(token string) (*Invitation, error) {

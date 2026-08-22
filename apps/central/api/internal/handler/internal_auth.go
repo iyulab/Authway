@@ -212,10 +212,11 @@ func (h *InternalAuthHandler) AuthenticateGoogleUser(c *fiber.Ctx) error {
 	})
 }
 
-// InvitationGate reports whether an email has been invited into a tenant.
-// Satisfied by *invitation.Gate.
+// InvitationGate reports whether a first-time sign-in may create a new
+// account for (tenantID, email) — invited, or the tenant allows open signup.
+// Satisfied by *invitation.Gate and invitation.Service.
 type InvitationGate interface {
-	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
+	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 }
 
 // mayProvision fails closed on a missing gate or a lookup error: a wiring
@@ -225,10 +226,10 @@ func (h *InternalAuthHandler) mayProvision(tenantID uuid.UUID, email string) boo
 		h.logger.Error("Invitation gate not wired; denying social provisioning")
 		return false
 	}
-	invited, err := h.invitations.HasValidInvitation(tenantID, email)
+	allowed, err := h.invitations.MayProvision(tenantID, email)
 	if err != nil {
-		h.logger.Error("Invitation check failed; denying provisioning", zap.Error(err))
+		h.logger.Error("Provisioning check failed; denying provisioning", zap.Error(err))
 		return false
 	}
-	return invited
+	return allowed
 }

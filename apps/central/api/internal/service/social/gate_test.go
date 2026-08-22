@@ -14,7 +14,7 @@ type stubGate struct {
 	calls   int
 }
 
-func (s *stubGate) HasValidInvitation(uuid.UUID, string) (bool, error) {
+func (s *stubGate) MayProvision(uuid.UUID, string) (bool, error) {
 	s.calls++
 	return s.invited, s.err
 }

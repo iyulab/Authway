@@ -122,7 +122,7 @@ func TestRevoke_SetsRevokedAtAndDeletesHydraClient(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM service_clients WHERE id = ?`, sc.ID) })
 
-	if err := svc.Revoke(sc.ID); err != nil {
+	if err := svc.Revoke(tenantID, sc.ID); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
 
@@ -136,5 +136,98 @@ func TestRevoke_SetsRevokedAtAndDeletesHydraClient(t *testing.T) {
 
 	if _, err := hydraClient.GetOAuth2Client(creds.ClientID); err == nil {
 		t.Fatal("expected the Hydra client to be deleted after Revoke, but it still exists")
+	}
+}
+
+func TestListByTenant_ScopedAndPaginated(t *testing.T) {
+	db := setupPostgres(t)
+	tenantID := fixtureTenant(t, db)
+	otherTenantID := fixtureTenant(t, db)
+	hydraClient := hydra.NewClient(testHydraAdminURL())
+	svc := NewService(db, zap.NewNop(), hydraClient)
+
+	for range 3 {
+		sc, _, err := svc.Create(tenantID, &CreateServiceClientRequest{
+			Name: "list-me", Scopes: []string{"admin.clients:write"},
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		t.Cleanup(func(sc *ServiceClient) func() {
+			return func() {
+				hydraClient.DeleteOAuth2Client(sc.HydraClientID)
+				db.Exec(`DELETE FROM service_clients WHERE id = ?`, sc.ID)
+			}
+		}(sc))
+	}
+
+	// A service_client belonging to a different tenant must never appear.
+	other, _, err := svc.Create(otherTenantID, &CreateServiceClientRequest{
+		Name: "other-tenant", Scopes: []string{"admin.clients:write"},
+	})
+	if err != nil {
+		t.Fatalf("Create (other tenant): %v", err)
+	}
+	t.Cleanup(func() {
+		hydraClient.DeleteOAuth2Client(other.HydraClientID)
+		db.Exec(`DELETE FROM service_clients WHERE id = ?`, other.ID)
+	})
+
+	all, total, err := svc.ListByTenant(tenantID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListByTenant: %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("total = %d, want 3", total)
+	}
+	if len(all) != 3 {
+		t.Fatalf("len(all) = %d, want 3", len(all))
+	}
+	for _, sc := range all {
+		if sc.TenantID != tenantID {
+			t.Fatalf("ListByTenant returned a service_client from tenant %v, want only %v", sc.TenantID, tenantID)
+		}
+	}
+
+	page, total, err := svc.ListByTenant(tenantID, 2, 0)
+	if err != nil {
+		t.Fatalf("ListByTenant (paginated): %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("paginated total = %d, want 3 (total ignores limit)", total)
+	}
+	if len(page) != 2 {
+		t.Fatalf("len(page) = %d, want 2", len(page))
+	}
+}
+
+func TestRevoke_WrongTenant_NotFound(t *testing.T) {
+	db := setupPostgres(t)
+	ownerTenantID := fixtureTenant(t, db)
+	otherTenantID := fixtureTenant(t, db)
+	hydraClient := hydra.NewClient(testHydraAdminURL())
+	svc := NewService(db, zap.NewNop(), hydraClient)
+
+	sc, creds, err := svc.Create(ownerTenantID, &CreateServiceClientRequest{
+		Name: "cross-tenant-revoke", Scopes: []string{"admin.clients:write"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() {
+		hydraClient.DeleteOAuth2Client(sc.HydraClientID)
+		db.Exec(`DELETE FROM service_clients WHERE id = ?`, sc.ID)
+	})
+
+	if err := svc.Revoke(otherTenantID, sc.ID); err == nil {
+		t.Fatal("expected Revoke to fail when the service_client belongs to a different tenant")
+	}
+
+	fetched, err := svc.GetByHydraClientID(creds.ClientID)
+	if err != nil {
+		t.Fatalf("GetByHydraClientID: %v", err)
+	}
+	if fetched.IsRevoked() {
+		t.Fatal("expected the service_client to remain unrevoked after a cross-tenant Revoke attempt")
 	}
 }
