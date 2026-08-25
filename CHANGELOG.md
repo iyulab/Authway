@@ -26,6 +26,15 @@
 
 ### Changed
 
+- **Outbound email now sends through Sendway instead of a bespoke Azure Functions
+  gateway.** Production email (verification, password reset, invitation, magic
+  link) moves to [Sendway](https://github.com/iyulab/Sendway), iyulab's own
+  notification-service deployment; the local SMTP fallback used in development is
+  unchanged. Sendway does not support HTML bodies yet, so every email sent through
+  this path is now plain text (it previously included a styled HTML button) —
+  tracked upstream, see the code's `TODO(upstream: ...)` marker in
+  `pkg/email/sendway_service.go`.
+
 - **Relicensed from MIT to Apache License 2.0.** Applies to the whole repo
   going forward, including the published `@authway/client` and
   `@authway/react` npm packages — versions already published under MIT are

@@ -106,11 +106,11 @@ type HydraConfig struct {
 }
 
 type EmailConfig struct {
-	// Azure Functions Email Service (Production)
-	UseAzure         bool   `mapstructure:"use_azure"`
-	AzureBaseURL     string `mapstructure:"azure_base_url"`
-	AzureFunctionKey string `mapstructure:"azure_function_key"`
-	AzureProfile     string `mapstructure:"azure_profile"`
+	// Sendway (iyulab's own notification service, production) — see
+	// org/dev-docs/sendway.md for the deployment and API contract.
+	UseSendway     bool   `mapstructure:"use_sendway"`
+	SendwayBaseURL string `mapstructure:"sendway_base_url"`
+	SendwayAPIKey  string `mapstructure:"sendway_api_key"`
 
 	// Traditional SMTP (Development/Fallback)
 	SMTPHost     string `mapstructure:"smtp_host"`
@@ -511,10 +511,9 @@ func setDefaults() {
 	viper.SetDefault("cors.allowed_origins", []string{"http://localhost:3000", "http://localhost:3001"})
 
 	// Email defaults
-	viper.SetDefault("email.use_azure", false) // Default to SMTP for development
-	viper.SetDefault("email.azure_base_url", "")
-	viper.SetDefault("email.azure_function_key", "")
-	viper.SetDefault("email.azure_profile", "")
+	viper.SetDefault("email.use_sendway", false) // Default to SMTP for development
+	viper.SetDefault("email.sendway_base_url", "sendway.u-platform.kr")
+	viper.SetDefault("email.sendway_api_key", "")
 	viper.SetDefault("email.smtp_host", "localhost")
 	viper.SetDefault("email.smtp_port", 587)
 	viper.SetDefault("email.from_email", "noreply@authway.in")

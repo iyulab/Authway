@@ -145,10 +145,9 @@ try {
             "AUTHWAY_ADMIN_API_KEY=$($envVars['ADMIN_API_KEY'])" `
             "AUTHWAY_ADMIN_INTERNAL_API_KEY=$($envVars['INTERNAL_API_KEY'])" `
             "AUTHWAY_TOTP_ENCRYPTION_KEY=$($envVars['AUTHWAY_TOTP_ENCRYPTION_KEY'])" `
-            "AUTHWAY_EMAIL_USE_AZURE=$($envVars['EMAIL_USE_AZURE'])" `
-            "AUTHWAY_EMAIL_AZURE_BASE_URL=$($envVars['EMAIL_AZURE_BASE_URL'])" `
-            "AUTHWAY_EMAIL_AZURE_FUNCTION_KEY=$($envVars['EMAIL_AZURE_FUNCTION_KEY'])" `
-            "AUTHWAY_EMAIL_AZURE_PROFILE=$($envVars['EMAIL_AZURE_PROFILE'])" `
+            "AUTHWAY_EMAIL_USE_SENDWAY=$($envVars['EMAIL_USE_SENDWAY'])" `
+            "AUTHWAY_EMAIL_SENDWAY_BASE_URL=$($envVars['EMAIL_SENDWAY_BASE_URL'])" `
+            "AUTHWAY_EMAIL_SENDWAY_API_KEY=secretref:sendway-api-key" `
             "AUTHWAY_EMAIL_FROM_EMAIL=$($envVars['EMAIL_FROM_EMAIL'])" `
             "AUTHWAY_EMAIL_FROM_NAME=$($envVars['EMAIL_FROM_NAME'])" `
             "AUTHWAY_LOG_LEVEL=$($envVars['LOG_LEVEL'])"

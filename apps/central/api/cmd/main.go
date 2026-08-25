@@ -164,20 +164,17 @@ func main() {
 	// Initialize email services
 	var emailService email.EmailService
 
-	if cfg.Email.UseAzure {
-		// Use Azure Functions Email Service (Production)
-		zapLogger.Info("Using Azure Functions Email Service",
-			zap.String("baseURL", cfg.Email.AzureBaseURL))
+	if cfg.Email.UseSendway {
+		// Use Sendway (Production) — see org/dev-docs/sendway.md
+		zapLogger.Info("Using Sendway Email Service",
+			zap.String("baseURL", cfg.Email.SendwayBaseURL))
 
-		azureConfig := email.AzureEmailConfig{
-			BaseURL:     cfg.Email.AzureBaseURL,
-			FunctionKey: cfg.Email.AzureFunctionKey,
-			ProfileID:   cfg.Email.AzureProfile,
-			FromEmail:   cfg.Email.FromEmail,
-			FromName:    cfg.Email.FromName,
+		sendwayConfig := email.SendwayEmailConfig{
+			BaseURL:     cfg.Email.SendwayBaseURL,
+			APIKey:      cfg.Email.SendwayAPIKey,
 			FrontendURL: cfg.App.FrontendURL,
 		}
-		emailService = email.NewAzureEmailService(azureConfig, zapLogger)
+		emailService = email.NewSendwayEmailService(sendwayConfig, zapLogger)
 	} else {
 		// Use traditional SMTP (Development/Fallback)
 		zapLogger.Info("Using traditional SMTP Email Service",

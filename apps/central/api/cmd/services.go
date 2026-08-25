@@ -133,7 +133,7 @@ func (s *NewFeatureServices) StartBackgroundCleanupTasks(logger *zap.Logger) {
 // ======================================
 
 // invitationEmailAdapterImpl implements invitation.EmailSender by delegating
-// to the central email.EmailService (Azure Functions gateway in prod, SMTP in dev).
+// to the central email.EmailService (Sendway in prod, SMTP in dev).
 type invitationEmailAdapterImpl struct {
 	emailService email.EmailService
 }
