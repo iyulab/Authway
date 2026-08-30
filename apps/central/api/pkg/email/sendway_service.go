@@ -35,12 +35,14 @@ type SendwayEmailConfig struct {
 	FrontendURL string
 }
 
-// sendwayEmailRequest mirrors POST /messages/email. Body is plain text — Sendway
-// does not support HTML/template bodies yet (org/dev-docs/sendway.md "Known limits").
+// sendwayEmailRequest mirrors POST /messages/email. HtmlBody is optional — Sendway
+// sends multipart/alternative when set, keeping Body as the RFC 2046 fallback part
+// (org/dev-docs/sendway.md "Using your own sender identity" / docket iyulab/Sendway#105).
 type sendwayEmailRequest struct {
-	To      []string `json:"to"`
-	Subject string   `json:"subject"`
-	Body    string   `json:"body"`
+	To       []string `json:"to"`
+	Subject  string   `json:"subject"`
+	Body     string   `json:"body"`
+	HtmlBody string   `json:"htmlBody,omitempty"`
 }
 
 // sendwaySuccessResponse is the 200 shape.
@@ -74,8 +76,9 @@ func (s *SendwayEmailService) SendVerificationEmail(toEmail, token string) error
 	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
 	body := fmt.Sprintf("Authway 이메일 인증\n\n아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", verificationLink)
+	htmlBody := renderEmailTemplate("verification", verificationLink)
 
-	return s.sendEmail(toEmail, "Authway - 이메일 인증", body)
+	return s.sendEmail(toEmail, "Authway - 이메일 인증", body, htmlBody)
 }
 
 // SendPasswordResetEmail sends a password reset link via Sendway.
@@ -83,8 +86,9 @@ func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, token string) erro
 	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
 	body := fmt.Sprintf("Authway 비밀번호 재설정\n\n아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", resetLink)
+	htmlBody := renderEmailTemplate("reset", resetLink)
 
-	return s.sendEmail(toEmail, "Authway - 비밀번호 재설정", body)
+	return s.sendEmail(toEmail, "Authway - 비밀번호 재설정", body, htmlBody)
 }
 
 // SendInvitationEmail sends a tenant invitation link via Sendway.
@@ -97,8 +101,9 @@ func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantNa
 		body += fmt.Sprintf("메시지:\n%s\n\n", message)
 	}
 	body += "본인이 알지 못하는 초대인 경우 이 이메일을 무시하셔도 됩니다."
+	htmlBody := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
 
-	return s.sendEmail(toEmail, subject, body)
+	return s.sendEmail(toEmail, subject, body, htmlBody)
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via Sendway.
@@ -109,22 +114,20 @@ func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewU
 	}
 
 	body := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n이 링크는 일정 시간 후 만료됩니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL)
+	htmlBody := renderMagicLinkTemplate(linkURL, isNewUser)
 
-	return s.sendEmail(toEmail, subject, body)
+	return s.sendEmail(toEmail, subject, body, htmlBody)
 }
 
-// sendEmail sends a plain-text email via Sendway's POST /messages/email.
-//
-// TODO(upstream: docket iyulab/Sendway#105 — HTML body support):
-// Authway's emails used to carry a styled HTML body (button, branding) via the
-// Azure Functions gateway this replaces. Sendway only accepts a plain-text body
-// today, so every email sent through this service is plain text until Sendway
-// ships HTML/template support and Authway upgrades to it.
-func (s *SendwayEmailService) sendEmail(to, subject, body string) error {
+// sendEmail sends an email via Sendway's POST /messages/email, with an HTML
+// alternative alongside the required plain-text body (docket iyulab/Sendway#105 —
+// resolved 2026-08-30, live on sendway.u-platform.kr).
+func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) error {
 	req := sendwayEmailRequest{
-		To:      []string{to},
-		Subject: subject,
-		Body:    body,
+		To:       []string{to},
+		Subject:  subject,
+		Body:     body,
+		HtmlBody: htmlBody,
 	}
 
 	reqBody, err := json.Marshal(req)

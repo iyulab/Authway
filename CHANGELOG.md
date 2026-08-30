@@ -30,10 +30,9 @@
   gateway.** Production email (verification, password reset, invitation, magic
   link) moves to [Sendway](https://github.com/iyulab/Sendway), iyulab's own
   notification-service deployment; the local SMTP fallback used in development is
-  unchanged. Sendway does not support HTML bodies yet, so every email sent through
-  this path is now plain text (it previously included a styled HTML button) —
-  tracked upstream, see the code's `TODO(upstream: ...)` marker in
-  `pkg/email/sendway_service.go`.
+  unchanged. Sendway shipped HTML body support shortly after this migration, and
+  every email sent through this path now carries the same styled HTML alternative
+  (with the plain-text version kept as the fallback part) it did before the move.
 
 - **Relicensed from MIT to Apache License 2.0.** Applies to the whole repo
   going forward, including the published `@authway/client` and

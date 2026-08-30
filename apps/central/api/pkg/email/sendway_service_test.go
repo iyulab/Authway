@@ -57,6 +57,9 @@ func TestSendwayEmailService_SendVerificationEmail_SendsExpectedRequest(t *testi
 	if !strings.Contains(captured.Body, "tok-123") {
 		t.Fatal("expected the verification link (carrying the token) to be embedded in Body")
 	}
+	if !strings.Contains(captured.HtmlBody, "tok-123") || !strings.Contains(captured.HtmlBody, "<html") {
+		t.Fatalf("expected an HTML alternative carrying the same link, got %q", captured.HtmlBody)
+	}
 	if gotAPIKey != "test-key" {
 		t.Fatalf("expected X-Api-Key=test-key, got %q", gotAPIKey)
 	}
@@ -128,5 +131,44 @@ func TestSendwayEmailService_SendMagicLinkEmail_SubjectVariesByIsNewUser(t *test
 	}
 	if !strings.Contains(captured.Subject, "가입") {
 		t.Fatalf("expected a new-user subject mentioning signup, got %q", captured.Subject)
+	}
+}
+
+// TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType guards the docket
+// iyulab/Sendway#105 upgrade — every send method must carry an HTML alternative
+// alongside its plain-text body, not just SendVerificationEmail.
+func TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType(t *testing.T) {
+	var captured sendwayEmailRequest
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&captured)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(sendwaySuccessResponse{ID: "msg-1"})
+	}))
+	defer ts.Close()
+	svc := newTestSendwayService(t, ts)
+
+	cases := []struct {
+		name string
+		send func() error
+	}{
+		{"reset", func() error { return svc.SendPasswordResetEmail("user@example.com", "tok") }},
+		{"invitation", func() error {
+			return svc.SendInvitationEmail("user@example.com", "Alice", "Acme", "welcome", "https://app.example.com/invite?token=t")
+		}},
+		{"magic-link", func() error {
+			return svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", false)
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			captured = sendwayEmailRequest{}
+			if err := tc.send(); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if captured.HtmlBody == "" || !strings.Contains(captured.HtmlBody, "<html") {
+				t.Fatalf("%s: expected a non-empty HTML alternative, got %q", tc.name, captured.HtmlBody)
+			}
+		})
 	}
 }
