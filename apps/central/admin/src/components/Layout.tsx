@@ -106,7 +106,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="px-4 pb-3">
               <div className="bg-indigo-500/50 rounded-lg p-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shrink-0">
                     <span className="text-lg font-bold text-indigo-600">
                       {selectedTenant.name.charAt(0).toUpperCase()}
                     </span>
@@ -150,7 +150,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 `}
                 title={isCollapsed ? item.name : undefined}
               >
-                <item.icon className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
+                <item.icon className={`w-5 h-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
                 <span className={`transition-opacity duration-200 whitespace-nowrap ${
                   isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
                 }`}>
@@ -168,7 +168,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             className="flex items-center w-full px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors"
             title={isCollapsed ? '로그아웃' : undefined}
           >
-            <ArrowRightOnRectangleIcon className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
+            <ArrowRightOnRectangleIcon className={`w-5 h-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
             <span className={`transition-opacity duration-200 whitespace-nowrap ${
               isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
             }`}>
@@ -181,7 +181,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* 메인 콘텐츠 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 헤더 */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white shadow-xs border-b border-gray-200">
           <div className="px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h2 className="text-2xl font-semibold text-gray-900">

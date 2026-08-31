@@ -332,7 +332,7 @@ const InvitationsPage: React.FC = () => {
             <select
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
@@ -347,7 +347,7 @@ const InvitationsPage: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
               placeholder="Personal message to include in the invitation..."
               rows={3}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             />
           </div>
 

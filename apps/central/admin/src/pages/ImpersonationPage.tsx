@@ -177,7 +177,7 @@ const ImpersonationPage: React.FC = () => {
       {/* Warning Banner */}
       <Card className="bg-yellow-50 border-yellow-200 p-4">
         <div className="flex items-start">
-          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-600 mr-3 flex-shrink-0" />
+          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-600 mr-3 shrink-0" />
           <div>
             <h3 className="text-sm font-medium text-yellow-800">Important Security Notice</h3>
             <p className="mt-1 text-sm text-yellow-700">
@@ -353,7 +353,7 @@ const ImpersonationPage: React.FC = () => {
               onChange={(e) => setReason(e.target.value)}
               placeholder="Explain why you need to impersonate this user..."
               rows={3}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               required
             />
           </div>

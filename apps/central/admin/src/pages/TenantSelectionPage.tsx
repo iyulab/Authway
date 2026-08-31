@@ -89,9 +89,9 @@ const TenantSelectionPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    <div className="min-h-screen bg-linear-to-br from-indigo-50 via-white to-purple-50">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
+      <header className="bg-white/80 backdrop-blur-xs border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ const TenantSelectionPage: React.FC = () => {
           </div>
         ) : tenants.length === 0 ? (
           // Empty state
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 p-12 text-center">
             <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <BuildingOfficeIcon className="h-8 w-8 text-indigo-600" />
             </div>
@@ -160,7 +160,7 @@ const TenantSelectionPage: React.FC = () => {
                   className="group relative bg-white rounded-xl border border-gray-200 p-6 text-left hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-200"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
                       <span className="text-lg font-bold text-white">
                         {tenant.name.charAt(0).toUpperCase()}
                       </span>
@@ -201,7 +201,7 @@ const TenantSelectionPage: React.FC = () => {
                 onClick={() => setShowCreateModal(true)}
                 className="group bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-6 text-center hover:border-indigo-400 hover:bg-indigo-50 transition-all duration-200 flex flex-col items-center justify-center min-h-[180px]"
               >
-                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow mb-4">
+                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-xs group-hover:shadow-md transition-shadow mb-4">
                   <PlusIcon className="h-6 w-6 text-gray-400 group-hover:text-indigo-600 transition-colors" />
                 </div>
                 <h3 className="text-sm font-medium text-gray-600 group-hover:text-indigo-600 transition-colors">
