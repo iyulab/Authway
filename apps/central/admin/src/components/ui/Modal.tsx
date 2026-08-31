@@ -90,7 +90,7 @@ export const Modal: React.FC<ModalProps> = ({
               {showCloseButton && (
                 <button
                   onClick={onClose}
-                  className="rounded-md text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="rounded-md text-gray-400 hover:text-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   <XMarkIcon className="h-6 w-6" />
                 </button>

@@ -144,7 +144,7 @@ const SettingsPage: React.FC = () => {
 
       {/* 현재 테넌트 정보 */}
       {selectedTenant && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white shadow-sm rounded-lg">
           <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
             <div className="flex items-center">
               <BuildingOfficeIcon className="h-6 w-6 text-gray-400 mr-3" />
@@ -161,7 +161,7 @@ const SettingsPage: React.FC = () => {
           <div className="px-4 py-5 sm:px-6">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <div className="w-16 h-16 bg-linear-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shrink-0">
                   <span className="text-2xl font-bold text-white">
                     {selectedTenant.name.charAt(0).toUpperCase()}
                   </span>
@@ -205,7 +205,7 @@ const SettingsPage: React.FC = () => {
       )}
 
       {/* 관리자 세션 정보 */}
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-white shadow-sm rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
           <h3 className="text-lg leading-6 font-medium text-gray-900">
             관리자 세션
@@ -243,7 +243,7 @@ const SettingsPage: React.FC = () => {
       {settingSections.map((section) => {
         const Icon = section.icon
         return (
-          <div key={section.id} className="bg-white shadow rounded-lg">
+          <div key={section.id} className="bg-white shadow-sm rounded-lg">
             <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
               <div className="flex items-center">
                 <Icon className="h-6 w-6 text-gray-400 mr-3" />
@@ -292,7 +292,7 @@ const SettingsPage: React.FC = () => {
       })}
 
       {/* 버전 정보 */}
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-white shadow-sm rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
           <div className="flex items-center">
             <InformationCircleIcon className="h-6 w-6 text-gray-400 mr-3" />
@@ -357,7 +357,7 @@ const SettingsPage: React.FC = () => {
 
       {/* Danger Zone - 테넌트 삭제 */}
       {selectedTenant && (
-        <div className="bg-white shadow rounded-lg border-2 border-red-200">
+        <div className="bg-white shadow-sm rounded-lg border-2 border-red-200">
           <div className="px-4 py-5 sm:px-6 border-b border-red-200 bg-red-50">
             <div className="flex items-center">
               <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mr-3" />

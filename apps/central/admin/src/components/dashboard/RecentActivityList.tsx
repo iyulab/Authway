@@ -43,7 +43,7 @@ export const RecentActivityList: React.FC<RecentActivityListProps> = ({
                 <div key={item.id} className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0">
+                      <div className="shrink-0">
                         <Icon
                           className={`h-8 w-8 ${item.iconColor || 'text-gray-400'}`}
                         />

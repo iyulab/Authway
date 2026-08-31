@@ -50,7 +50,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} size="sm" showCloseButton={false}>
       <div className="sm:flex sm:items-start">
         <div
-          className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full ${styles.iconBg} sm:mx-0 sm:h-10 sm:w-10`}
+          className={`mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${styles.iconBg} sm:mx-0 sm:h-10 sm:w-10`}
         >
           <ExclamationTriangleIcon
             className={`h-6 w-6 ${styles.iconColor}`}

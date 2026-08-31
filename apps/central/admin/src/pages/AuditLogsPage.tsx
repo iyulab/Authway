@@ -164,7 +164,7 @@ const AuditLogsPage: React.FC = () => {
               <select
                 value={filters.severity}
                 onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               >
                 <option value="">All</option>
                 <option value="info">Info</option>
@@ -178,7 +178,7 @@ const AuditLogsPage: React.FC = () => {
               <select
                 value={filters.success}
                 onChange={(e) => setFilters({ ...filters, success: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               >
                 <option value="">All</option>
                 <option value="true">Success</option>
