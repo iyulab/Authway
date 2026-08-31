@@ -95,7 +95,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
       className={`
         relative w-full flex justify-center items-center px-4 py-3
         border border-gray-300 rounded-lg text-sm font-medium text-gray-700
-        bg-white hover:bg-gray-50 focus:outline-none focus:ring-2
+        bg-white hover:bg-gray-50 focus:outline-hidden focus:ring-2
         focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50
         disabled:cursor-not-allowed transition-colors duration-200
         ${className}

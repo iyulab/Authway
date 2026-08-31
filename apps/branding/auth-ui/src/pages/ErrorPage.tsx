@@ -155,7 +155,7 @@ const ErrorPage = () => {
   const colors = getColorClasses(errorInfo.color)
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 px-4">
       <div className="max-w-2xl w-full">
         <div className={`${colors.bg} border-2 ${colors.border} rounded-lg p-8 shadow-lg`}>
           {/* Icon */}

@@ -126,7 +126,7 @@ const MFAVerifyPage: React.FC = () => {
               maxLength={useRecovery ? 16 : 6}
               value={code}
               onChange={(e) => setCode(useRecovery ? e.target.value : e.target.value.replace(/\D/g, ''))}
-              className={`appearance-none relative block w-full px-3 py-4 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-center ${
+              className={`appearance-none relative block w-full px-3 py-4 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 text-center ${
                 useRecovery ? 'text-lg' : 'text-2xl tracking-widest'
               } font-mono`}
               placeholder={useRecovery ? 'XXXX-XXXX-XXXX' : '000000'}
@@ -139,7 +139,7 @@ const MFAVerifyPage: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting || !code}
-              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <span className="flex items-center">

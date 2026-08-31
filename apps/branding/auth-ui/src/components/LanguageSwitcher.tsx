@@ -50,7 +50,7 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
         <select
           value={i18n.language}
           onChange={(e) => handleLanguageChange(e.target.value)}
-          className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+          className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-8 text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
         >
           {languages.map((lang) => (
             <option key={lang.code} value={lang.code}>
