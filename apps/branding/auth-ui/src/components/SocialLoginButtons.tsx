@@ -72,7 +72,7 @@ export const GitHubLoginButton: React.FC<SocialLoginButtonProps> = ({
       type="button"
       onClick={handleLogin}
       disabled={disabled || isLoading}
-      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
     >
       {isLoading ? (
         <div className="flex items-center">
@@ -156,7 +156,7 @@ export const MicrosoftLoginButton: React.FC<SocialLoginButtonProps> = ({
       type="button"
       onClick={handleLogin}
       disabled={disabled || isLoading}
-      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
     >
       {isLoading ? (
         <div className="flex items-center">
@@ -244,7 +244,7 @@ export const AppleLoginButton: React.FC<SocialLoginButtonProps> = ({
       type="button"
       onClick={handleLogin}
       disabled={disabled || isLoading}
-      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+      className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-white bg-black hover:bg-gray-800 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
     >
       {isLoading ? (
         <div className="flex items-center">
