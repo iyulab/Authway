@@ -1,8 +1,10 @@
 package serviceclient
 
 import (
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -56,6 +58,32 @@ func testHydraAdminURL() string {
 	return "http://localhost:4445"
 }
 
+// requireHydra fails the test up front when the admin API is not reachable,
+// rather than letting it surface further in as a bare dial error from whichever
+// call happened to touch Hydra first. These tests are deliberately not skipped
+// when Hydra is absent: provisioning a scoped credential *is* the Hydra
+// round-trip, so skipping would report success for a path nothing checked.
+func requireHydra(t *testing.T) string {
+	t.Helper()
+	url := testHydraAdminURL()
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url + "/health/ready")
+	if err != nil {
+		t.Fatalf("Hydra admin API unreachable at %s: %v\n"+
+			"These tests drive the real admin API. Start one with:\n"+
+			"  docker run -d -p 4444:4444 -p 4445:4445 -e DSN=memory "+
+			"-e SECRETS_SYSTEM=$(openssl rand -hex 16) "+
+			"-e URLS_SELF_ISSUER=http://localhost:4444 "+
+			"oryd/hydra:v26.2.0 serve all --dev\n"+
+			"or point HYDRA_ADMIN_URL at an existing instance.", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Hydra admin API at %s is not ready: HTTP %d", url, resp.StatusCode)
+	}
+	return url
+}
+
 func TestCreate_RejectsUnknownScope(t *testing.T) {
 	db := setupPostgres(t)
 	tenantID := fixtureTenant(t, db)
@@ -72,7 +100,7 @@ func TestCreate_RejectsUnknownScope(t *testing.T) {
 func TestCreate_RegistersInHydraAndDB(t *testing.T) {
 	db := setupPostgres(t)
 	tenantID := fixtureTenant(t, db)
-	hydraClient := hydra.NewClient(testHydraAdminURL())
+	hydraClient := hydra.NewClient(requireHydra(t))
 	svc := NewService(db, zap.NewNop(), hydraClient)
 
 	sc, creds, err := svc.Create(tenantID, &CreateServiceClientRequest{
@@ -111,7 +139,7 @@ func TestCreate_RegistersInHydraAndDB(t *testing.T) {
 func TestRevoke_SetsRevokedAtAndDeletesHydraClient(t *testing.T) {
 	db := setupPostgres(t)
 	tenantID := fixtureTenant(t, db)
-	hydraClient := hydra.NewClient(testHydraAdminURL())
+	hydraClient := hydra.NewClient(requireHydra(t))
 	svc := NewService(db, zap.NewNop(), hydraClient)
 
 	sc, creds, err := svc.Create(tenantID, &CreateServiceClientRequest{
@@ -143,7 +171,7 @@ func TestListByTenant_ScopedAndPaginated(t *testing.T) {
 	db := setupPostgres(t)
 	tenantID := fixtureTenant(t, db)
 	otherTenantID := fixtureTenant(t, db)
-	hydraClient := hydra.NewClient(testHydraAdminURL())
+	hydraClient := hydra.NewClient(requireHydra(t))
 	svc := NewService(db, zap.NewNop(), hydraClient)
 
 	for range 3 {
@@ -205,7 +233,7 @@ func TestRevoke_WrongTenant_NotFound(t *testing.T) {
 	db := setupPostgres(t)
 	ownerTenantID := fixtureTenant(t, db)
 	otherTenantID := fixtureTenant(t, db)
-	hydraClient := hydra.NewClient(testHydraAdminURL())
+	hydraClient := hydra.NewClient(requireHydra(t))
 	svc := NewService(db, zap.NewNop(), hydraClient)
 
 	sc, creds, err := svc.Create(ownerTenantID, &CreateServiceClientRequest{
