@@ -41,7 +41,7 @@ recent security fixes.
 ### Prerequisites
 
 - Node.js 18+, pnpm 9+
-- Go 1.25+
+- Go 1.26+
 - Docker (for the backing services)
 
 ### Installation

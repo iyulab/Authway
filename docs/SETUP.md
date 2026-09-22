@@ -18,7 +18,7 @@ See [CHANGELOG.md](../CHANGELOG.md) for the current release.
 ## Prerequisites
 
 - **Node.js** 18+ and **pnpm** 9+
-- **Go** 1.25+ (for backend development)
+- **Go** 1.26+ (for backend development)
 - **Docker** (for the backing services: PostgreSQL, Redis, MailHog, Hydra)
 
 ---
