@@ -2,6 +2,10 @@
 
 ### Added
 
+- **The contract covers managing clients.** Listing, reading and updating a
+  client and regenerating its secret are in `packages/contract`, every admin
+  operation lists its `401`, and the conformance suite exercises each of them.
+
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
   consent and logout flows, sign-in links, capabilities, email verification,
   password reset and invitations, plus the admin operations that provision a
@@ -11,6 +15,14 @@
 
 ### Changed
 
+- **Admin authentication refusals carry a `code`.** `unauthorized` for a
+  missing or rejected credential, `insufficient_scope` for a service
+  credential without the needed scope, `admin_api_not_configured` when no
+  admin key is set, `invalid_credentials` for a wrong admin console password.
+  A refusal that carries only an HTTP status now uses a code named after it
+  (`unauthorized`, `forbidden`, `conflict`, `too_many_requests`,
+  `bad_gateway`, `service_unavailable`, `internal_server_error`) instead of
+  `request_error`, and the `strict_sync` 502 carries `upstream_sync_failed`.
 - **`email.sendway_base_url` has no default.** Set
   `AUTHWAY_EMAIL_SENDWAY_BASE_URL` when `AUTHWAY_EMAIL_USE_SENDWAY=true`; the API
   refuses to start without it.
@@ -30,6 +42,14 @@
 
 ### Fixed
 
+- **Saving a client in the admin console no longer turns off consent
+  skipping.** Reading a client did not return `skip_consent` or
+  `skip_logout_consent`, so the edit form loaded them as off and wrote that
+  back on every save. Reads now return every field an update accepts except
+  provider credentials.
+- **A public client's secret cannot be regenerated.** It has none: the call
+  stored a new secret the client never uses. It now answers `400` with code
+  `public_client_has_no_secret`.
 - **`@authway/client` and `@authway/react` load through `require`.** Their
   `main` and `exports` pointed CommonJS consumers at `dist/*.cjs`, but the build
   wrote `dist/*.js`, so `require('@authway/client')` (and CommonJS bundlers or

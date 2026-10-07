@@ -16,7 +16,8 @@ and the exact request restrictions. Every other `/clients*` route (`GET`,
 `PUT`, `DELETE`, `regenerate-secret`, …) is unchanged and still accepts only
 the two admin methods above — except the public `GET
 /clients/{client_id}/config` endpoint, which requires no authentication at
-all.
+all. A missing or rejected credential answers `401` with
+`{"error": "...", "code": "unauthorized"}`.
 
 This document covers two semantics that are easy to get wrong: **Hydra sync
 visibility** and **client-config validation**.
@@ -94,6 +95,7 @@ Content-Type: application/json
 
 {
   "error": "Upstream OAuth provider sync failed",
+  "code": "upstream_sync_failed",
   "sync_status": { "state": "failed", "error": "..." },
   "hint": "Authway DB was updated but Hydra rejected the change. Retry, or omit ?strict_sync=true to accept best-effort sync (drift visible in sync_status)."
 }
@@ -142,6 +144,7 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `public_client_with_password_grant` | `public=true` and `grant_types` includes `password` | Use authorization_code + PKCE |
 | `public_client_missing_allowed_origins` | SPA config without CORS allow-list | Set `allowed_origins` to the SPA origin(s) |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
+| `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
 
 ### Application-type matrix
 

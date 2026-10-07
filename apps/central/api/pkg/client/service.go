@@ -673,6 +673,14 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	if err != nil {
 		return nil, SyncStatus{}, err
 	}
+	if client.Public {
+		return nil, SyncStatus{}, &ConfigError{
+			Code:    "public_client_has_no_secret",
+			Field:   "public",
+			Message: "Public clients have no secret to regenerate",
+			Hint:    "A public client authenticates with PKCE instead of a secret. Register a confidential client if the application can keep a secret.",
+		}
+	}
 
 	// Generate new secret
 	newSecret := s.generateClientSecret()

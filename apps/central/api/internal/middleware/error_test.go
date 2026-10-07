@@ -39,3 +39,35 @@ func TestErrorHandler_AnswersLikeEveryOtherRefusal(t *testing.T) {
 		}
 	}
 }
+
+// A handler that refuses with fiber.NewError gives only a status; the code a
+// caller branches on must still say what kind of refusal it was.
+func TestErrorHandler_NamesStatusOnlyRefusals(t *testing.T) {
+	cases := map[int]string{
+		fiber.StatusBadRequest:          "invalid_request",
+		fiber.StatusUnauthorized:        "unauthorized",
+		fiber.StatusForbidden:           "forbidden",
+		fiber.StatusNotFound:            "not_found",
+		fiber.StatusConflict:            "conflict",
+		fiber.StatusTooManyRequests:     "too_many_requests",
+		fiber.StatusInternalServerError: "internal_server_error",
+		fiber.StatusBadGateway:          "bad_gateway",
+		fiber.StatusServiceUnavailable:  "service_unavailable",
+		fiber.StatusGatewayTimeout:      "internal_server_error",
+	}
+	for status, want := range cases {
+		app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+		app.Get("/", func(c *fiber.Ctx) error { return fiber.NewError(status, "refused") })
+		resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != status || body["code"] != want || body["error"] != "refused" {
+			t.Errorf("status %d: got %d %v, want code %s", status, resp.StatusCode, body, want)
+		}
+	}
+}

@@ -72,7 +72,8 @@ export class Provider {
 
   // ---- admin provisioning -------------------------------------------------
 
-  private async admin(path: string, init: RequestInit = {}): Promise<Response> {
+  /** Calls the admin API with the configured admin credential and tenant. */
+  async admin(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${this.config.adminKey}`)
     headers.set('X-Tenant-ID', await this.tenantId())
@@ -110,6 +111,25 @@ export class Provider {
         allowed_origins: ['http://localhost:9999'],
         grant_types: ['authorization_code', 'refresh_token'],
         scopes: ['openid', 'profile', 'email'],
+      }),
+    })
+    await conform('POST', '/api/v1/clients', res)
+    const text = await res.text()
+    if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
+    const { client } = JSON.parse(text) as { client: { id: string; client_id: string } }
+    return { id: client.id, clientId: client.client_id }
+  }
+
+  /** Registers a confidential machine-to-machine client, which holds a secret. */
+  async createConfidentialClient(): Promise<TestClient> {
+    const res = await this.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: await this.tenantId(),
+        name: `conformance-${randomToken(4)}`,
+        public: false,
+        grant_types: ['client_credentials'],
+        scopes: ['openid'],
       }),
     })
     await conform('POST', '/api/v1/clients', res)

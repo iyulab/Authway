@@ -131,8 +131,8 @@ the admin API key, then an admin session token, and only if both miss does
 it fall back to Hydra token introspection for a service client credential —
 so admin callers pay no extra cost. A token that fails all three, or whose
 service client has been revoked, or whose granted scopes don't include
-`admin.clients:write`, is rejected with `401 Unauthorized` (or `403
-Forbidden` for a valid-but-under-scoped credential).
+`admin.clients:write`, is rejected with `401` and code `unauthorized` (or
+`403` and code `insufficient_scope` for a valid-but-under-scoped credential).
 
 ---
 

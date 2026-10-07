@@ -98,22 +98,16 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	if req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Password is required",
-		})
+		return refuse(c, fiber.StatusBadRequest, "invalid_request", "Password is required")
 	}
 
 	session, err := h.service.Authenticate(req.Password)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid password",
-		})
+		return refuse(c, fiber.StatusUnauthorized, "invalid_credentials", "Invalid password")
 	}
 
 	if h.auditService != nil {
@@ -139,15 +133,11 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 func (h *Handler) Logout(c *fiber.Ctx) error {
 	token := h.extractToken(c)
 	if token == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "No token provided",
-		})
+		return refuse(c, fiber.StatusUnauthorized, "unauthorized", "No token provided")
 	}
 
 	if err := h.service.Logout(token); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to logout",
-		})
+		return refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to logout")
 	}
 
 	if h.auditService != nil {
@@ -203,23 +193,17 @@ func (h *Handler) createAdminAuthHandler() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		token := h.extractToken(c)
 		if token == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "No authorization token provided",
-			})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "No authorization token provided")
 		}
 
 		valid, err := h.service.ValidateToken(token)
 		if err != nil {
 			h.logger.Error("Failed to validate admin token", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to validate session",
-			})
+			return refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to validate session")
 		}
 
 		if !valid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid or expired session",
-			})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		}
 
 		c.Locals("admin_authenticated", true)
@@ -244,33 +228,25 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			h.logger.Warn("AdminConsoleAuth: refusing request — admin API key not configured",
 				zap.String("path", c.Path()))
 			h.logAuthFailure(c, "api_key_not_configured", "admin API key missing — fail-closed")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
-			})
+			return refuse(c, fiber.StatusServiceUnavailable, "admin_api_not_configured", "Admin API is not configured (missing ADMIN_API_KEY)")
 		}
 
 		token := h.extractToken(c)
 		if token == "" {
 			h.logger.Warn("AdminConsoleAuth: No token provided", zap.String("path", c.Path()))
 			h.logAuthFailure(c, "no_token", "missing or malformed Authorization header")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "No authorization token provided",
-			})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "No authorization token provided")
 		}
 
 		ok, sessionErr := h.checkAdminAuth(c, token)
 		if sessionErr != nil {
 			h.logger.Error("Failed to validate admin token", zap.Error(sessionErr))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to validate session",
-			})
+			return refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to validate session")
 		}
 		if !ok {
 			h.logger.Warn("AdminConsoleAuth: Token invalid or expired", zap.String("path", c.Path()))
 			h.logAuthFailure(c, "invalid_or_expired_session", "token rejected by session validator (also covers api_key mismatch)")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid or expired session",
-			})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		}
 		return c.Next()
 	}
@@ -337,22 +313,18 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 			h.logger.Warn("GetClientAuth: refusing request — admin API key not configured",
 				zap.String("path", c.Path()))
 			h.logAuthFailure(c, "api_key_not_configured", "admin API key missing — fail-closed")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error": "Admin API is not configured (missing ADMIN_API_KEY)",
-			})
+			return refuse(c, fiber.StatusServiceUnavailable, "admin_api_not_configured", "Admin API is not configured (missing ADMIN_API_KEY)")
 		}
 
 		token := h.extractToken(c)
 		if token == "" {
 			h.logAuthFailure(c, "no_token", "missing or malformed Authorization header")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "No authorization token provided",
-			})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "No authorization token provided")
 		}
 
 		if ok, err := h.checkAdminAuth(c, token); err != nil {
 			h.logger.Error("Failed to validate admin token", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to validate session"})
+			return refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to validate session")
 		} else if ok {
 			return c.Next()
 		}
@@ -360,16 +332,16 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 		introspectResp, err := hydraClient.IntrospectToken(token)
 		if err != nil || !introspectResp.Active || introspectResp.ClientID == "" || introspectResp.ClientID != introspectResp.Subject {
 			h.logAuthFailure(c, "invalid_credential", "token rejected by api key, admin session, and service-client introspection")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired session"})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		}
 
 		sc, err := svc.GetByHydraClientID(introspectResp.ClientID)
 		if err != nil || sc.IsRevoked() {
 			h.logAuthFailure(c, "unknown_or_revoked_service_client", "hydra_client_id not found in service_clients, or revoked")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired session"})
+			return refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		}
 		if !sc.HasScope(requiredScope) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insufficient scope"})
+			return refuse(c, fiber.StatusForbidden, "insufficient_scope", "Insufficient scope")
 		}
 
 		c.Locals("admin_authenticated", false)
@@ -379,6 +351,12 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 		c.Locals("tenant_id", sc.TenantID.String())
 		return c.Next()
 	}
+}
+
+// refuse writes the API's error shape, {error, code}: error is a message for a
+// person, code a stable identifier a caller can branch on.
+func refuse(c *fiber.Ctx, status int, code, message string) error {
+	return c.Status(status).JSON(fiber.Map{"error": message, "code": code})
 }
 
 // extractToken extracts bearer token from Authorization header

@@ -21,8 +21,9 @@ tags:
     description: |
       Administration, authenticated with the deployment's admin key (or an
       admin session) as a bearer token. Tenant-scoped calls name the tenant
-      in X-Tenant-ID. This document covers the operations needed to
-      provision a client and a user; the rest of the admin API follows.
+      in X-Tenant-ID. A missing or rejected credential answers 401 with
+      code unauthorized. This document covers provisioning and managing
+      clients, and provisioning a user; the rest of the admin API follows.
 
 security: []
 
@@ -352,8 +353,34 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Tenant' }
+        '401': { $ref: '#/components/responses/Error' }
 
   /api/v1/clients:
+    get:
+      tags: [admin]
+      operationId: listClients
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of clients, every tenant's unless tenant_id is given
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clients, total, limit, offset]
+                properties:
+                  clients:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
+                  total: { type: integer, minimum: 0 }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
     post:
       tags: [admin]
       operationId: createClient
@@ -394,17 +421,127 @@ paths:
                     description: The client secret, shown once (confidential clients).
                   message: { type: string }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403':
+          description: A service credential without the admin.clients:write scope (code insufficient_scope)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/clients/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: The registration id (Client.id), not the OAuth client_id. }
+    get:
+      tags: [admin]
+      operationId: getClient
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The client
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client]
+                properties:
+                  client: { $ref: '#/components/schemas/Client' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      operationId: updateClient
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StrictSync'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |
+                Only the fields present change. For the list fields an empty
+                array clears the list and an absent field leaves it alone.
+              properties:
+                name: { type: string }
+                description: { type: string }
+                public: { type: boolean }
+                active: { type: boolean }
+                redirect_uris: { type: array, items: { type: string } }
+                post_logout_redirect_uris: { type: array, items: { type: string } }
+                allowed_origins: { type: array, items: { type: string } }
+                grant_types: { type: array, items: { type: string } }
+                scopes: { type: array, items: { type: string } }
+                enabled_auth_providers: { type: array, items: { type: string } }
+                skip_consent: { type: boolean }
+                skip_logout_consent: { type: boolean }
+                access_token_strategy:
+                  description: jwt or opaque pins this client; an empty string returns it to the deployment default.
+                  type: string
+                  enum: ['', jwt, opaque]
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client, sync_status]
+                properties:
+                  message: { type: string }
+                  client: { $ref: '#/components/schemas/Client' }
+                  sync_status: { $ref: '#/components/schemas/SyncStatus' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/SyncFailed' }
     delete:
       tags: [admin]
       operationId: deleteClient
       security: [{ adminKey: [] }]
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/StrictSync'
       responses:
         '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/SyncFailed' }
+
+  /api/v1/clients/{id}/regenerate-secret:
+    post:
+      tags: [admin]
+      operationId: regenerateClientSecret
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/StrictSync'
+      responses:
+        '200':
+          description: The new secret, shown once. The previous one stops working.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [credentials, sync_status]
+                properties:
+                  message: { type: string }
+                  credentials:
+                    type: object
+                    required: [client_id, client_secret]
+                    properties:
+                      client_id: { type: string }
+                      client_secret: { type: string, minLength: 1 }
+                  sync_status: { $ref: '#/components/schemas/SyncStatus' }
+        '400':
+          description: Malformed id, or a public client, which has no secret (code public_client_has_no_secret)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/SyncFailed' }
 
   /api/v1/invitations:
     post:
@@ -442,6 +579,7 @@ paths:
                       expires_at: { type: string }
                   message: { type: string }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
 
   /api/v1/users/{id}:
     delete:
@@ -457,6 +595,7 @@ paths:
             application/json:
               schema: { type: object }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
 components:
@@ -467,6 +606,15 @@ components:
       description: The deployment's admin API key, or an admin console session token.
 
   parameters:
+    StrictSync:
+      name: strict_sync
+      in: query
+      required: false
+      description: |
+        true: answer 502 when the change was saved but the authorization
+        server rejected it. Otherwise the answer succeeds and sync_status
+        reports the outcome.
+      schema: { type: boolean }
     TenantHeader:
       name: X-Tenant-ID
       in: header
@@ -545,6 +693,19 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    SyncFailed:
+      description: |
+        Saved, but the authorization server rejected the change (only with
+        strict_sync=true; code upstream_sync_failed).
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                required: [sync_status]
+                properties:
+                  sync_status: { $ref: '#/components/schemas/SyncStatus' }
 
   schemas:
     Redirect:
@@ -646,6 +807,21 @@ components:
         grant_types: { type: array, items: { type: string } }
         scopes: { type: array, items: { type: string } }
         enabled_auth_providers: { type: [array, 'null'], items: { type: string } }
+        active: { type: boolean }
+        skip_consent: { type: boolean }
+        skip_logout_consent: { type: boolean }
+        access_token_strategy:
+          description: null when the client follows the deployment default.
+          type: ['null', string]
+          enum: [null, jwt, opaque]
+
+    SyncStatus:
+      type: object
+      description: Whether the authorization server accepted the change.
+      required: [state]
+      properties:
+        state: { type: string, enum: [ok, failed, skipped] }
+        error: { type: string }
 
     Capabilities:
       type: object
@@ -675,4 +851,8 @@ components:
             invalid_mfa_challenge, invalid_code, mfa_locked, invalid_link,
             invalid_request, client_not_registered, invalid_token,
             token_expired, invitation_not_acceptable, invitation_not_accepted,
-            too_many_requests, not_found, method_not_allowed.
+            too_many_requests, not_found, method_not_allowed, unauthorized,
+            forbidden, insufficient_scope, admin_api_not_configured, conflict,
+            public_client_has_no_secret, upstream_sync_failed,
+            internal_server_error. A refusal that carries only an HTTP status
+            uses the code named after it.

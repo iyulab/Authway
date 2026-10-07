@@ -344,6 +344,14 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 
 	credentials, syncStatus, err := h.services.ClientService.RegenerateSecret(id)
 	if err != nil {
+		if cerr, ok := err.(*client.ConfigError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": cerr.Message,
+				"code":  cerr.Code,
+				"field": cerr.Field,
+				"hint":  cerr.Hint,
+			})
+		}
 		h.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
 	}
@@ -381,6 +389,7 @@ func (h *ClientHandler) respondWithSync(c *fiber.Ctx, syncStatus client.SyncStat
 	if c.Query("strict_sync") == "true" && !syncStatus.OK() {
 		return fiber.StatusBadGateway, fiber.Map{
 			"error":       "Upstream OAuth provider sync failed",
+			"code":        "upstream_sync_failed",
 			"sync_status": syncStatus,
 			"hint":        "Authway DB was updated but Hydra rejected the change. Retry, or omit ?strict_sync=true to accept best-effort sync (drift visible in sync_status).",
 		}

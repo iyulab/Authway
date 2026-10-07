@@ -123,3 +123,41 @@ func TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs(t *testing.T) {
 		t.Errorf("post_logout_redirect_uris = %d entries; a client with no redirect URIs must not gain any", count)
 	}
 }
+
+// A public client authenticates with PKCE and has no secret. Regenerating one
+// used to succeed: it stored a fresh secret and pushed it to the authorization
+// server for a client whose auth method stays "none", handing the caller a
+// credential that authenticates nothing.
+func TestRegenerateSecret_RefusesPublicClient(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db, zap.NewNop(), stubHydra(t))
+	tenantID := seedTenant(t, db)
+
+	created, _, err := svc.Create(&CreateClientRequest{
+		TenantID:       tenantID,
+		Name:           "regress-public-" + uuid.NewString()[:8],
+		Public:         true,
+		RedirectURIs:   []string{"https://example.com/callback"},
+		AllowedOrigins: []string{"https://example.com"},
+		GrantTypes:     []string{"authorization_code"},
+		Scopes:         []string{"openid"},
+	})
+	if err != nil {
+		t.Fatalf("Create public client: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, created.ID) })
+
+	creds, _, err := svc.RegenerateSecret(created.ID)
+	cerr, ok := err.(*ConfigError)
+	if !ok || cerr.Code != "public_client_has_no_secret" {
+		t.Fatalf("RegenerateSecret on a public client = (%v, %v), want ConfigError public_client_has_no_secret", creds, err)
+	}
+
+	var secret string
+	if err := db.Raw(`SELECT coalesce(client_secret, '') FROM clients WHERE id = ?`, created.ID).Scan(&secret).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if secret != "" {
+		t.Error("a refused regeneration still stored a secret")
+	}
+}

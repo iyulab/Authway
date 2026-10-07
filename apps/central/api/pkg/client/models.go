@@ -127,6 +127,11 @@ type PublicClient struct {
 	// Access Token Format (null = inherit the deployment-wide strategy)
 	AccessTokenStrategy *string `json:"access_token_strategy"`
 
+	// Consent screens the client skips. An editor that cannot read these writes
+	// them back as false, so they belong in every read of a client.
+	SkipConsent       bool `json:"skip_consent"`
+	SkipLogoutConsent bool `json:"skip_logout_consent"`
+
 	// Microsoft OAuth (public fields)
 	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled"`
 	MicrosoftTenantID     *string `json:"microsoft_tenant_id"`
@@ -196,6 +201,8 @@ func (c *Client) ToPublic() PublicClient {
 		AllowEmailLogin:      c.AllowEmailLogin,
 
 		AccessTokenStrategy: c.AccessTokenStrategy,
+		SkipConsent:         c.SkipConsent,
+		SkipLogoutConsent:   c.SkipLogoutConsent,
 
 		// Microsoft OAuth public fields
 		MicrosoftOAuthEnabled: c.MicrosoftOAuthEnabled,
@@ -389,9 +396,8 @@ const (
 // the upstream OAuth2/OIDC provider (currently Ory Hydra).
 //
 // API responses include this so callers can detect drift between Authway's
-// database and Hydra without scraping logs. The previous behavior was to
-// log a warning and return 200 OK regardless — see the
-// `hydra-sync-silent-failure` issue for the AllDot incident this fixes.
+// database and Hydra without scraping logs, instead of a warning in the log
+// behind a 200 OK.
 type SyncStatus struct {
 	State string `json:"state"`           // "ok", "failed", "skipped"
 	Error string `json:"error,omitempty"` // human-readable upstream error
