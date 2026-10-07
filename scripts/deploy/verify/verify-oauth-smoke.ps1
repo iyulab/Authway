@@ -152,53 +152,65 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     $userCreated = $true
     Write-Host "   ✅ 생성 완료" -ForegroundColor Green
 
-    # --- 3. authorization_code 플로우 시작 ---
-    Write-Host "3️⃣  OAuth authorize → login_challenge" -ForegroundColor Yellow
+    # --- 3. authorization_code 플로우 시작 → 로그인 flow id ---
+    # Hydra 는 브라우저를 API 의 /login?login_challenge= 로 보내고, API 는 로그인 UI 의
+    # ?flow=<id> 로 보낸다(docs/api/login-flows.md). 화면이 하는 일을 그대로 따라간다.
+    Write-Host "3️⃣  OAuth authorize → 로그인 flow" -ForegroundColor Yellow
     $state = New-VerifySuffix
     $authUrl = "$issuer/oauth2/auth?client_id=$clientId&response_type=code&scope=openid&redirect_uri=http%3A%2F%2Flocalhost%3A9999%2Fverify-callback&state=verify$state"
     $r1 = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($authUrl)
-    if (-not $r1.Location -or $r1.Location -notmatch 'login_challenge=([^&]+)') {
+    if (-not $r1.Location -or $r1.Location -notmatch 'login_challenge=') {
         Write-Host "❌ login_challenge를 얻지 못함 — status=$($r1.Status) location=$($r1.Location)" -ForegroundColor Red
         exit 1
     }
-    $loginChallenge = [uri]::UnescapeDataString($matches[1])
-    Write-Host "   ✅ login_challenge 획득" -ForegroundColor Green
+    $r1b = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($r1.Location)
+    if (-not $r1b.Location -or $r1b.Location -notmatch '[?&]flow=([^&]+)') {
+        Write-Host "❌ 로그인 flow id를 얻지 못함 — status=$($r1b.Status) location=$($r1b.Location)" -ForegroundColor Red
+        exit 1
+    }
+    $loginFlow = [uri]::UnescapeDataString($matches[1])
+    Write-Host "   ✅ 로그인 flow 획득" -ForegroundColor Green
 
     # --- 4. 비밀번호 로그인 제출 ---
     Write-Host "4️⃣  비밀번호 로그인 제출" -ForegroundColor Yellow
-    $loginBody = @{ challenge = $loginChallenge; email = $verifyEmail; password = $VerifyPassword } | ConvertTo-Json -Compress
+    $loginBody = @{ email = $verifyEmail; password = $VerifyPassword } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $loginBody -NoNewline -Encoding UTF8
-    $loginResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/authenticate" `
+    $loginResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/api/v1/login-flows/$([uri]::EscapeDataString($loginFlow))/password" `
         -H "Content-Type: application/json" --data "@$tmpBody"
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
     $loginJson = $loginResp | ConvertFrom-Json
-    if (-not $loginJson.redirect_to) {
+    if ($loginJson.next -ne 'redirect' -or -not $loginJson.redirect_to) {
         Write-Host "❌ 로그인 실패: $loginResp" -ForegroundColor Red
         exit 1
     }
     Write-Host "   ✅ 로그인 accept됨" -ForegroundColor Green
 
-    # --- 5. Hydra accept 리다이렉트를 따라가 consent_challenge 획득 ---
-    Write-Host "5️⃣  로그인 accept → consent_challenge" -ForegroundColor Yellow
+    # --- 5. Hydra accept 리다이렉트를 따라가 동의 flow id 획득 ---
+    Write-Host "5️⃣  로그인 accept → 동의 flow" -ForegroundColor Yellow
     $r2 = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($loginJson.redirect_to)
-    if (-not $r2.Location -or $r2.Location -notmatch 'consent_challenge=([^&]+)') {
+    if (-not $r2.Location -or $r2.Location -notmatch 'consent_challenge=') {
         Write-Host "❌ consent_challenge를 얻지 못함 — status=$($r2.Status) location=$($r2.Location)" -ForegroundColor Red
         exit 1
     }
-    $consentChallenge = [uri]::UnescapeDataString($matches[1])
-    Write-Host "   ✅ consent_challenge 획득" -ForegroundColor Green
+    $r2b = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($r2.Location)
+    if (-not $r2b.Location -or $r2b.Location -notmatch '[?&]flow=([^&]+)') {
+        Write-Host "❌ 동의 flow id를 얻지 못함 — status=$($r2b.Status) location=$($r2b.Location)" -ForegroundColor Red
+        exit 1
+    }
+    $consentFlow = [uri]::UnescapeDataString($matches[1])
+    Write-Host "   ✅ 동의 flow 획득" -ForegroundColor Green
 
     # --- 6. consent accept ---
     Write-Host "6️⃣  consent accept" -ForegroundColor Yellow
-    $consentBody = @{ challenge = $consentChallenge; grant_scope = @("openid") } | ConvertTo-Json -Compress
+    $consentBody = @{ grant_scope = @("openid") } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $consentBody -NoNewline -Encoding UTF8
-    $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/consent/accept" `
+    $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/api/v1/consent-flows/$([uri]::EscapeDataString($consentFlow))/accept" `
         -H "Content-Type: application/json" --data "@$tmpBody"
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
     $consentJson = $consentResp | ConvertFrom-Json
-    if (-not $consentJson.redirect_to) {
+    if ($consentJson.next -ne 'redirect' -or -not $consentJson.redirect_to) {
         Write-Host "❌ consent accept 실패: $consentResp" -ForegroundColor Red
         exit 1
     }
