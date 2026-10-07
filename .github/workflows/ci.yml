@@ -15,12 +15,10 @@ jobs:
     name: Go build / vet / test
     runs-on: ubuntu-latest
 
-    # The migration and client-persistence tests need a real Postgres: the
-    # constraints they guard (`redirect_uris text[] NOT NULL`, CHECK constraints,
-    # array types) cannot be expressed by the SQLite harness the other tests use,
-    # and a defect already escaped through that blind spot (commit 7082776).
-    # They were written gated on MIGRATE_SMOKE_DSN and, until this service
-    # existed, silently SKIPPED here — automated coverage was zero.
+    # The persistence tests need a real Postgres: the constraints they guard
+    # (`redirect_uris text[] NOT NULL`, CHECK constraints, array types) and the
+    # schema the migrations actually produce exist nowhere else. They are gated
+    # on MIGRATE_SMOKE_DSN and would silently SKIP without this service.
     services:
       postgres:
         image: postgres:15-alpine

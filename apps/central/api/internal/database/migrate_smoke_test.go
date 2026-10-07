@@ -147,8 +147,8 @@ func TestMigrateFreshDatabase(t *testing.T) {
 		{`SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='password_resets' AND column_name='token')`, "password_resets.token dropped"},
 		{`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='email_verifications' AND column_name='token_hash')`, "email_verifications.token_hash"},
 		{`SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='email_verifications' AND column_name='token')`, "email_verifications.token dropped"},
-		// redirect_uris is the constraint the SQLite harness cannot express, and
-		// the one a nil slice violated in production. Pin it here.
+		// redirect_uris is the constraint a nil slice violated in production.
+		// Pin it here.
 		{`SELECT is_nullable='NO' FROM information_schema.columns WHERE table_name='clients' AND column_name='redirect_uris'`, "clients.redirect_uris is NOT NULL"},
 		{`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='access_token_strategy')`, "clients.access_token_strategy"},
 		// 015 must not opt any client in — enabling JWT is an operational decision.

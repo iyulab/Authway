@@ -310,3 +310,43 @@ func TestGetByTenant_ScopesAndPaginates(t *testing.T) {
 		t.Fatalf("expected exactly 1 user in tenant B, got total=%d len=%d", totalB, len(restB))
 	}
 }
+
+// The two bookkeeping writes the sign-in and email-verification paths make
+// land on the stored row, and a lookup by an unknown id answers not found
+// rather than a database error.
+func TestBookkeepingWritesAndLookupByID(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tn := freshTenant(t, db, ts)
+
+	u, err := svc.Create(tn.ID, &CreateUserRequest{
+		Email: fmt.Sprintf("bookkeeping-%s@example.com", uuid.New().String()[:8]),
+		Name:  "Bookkeeping",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+
+	if err := svc.UpdateLastLogin(u.ID); err != nil {
+		t.Fatalf("UpdateLastLogin: %v", err)
+	}
+	if err := svc.UpdateEmailVerified(u.ID, true); err != nil {
+		t.Fatalf("UpdateEmailVerified: %v", err)
+	}
+
+	got, err := svc.GetByID(u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.LastLoginAt == nil {
+		t.Error("last_login_at was not recorded")
+	}
+	if !got.EmailVerified {
+		t.Error("email_verified was not recorded")
+	}
+
+	if _, err := svc.GetByID(uuid.New()); err == nil || err.Error() != "user not found" {
+		t.Errorf("GetByID(unknown) = %v, want user not found", err)
+	}
+}

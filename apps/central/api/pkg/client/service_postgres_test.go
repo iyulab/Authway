@@ -15,10 +15,10 @@ import (
 )
 
 // These tests run the real client service against a real Postgres, because the
-// column constraints that matter here do not exist in the SQLite harness the
-// other service tests use. `clients.redirect_uris` is `text[] NOT NULL`, and
-// AutoMigrate-from-Go-struct never reproduces that — so a nil slice sails
-// through SQLite and only explodes on a real deployment.
+// column constraints that matter here exist only in the migrated schema.
+// `clients.redirect_uris` is `text[] NOT NULL`, and AutoMigrate-from-Go-struct
+// never reproduces that — so a nil slice passes any struct-derived harness and
+// only explodes on a real deployment.
 //
 // Gated on the same DSN as the migration tests. The schema is brought up by the
 // real migrator rather than assumed: RunMigrations is idempotent, so this both
