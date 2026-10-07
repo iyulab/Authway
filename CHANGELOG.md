@@ -43,6 +43,21 @@
 
 ### Fixed
 
+- **RP-initiated logout no longer fails for clients on the default logout
+  policy.** The logout backend looked for `post_logout_redirect_uri` in its
+  own request, but the authorization server never passes it to the logout
+  screen — so for every client on the default `strict` policy the logout was
+  refused and the user was left on an error screen. The authorization server
+  already checks that address against the client's registered
+  `post_logout_redirect_uris` before a logout starts, and it alone decides
+  where the browser goes afterwards; the logout backend now just completes the
+  flow and revokes the user's sessions.
+
+- **An unknown or already-used flow id is a client error on every step.**
+  Accepting or rejecting a login or consent with such an id answered 500 or
+  502; every step now answers 400 `invalid_flow` or 410 `flow_expired`, as the
+  lookups already did.
+
 - **The login rate limit now counts per route, not per address.** The limiter
   keyed its counter on the request path, so once a flow id is part of the path
   every new sign-in attempt started a fresh counter. It now keys on the route,
@@ -113,6 +128,18 @@
   **Migration:** point Hydra's `URLS_LOGIN` at `<API>/login` (the deploy
   scripts derive all four `URLS_*` from `API_URL` and `AUTH_UI_URL`; the
   `LOGIN_URL`, `CONSENT_URL` and `ERROR_URL` keys are gone).
+
+- **Consent and logout screens use flow endpoints too (breaking for custom
+  screens).** Hydra's `URLS_CONSENT` and `URLS_LOGOUT` now point at the API's
+  `GET /consent` and `GET /logout`, which open `/consent?flow=<id>` and
+  `/logout?flow=<id>` on the login UI. The screens call
+  `GET /api/v1/consent-flows/{flow}` (`next`: `form` or `redirect`),
+  `POST /api/v1/consent-flows/{flow}/accept` (`{grant_scope, remember,
+  remember_for}`), `POST /api/v1/consent-flows/{flow}/reject` and
+  `POST /api/v1/logout-flows/{flow}`; each answers `next: redirect` with
+  `redirect_to`. `GET|POST /consent`, `POST /consent/accept` and
+  `POST /consent/reject` as JSON endpoints are removed. **Migration:** point
+  `URLS_CONSENT` at `<API>/consent` and `URLS_LOGOUT` at `<API>/logout`.
 
 - **`@authway/client` and `@authway/react` resolve every endpoint through
   OpenID Connect discovery (breaking).** `domain` is the URL of your Authway

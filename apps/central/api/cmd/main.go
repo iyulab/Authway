@@ -284,7 +284,7 @@ func main() {
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
-	logoutFlowHandler := handler.NewLogoutFlowHandler(clientService, hydraClient, zapLogger)
+	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, zapLogger)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
@@ -293,15 +293,8 @@ func main() {
 	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL)
 	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
 	app.Get("/login", flowEntryHandler.Login)
-
-	app.Get("/consent", authHandler.ConsentPage)
-	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
-	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission
-	app.Post("/consent/reject", authHandler.RejectConsent)
-
-	// Logout screen backend: validates the post-logout redirect against the
-	// client's policy, accepts the Hydra logout and revokes the user's sessions.
-	app.Get("/logout", logoutFlowHandler.HandleLogout)
+	app.Get("/consent", flowEntryHandler.Consent)
+	app.Get("/logout", flowEntryHandler.Logout)
 
 	// Popup callback for popup-based authentication (@authway/client, @authway/react)
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
@@ -341,6 +334,12 @@ func main() {
 	v1.Post("/login-flows/:flow/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin)
 	// A page navigation (not fetch): the browser goes on to the provider.
 	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
+
+	// Consent and logout screens: what to ask, and the user's answer.
+	v1.Get("/consent-flows/:flow", authHandler.GetConsentFlow)
+	v1.Post("/consent-flows/:flow/accept", authHandler.AcceptConsent)
+	v1.Post("/consent-flows/:flow/reject", authHandler.RejectConsent)
+	v1.Post("/logout-flows/:flow", logoutFlowHandler.CompleteLogout)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)

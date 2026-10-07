@@ -1,152 +1,66 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { getConfig } from '../config'
+import { submitFlowStep } from '../utils/loginFlow'
 
 interface LogoutErrorState {
   message: string
   fallbackRedirect: string | null
 }
 
+/** Origin of the page that sent the user here, to return them to on failure. */
+function referrerOrigin(): string | null {
+  try {
+    return document.referrer ? new URL(document.referrer).origin : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Completes a logout flow without asking: the backend ends the session and
+ * says where to go; the authorization server has already checked that
+ * destination against the client's registered post-logout URIs.
+ */
 const LogoutPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
   const [error, setError] = useState<LogoutErrorState | null>(null)
-  const redirectTimerRef = useRef<number | null>(null)
+  const submittedRef = useRef<string | null>(null)
 
-  // Extract origin from URL for fallback
-  const extractOrigin = useCallback((url: string): string => {
-    try {
-      const parsed = new URL(url)
-      return parsed.origin
-    } catch {
-      // Simple fallback: find third slash
-      const matches = url.match(/^(https?:\/\/[^/]+)/)
-      return matches ? matches[1] : url
-    }
-  }, [])
+  const flow = searchParams.get('flow')
 
-  // Determine fallback redirect URL
-  const getFallbackUrl = useCallback((data: Record<string, unknown>): string | null => {
-    // Priority: fallback_redirect from API > post_logout_redirect_uri param > referrer origin
-    if (data.fallback_redirect && typeof data.fallback_redirect === 'string') {
-      return data.fallback_redirect
-    }
-
-    const postLogoutUri = searchParams.get('post_logout_redirect_uri')
-    if (postLogoutUri) {
-      return extractOrigin(postLogoutUri)
-    }
-
-    if (document.referrer) {
-      return extractOrigin(document.referrer)
-    }
-
-    return null
-  }, [searchParams, extractOrigin])
-
-  // Handle redirect with countdown
+  // On failure, return the user to where they came from after a moment.
   useEffect(() => {
-    if (error?.fallbackRedirect) {
-      redirectTimerRef.current = window.setTimeout(() => {
-        window.location.href = error.fallbackRedirect!
-      }, 1000)
-
-      return () => {
-        if (redirectTimerRef.current) {
-          clearTimeout(redirectTimerRef.current)
-        }
-      }
-    }
+    if (!error?.fallbackRedirect) return
+    const timer = window.setTimeout(() => {
+      window.location.href = error.fallbackRedirect!
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [error])
 
   useEffect(() => {
-    const logoutChallenge = searchParams.get('logout_challenge')
-    const postLogoutUri = searchParams.get('post_logout_redirect_uri')
-
-    if (!logoutChallenge) {
-      // No challenge - redirect to referrer or post_logout_redirect_uri
-      const fallback = postLogoutUri ? extractOrigin(postLogoutUri) :
-                       document.referrer ? extractOrigin(document.referrer) : null
-
-      console.error('[Authway Logout] Missing logout_challenge parameter', {
-        post_logout_redirect_uri: postLogoutUri,
-        referrer: document.referrer,
-        fallback_redirect: fallback
-      })
-
-      setError({
-        message: 'Logout challenge parameter is missing',
-        fallbackRedirect: fallback
-      })
+    if (!flow) {
+      setError({ message: t('auth:logout.missingFlow', 'This sign-out link is not valid.'), fallbackRedirect: referrerOrigin() })
       return
     }
+    // Strict Mode mounts twice; a logout flow can only be completed once.
+    if (submittedRef.current === flow) return
+    submittedRef.current = flow
 
-    // Auto-accept logout by calling backend
-    const performLogout = async () => {
-      try {
-        const baseUrl = getConfig().apiUrl
-        const url = postLogoutUri
-          ? `${baseUrl}/logout?logout_challenge=${logoutChallenge}&post_logout_redirect_uri=${encodeURIComponent(postLogoutUri)}`
-          : `${baseUrl}/logout?logout_challenge=${logoutChallenge}`
-
-        const response = await fetch(url, {
-          redirect: 'manual' // Don't auto-follow redirects
-        })
-
-        // Check for redirect response (status 3xx)
-        if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
-          const redirectUrl = response.headers.get('Location') || response.url
-          if (redirectUrl) {
-            window.location.href = redirectUrl
-            return
-          }
-        }
-
-        const data = await response.json()
-
-        if (data.redirect_to) {
-          // Redirect to Hydra's logout completion URL
+    submitFlowStep('logout-flows', flow, '')
+      .then((data) => {
+        if (data.next === 'redirect' && data.redirect_to) {
           window.location.href = data.redirect_to
-        } else if (data.error) {
-          // Log detailed error for developers
-          console.error('[Authway Logout] Logout failed', {
-            error: data.error,
-            error_description: data.error_description,
-            client_id: data.client_id,
-            fallback_redirect: data.fallback_redirect,
-            post_logout_redirect_uri: postLogoutUri,
-            logout_challenge: logoutChallenge,
-            hint: 'Ensure post_logout_redirect_uris is configured in Authway client settings'
-          })
-
-          const fallback = getFallbackUrl(data)
-          setError({
-            message: data.error_description || data.error,
-            fallbackRedirect: fallback
-          })
+        } else {
+          setError({ message: data.error || t('auth:logout.error'), fallbackRedirect: referrerOrigin() })
         }
-      } catch (err) {
-        // Log error for developers
-        console.error('[Authway Logout] Network or parsing error', {
-          error: err,
-          logout_challenge: logoutChallenge,
-          post_logout_redirect_uri: postLogoutUri,
-          referrer: document.referrer
-        })
-
-        const fallback = postLogoutUri ? extractOrigin(postLogoutUri) :
-                         document.referrer ? extractOrigin(document.referrer) : null
-
-        setError({
-          message: 'Logout failed due to network error',
-          fallbackRedirect: fallback
-        })
-      }
-    }
-
-    performLogout()
-  }, [searchParams, extractOrigin, getFallbackUrl])
+      })
+      .catch((err) => {
+        console.error('[Authway Logout] Network or parsing error', err)
+        setError({ message: t('auth:logout.networkError', 'Signing out failed because of a network error.'), fallbackRedirect: referrerOrigin() })
+      })
+  }, [flow, t])
 
   if (error) {
     return (

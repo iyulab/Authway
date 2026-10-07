@@ -2,22 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
-import { getConfig } from '../config'
-
-interface ConsentRequest {
-  challenge: string
-  grant_scope: string[]
-  remember: boolean
-  remember_for: number
-}
-
-interface ConsentResponse {
-  redirect_to?: string
-  error?: string
-}
+import { flowUrl, followRedirect, submitFlowStep, type FlowStep } from '../utils/loginFlow'
 
 interface ConsentPageInfo {
-  challenge: string
+  next: 'form'
+  flow: string
   client_name: string
   requested_scope: string[]
   user: {
@@ -35,144 +24,57 @@ const ConsentPage: React.FC = () => {
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
   const [rememberConsent, setRememberConsent] = useState(true) // Default to true for better UX
 
-  const challenge = searchParams.get('consent_challenge')
+  const flow = searchParams.get('flow')
 
-  // Helper function to handle popup mode redirect
-  const handlePopupRedirect = (redirectUrl: string) => {
-    // Check both window.opener AND sessionStorage (survives cross-origin redirects)
-    const hasWindowOpener = window.opener !== null && window.opener !== window
-    const isSessionStoragePopup = sessionStorage.getItem('authway_popup_mode') === 'true'
-    const isPopupMode = hasWindowOpener || isSessionStoragePopup
-
-    // Check if response_mode is form_post (incompatible with popup iframe approach)
-    try {
-      const url = new URL(redirectUrl)
-      const responseMode = url.searchParams.get('response_mode')
-      if (responseMode === 'form_post') {
-        console.log('[ConsentPage] form_post response mode detected - popup approach not supported')
-        console.log('[ConsentPage] Clearing popup mode and using normal redirect')
-        sessionStorage.removeItem('authway_popup_mode')
-        return false // Use normal redirect
-      }
-    } catch {
-      // URL parsing failed, continue with popup check
-    }
-
-    if (isPopupMode) {
-      console.log('[ConsentPage] Popup mode detected via', hasWindowOpener ? 'window.opener' : 'sessionStorage')
-
-      // Use direct navigation instead of hidden iframe to avoid COOP issues with social logins (Google, etc.)
-      // The callback.html in the popup will handle sending postMessage to the parent
-      console.log('[ConsentPage] Popup mode - navigating directly to:', redirectUrl)
-      window.location.href = redirectUrl
-      return true
-    }
-
-    return false // Not in popup mode
-  }
-
-  // Fetch consent challenge info
+  // Fetch what the consent flow asks
   useEffect(() => {
-    const hasWindowOpener = window.opener !== null && window.opener !== window
-    const hasSessionStorage = sessionStorage.getItem('authway_popup_mode') === 'true'
-
-    console.log('[ConsentPage] useEffect - checking popup mode:', {
-      hasOpener: window.opener !== null,
-      isSelfReference: window.opener === window,
-      hasSessionStorage,
-      isPopupMode: hasWindowOpener || hasSessionStorage,
-      detectionMethod: hasWindowOpener ? 'window.opener' : (hasSessionStorage ? 'sessionStorage' : 'none')
-    })
-
-    if (!challenge) {
+    if (!flow) {
       setError(t('consent:errors.missingChallenge'))
       setIsLoading(false)
       return
     }
 
-    console.log('[ConsentPage] Fetching consent info with challenge:', challenge.substring(0, 20) + '...')
-
-    // Use POST to avoid HTTP 431 with long consent_challenge
-    fetch(`${getConfig().apiUrl}/consent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        consent_challenge: challenge,
-      }),
-    })
+    fetch(flowUrl('consent-flows', flow))
       .then(res => res.json())
       .then(data => {
-        if (data.error) {
+        if (data.next === 'redirect' && data.redirect_to) {
+          // Nothing to ask (the client skips consent, or single sign-on).
+          // Keep the loading state while the browser leaves.
+          followRedirect(data.redirect_to)
+        } else if (data.error) {
           setError(data.error)
           setIsLoading(false)
-        } else if (data.redirect_to && data.auto_accepted) {
-          // Auto-accepted by skip_consent - redirect immediately
-          // Keep loading state to prevent rendering
-          console.log('[ConsentPage] Auto-accepted consent, redirecting...')
-          console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
-
-          // Handle popup mode redirect
-          console.log('[ConsentPage] Calling handlePopupRedirect...')
-          const popupHandled = handlePopupRedirect(data.redirect_to)
-          console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
-
-          // If not in popup mode or popup handling failed, do normal redirect
-          if (!popupHandled) {
-            window.location.href = data.redirect_to
-          }
         } else {
           setConsentInfo(data)
-          // 기본적으로 모든 요청된 scope를 선택
+          // Every requested scope starts selected.
           setSelectedScopes(data.requested_scope || [])
           setIsLoading(false)
         }
       })
       .catch(err => {
-        console.error('Consent challenge fetch error:', err)
+        console.error('Consent flow fetch error:', err)
         setError(t('consent:errors.fetchFailed'))
         setIsLoading(false)
       })
-  }, [challenge, t])
+  }, [flow, t])
+
+  const handleAnswer = (data: FlowStep) => {
+    if (data.next === 'redirect' && data.redirect_to) {
+      followRedirect(data.redirect_to)
+    } else if (data.error) {
+      setError(data.error)
+    }
+  }
 
   // Accept consent mutation
   const acceptMutation = useMutation({
-    mutationFn: async (): Promise<ConsentResponse> => {
-      const response = await fetch(`${getConfig().apiUrl}/consent/accept`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          challenge,
-          grant_scope: selectedScopes,
-          remember: rememberConsent,
-          remember_for: rememberConsent ? 3600 : 0, // 1 hour
-        } as ConsentRequest),
-      })
-
-      return response.json()
-    },
-    onSuccess: (data) => {
-      if (data.redirect_to) {
-        console.log('[ConsentPage] Consent accepted, redirecting...')
-        console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
-
-        // Handle popup mode redirect
-        console.log('[ConsentPage] Calling handlePopupRedirect (accept)...')
-        const popupHandled = handlePopupRedirect(data.redirect_to)
-        console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
-
-        // If not in popup mode or popup handling failed, do normal redirect
-        if (!popupHandled) {
-          console.log('[ConsentPage] Not popup mode, doing normal redirect')
-          window.location.href = data.redirect_to
-        }
-      } else if (data.error) {
-        setError(data.error)
-      }
-    },
+    mutationFn: (): Promise<FlowStep> =>
+      submitFlowStep('consent-flows', flow ?? '', '/accept', {
+        grant_scope: selectedScopes,
+        remember: rememberConsent,
+        remember_for: rememberConsent ? 3600 : 0, // 1 hour
+      }),
+    onSuccess: handleAnswer,
     onError: (error) => {
       console.error('Consent accept error:', error)
       setError(t('consent:errors.approveFailed'))
@@ -181,41 +83,8 @@ const ConsentPage: React.FC = () => {
 
   // Reject consent mutation
   const rejectMutation = useMutation({
-    mutationFn: async (): Promise<ConsentResponse> => {
-      const response = await fetch(
-        `${getConfig().apiUrl}/consent/reject`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            consent_challenge: challenge,
-          }),
-        }
-      )
-
-      return response.json()
-    },
-    onSuccess: (data) => {
-      if (data.redirect_to) {
-        console.log('[ConsentPage] Consent rejected, redirecting...')
-        console.log('[ConsentPage] redirect_to URL:', data.redirect_to)
-
-        // Handle popup mode redirect
-        console.log('[ConsentPage] Calling handlePopupRedirect (reject)...')
-        const popupHandled = handlePopupRedirect(data.redirect_to)
-        console.log('[ConsentPage] handlePopupRedirect returned:', popupHandled)
-
-        // If not in popup mode or popup handling failed, do normal redirect
-        if (!popupHandled) {
-          console.log('[ConsentPage] Not popup mode, doing normal redirect')
-          window.location.href = data.redirect_to
-        }
-      } else if (data.error) {
-        setError(data.error)
-      }
-    },
+    mutationFn: (): Promise<FlowStep> => submitFlowStep('consent-flows', flow ?? '', '/reject'),
+    onSuccess: handleAnswer,
     onError: (error) => {
       console.error('Consent reject error:', error)
       setError(t('consent:errors.denyFailed'))

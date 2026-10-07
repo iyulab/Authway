@@ -7,10 +7,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// FlowEntryHandler is where the authorization server sends the browser to
-// start a login. It hands the login UI an opaque flow id, so the UI never
-// sees the authorization server's own parameter names and works unchanged
-// with any backend that issues flow ids.
+// FlowEntryHandler is where the authorization server sends the browser for
+// login, consent and logout. It hands the login UI an opaque flow id, so the
+// UI never sees the authorization server's own parameter names and works
+// unchanged with any backend that issues flow ids.
 type FlowEntryHandler struct {
 	frontendURL string
 }
@@ -22,6 +22,16 @@ func NewFlowEntryHandler(frontendURL string) *FlowEntryHandler {
 // Login serves GET /login?login_challenge=… (Hydra's URLS_LOGIN).
 func (h *FlowEntryHandler) Login(c *fiber.Ctx) error {
 	return h.enter(c, "login_challenge", "/login")
+}
+
+// Consent serves GET /consent?consent_challenge=… (Hydra's URLS_CONSENT).
+func (h *FlowEntryHandler) Consent(c *fiber.Ctx) error {
+	return h.enter(c, "consent_challenge", "/consent")
+}
+
+// Logout serves GET /logout?logout_challenge=… (Hydra's URLS_LOGOUT).
+func (h *FlowEntryHandler) Logout(c *fiber.Ctx) error {
+	return h.enter(c, "logout_challenge", "/logout")
 }
 
 func (h *FlowEntryHandler) enter(c *fiber.Ctx, challengeParam, screen string) error {

@@ -79,8 +79,8 @@ az containerapp create \
     SECRETS_SYSTEM="<random-32-char-string>" \
     URLS_SELF_ISSUER="https://oauth.authway.in" \
     URLS_LOGIN="https://api.authway.in/login" \
-    URLS_CONSENT="https://auth.authway.in/consent" \
-    URLS_LOGOUT="https://auth.authway.in/logout"
+    URLS_CONSENT="https://api.authway.in/consent" \
+    URLS_LOGOUT="https://api.authway.in/logout"
 ```
 
 ### 3. Deploy Central API
@@ -223,8 +223,8 @@ services:
       SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
       URLS_SELF_ISSUER: https://oauth.example.com
       URLS_LOGIN: https://api.example.com/login
-      URLS_CONSENT: https://auth.example.com/consent
-      URLS_LOGOUT: https://auth.example.com/logout
+      URLS_CONSENT: https://api.example.com/consent
+      URLS_LOGOUT: https://api.example.com/logout
     ports:
       - "4444:4444"
       - "4445:4445"
@@ -385,9 +385,9 @@ COOKIE_SECURE=true
 DSN=postgres://user:password@host:5432/hydra?sslmode=require
 SECRETS_SYSTEM=<at-least-32-random-characters>
 URLS_SELF_ISSUER=https://oauth.authway.in
-URLS_LOGIN=https://api.authway.in/login  # the API hands the login UI an opaque flow id
-URLS_CONSENT=https://auth.authway.in/consent
-URLS_LOGOUT=https://auth.authway.in/logout
+URLS_LOGIN=https://api.authway.in/login      # the API hands the login UI an opaque flow id
+URLS_CONSENT=https://api.authway.in/consent
+URLS_LOGOUT=https://api.authway.in/logout
 
 # Optional
 LOG_LEVEL=info

@@ -25,7 +25,8 @@ describe('ConsentPage', () => {
   const user = userEvent.setup()
 
   const mockConsentInfo = {
-    challenge: 'test-consent-challenge',
+    next: 'form',
+    flow: 'test-consent-challenge',
     client_name: 'Test Application',
     requested_scope: ['openid', 'profile', 'email', 'offline_access'],
     user: {
@@ -40,10 +41,10 @@ describe('ConsentPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSearchParams.set('consent_challenge', 'test-consent-challenge')
+    mockSearchParams.set('flow', 'test-consent-challenge')
 
     server.use(
-      http.post('http://localhost:8080/consent', () => {
+      http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
         return HttpResponse.json(mockConsentInfo)
       })
     )
@@ -61,8 +62,8 @@ describe('ConsentPage', () => {
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
 
-    it('shows error when consent_challenge is missing', async () => {
-      mockSearchParams.delete('consent_challenge')
+    it('shows error when the flow is missing', async () => {
+      mockSearchParams.delete('flow')
 
       render(<ConsentPage />)
 
@@ -74,7 +75,7 @@ describe('ConsentPage', () => {
 
     it('shows error when consent challenge fetch fails', async () => {
       server.use(
-        http.post('http://localhost:8080/consent', () => {
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
           return HttpResponse.json({ error: 'Server error' }, { status: 500 })
         })
       )
@@ -89,7 +90,7 @@ describe('ConsentPage', () => {
 
     it('shows error when consent challenge fetch throws', async () => {
       server.use(
-        http.post('http://localhost:8080/consent', () => {
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
           return HttpResponse.error()
         })
       )
@@ -141,7 +142,7 @@ describe('ConsentPage', () => {
 
     it('shows fallback description for unknown scopes', async () => {
       server.use(
-        http.post('http://localhost:8080/consent', () => {
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
           return HttpResponse.json({
             ...mockConsentInfo,
             requested_scope: ['unknown_scope']
@@ -246,9 +247,9 @@ describe('ConsentPage', () => {
 
     it('handles successful consent approval with redirect', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/accept', async () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', async () => {
           await delay(50) // keep isPending long enough to observe the loading label
-          return HttpResponse.json({ redirect_to: 'http://example.com/callback?code=auth-code' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback?code=auth-code' })
         })
       )
 
@@ -270,7 +271,7 @@ describe('ConsentPage', () => {
 
     it('handles consent approval error from server', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/accept', () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', () => {
           return HttpResponse.json({ error: 'Consent processing failed' })
         })
       )
@@ -285,7 +286,7 @@ describe('ConsentPage', () => {
 
     it('handles network error during consent approval', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/accept', () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', () => {
           return HttpResponse.error()
         })
       )
@@ -302,9 +303,9 @@ describe('ConsentPage', () => {
       let requestBody: any
 
       server.use(
-        http.post('http://localhost:8080/consent/accept', async ({ request }) => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', async ({ request }) => {
           requestBody = await request.json()
-          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
         })
       )
 
@@ -317,7 +318,6 @@ describe('ConsentPage', () => {
 
       await waitFor(() => {
         expect(requestBody).toEqual({
-          challenge: 'test-consent-challenge',
           grant_scope: ['openid', 'email', 'offline_access'], // profile removed
           remember: true,
           remember_for: 3600
@@ -337,9 +337,9 @@ describe('ConsentPage', () => {
 
     it('handles successful consent rejection with redirect', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/reject', async () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', async () => {
           await delay(50) // keep isPending long enough to observe the loading label
-          return HttpResponse.json({ redirect_to: 'http://example.com/error?error=access_denied' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/error?error=access_denied' })
         })
       )
 
@@ -361,7 +361,7 @@ describe('ConsentPage', () => {
 
     it('handles consent rejection error from server', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/reject', () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', () => {
           return HttpResponse.json({ error: 'Rejection processing failed' })
         })
       )
@@ -376,7 +376,7 @@ describe('ConsentPage', () => {
 
     it('handles network error during consent rejection', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/reject', () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', () => {
           return HttpResponse.error()
         })
       )
@@ -393,7 +393,7 @@ describe('ConsentPage', () => {
   describe('User Display', () => {
     it('displays user email when names are not available', async () => {
       server.use(
-        http.post('http://localhost:8080/consent', () => {
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
           return HttpResponse.json({
             ...mockConsentInfo,
             user: {
@@ -432,9 +432,9 @@ describe('ConsentPage', () => {
 
     it('disables buttons during approval', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/accept', async () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', async () => {
           await delay(50)
-          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
         })
       )
 
@@ -451,9 +451,9 @@ describe('ConsentPage', () => {
 
     it('disables buttons during rejection', async () => {
       server.use(
-        http.post('http://localhost:8080/consent/reject', async () => {
+        http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', async () => {
           await delay(50)
-          return HttpResponse.json({ redirect_to: 'http://example.com/error' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/error' })
         })
       )
 

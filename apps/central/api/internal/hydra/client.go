@@ -20,9 +20,10 @@ var ErrFlowNotFound = errors.New("login or consent flow not found")
 // longer be acted on — it was already accepted or rejected, or it timed out.
 var ErrFlowExpired = errors.New("login or consent flow expired or already handled")
 
-// flowError classifies a non-200 response to a challenge lookup. Lookups of
-// a client-supplied id fail for reasons the caller caused (unknown, used,
-// expired), which must surface as client errors, not as Hydra being down.
+// flowError classifies a non-200 response to a call on a login, consent or
+// logout challenge. The id comes from the caller, so calls fail for reasons
+// the caller caused (unknown, used, expired), which must surface as client
+// errors, not as Hydra being down.
 func flowError(status int, body []byte) error {
 	switch status {
 	case http.StatusNotFound:
@@ -258,10 +259,10 @@ type LoginRequest struct {
 }
 
 type AcceptLoginRequest struct {
-	Subject     string                 `json:"subject"`
-	Remember    bool                   `json:"remember"`
-	RememberFor int                    `json:"remember_for"`
-	ACR         string                 `json:"acr,omitempty"`
+	Subject     string         `json:"subject"`
+	Remember    bool           `json:"remember"`
+	RememberFor int            `json:"remember_for"`
+	ACR         string         `json:"acr,omitempty"`
 	Context     map[string]any `json:"context,omitempty"`
 }
 
@@ -320,7 +321,7 @@ func (c *Client) AcceptLoginRequest(challenge string, body *AcceptLoginRequest) 
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hydra accept login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("hydra accept login: %w", flowError(resp.StatusCode, bodyBytes))
 	}
 
 	var loginResp LoginResponse
@@ -366,7 +367,7 @@ func (c *Client) RejectLoginRequest(challenge string, error_code, error_descript
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hydra reject login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("hydra reject login: %w", flowError(resp.StatusCode, bodyBytes))
 	}
 
 	var loginResp LoginResponse
@@ -379,16 +380,16 @@ func (c *Client) RejectLoginRequest(challenge string, error_code, error_descript
 
 // Consent Flow
 type ConsentRequest struct {
-	Challenge         string                 `json:"challenge"`
-	RequestedScope    []string               `json:"requested_scope"`
-	RequestedAudience []string               `json:"requested_audience"`
-	Subject           string                 `json:"subject"`
-	Client            *OAuth2Client          `json:"client"`
-	LoginChallenge    string                 `json:"login_challenge"`
-	LoginSessionID    string                 `json:"login_session_id"`
-	ACR               string                 `json:"acr"`
+	Challenge         string         `json:"challenge"`
+	RequestedScope    []string       `json:"requested_scope"`
+	RequestedAudience []string       `json:"requested_audience"`
+	Subject           string         `json:"subject"`
+	Client            *OAuth2Client  `json:"client"`
+	LoginChallenge    string         `json:"login_challenge"`
+	LoginSessionID    string         `json:"login_session_id"`
+	ACR               string         `json:"acr"`
 	Context           map[string]any `json:"context"`
-	Skip              bool                   `json:"skip"`
+	Skip              bool           `json:"skip"`
 }
 
 type AcceptConsentRequest struct {
@@ -462,7 +463,7 @@ func (c *Client) AcceptConsentRequest(challenge string, body *AcceptConsentReque
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hydra accept consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("hydra accept consent: %w", flowError(resp.StatusCode, bodyBytes))
 	}
 
 	var consentResp LoginResponse
@@ -508,7 +509,7 @@ func (c *Client) RejectConsentRequest(challenge string, error_code, error_descri
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hydra reject consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("hydra reject consent: %w", flowError(resp.StatusCode, bodyBytes))
 	}
 
 	var consentResp LoginResponse
@@ -581,13 +582,13 @@ type IntrospectRequest struct {
 }
 
 type IntrospectResponse struct {
-	Active    bool                   `json:"active"`
-	Subject   string                 `json:"sub,omitempty"`
-	ClientID  string                 `json:"client_id,omitempty"`
-	Scope     string                 `json:"scope,omitempty"`
-	TokenType string                 `json:"token_type,omitempty"`
-	Exp       int64                  `json:"exp,omitempty"`
-	Iat       int64                  `json:"iat,omitempty"`
+	Active    bool           `json:"active"`
+	Subject   string         `json:"sub,omitempty"`
+	ClientID  string         `json:"client_id,omitempty"`
+	Scope     string         `json:"scope,omitempty"`
+	TokenType string         `json:"token_type,omitempty"`
+	Exp       int64          `json:"exp,omitempty"`
+	Iat       int64          `json:"iat,omitempty"`
 	Ext       map[string]any `json:"ext,omitempty"`
 }
 
@@ -662,19 +663,12 @@ func (c *Client) GetLogoutRequest(challenge string) (*LogoutRequest, error) {
 }
 
 // AcceptLogoutRequest accepts a logout request and returns where Hydra wants
-// the browser to go next. An empty postLogoutRedirectURI leaves the choice to
-// Hydra (its configured default).
-func (c *Client) AcceptLogoutRequest(challenge, postLogoutRedirectURI string) (*LoginResponse, error) {
-	payload := map[string]string{}
-	if postLogoutRedirectURI != "" {
-		payload["post_logout_redirect_uri"] = postLogoutRedirectURI
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
+// the browser to go next. The request carries no body: Hydra decides the
+// post-logout destination itself (the RP's validated post_logout_redirect_uri,
+// or its configured default).
+func (c *Client) AcceptLogoutRequest(challenge string) (*LoginResponse, error) {
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?logout_challenge=%s",
-		c.AdminURL, url.QueryEscape(challenge)), bytes.NewReader(body))
+		c.AdminURL, url.QueryEscape(challenge)), nil)
 	if err != nil {
 		return nil, err
 	}

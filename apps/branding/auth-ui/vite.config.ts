@@ -14,12 +14,5 @@ export default defineConfig({
     port: 3001,
     host: true,
     strictPort: true, // Fail if port is already in use
-    proxy: {
-      // Logout screen backend (the central API)
-      '/logout': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      }
-    }
   },
 })

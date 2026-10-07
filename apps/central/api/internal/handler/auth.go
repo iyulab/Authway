@@ -219,9 +219,8 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 
 	resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to accept login request",
-		})
+		h.logger.Error("Failed to accept login request", zap.Error(err))
+		return respondFlowLookupError(c, err)
 	}
 
 	middleware.ResetRateLimitOnSuccess(c)
@@ -315,32 +314,13 @@ func (h *AuthHandler) logMFALoginFailure(c *fiber.Ctx, u *user.User, phase strin
 	}
 }
 
-// ConsentPageRequest for POST request body
-type ConsentPageRequest struct {
-	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
-}
-
-// Consent flow handler - supports both GET and POST
-func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
-	// Try to get challenge from query parameter first (GET)
-	challenge := c.Query("consent_challenge")
-
-	// If not in query, try POST body (supports both JSON and form-urlencoded)
-	if challenge == "" && c.Method() == "POST" {
-		var req ConsentPageRequest
-		// BodyParser supports both JSON and form-urlencoded automatically
-		if err := c.BodyParser(&req); err == nil {
-			challenge = req.ConsentChallenge
-		}
-	}
-
-	if challenge == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "consent_challenge parameter is required",
-			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body. This parameter is provided by Ory Hydra after successful login.",
-			"docs":  "https://www.ory.sh/docs/hydra/guides/consent",
-		})
-	}
+// GetConsentFlow tells the consent screen what to do with a consent flow:
+// {"next":"redirect","redirect_to":…} when no question needs asking (the
+// client skips consent, a silent or single-sign-on login, a claims update),
+// otherwise {"next":"form",…} with what to ask.
+// GET /api/v1/consent-flows/:flow
+func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
+	challenge := flowParam(c)
 
 	// Get consent request from Hydra
 	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
@@ -434,13 +414,13 @@ func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
 
 		redirectTo, err := h.hydraClient.AcceptConsentRequest(challenge, acceptRequest)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to auto-accept consent"})
+			h.logger.Error("Failed to auto-accept consent", zap.Error(err))
+			return respondFlowLookupError(c, err)
 		}
 
-		// Return redirect_to as JSON for frontend to handle
 		return c.JSON(fiber.Map{
-			"redirect_to":   redirectTo.RedirectTo,
-			"auto_accepted": true,
+			"next":        nextRedirect,
+			"redirect_to": redirectTo.RedirectTo,
 		})
 	}
 
@@ -451,7 +431,8 @@ func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
 		zap.Bool("skip", consentReq.Skip))
 
 	return c.JSON(fiber.Map{
-		"challenge":       challenge,
+		"next":            nextForm,
+		"flow":            challenge,
 		"client_name":     consentReq.Client.ClientName,
 		"requested_scope": consentReq.RequestedScope,
 		"user": fiber.Map{
@@ -461,23 +442,26 @@ func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
 	})
 }
 
-type ConsentRequest struct {
-	Challenge   string   `json:"challenge"`
+// AcceptConsentRequest is the body of POST /api/v1/consent-flows/:flow/accept.
+type AcceptConsentRequest struct {
 	GrantScope  []string `json:"grant_scope"`
 	Remember    bool     `json:"remember"`
 	RememberFor int      `json:"remember_for"`
 }
 
-func (h *AuthHandler) Consent(c *fiber.Ctx) error {
-	var req ConsentRequest
+// AcceptConsent grants the scopes the user approved on the consent screen.
+// POST /api/v1/consent-flows/:flow/accept
+func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
+	challenge := flowParam(c)
+	var req AcceptConsentRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Invalid request body",
+			"code":  "invalid_request",
 		})
 	}
 
-	// Get consent request from Hydra
-	consentReq, err := h.hydraClient.GetConsentRequest(req.Challenge)
+	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
 	if err != nil {
 		return respondFlowLookupError(c, err)
 	}
@@ -551,7 +535,7 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 
 	// Log detailed consent request data
 	h.logger.Info("Sending consent accept to Hydra",
-		zap.String("challenge", req.Challenge),
+		zap.String("challenge", challenge),
 		zap.Strings("grant_scope", req.GrantScope),
 		zap.Strings("grant_access_token_audience", consentReq.RequestedAudience),
 		zap.Bool("remember", req.Remember),
@@ -559,14 +543,12 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 		zap.String("user_id", user.ID.String()),
 		zap.String("tenant_id", user.TenantID.String()))
 
-	resp, err := h.hydraClient.AcceptConsentRequest(req.Challenge, acceptBody)
+	resp, err := h.hydraClient.AcceptConsentRequest(challenge, acceptBody)
 	if err != nil {
 		h.logger.Error("Failed to accept consent request",
 			zap.Error(err),
-			zap.String("challenge", req.Challenge))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to accept consent request",
-		})
+			zap.String("challenge", challenge))
+		return respondFlowLookupError(c, err)
 	}
 
 	h.logger.Info("Consent accepted, redirecting",
@@ -574,7 +556,7 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 		zap.String("user_id", user.ID.String()))
 
 	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]any{
-		"challenge":   req.Challenge,
+		"challenge":   challenge,
 		"grant_scope": req.GrantScope,
 		"audience":    consentReq.RequestedAudience,
 		"client_id":   consentReq.Client.ClientID,
@@ -582,33 +564,15 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 	})
 
 	return c.JSON(fiber.Map{
+		"next":        nextRedirect,
 		"redirect_to": resp.RedirectTo,
 	})
 }
 
-// RejectConsentRequest for POST request body
-type RejectConsentRequest struct {
-	ConsentChallenge string `json:"consent_challenge" form:"consent_challenge"`
-}
-
+// RejectConsent records that the user declined; the application receives
+// access_denied. POST /api/v1/consent-flows/:flow/reject
 func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
-	// Try to get challenge from query parameter first (GET)
-	challenge := c.Query("consent_challenge")
-
-	// If not in query, try POST body (supports both JSON and form-urlencoded)
-	if challenge == "" && c.Method() == "POST" {
-		var req RejectConsentRequest
-		if err := c.BodyParser(&req); err == nil {
-			challenge = req.ConsentChallenge
-		}
-	}
-
-	if challenge == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "consent_challenge parameter is required",
-			"hint":  "The consent_challenge parameter must be included in the URL query string or POST body",
-		})
-	}
+	challenge := flowParam(c)
 
 	// Resolve subject for audit actor before rejecting — best effort, ignore errors.
 	var rejectingUser *user.User
@@ -620,9 +584,8 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 
 	resp, err := h.hydraClient.RejectConsentRequest(challenge, "access_denied", "User denied consent")
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to reject consent request",
-		})
+		h.logger.Error("Failed to reject consent request", zap.Error(err))
+		return respondFlowLookupError(c, err)
 	}
 
 	if rejectingUser != nil {
@@ -633,6 +596,7 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
+		"next":        nextRedirect,
 		"redirect_to": resp.RedirectTo,
 	})
 }

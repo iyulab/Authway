@@ -35,28 +35,27 @@ export const handlers = [
     })
   }),
 
-  // Consent endpoint
-  http.get('http://localhost:8080/consent', ({ request }) => {
-    const url = new URL(request.url)
-    const challenge = url.searchParams.get('consent_challenge')
+  // Consent flow: what to ask, and the answers
+  http.get('http://localhost:8080/api/v1/consent-flows/:flow', ({ params }) => {
     return HttpResponse.json({
-      challenge,
+      next: 'form',
+      flow: params.flow,
       client_name: 'Test Application',
       requested_scope: ['openid', 'email', 'profile'],
       user: mockUser
     })
   }),
 
-  // Accept consent
-  http.post('http://localhost:8080/consent/accept', () => {
+  http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', () => {
     return HttpResponse.json({
+      next: 'redirect',
       redirect_to: 'http://localhost:3000/callback?code=mock-auth-code'
     })
   }),
 
-  // Reject consent
-  http.post('http://localhost:8080/consent/reject', () => {
+  http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', () => {
     return HttpResponse.json({
+      next: 'redirect',
       redirect_to: 'http://localhost:3000/error?error=access_denied'
     })
   })

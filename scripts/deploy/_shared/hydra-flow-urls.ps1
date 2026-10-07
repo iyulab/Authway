@@ -1,10 +1,10 @@
 # ============================================================
 # Hydra flow URLs (URLS_LOGIN / URLS_CONSENT / URLS_LOGOUT / URLS_ERROR)
 # ============================================================
-# Hydra sends the browser to these addresses during sign-in. Login goes to
-# the central API, which hands the login UI an opaque flow id; the other
-# screens are still addressed directly. Both the deploy (publish-hydra) and
-# its check (verify-hydra-env) read them from here, so they cannot drift.
+# Hydra sends the browser to these addresses during sign-in. Login, consent
+# and logout go to the central API, which hands the login UI an opaque flow
+# id; the error screen is addressed directly. Both the deploy (publish-hydra)
+# and its check (verify-hydra-env) read them from here, so they cannot drift.
 #
 # Derived from API_URL and AUTH_UI_URL — there is no separate key per URL.
 # ============================================================
@@ -25,8 +25,8 @@ function Get-HydraFlowUrls {
 
     return [ordered]@{
         URLS_LOGIN   = "$api/login"
-        URLS_CONSENT = "$ui/consent"
-        URLS_LOGOUT  = "$ui/logout"
+        URLS_CONSENT = "$api/consent"
+        URLS_LOGOUT  = "$api/logout"
         URLS_ERROR   = "$ui/error"
     }
 }

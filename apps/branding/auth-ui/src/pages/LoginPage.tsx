@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep } from '../utils/loginFlow'
+import { followRedirect, loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep } from '../utils/loginFlow'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -60,40 +60,6 @@ const LoginPage: React.FC = () => {
   const flow = searchParams.get('flow')
   const connection = searchParams.get('connection')
 
-  // Helper function to handle popup mode redirect
-  const handlePopupRedirect = (redirectUrl: string) => {
-    // Check both window.opener AND sessionStorage (survives cross-origin redirects)
-    const hasWindowOpener = window.opener !== null && window.opener !== window
-    const isSessionStoragePopup = sessionStorage.getItem('authway_popup_mode') === 'true'
-    const isPopupMode = hasWindowOpener || isSessionStoragePopup
-
-    // Check if response_mode is form_post (incompatible with popup iframe approach)
-    try {
-      const url = new URL(redirectUrl)
-      const responseMode = url.searchParams.get('response_mode')
-      if (responseMode === 'form_post') {
-        console.log('[LoginPage] form_post response mode detected - popup approach not supported')
-        console.log('[LoginPage] Clearing popup mode and using normal redirect')
-        sessionStorage.removeItem('authway_popup_mode')
-        return false // Use normal redirect
-      }
-    } catch {
-      // URL parsing failed, continue with popup check
-    }
-
-    if (isPopupMode) {
-      console.log('[LoginPage] Popup mode detected via', hasWindowOpener ? 'window.opener' : 'sessionStorage')
-
-      // Use direct navigation instead of hidden iframe to avoid COOP issues with social logins (Google, etc.)
-      // The callback.html in the popup will handle sending postMessage to the parent
-      console.log('[LoginPage] Popup mode - navigating directly to:', redirectUrl)
-      window.location.href = redirectUrl
-      return true
-    }
-
-    return false // Not in popup mode
-  }
-
   const loginSchema = createLoginSchema(t)
 
   const {
@@ -135,18 +101,7 @@ const LoginPage: React.FC = () => {
           } else if (data.session_cleared) {
             console.log('[LoginPage] Session cleared, redirecting...')
           }
-          console.log('[LoginPage] redirect_to URL:', data.redirect_to)
-
-          // Handle popup mode redirect
-          console.log('[LoginPage] Calling handlePopupRedirect (SSO)...')
-          const popupHandled = handlePopupRedirect(data.redirect_to)
-          console.log('[LoginPage] handlePopupRedirect returned:', popupHandled)
-
-          // If not in popup mode or popup handling failed, do normal redirect
-          if (!popupHandled) {
-            console.log('[LoginPage] Not popup mode, doing normal redirect')
-            window.location.href = data.redirect_to
-          }
+          followRedirect(data.redirect_to)
           return
         }
 
@@ -191,19 +146,7 @@ const LoginPage: React.FC = () => {
         const params = new URLSearchParams({ flow, mfa_challenge: data.mfa_challenge })
         navigate(`/mfa/verify?${params}`)
       } else if (data.next === 'redirect' && data.redirect_to) {
-        console.log('[LoginPage] Email/password login successful, redirecting...')
-        console.log('[LoginPage] redirect_to URL:', data.redirect_to)
-
-        // Handle popup mode redirect
-        console.log('[LoginPage] Calling handlePopupRedirect (email/password)...')
-        const popupHandled = handlePopupRedirect(data.redirect_to)
-        console.log('[LoginPage] handlePopupRedirect returned:', popupHandled)
-
-        // If not in popup mode or popup handling failed, do normal redirect
-        if (!popupHandled) {
-          console.log('[LoginPage] Not popup mode, doing normal redirect')
-          window.location.href = data.redirect_to
-        }
+        followRedirect(data.redirect_to)
       } else if (data.error) {
         const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
         setError(key ? t(key) : data.error)

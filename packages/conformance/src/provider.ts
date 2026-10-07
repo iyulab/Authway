@@ -160,8 +160,16 @@ export class Provider {
    * address that carries a flow id.
    */
   async openLoginScreen(browser: Browser, authorizeUrl: string): Promise<URL> {
-    let next = await browser.redirectFrom(authorizeUrl)
-    for (let hops = 0; hops < 5 && !next.searchParams.has('flow'); hops++) {
+    return this.followUntil(browser, authorizeUrl, (u) => u.searchParams.has('flow'))
+  }
+
+  /**
+   * Follows redirects from `url` until `done` holds for the address reached —
+   * a screen of the login UI (it carries a flow id) or the client's redirect.
+   */
+  private async followUntil(browser: Browser, url: string, done: (u: URL) => boolean): Promise<URL> {
+    let next = await browser.redirectFrom(url)
+    for (let hops = 0; hops < 5 && !done(next); hops++) {
       next = await browser.redirectFrom(next.toString())
     }
     return next
@@ -169,12 +177,16 @@ export class Provider {
 
   /** URL of a login-flow endpoint of the login UI's backend. */
   loginFlowUrl(flow: string, path = ''): string {
-    return `${this.config.api}/api/v1/login-flows/${encodeURIComponent(flow)}${path}`
+    return this.flowUrl('login-flows', flow, path)
+  }
+
+  flowUrl(kind: 'login-flows' | 'consent-flows' | 'logout-flows', flow: string, path = ''): string {
+    return `${this.config.api}/api/v1/${kind}/${encodeURIComponent(flow)}${path}`
   }
 
   consentFlowFrom(location: URL): string {
-    const flow = location.searchParams.get('flow') ?? location.searchParams.get('consent_challenge')
-    if (!flow) throw new Error(`Redirect to the consent screen carries no flow id: ${location}`)
+    const flow = location.searchParams.get('flow')
+    if (!flow) throw new Error(`The consent screen was opened without a flow id: ${location}`)
     return flow
   }
 
@@ -187,17 +199,18 @@ export class Provider {
   }
 
   async acceptConsent(browser: Browser, flow: string, scopes: string[]): Promise<Response> {
-    return browser.fetch(`${this.config.api}/consent/accept`, {
+    return browser.fetch(this.flowUrl('consent-flows', flow, '/accept'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenge: flow, grant_scope: scopes }),
+      body: JSON.stringify({ grant_scope: scopes }),
     })
   }
 
   /**
    * RP-initiated logout (OIDC RP-Initiated Logout 1.0) through the logout
-   * screen's backend, in the browser that holds the login session. Returns
-   * where the browser finally lands.
+   * screen's backend, in the browser that holds the login session. The screen
+   * only knows its flow id, as the real one does. Returns where the browser
+   * finally lands.
    */
   async rpInitiatedLogout(browser: Browser, idToken: string): Promise<URL> {
     const d = await this.discovery()
@@ -209,20 +222,23 @@ export class Provider {
       post_logout_redirect_uri: POST_LOGOUT_REDIRECT_URI,
       state: randomToken(),
     }).toString()
-    const logoutScreen = await browser.redirectFrom(start.toString())
-    const flow = logoutScreen.searchParams.get('flow') ?? logoutScreen.searchParams.get('logout_challenge')
-    if (!flow) throw new Error(`Redirect to the logout screen carries no flow id: ${logoutScreen}`)
-    const backend = new URL(`${this.config.api}/logout`)
-    backend.search = new URLSearchParams({
-      logout_challenge: flow,
-      post_logout_redirect_uri: POST_LOGOUT_REDIRECT_URI,
-    }).toString()
-    let next = await browser.redirectFrom(backend.toString())
+    const issuer = new URL(this.config.issuer).origin
+    const api = new URL(this.config.api).origin
+    // Through the authorization server and the provider's backend to the logout screen.
+    const logoutScreen = await this.followUntil(
+      browser,
+      start.toString(),
+      (u) => u.searchParams.has('flow') || (u.origin !== issuer && u.origin !== api),
+    )
+    const flow = logoutScreen.searchParams.get('flow')
+    if (!flow) throw new Error(`The logout screen was opened without a flow id: ${logoutScreen}`)
+    const res = await browser.fetch(this.flowUrl('logout-flows', flow), { method: 'POST' })
+    const body = await res.text()
+    if (!res.ok) throw new Error(`Completing the logout flow failed: ${res.status} ${body}`)
+    const { next: step, redirect_to: redirectTo } = JSON.parse(body) as { next?: string; redirect_to?: string }
+    if (step !== 'redirect' || !redirectTo) throw new Error(`Logout flow did not redirect: ${body}`)
     // Follow the authorization server's own hops until it hands the browser back to the client.
-    for (let hops = 0; hops < 5 && next.origin === new URL(this.config.issuer).origin; hops++) {
-      next = await browser.redirectFrom(next.toString())
-    }
-    return next
+    return this.followUntil(browser, redirectTo, (u) => u.origin !== issuer)
   }
 
   async logout(accessToken: string): Promise<Response> {
@@ -263,7 +279,8 @@ export class Provider {
     const { next: step, redirect_to: afterLogin } = JSON.parse(loginBody) as { next?: string; redirect_to?: string }
     if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: loginRes.status, body: loginBody }
 
-    let next = await browser.redirectFrom(afterLogin)
+    // After login the authorization server either answers the client or opens the consent screen.
+    let next = await this.followUntil(browser, afterLogin, (u) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error'))
     if (next.searchParams.has('error')) {
       // The provider ended the whole authorization request instead of answering the login screen.
       return { kind: 'rejected', status: loginRes.status, body: next.toString() }
@@ -273,7 +290,7 @@ export class Provider {
       const consentBody = await consentRes.text()
       if (!consentRes.ok) throw new Error(`Consent failed: ${consentRes.status} ${consentBody}`)
       const { redirect_to: afterConsent } = JSON.parse(consentBody) as { redirect_to: string }
-      next = await browser.redirectFrom(afterConsent)
+      next = await this.followUntil(browser, afterConsent, (u) => u.searchParams.has('code') || u.searchParams.has('error'))
     }
     const code = next.searchParams.get('code')
     if (!code) throw new Error(`Authorization did not return a code: ${next}`)

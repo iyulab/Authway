@@ -19,9 +19,6 @@ const provider = new Provider(loadConfig())
  * machine-readable API contract.
  */
 const LOGIN_UI_POSTS: { path: string; knownBroken?: boolean }[] = [
-  { path: '/consent' },
-  { path: '/consent/accept' },
-  { path: '/consent/reject' },
   { path: '/api/v1/auth/magic-link/verify' },
   // The magic-link request form posts here, but the backend has no
   // magic-link step inside the sign-in flow yet.
@@ -101,13 +98,34 @@ describe('login UI backend routes', () => {
     expect(location.origin).not.toBe(new URL(provider.config.api).origin)
   })
 
+  // Consent and logout steps must reach the flow lookup: an unknown flow id is
+  // answered as such, not as a missing route or a server fault.
+  const UNKNOWN_FLOW_STEPS: { kind: 'consent-flows' | 'logout-flows'; path: string; method: string }[] = [
+    { kind: 'consent-flows', path: '', method: 'GET' },
+    { kind: 'consent-flows', path: '/accept', method: 'POST' },
+    { kind: 'consent-flows', path: '/reject', method: 'POST' },
+    { kind: 'logout-flows', path: '', method: 'POST' },
+  ]
+  for (const { kind, path, method } of UNKNOWN_FLOW_STEPS) {
+    it(`answers ${method} ${kind}/{flow}${path} for an unknown flow as invalid_flow`, async () => {
+      const res = await fetch(provider.flowUrl(kind, `unknown-${randomToken(4)}`, path), {
+        method,
+        headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+        body: method === 'POST' ? '{}' : undefined,
+      })
+      const body = await res.json()
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      expect(body.code).toBe('invalid_flow')
+    })
+  }
+
   for (const { path, knownBroken } of LOGIN_UI_POSTS) {
     const test = knownBroken ? it.fails : it
     test(`routes POST ${path}`, async () => {
       const res = await fetch(`${provider.config.api}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge: flow, login_challenge: flow }),
+        body: "{}",
       })
       expect(res.status, await res.text()).not.toBe(404)
     })

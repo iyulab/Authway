@@ -8,8 +8,8 @@ import (
 	"authway/apps/central/api/internal/hydra"
 )
 
-// respondFlowLookupError answers a failed lookup of a login or consent
-// challenge. The challenge comes from the caller, so an unknown or spent one
+// respondFlowLookupError answers a failed call on a login, consent or logout
+// flow. The challenge comes from the caller, so an unknown or spent one
 // is a client error; only a failure to get an answer from Hydra at all is
 // reported as an upstream error. Internal addresses and raw Hydra errors are
 // logged by the caller, never returned.

@@ -99,13 +99,13 @@ services:
     environment:
       DSN: postgres://authway:authway@postgres:5432/authway?sslmode=disable
       URLS_SELF_ISSUER: http://localhost:4444
-      # Login goes to the API (:8080), which hands the login UI (:3001) an
-      # opaque flow id; the other screens are addressed on the UI directly.
+      # Login, consent and logout go to the API (:8080), which hands the login
+      # UI (:3001) an opaque flow id; the error screen is on the UI directly.
       # Deployments derive the same from API_URL/AUTH_UI_URL
       # (scripts/deploy/_shared/hydra-flow-urls.ps1).
       URLS_LOGIN: http://localhost:8080/login
-      URLS_CONSENT: http://localhost:3001/consent
-      URLS_LOGOUT: http://localhost:3001/logout
+      URLS_CONSENT: http://localhost:8080/consent
+      URLS_LOGOUT: http://localhost:8080/logout
       URLS_ERROR: http://localhost:3001/error
       SECRETS_SYSTEM: youReallyNeedToChangeThis
       OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES: public,pairwise
