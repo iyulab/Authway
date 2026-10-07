@@ -11,6 +11,9 @@
 
 ### Changed
 
+- **`email.sendway_base_url` has no default.** Set
+  `AUTHWAY_EMAIL_SENDWAY_BASE_URL` when `AUTHWAY_EMAIL_USE_SENDWAY=true`; the API
+  refuses to start without it.
 - **Every refusal from these endpoints carries a `code`.** Email verification,
   password reset and invitation endpoints answer errors as `{error, code}`
   like the login flows (`invalid_request`, `invalid_token`, `token_expired`,
@@ -34,6 +37,18 @@
   CommonJS build is now `dist/*.cjs`, and `import` and `require` each resolve
   their own type declarations (`.d.mts` / `.d.ts`). The script-tag example for
   the popup callback is now `<script type="module" src=".../popup-callback.mjs">`.
+- **A misnamed or duplicated migration file stops the API instead of being
+  skipped.** A `.sql` file without a `<version>_` prefix was never applied, and
+  two files with the same version left one of them recorded as applied without
+  running. The API now refuses to start in both cases, naming the files.
+
+### Removed
+
+- **The PowerShell migration runner** (`run-migration*.ps1`, the
+  `-SkipMigration`/`-ForceMigration` switches of `deploy-all.ps1`, and
+  `scripts/test/`). The API applies migrations at startup; these had no effect
+  or no longer ran. `scripts/deploy/<target>/check-migration-status.ps1` shows
+  what a deployed database has applied.
 
 ### Security
 
