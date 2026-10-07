@@ -2,10 +2,12 @@ openapi: 3.1.0
 info:
   title: Authway login UI API
   version: 0.5.0
-  summary: The contract between a login screen and an Authway provider.
+  summary: The contract between Authway's login screens and a provider.
   description: |
     Every Authway implementation answers these endpoints the same way, so the
-    bundled login screens — or a custom one — work with any of them. Flow ids
+    bundled login screens — or a custom one — work with any of them: sign-in,
+    consent and logout flows, email verification, password reset and
+    invitations. Flow ids
     are opaque: a screen only passes them back, URL-encoded in a path segment.
     See docs/api/login-flows.md for the walk-through.
   license:
@@ -65,6 +67,7 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/Redirect'
                   - $ref: '#/components/schemas/MFARequired'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
@@ -77,6 +80,7 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
       responses:
         '200': { $ref: '#/components/responses/Redirect' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
@@ -87,6 +91,7 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
       responses:
         '200': { $ref: '#/components/responses/Redirect' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
@@ -126,6 +131,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EmailSent' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
@@ -150,6 +156,7 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/MagicLinkToken' }
       responses:
         '200': { $ref: '#/components/responses/Redirect' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/consent-flows/{flow}:
@@ -206,8 +213,127 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
+  /api/email/send-verification:
+    post:
+      operationId: sendVerificationEmail
+      description: Same answer whether or not the address has an account.
+      requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/email/verify:
+    get:
+      operationId: verifyEmail
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/email/forgot-password:
+    post:
+      operationId: forgotPassword
+      description: Same answer whether or not the address has an account.
+      requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/email/verify-reset-token:
+    get:
+      operationId: verifyResetToken
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200':
+          description: The token can be used
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { const: true }
+                  message: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/email/reset-password:
+    post:
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/invitations/token/{token}:
+    get:
+      operationId: getInvitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: An invitation that can be accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation]
+                properties:
+                  invitation: { $ref: '#/components/schemas/Invitation' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                name: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: The account exists and belongs to the invitation's tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  message: { type: string }
+                  user:
+                    type: object
+                    required: [id, email]
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
 components:
   parameters:
+    Token:
+      name: token
+      in: query
+      required: true
+      schema: { type: string, minLength: 1 }
     Flow:
       name: flow
       in: path
@@ -216,6 +342,16 @@ components:
       schema: { type: string, minLength: 1 }
 
   requestBodies:
+    EmailAddress:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email]
+            properties:
+              email: { type: string }
+              client_id: { type: string, description: Scopes the lookup to the client's tenant. }
     SecondFactor:
       required: true
       content:
@@ -237,11 +373,30 @@ components:
               token: { type: string }
 
   responses:
+    Message:
+      description: Done
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message: { type: string }
     Redirect:
       description: Continue in the browser
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Redirect' }
+    TooManyRequests:
+      description: Rate limited; retry_after is in seconds
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                properties:
+                  retry_after: { type: integer, minimum: 0 }
     Error:
       description: Refused
       content:
@@ -312,6 +467,18 @@ components:
         expires_at: { type: string }
         error: { type: string }
 
+    Invitation:
+      type: object
+      required: [id, email, tenant_name, expires_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        tenant_name: { type: string }
+        inviter_name: { type: string }
+        role: { type: string }
+        message: { type: string }
+        expires_at: { type: string }
+
     Capabilities:
       type: object
       required: [multi_tenant, providers, magic_link, mfa, signup_modes, token_exchange, ciba]
@@ -338,4 +505,6 @@ components:
             Stable identifier, for example invalid_flow, flow_expired,
             invalid_credentials, sign_in_method_not_allowed,
             invalid_mfa_challenge, invalid_code, mfa_locked, invalid_link,
-            invalid_request, client_not_registered.
+            invalid_request, client_not_registered, invalid_token,
+            token_expired, invitation_not_acceptable, invitation_not_accepted,
+            too_many_requests.

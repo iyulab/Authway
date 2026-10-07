@@ -71,8 +71,8 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		if blocked > 0 {
 			ttl, _ := cfg.RedisClient.TTL(ctx, blockKey).Result()
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error":       "too_many_requests",
-				"message":     "Too many failed attempts. Please try again later.",
+				"error":       "Too many attempts. Try again later.",
+				"code":        "too_many_requests",
 				"retry_after": int(ttl.Seconds()),
 			})
 		}
@@ -85,8 +85,8 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 			cfg.RedisClient.Set(ctx, blockKey, "1", cfg.BlockDuration)
 			cfg.RedisClient.Del(ctx, key)
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error":       "too_many_requests",
-				"message":     "Rate limit exceeded. You have been temporarily blocked.",
+				"error":       "Too many attempts. Try again later.",
+				"code":        "too_many_requests",
 				"retry_after": int(cfg.BlockDuration.Seconds()),
 			})
 		}

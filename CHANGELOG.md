@@ -3,10 +3,27 @@
 ### Added
 
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
-  consent and logout flows, sign-in links and capabilities, as one OpenAPI 3.1
-  document. The conformance suite now checks every answer a provider gives
+  consent and logout flows, sign-in links, capabilities, email verification,
+  password reset and invitations, as one OpenAPI 3.1 document. The conformance suite now checks every answer a provider gives
   against it — status codes and bodies — so another implementation is held to
   the same document.
+
+### Changed
+
+- **Every refusal from these endpoints carries a `code`.** Email verification,
+  password reset and invitation endpoints answer errors as `{error, code}`
+  like the login flows (`invalid_request`, `invalid_token`, `token_expired`,
+  `invitation_not_acceptable`, `invitation_not_accepted`). A rate-limited
+  request answers `429` with `error` as a message to show, `code:
+  too_many_requests` and `retry_after` — previously `error` held the code and
+  the text was in `message`.
+
+### Security
+
+- **Removed `GET /api/v1/invitations/pending`.** It was public and returned,
+  for any email address, its pending invitations with tenant name, inviter
+  name and role — enough to map who is being invited to which organization.
+  Nothing used it; invitation links carry their own token.
 
 ## [0.5.0] - 2026-10-07
 

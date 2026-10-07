@@ -36,7 +36,6 @@ type Service interface {
 	GetByToken(token string) (*Invitation, error)
 	GetByID(id uuid.UUID) (*Invitation, error)
 	ListByTenant(tenantID uuid.UUID) ([]Invitation, error)
-	ListPendingByEmail(email string) ([]Invitation, error)
 	Accept(token string, userID *uuid.UUID, name, password string) (*user.User, error)
 	Decline(token string) error
 	Revoke(id uuid.UUID) error
@@ -207,15 +206,6 @@ func (s *service) GetByID(id uuid.UUID) (*Invitation, error) {
 func (s *service) ListByTenant(tenantID uuid.UUID) ([]Invitation, error) {
 	var invitations []Invitation
 	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&invitations).Error; err != nil {
-		return nil, fmt.Errorf("failed to list invitations: %w", err)
-	}
-	s.hydrateAll(invitations)
-	return invitations, nil
-}
-
-func (s *service) ListPendingByEmail(email string) ([]Invitation, error) {
-	var invitations []Invitation
-	if err := s.db.Where("email = ? AND status = ? AND expires_at > ?", email, StatusPending, time.Now()).Find(&invitations).Error; err != nil {
 		return nil, fmt.Errorf("failed to list invitations: %w", err)
 	}
 	s.hydrateAll(invitations)

@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -231,5 +233,39 @@ func TestRateLimit_CountsPerRouteNotPerPath(t *testing.T) {
 	}
 	if status := statusFor("d"); status != fiber.StatusTooManyRequests {
 		t.Fatalf("attempt on a fresh flow id: status = %d, want 429", status)
+	}
+}
+
+// A blocked request answers like every other refusal: a message to show and
+// a stable code, plus when to retry.
+func TestRateLimit_BlockedAnswerHasCode(t *testing.T) {
+	cfg := RateLimitConfig{
+		RedisClient:    newTestRedis(t),
+		MaxAttempts:    1,
+		WindowDuration: time.Minute,
+		BlockDuration:  time.Minute,
+		KeyPrefix:      "ratelimit:test:",
+		SkipOnError:    true,
+	}
+	app := fiber.New()
+	app.Post("/x", RateLimit(cfg), func(c *fiber.Ctx) error {
+		IncrementRateLimitOnFailure(c)
+		return c.SendStatus(fiber.StatusUnauthorized)
+	})
+	send := func() *http.Response {
+		resp, err := app.Test(httptest.NewRequest("POST", "/x", nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	send()
+	resp := send()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusTooManyRequests || body["code"] != "too_many_requests" || body["error"] == "" || body["retry_after"] == nil {
+		t.Fatalf("status %d body %v", resp.StatusCode, body)
 	}
 }

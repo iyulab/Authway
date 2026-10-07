@@ -23,6 +23,7 @@ const LOGIN_ERROR_KEYS: Record<string, string> = {
   invalid_credentials: 'auth:errors.invalidCredentials',
   invalid_flow: 'auth:errors.flowInvalid',
   sign_in_method_not_allowed: 'auth:errors.signInMethodNotAllowed',
+  too_many_requests: 'auth:errors.tooManyRequests',
   flow_expired: 'auth:errors.flowExpired',
 }
 

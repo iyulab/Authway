@@ -100,12 +100,14 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+			"code":  "invalid_request",
 		})
 	}
 
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
+			"code":  "invalid_request",
 		})
 	}
 
@@ -167,6 +169,7 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 	if token == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Token is required",
+			"code":  "invalid_request",
 		})
 	}
 
@@ -176,6 +179,7 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 		h.logger.Error("Verification token not found", zap.Error(err))
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{
 			"error": "Invalid or expired verification token",
+			"code":  "invalid_token",
 		})
 	}
 
@@ -183,6 +187,7 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 	if verification.IsExpired() {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Verification token has expired",
+			"code":  "token_expired",
 		})
 	}
 
@@ -228,12 +233,14 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+			"code":  "invalid_request",
 		})
 	}
 
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
+			"code":  "invalid_request",
 		})
 	}
 
@@ -282,6 +289,7 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	if token == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Token is required",
+			"code":  "invalid_request",
 		})
 	}
 
@@ -290,6 +298,7 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid or expired reset token",
+			"code":  "invalid_token",
 			"valid": false,
 		})
 	}
@@ -298,6 +307,7 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	if !reset.IsValid() {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Reset token is invalid or has expired",
+			"code":  "token_expired",
 			"valid": false,
 		})
 	}
@@ -323,12 +333,14 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+			"code":  "invalid_request",
 		})
 	}
 
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
+			"code":  "invalid_request",
 		})
 	}
 
@@ -337,6 +349,7 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid or expired reset token",
+			"code":  "invalid_token",
 		})
 	}
 
@@ -344,6 +357,7 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	if !reset.IsValid() {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Reset token is invalid or has expired",
+			"code":  "token_expired",
 		})
 	}
 

@@ -135,11 +135,17 @@ export class Provider {
     const token = link.searchParams.get('token')
     if (!token) throw new Error(`Invitation link carries no token: ${link}`)
 
+    // The acceptance screen shows the invitation first, then accepts it.
+    const shown = await fetch(`${this.config.api}/api/v1/invitations/token/${encodeURIComponent(token)}`)
+    await conform('GET', '/api/v1/invitations/token/{token}', shown)
+    if (!shown.ok) throw new Error(`Showing the invitation failed: ${shown.status} ${await shown.text()}`)
+
     const accept = await fetch(`${this.config.api}/api/v1/invitations/accept`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password, name: 'Conformance User' }),
     })
+    await conform('POST', '/api/v1/invitations/accept', accept)
     if (!accept.ok) throw new Error(`Accepting invitation failed: ${accept.status} ${await accept.text()}`)
     return { email, password }
   }

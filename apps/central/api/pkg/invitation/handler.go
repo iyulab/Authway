@@ -134,12 +134,12 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 		token = decoded
 	}
 	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
 	}
 
 	invitation, err := h.service.GetByToken(token)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invitation not found or expired"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invitation not found or expired", "code": "invalid_token"})
 	}
 
 	if !invitation.CanBeAccepted() {
@@ -151,6 +151,7 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "invitation cannot be accepted",
+			"code":   "invitation_not_acceptable",
 			"status": status,
 		})
 	}
@@ -173,11 +174,11 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 	var req AcceptInvitationRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body", "code": "invalid_request"})
 	}
 
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
 	}
 
 	// Check if user is already logged in
@@ -191,7 +192,7 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 	user, err := h.service.Accept(req.Token, userID, req.Name, req.Password)
 	if err != nil {
 		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.Int("token_length", len(req.Token)))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation")})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation"), "code": "invitation_not_accepted"})
 	}
 
 	h.logger.Info("Invitation accepted", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
@@ -263,39 +264,6 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "invitation resent"})
 }
 
-// GetPendingInvitations gets pending invitations for an email (public)
-// GET /api/v1/invitations/pending
-func (h *Handler) GetPendingInvitations(c *fiber.Ctx) error {
-	email := c.Query("email")
-	if email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "email is required"})
-	}
-
-	invitations, err := h.service.ListPendingByEmail(email)
-	if err != nil {
-		h.logger.Error("Failed to get pending invitations", zap.Error(err), zap.String("email", email))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to get invitations"})
-	}
-
-	// Return minimal info for security
-	responses := make([]InvitationResponse, 0, len(invitations))
-	for _, inv := range invitations {
-		responses = append(responses, InvitationResponse{
-			ID:          inv.ID.String(),
-			TenantName:  inv.TenantName,
-			InviterName: inv.InviterName,
-			Email:       inv.Email,
-			Role:        inv.Role,
-			ExpiresAt:   inv.ExpiresAt,
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"invitations": responses,
-		"count":       len(responses),
-	})
-}
-
 // RegisterRoutes registers invitation routes
 // Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
@@ -304,7 +272,6 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	public.Get("/token/:token", h.GetInvitationByToken)
 	public.Post("/accept", h.AcceptInvitation)
 	public.Post("/decline", h.DeclineInvitation)
-	public.Get("/pending", h.GetPendingInvitations)
 
 	// Admin Console protected endpoints - use adminMiddleware only (validates admin session + tenant context)
 	protected := app.Group("/invitations", adminMiddleware)

@@ -7,20 +7,6 @@ import { conform } from '../src/contract.js'
 
 const provider = new Provider(loadConfig())
 
-/**
- * Every backend path the bundled login UI posts to, as the UI calls it. A path the
- * UI calls but the backend does not route is a screen that cannot work.
- *
- * This hand-kept list goes away once the login UI and the backend share a
- * machine-readable API contract.
- */
-const LOGIN_UI_POSTS: { path: string }[] = [
-  { path: '/api/email/forgot-password' },
-  { path: '/api/email/send-verification' },
-  { path: '/api/email/reset-password' },
-  { path: '/api/v1/invitations/accept' },
-]
-
 describe('login UI backend routes', () => {
   let client: TestClient
   let flow: string
@@ -145,14 +131,40 @@ describe('login UI backend routes', () => {
     })
   }
 
-  for (const { path } of LOGIN_UI_POSTS) {
-    it(`routes POST ${path}`, async () => {
-      const res = await fetch(`${provider.config.api}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: "{}",
-      })
-      expect(res.status, await res.text()).not.toBe(404)
-    })
-  }
+  // Account screens: each answers what the contract says, and the
+  // enumeration-safe ones answer an unknown address like a known one.
+  const json = (body: unknown): RequestInit => ({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const nobody = () => `nobody-${randomToken(4)}@example.test`
+
+  it('answers a verification request for an unknown address like any other', async () => {
+    const res = await fetch(`${provider.config.api}/api/email/send-verification`, json({ email: nobody() }))
+    await conform('POST', '/api/email/send-verification', res)
+    expect(res.status).toBe(200)
+  })
+
+  it('answers a password reset request for an unknown address like any other', async () => {
+    const res = await fetch(`${provider.config.api}/api/email/forgot-password`, json({ email: nobody() }))
+    await conform('POST', '/api/email/forgot-password', res)
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses tokens it did not issue', async () => {
+    const bogus = randomToken(8)
+    const checks: [string, string, Response][] = [
+      ['GET', '/api/email/verify', await fetch(`${provider.config.api}/api/email/verify?token=${bogus}`)],
+      ['GET', '/api/email/verify-reset-token', await fetch(`${provider.config.api}/api/email/verify-reset-token?token=${bogus}`)],
+      ['POST', '/api/email/reset-password', await fetch(`${provider.config.api}/api/email/reset-password`, json({ token: bogus, new_password: 'long-enough-1' }))],
+      ['GET', '/api/v1/invitations/token/{token}', await fetch(`${provider.config.api}/api/v1/invitations/token/${bogus}`)],
+      ['POST', '/api/v1/invitations/accept', await fetch(`${provider.config.api}/api/v1/invitations/accept`, json({ token: bogus, password: 'long-enough-1', name: 'x' }))],
+    ]
+    for (const [method, path, res] of checks) {
+      await conform(method, path, res)
+      expect(res.status, `${method} ${path}`).toBeGreaterThanOrEqual(400)
+      expect(res.status, `${method} ${path}`).toBeLessThan(500)
+    }
+  })
 })
