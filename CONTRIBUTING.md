@@ -12,7 +12,7 @@ Each Go service reads its own `.env`, and the two Vite apps run with
 ## Before opening a pull request
 
 - Run the relevant test suite for what you changed:
-  - Go: `go test ./...` from the repo root, or from `apps/branding/auth-api`
+  - Go: `go test ./...` from the repo root
     (its own module).
   - TypeScript apps/packages: `pnpm test` from the repo root, or
     `npx vitest run` inside `apps/central/admin` / `apps/branding/auth-ui`.

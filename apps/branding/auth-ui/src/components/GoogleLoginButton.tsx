@@ -37,8 +37,8 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
 
       // Use POST to avoid HTTP 431 errors with long login_challenge
       // Use Auth Backend URL for OAuth endpoints
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const response = await fetch(`${authBackendUrl}/auth/google/login`, {
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/auth/google/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

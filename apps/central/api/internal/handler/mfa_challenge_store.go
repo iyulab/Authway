@@ -30,8 +30,7 @@ type pendingMFALogin struct {
 const maxMFAAttempts = 5
 
 // mfaChallengeTTL bounds how long a password-verified-but-MFA-pending login
-// stays valid, mirroring the TTL apps/branding/auth-api's OAuth StateStore
-// uses for the equivalent short-lived server-side state.
+// stays valid — the same window OAuthStateStore gives a social sign-in.
 const mfaChallengeTTL = 10 * time.Minute
 
 // recordFailureScript atomically increments the attempt counter and, once it
@@ -53,9 +52,8 @@ return 0
 `)
 
 // MFAChallengeStore holds password-verified, MFA-pending logins in Redis,
-// keyed by an opaque challenge handed to the client. Same shape as
-// apps/branding/auth-api's StateStore (separate Go module, so not directly
-// shared) — both moved off in-memory storage together: central-api's
+// keyed by an opaque challenge handed to the client (OAuthStateStore has the
+// same shape). It moved off in-memory storage because central-api's
 // Container App scales to maxReplicas=5, so a challenge created on one
 // replica must be readable by whichever replica serves the follow-up
 // /mfa/verify request.

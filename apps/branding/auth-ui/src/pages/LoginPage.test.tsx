@@ -33,7 +33,7 @@ vi.mock('../components/GoogleLoginButton', () => ({
   )
 }))
 
-// Vite env vars (VITE_API_URL / VITE_AUTH_BACKEND_URL) are provided globally
+// Vite env vars (VITE_API_URL) is provided globally
 // via vi.stubEnv in src/test/setup.ts.
 
 describe('LoginPage', () => {

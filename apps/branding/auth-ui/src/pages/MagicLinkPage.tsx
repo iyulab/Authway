@@ -26,8 +26,8 @@ const MagicLinkPage: React.FC = () => {
       setError(null)
 
       try {
-        const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-        const response = await fetch(`${authBackendUrl}/auth/magic-link/verify`, {
+        const apiUrl = import.meta.env.VITE_API_URL
+        const response = await fetch(`${apiUrl}/api/v1/auth/magic-link/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token }),
@@ -76,8 +76,8 @@ const MagicLinkPage: React.FC = () => {
     setError(null)
 
     try {
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const response = await fetch(`${authBackendUrl}/auth/magic-link/request`, {
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/auth/magic-link/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -61,6 +61,10 @@
   now lives in Redis and is consumed exactly once, so a sign-in survives the
   provider callback landing on a different replica and a replayed callback is
   refused.
+- **The login screens talk to one backend.** `VITE_AUTH_BACKEND_URL` is gone;
+  every call goes to `VITE_API_URL`. Signing in with GitHub, Microsoft or
+  Apple, the MFA step and the magic-link landing page now reach routes that
+  exist — through the separate backend they returned 404.
 
 - **Outbound email now sends through Sendway instead of a bespoke Azure Functions
   gateway.** Production email (verification, password reset, invitation, magic
@@ -330,6 +334,11 @@
   used.
 
 ### Removed
+
+- **The separate login backend (`apps/branding/auth-api`).** Everything it did
+  is served by the central API; its Dockerfile, CI job and Dependabot entry
+  went with it. The MFA setup screen in the login UI was removed too: nothing
+  linked to it and no backend route matched what it called.
 
 - **Internal service-to-service endpoints.** `POST /internal/auth/google`,
   `GET /api/v1/clients/by-client-id/:client_id` and the

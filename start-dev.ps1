@@ -56,7 +56,7 @@ function Ensure-PortFree {
 
 # Clean up any existing processes on required ports
 Write-Host "🧹 Cleaning up ports for Authway services..." -ForegroundColor Yellow
-$ports = @(3000, 3001, 8080, 8081, 9001, 9002, 9003)
+$ports = @(3000, 3001, 8080, 9001, 9002, 9003)
 $killedProcesses = 0
 
 foreach ($port in $ports) {
@@ -182,16 +182,11 @@ if (-not (Ensure-PortFree -Port 3001 -ServiceName "Login UI")) {
     Write-Host "❌ Cannot start Login UI - port 3001 is in use" -ForegroundColor Red
     exit 1
 }
-if (-not (Ensure-PortFree -Port 8081 -ServiceName "Auth Backend")) {
-    Write-Host "❌ Cannot start Auth Backend - port 8081 is in use" -ForegroundColor Red
-    exit 1
-}
 
 # Define paths
 $backendPath = Join-Path $PSScriptRoot "apps\central\api"
 $frontendPath = Join-Path $PSScriptRoot "apps\central\admin"
 $loginUiPath = Join-Path $PSScriptRoot "apps\branding\auth-ui"
-$authBackendPath = Join-Path $PSScriptRoot "apps\branding\auth-api"
 
 Write-Host ""
 
@@ -218,7 +213,7 @@ if (-not (Test-Path "$loginUiPath\node_modules")) {
 Write-Host "✓ All dependencies ready" -ForegroundColor Green
 Write-Host ""
 
-# Start all 4 services in Windows Terminal with tabs
+# Start all 3 services in Windows Terminal with tabs
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 Write-Host "🚀 Starting Development Servers" -ForegroundColor Cyan
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
@@ -227,9 +222,8 @@ Write-Host "📂 Paths:" -ForegroundColor Gray
 Write-Host "   Backend:        $backendPath" -ForegroundColor Gray
 Write-Host "   Admin Dashboard: $frontendPath" -ForegroundColor Gray
 Write-Host "   Login UI:       $loginUiPath" -ForegroundColor Gray
-Write-Host "   Auth Backend:   $authBackendPath" -ForegroundColor Gray
 Write-Host ""
-Write-Host "🖥️  Launching Windows Terminal with 4 tabs..." -ForegroundColor Yellow
+Write-Host "🖥️  Launching Windows Terminal with 3 tabs..." -ForegroundColor Yellow
 Write-Host ""
 
 # Create a temporary script for each tab to avoid escaping issues
@@ -251,27 +245,19 @@ Write-Host ''
 npm run dev
 "@
 
-$authScript = @"
-Write-Host '🔑 Auth Backend - Port 8081' -ForegroundColor Cyan
-Write-Host ''
-go run cmd/main.go
-"@
-
 # Save scripts to temp files
 $tempDir = [System.IO.Path]::GetTempPath()
 $backendScriptPath = Join-Path $tempDir "authway-backend.ps1"
 $adminScriptPath = Join-Path $tempDir "authway-admin.ps1"
 $loginScriptPath = Join-Path $tempDir "authway-login.ps1"
-$authScriptPath = Join-Path $tempDir "authway-auth.ps1"
 
 $backendScript | Out-File -FilePath $backendScriptPath -Encoding UTF8
 $adminScript | Out-File -FilePath $adminScriptPath -Encoding UTF8
 $loginScript | Out-File -FilePath $loginScriptPath -Encoding UTF8
-$authScript | Out-File -FilePath $authScriptPath -Encoding UTF8
 
-# Launch Windows Terminal with 4 tabs using script files
+# Launch Windows Terminal with 3 tabs using script files
 # Using cmd /c to properly handle the semicolon separators
-$wtCmd = "wt --title `"Authway Dev`" -d `"$backendPath`" powershell -NoExit -File `"$backendScriptPath`" ; new-tab --title `"Admin Dashboard`" -d `"$frontendPath`" powershell -NoExit -File `"$adminScriptPath`" ; new-tab --title `"Login UI`" -d `"$loginUiPath`" powershell -NoExit -File `"$loginScriptPath`" ; new-tab --title `"Auth Backend`" -d `"$authBackendPath`" powershell -NoExit -File `"$authScriptPath`""
+$wtCmd = "wt --title `"Authway Dev`" -d `"$backendPath`" powershell -NoExit -File `"$backendScriptPath`" ; new-tab --title `"Admin Dashboard`" -d `"$frontendPath`" powershell -NoExit -File `"$adminScriptPath`" ; new-tab --title `"Login UI`" -d `"$loginUiPath`" powershell -NoExit -File `"$loginScriptPath`""
 
 cmd /c $wtCmd
 
@@ -336,7 +322,6 @@ Write-Host "🌐 Application Endpoints:" -ForegroundColor Cyan
 Write-Host "   Admin Dashboard:  http://localhost:3000" -ForegroundColor White
 Write-Host "   Login UI:         http://localhost:3001" -ForegroundColor White
 Write-Host "   Backend API:      http://localhost:8080" -ForegroundColor White
-Write-Host "   Auth Backend:     http://localhost:8081" -ForegroundColor White
 Write-Host "   MailHog UI:       http://localhost:8025 (Email Testing)" -ForegroundColor White
 Write-Host ""
 Write-Host "📦 Infrastructure Services:" -ForegroundColor Cyan

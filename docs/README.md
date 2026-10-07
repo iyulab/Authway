@@ -46,13 +46,13 @@ Example applications in `../samples/`:
 ## Architecture
 
 ```
-Your App → Auth Backend (8081) → Central API (8080) → Hydra (4444) → PostgreSQL
+Your App → Authway API (8080) → Hydra (4444) → PostgreSQL
 ```
 
 **Key Concepts**:
-- **Auto-Discovery**: Apps only need Auth Backend URL
+- **Auto-Discovery**: Apps only need the Authway API URL
 - **Config Endpoint**: `GET /.well-known/authway-config`
-- **Internal API**: Central API never exposed directly
+- **One backend**: The API serves the login screens, the admin console and Authway's own APIs
 - **OAuth Server**: Hydra handles OAuth 2.0 protocol
 
 ## Support

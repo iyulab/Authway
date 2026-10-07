@@ -26,7 +26,7 @@ track their actual published versions.
 - **Admin impersonation** - Support staff can act as a user, fully audited
 - **Audit logging** - Auth, admin and webhook actions recorded per tenant
 - **Webhooks** - Subscribe to account and session lifecycle events
-- **Auto-Discovery** - Apps only need the Auth Backend URL, the rest is auto-discovered
+- **Auto-Discovery** - Apps only need the Authway API URL, the rest is auto-discovered
 - **Dynamic Claims** - Runtime user claims management
 - **Multi-Tenancy** - Fully isolated tenant support
 - **Popup Login** - No-redirect authentication flow with Google OAuth support
@@ -54,10 +54,10 @@ cd authway
 # Install dependencies
 pnpm install
 
-# Each Go service reads a .env next to itself; the defaults match compose
+# The API reads a .env next to itself; the defaults match compose
 cp apps/central/api/.env.example apps/central/api/.env
-cp apps/branding/auth-api/.env.example apps/branding/auth-api/.env
-# Fill in GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET — the Auth Backend requires them
+# Social sign-in is optional — set AUTHWAY_GOOGLE_* (and the GitHub/Microsoft/
+# Apple equivalents) to enable a provider
 
 # Start the backing services: Postgres, Redis, MailHog, Hydra
 # (Postgres is published on 5433 and Redis on 6380 — the .env files point there)
@@ -71,9 +71,6 @@ each in its own shell:
 # Central API (port 8080) — applies database migrations on startup
 cd apps/central/api && go run ./cmd/
 
-# Auth Backend (port 8081)
-cd apps/branding/auth-api && go run ./cmd/
-
 # Login UI (port 3001) — Hydra redirects here for login and consent
 cd apps/branding/auth-ui && npm run dev
 
@@ -86,7 +83,7 @@ cd samples/react-sdk-sample && pnpm dev
 
 Access: http://localhost:9004
 
-The APIs and UIs deliberately run natively rather than in containers — see the
+The API and UIs deliberately run natively rather than in containers — see the
 comment at the top of `docker-compose.yml`.
 
 ## SDK Usage
@@ -100,7 +97,7 @@ function App() {
   return (
     <AuthwayProvider
       config={{
-        domain: 'http://localhost:8081',
+        domain: 'http://localhost:8080',
         clientId: 'your-client-id'
       }}
     >
@@ -131,7 +128,7 @@ function Dashboard() {
 import { AuthwayClient } from '@authway/client'
 
 const client = new AuthwayClient({
-  domain: 'http://localhost:8081',
+  domain: 'http://localhost:8080',
   clientId: 'your-client-id'
 })
 
@@ -160,13 +157,8 @@ SDK reference, feature guides, backend integration, deployment and database.
 └────────┬────────┘
          │ GET /.well-known/authway-config
          ▼
-┌─────────────────┐
-│  Auth Backend   │  (port 8081) - App entry point
-└────────┬────────┘
-         │ Proxies to Central API
-         ▼
 ┌─────────────────┐         ┌──────────────┐
-│  Central API    │◄────────┤ Ory Hydra    │
+│  Authway API    │◄────────┤ Ory Hydra    │
 │  (port 8080)    │         │ (4444/4445)  │
 └─────────┬───────┘         └──────────────┘
           │
@@ -177,9 +169,9 @@ SDK reference, feature guides, backend integration, deployment and database.
 ```
 
 **Key Points**:
-- Apps only connect to Auth Backend (8081)
-- Central API (8080) is internal - never exposed directly
-- Hydra handles OAuth 2.0 protocol
+- Apps discover everything from the Authway API (8080)
+- The API serves the login screens' backend, the admin API and Authway's own APIs
+- Hydra handles the OAuth 2.0 / OIDC protocol
 - PostgreSQL stores users, tenants, and configurations
 
 ## Project Structure
@@ -187,8 +179,9 @@ SDK reference, feature guides, backend integration, deployment and database.
 ```
 authway/
 ├── apps/
-│   ├── central/api/          # Core business logic (Go)
-│   └── branding/auth-api/    # Auth backend (Go)
+│   ├── central/api/          # Authway API (Go)
+│   ├── central/admin/        # Admin console (React)
+│   └── branding/auth-ui/     # Login screens (React)
 │
 ├── packages/
 │   ├── client/               # @authway/client (TypeScript)
@@ -220,9 +213,11 @@ cd packages/react && pnpm build
 # SDK tests
 pnpm test
 
-# Backend tests (two separate Go modules)
-cd apps/central/api && go test ./...
-cd apps/branding/auth-api && go test ./...
+# Backend tests
+go test ./...
+
+# Conformance scenarios against a running stack (see packages/conformance)
+pnpm --filter @authway/conformance test
 ```
 
 ## Contributing

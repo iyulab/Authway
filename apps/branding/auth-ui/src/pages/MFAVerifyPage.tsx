@@ -27,10 +27,10 @@ const MFAVerifyPage: React.FC = () => {
     setError(null)
 
     try {
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const endpoint = useRecovery ? '/auth/mfa/recovery' : '/auth/mfa/verify'
+      const apiUrl = import.meta.env.VITE_API_URL
+      const endpoint = useRecovery ? '/mfa/recovery' : '/mfa/verify'
 
-      const response = await fetch(`${authBackendUrl}${endpoint}`, {
+      const response = await fetch(`${apiUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

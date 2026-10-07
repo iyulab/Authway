@@ -1,11 +1,10 @@
 # Backing services for local development.
 #
 # This file provides ONLY the infrastructure Authway talks to — Postgres, Redis,
-# MailHog and Ory Hydra. The Go APIs and the two Vite apps are NOT services here;
+# MailHog and Ory Hydra. The Go API and the two Vite apps are NOT services here;
 # they run natively on the host:
 #
 #   cd apps/central/api      && go run ./cmd/      # http://localhost:8080
-#   cd apps/branding/auth-api && go run ./cmd/     # http://localhost:8081
 #   cd apps/branding/auth-ui  && npm run dev       # http://localhost:3001
 #   cd apps/central/admin     && npm run dev       # http://localhost:3000
 #

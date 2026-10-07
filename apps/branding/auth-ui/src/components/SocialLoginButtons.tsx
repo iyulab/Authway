@@ -30,8 +30,8 @@ export const GitHubLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const response = await fetch(`${authBackendUrl}/auth/github/login`, {
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/auth/github/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,8 +114,8 @@ export const MicrosoftLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const response = await fetch(`${authBackendUrl}/auth/microsoft/login`, {
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/auth/microsoft/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -202,8 +202,8 @@ export const AppleLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-      const response = await fetch(`${authBackendUrl}/auth/apple/login`, {
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/auth/apple/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -152,10 +152,10 @@ const LoginPage: React.FC = () => {
       : { method: 'GET' }
 
     // Use Auth Backend URL for OAuth endpoints
-    const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
+    const apiUrl = import.meta.env.VITE_API_URL
     const url = usePost
-      ? `${authBackendUrl}/auth/google/login`
-      : `${authBackendUrl}/auth/google/login?login_challenge=${challenge}`
+      ? `${apiUrl}/auth/google/login`
+      : `${apiUrl}/auth/google/login?login_challenge=${challenge}`
 
     fetch(url, fetchOptions)
       .then(res => res.json())
@@ -223,8 +223,8 @@ const LoginPage: React.FC = () => {
         console.log('[Auto-Google] Starting OAuth flow with challenge:', challenge.substring(0, 10) + '...')
 
         // Use Auth Backend URL for OAuth endpoints
-        const authBackendUrl = import.meta.env.VITE_AUTH_BACKEND_URL || import.meta.env.VITE_API_URL
-        const response = await fetch(`${authBackendUrl}/auth/google/login`, {
+        const apiUrl = import.meta.env.VITE_API_URL
+        const response = await fetch(`${apiUrl}/auth/google/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

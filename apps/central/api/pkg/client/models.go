@@ -43,10 +43,10 @@ type Client struct {
 	// Logout Redirect Policy Configuration.
 	// PostLogoutRedirectURIs is the whitelist Hydra itself enforces on RP-initiated logout
 	// (synced via SyncAllClientsToHydra). The other three fields are stored and returned
-	// here but NOT validated by this service — apps/branding/auth-api's logout handler reads
+	// here and enforced by the logout flow (internal/handler/logout_flow.go), which reads
 	// them from this API's response and enforces strict/lenient/disabled itself.
 	PostLogoutRedirectURIs pq.StringArray `json:"post_logout_redirect_uris" gorm:"type:text[];column:post_logout_redirect_uris;default:'{}'"`
-	LogoutRedirectPolicy   string         `json:"logout_redirect_policy" gorm:"column:logout_redirect_policy;default:'strict'"` // strict, lenient, disabled — enforced by auth-api, not here
+	LogoutRedirectPolicy   string         `json:"logout_redirect_policy" gorm:"column:logout_redirect_policy;default:'strict'"` // strict, lenient, disabled — enforced by the logout flow (handler/logout_flow.go)
 	DefaultLogoutURI       *string        `json:"default_logout_uri" gorm:"column:default_logout_uri;null"`
 	AllowWildcardLogout    bool           `json:"allow_wildcard_logout" gorm:"column:allow_wildcard_logout;default:false"`
 

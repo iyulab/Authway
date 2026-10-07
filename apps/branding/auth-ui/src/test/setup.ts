@@ -8,7 +8,6 @@ import { server } from './mocks/server'
 // import.meta.env does not take effect. Both point at the msw mock origin so
 // LoginPage/ConsentPage fetch URLs resolve to intercepted handlers.
 vi.stubEnv('VITE_API_URL', 'http://localhost:8080')
-vi.stubEnv('VITE_AUTH_BACKEND_URL', 'http://localhost:8080')
 
 // Mock server setup
 beforeAll(() => server.listen())

@@ -15,9 +15,9 @@ export default defineConfig({
     host: true,
     strictPort: true, // Fail if port is already in use
     proxy: {
-      // Proxy OAuth flow endpoints to Auth Backend
+      // Logout screen backend (the central API)
       '/logout': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:8080',
         changeOrigin: true,
       }
     }
