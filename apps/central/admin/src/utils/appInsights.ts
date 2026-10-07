@@ -1,4 +1,5 @@
 import { ApplicationInsights } from '@microsoft/applicationinsights-web';
+import { getConfig } from '../config'
 
 let appInsights: ApplicationInsights | null = null;
 
@@ -8,7 +9,7 @@ let appInsights: ApplicationInsights | null = null;
  */
 export function initializeAppInsights(): ApplicationInsights | null {
   // Check if connection string is provided via environment variable
-  const connectionString = import.meta.env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING;
+  const connectionString = getConfig().appInsightsConnectionString;
 
   if (!connectionString) {
     console.info('Application Insights: Not configured (optional)');

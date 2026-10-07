@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
+import { getConfig } from '../config'
 
 interface ConsentRequest {
   challenge: string
@@ -92,7 +93,7 @@ const ConsentPage: React.FC = () => {
     console.log('[ConsentPage] Fetching consent info with challenge:', challenge.substring(0, 20) + '...')
 
     // Use POST to avoid HTTP 431 with long consent_challenge
-    fetch(`${import.meta.env.VITE_API_URL}/consent`, {
+    fetch(`${getConfig().apiUrl}/consent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -138,7 +139,7 @@ const ConsentPage: React.FC = () => {
   // Accept consent mutation
   const acceptMutation = useMutation({
     mutationFn: async (): Promise<ConsentResponse> => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/consent/accept`, {
+      const response = await fetch(`${getConfig().apiUrl}/consent/accept`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +183,7 @@ const ConsentPage: React.FC = () => {
   const rejectMutation = useMutation({
     mutationFn: async (): Promise<ConsentResponse> => {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/consent/reject`,
+        `${getConfig().apiUrl}/consent/reject`,
         {
           method: 'POST',
           headers: {

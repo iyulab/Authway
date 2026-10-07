@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getConfig } from '../config'
 
 interface GoogleLoginButtonProps {
   onError?: (error: string) => void
@@ -37,7 +38,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
 
       // Use POST to avoid HTTP 431 errors with long login_challenge
       // Use Auth Backend URL for OAuth endpoints
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const response = await fetch(`${apiUrl}/auth/google/login`, {
         method: 'POST',
         headers: {

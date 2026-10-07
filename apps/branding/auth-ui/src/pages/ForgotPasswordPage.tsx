@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { KeyRound, ArrowLeft, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getConfig } from '../config'
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation(['password', 'auth', 'common']);
@@ -19,7 +20,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/email/forgot-password`,
+        `${getConfig().apiUrl}/api/email/forgot-password`,
         {
           method: 'POST',
           headers: {

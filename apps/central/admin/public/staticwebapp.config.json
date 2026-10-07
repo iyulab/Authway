@@ -1,9 +1,18 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/*.{css,scss,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot}"]
+    "exclude": [
+      "/assets/*",
+      "/*.{css,scss,js,png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot}"
+    ]
   },
   "routes": [
+    {
+      "route": "/config.js",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
     {
       "route": "/tenants",
       "rewrite": "/index.html"

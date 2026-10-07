@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { getConfig } from '../config'
 
 // Validation schema - will use i18n messages dynamically
 const createAcceptSchema = (t: (key: string) => string) => z.object({
@@ -39,7 +40,7 @@ const AcceptInvitationPage: React.FC = () => {
 
   const token = searchParams.get('token') ?? ''
   const loginChallenge = searchParams.get('login_challenge')
-  const apiUrl = import.meta.env.VITE_API_URL
+  const apiUrl = getConfig().apiUrl
 
   const acceptSchema = createAcceptSchema(t)
   const {

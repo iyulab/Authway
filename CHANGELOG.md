@@ -2,6 +2,14 @@
 
 ### Added
 
+- **Runtime configuration for the login UI and the admin console.** Both apps
+  load `/config.js` before starting and read their API URL (and the issuer
+  shown in settings, and the optional telemetry connection string) from
+  `window.__AUTHWAY_CONFIG__` first, then from the build-time `VITE_*`
+  variables. A production build with neither now calls the API on its own
+  origin, so one build serves any domain — a deployment replaces
+  `/config.js` instead of rebuilding. `/config.js` is served uncached.
+
 - **Conformance suite (`packages/conformance`).** Black-box scenarios that
   drive a running provider only through its public surfaces — OIDC
   discovery, authorization code + PKCE, userinfo, the login-screen backend

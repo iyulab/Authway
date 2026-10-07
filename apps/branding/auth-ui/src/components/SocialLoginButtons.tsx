@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getConfig } from '../config'
 
 interface SocialLoginButtonProps {
   onError?: (error: string) => void
@@ -30,7 +31,7 @@ export const GitHubLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const response = await fetch(`${apiUrl}/auth/github/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,7 +115,7 @@ export const MicrosoftLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const response = await fetch(`${apiUrl}/auth/microsoft/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,7 +203,7 @@ export const AppleLoginButton: React.FC<SocialLoginButtonProps> = ({
         throw new Error('Missing login_challenge parameter')
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const response = await fetch(`${apiUrl}/auth/apple/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { getConfig } from '../config'
 
 const MagicLinkPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
@@ -26,7 +27,7 @@ const MagicLinkPage: React.FC = () => {
       setError(null)
 
       try {
-        const apiUrl = import.meta.env.VITE_API_URL
+        const apiUrl = getConfig().apiUrl
         const response = await fetch(`${apiUrl}/api/v1/auth/magic-link/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -76,7 +77,7 @@ const MagicLinkPage: React.FC = () => {
     setError(null)
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const response = await fetch(`${apiUrl}/auth/magic-link/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

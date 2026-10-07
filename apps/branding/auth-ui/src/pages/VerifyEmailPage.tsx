@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getConfig } from '../config'
 
 export default function VerifyEmailPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -20,7 +21,7 @@ export default function VerifyEmailPage() {
 
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/email/verify?token=${token}`
+          `${getConfig().apiUrl}/api/email/verify?token=${token}`
         );
 
         const data = await response.json();

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getConfig } from '../config'
 
 export default function ResetPasswordPage() {
   const { t } = useTranslation(['password', 'common']);
@@ -30,7 +31,7 @@ export default function ResetPasswordPage() {
 
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/email/verify-reset-token?token=${token}`
+          `${getConfig().apiUrl}/api/email/verify-reset-token?token=${token}`
         );
 
         const data = await response.json();
@@ -69,7 +70,7 @@ export default function ResetPasswordPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/email/reset-password`,
+        `${getConfig().apiUrl}/api/email/reset-password`,
         {
           method: 'POST',
           headers: {

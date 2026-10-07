@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
+import { getConfig } from '../config'
 
 interface LogoutErrorState {
   message: string
@@ -84,7 +85,7 @@ const LogoutPage: React.FC = () => {
     // Auto-accept logout by calling backend
     const performLogout = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || ''
+        const baseUrl = getConfig().apiUrl
         const url = postLogoutUri
           ? `${baseUrl}/logout?logout_challenge=${logoutChallenge}&post_logout_redirect_uri=${encodeURIComponent(postLogoutUri)}`
           : `${baseUrl}/logout?logout_challenge=${logoutChallenge}`

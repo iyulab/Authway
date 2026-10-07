@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { getConfig } from '../config'
 
 const MFAVerifyPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
@@ -27,7 +28,7 @@ const MFAVerifyPage: React.FC = () => {
     setError(null)
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL
+      const apiUrl = getConfig().apiUrl
       const endpoint = useRecovery ? '/mfa/recovery' : '/mfa/verify'
 
       const response = await fetch(`${apiUrl}${endpoint}`, {

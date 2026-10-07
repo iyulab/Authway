@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getConfig } from '../config'
 
 export default function ResendVerificationPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -19,7 +20,7 @@ export default function ResendVerificationPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/email/send-verification`,
+        `${getConfig().apiUrl}/api/email/send-verification`,
         {
           method: 'POST',
           headers: {

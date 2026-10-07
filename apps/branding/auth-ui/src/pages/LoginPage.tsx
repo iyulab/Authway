@@ -8,6 +8,7 @@ import { useTranslation, Trans } from 'react-i18next'
 import GoogleLoginButton from '../components/GoogleLoginButton'
 import { GitHubLoginButton, MicrosoftLoginButton, AppleLoginButton } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { getConfig } from '../config'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -152,7 +153,7 @@ const LoginPage: React.FC = () => {
       : { method: 'GET' }
 
     // Use Auth Backend URL for OAuth endpoints
-    const apiUrl = import.meta.env.VITE_API_URL
+    const apiUrl = getConfig().apiUrl
     const url = usePost
       ? `${apiUrl}/auth/google/login`
       : `${apiUrl}/auth/google/login?login_challenge=${challenge}`
@@ -223,7 +224,7 @@ const LoginPage: React.FC = () => {
         console.log('[Auto-Google] Starting OAuth flow with challenge:', challenge.substring(0, 10) + '...')
 
         // Use Auth Backend URL for OAuth endpoints
-        const apiUrl = import.meta.env.VITE_API_URL
+        const apiUrl = getConfig().apiUrl
         const response = await fetch(`${apiUrl}/auth/google/login`, {
           method: 'POST',
           headers: {
@@ -262,7 +263,7 @@ const LoginPage: React.FC = () => {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData): Promise<LoginResponse> => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/authenticate`, {
+      const response = await fetch(`${getConfig().apiUrl}/authenticate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

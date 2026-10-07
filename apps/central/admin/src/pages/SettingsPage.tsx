@@ -14,6 +14,7 @@ import {
 import { tenantsApi, authApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input } from '@/components/ui'
+import { getConfig } from '../config'
 
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient()
@@ -72,7 +73,7 @@ const SettingsPage: React.FC = () => {
       settings: [
         {
           name: 'API Base URL',
-          value: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+          value: getConfig().apiUrl,
           description: 'Authway API 서버 URL',
         },
         {
@@ -90,7 +91,7 @@ const SettingsPage: React.FC = () => {
       settings: [
         {
           name: 'Hydra Public URL',
-          value: import.meta.env.VITE_HYDRA_PUBLIC_URL || 'http://localhost:4444',
+          value: getConfig().issuerUrl,
           description: 'Hydra Public Endpoint (OAuth2 토큰)',
         },
         {
