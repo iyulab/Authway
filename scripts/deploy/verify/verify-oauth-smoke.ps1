@@ -238,7 +238,12 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         }
     }
     if ($clientDbId) {
-        & curl.exe -s -o $null -X DELETE "$apiUrl/api/v1/clients/$clientDbId" -H "Authorization: Bearer $adminKey" | Out-Null
+        # PowerShell drops a $null argument to a native command, so "-o $null"
+        # would make curl read "-X" as the output file and send a GET instead.
+        $delCode = & curl.exe -s -o NUL -w "%{http_code}" -X DELETE "$apiUrl/api/v1/clients/$clientDbId" -H "Authorization: Bearer $adminKey"
+        if ($delCode -notin @('200', '204')) {
+            Write-Host "⚠️  검증용 client 삭제 실패(HTTP $delCode) — 수동 확인 필요: $clientId" -ForegroundColor Yellow
+        }
     }
     Remove-Item $cookieJar -ErrorAction SilentlyContinue
     Write-Host "   완료" -ForegroundColor Gray

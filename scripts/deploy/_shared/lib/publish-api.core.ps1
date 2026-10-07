@@ -182,13 +182,15 @@ try {
         --name $CONTAINER_APP_API `
         --resource-group $RESOURCE_GROUP `
         --query "properties.template.containers[0].env[].name" -o tsv
-    $toRemove = $staleEnv | Where-Object { $presentEnv -contains $_ }
-    if ($toRemove) {
+    # @(...) keeps a single match an array; a bare string would be passed to az
+    # one character at a time.
+    $toRemove = @($staleEnv | Where-Object { $presentEnv -contains $_ })
+    if ($toRemove.Count -gt 0) {
         Write-Host "🧹 더 이상 쓰지 않는 환경 변수 제거: $($toRemove -join ', ')" -ForegroundColor Yellow
         az containerapp update `
             --name $CONTAINER_APP_API `
             --resource-group $RESOURCE_GROUP `
-            --remove-env-vars @toRemove | Out-Null
+            --remove-env-vars $toRemove | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "환경 변수 제거 실패"
         }
