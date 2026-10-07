@@ -359,31 +359,19 @@ SERVE_COOKIES_SAME_SITE_MODE=Lax
 
 ## Database Migrations
 
-### Automatic Migration (Recommended)
+The API applies pending migrations itself when it starts — all of them in one
+transaction, and it exits rather than serve a half-migrated schema. Deploying the
+API image is what migrates the database; there is no separate migration step.
 
-**During Deployment**:
-```powershell
-# PowerShell (Azure)
-.\scripts\deploy\deploy-all.ps1 -ForceMigration
-```
-
-**Features**:
-- ⚡ Fast detection (1-2 seconds)
-- 🎯 Runs only pending migrations
-- 🔒 PostgreSQL advisory locks (parallel-safe)
-- 🔄 Transaction-based execution
-
-See [DATABASE.md](./DATABASE.md) for complete migration guide.
-
-### Manual Migration
+Check a deployed environment (read-only):
 
 ```powershell
-# Check status
-.\scripts\deploy\check-migration-status-psql.ps1
-
-# Run manually
-.\scripts\deploy\run-migration-azure.ps1
+.\scripts\deploy\staging\check-migration-status.ps1
+.\scripts\deploy\prod\check-migration-status.ps1
 ```
+
+Dropping a column or table is a two-deployment change — see
+[DATABASE.md](./DATABASE.md#changes-that-cannot-be-undone).
 
 ---
 

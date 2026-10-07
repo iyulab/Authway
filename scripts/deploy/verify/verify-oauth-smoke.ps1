@@ -41,7 +41,7 @@ if (-not $VerifyDir) { $VerifyDir = Split-Path -Parent $MyInvocation.MyCommand.P
 $SharedDir = Join-Path (Split-Path -Parent $VerifyDir) "_shared"
 
 . (Join-Path $SharedDir "load-env.ps1")
-. (Join-Path $SharedDir "migration-helpers.ps1")
+. (Join-Path $SharedDir "psql-helpers.ps1")
 
 # 이 스크립트가 실행마다 만들고 지우는 검증용 계정의 고정 비밀번호/해시.
 # 행이 즉시 삭제되는 일회성 검증용이라 회전할 필요가 없다(스크립트 헤더 참조).

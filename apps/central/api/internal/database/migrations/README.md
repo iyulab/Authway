@@ -4,20 +4,10 @@ This directory contains all SQL migration files for the Authway Central API.
 
 ## Migration System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    SINGLE SOURCE OF TRUTH                        │
-│   apps/central/api/internal/database/migrations/*.sql            │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-              ▼                               ▼
-   ┌─────────────────────┐       ┌─────────────────────┐
-   │   Go App Startup    │       │   Deploy Script     │
-   │   (Embedded SQL)    │       │   (Pre-deployment)  │
-   └─────────────────────┘       └─────────────────────┘
-```
+These files are embedded in the API binary and applied by
+`internal/database/migrate.go` when the API starts — in version order, all pending
+files in one transaction. Nothing else applies them. Operating guide (checking a
+deployed environment, destructive changes): [`docs/DATABASE.md`](../../../../../../docs/DATABASE.md).
 
 ## Creating New Migrations
 
@@ -32,8 +22,11 @@ Examples:
 - 008_add_impersonation_missing_columns.sql  (Schema fix)
 ```
 
-- **VERSION**: 3-digit zero-padded number (000, 001, 002...)
+- **VERSION**: 3-digit zero-padded number (000, 001, 002...), unique
 - **DESCRIPTION**: Snake_case description of the change
+
+Every `.sql` file here is a migration. The API refuses to start if a `.sql` file
+does not match `{VERSION}_{DESCRIPTION}.sql` or if two files share a version.
 
 ### 2. File Structure
 
@@ -75,7 +68,8 @@ Examples:
 - Never modify existing migration files after deployment
 - Never use columns that don't exist in the current schema
 - Never assume specific data exists (use safe lookups)
-- Never remove columns that are still referenced in code
+- Never remove columns that are still referenced in code — and never in the same
+  deployment that stops referencing them (see `docs/DATABASE.md`)
 
 ### 4. Adding New Columns to Existing Tables
 
@@ -124,24 +118,16 @@ the migrations stay the single source of truth for schema.
 4. Applies pending migrations in version order
 5. Records applied migrations in `schema_migrations` table
 
-### Azure Deployment (`deploy-all.ps1`)
+### Deployed environments
 
-1. Pre-deployment: `migration-helpers.ps1` checks for pending migrations
-2. Prompts user for confirmation (unless `-ForceMigration`)
-3. Applies migrations via psql
-4. On success: proceeds with container deployment
-5. Container startup: Go app verifies migrations (already applied)
+Deploying a new API image applies its migrations the same way at container
+startup. Check the result with `scripts/deploy/<target>/check-migration-status.ps1`.
 
 ## Rollback Strategy
 
-For complex changes, create a companion rollback file:
-
-```
-008_add_feature.sql          # Forward migration
-008_add_feature_rollback.sql # Rollback migration (optional)
-```
-
-Rollback files are not auto-executed. They serve as documentation for manual recovery.
+There are no down migrations — correct a mistake with a new forward migration.
+Do not put rollback SQL in this directory: `008_add_feature_rollback.sql` shares
+version 008 with its migration and the API refuses to start.
 
 ## Troubleshooting
 
@@ -155,7 +141,9 @@ FROM schema_migrations
 ORDER BY executed_at DESC;
 ```
 
-Failed migrations are rolled back by the transaction. Fix the SQL and retry.
+A failure rolls back the whole run and records nothing; the API exits and logs the
+version it was applying. Fix the SQL and redeploy. (`success = false` rows can only
+come from tooling that predates the startup migrator.)
 
 ### Column/Table Already Exists
 
@@ -204,5 +192,5 @@ CREATE TABLE schema_migrations (
 | Create new migration | `apps/central/api/internal/database/migrations/` |
 | Check applied migrations | Query `schema_migrations` table |
 | Run locally | Start Go app (`start-dev.ps1`) |
-| Deploy to Azure | `scripts/deploy/deploy-all.ps1` |
-| Manual migration | `scripts/deploy/run-migration-azure.ps1` |
+| Apply in a deployed environment | Deploy the API image (`scripts/deploy/<target>/publish-api.ps1`) |
+| Check a deployed environment | `scripts/deploy/<target>/check-migration-status.ps1` |

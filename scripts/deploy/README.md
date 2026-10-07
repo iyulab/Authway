@@ -8,16 +8,15 @@
 scripts/deploy/
 ├── _shared/                    # 타겟 무관 공통 로직
 │   ├── load-env.ps1             # env 로더 + preflight (secrets, az subscription)
-│   ├── migration-helpers.ps1    # psql 기반 마이그레이션
+│   ├── psql-helpers.ps1         # 검증 스크립트용 psql 쿼리 헬퍼
 │   ├── smoke-audit.ps1          # audit_logs 배포 smoke (fail-closed)
-│   ├── check-migration-status*.ps1
-│   ├── run-migration*.ps1
 │   └── lib/                     # 타겟 주입형 publish 코어 (직접 호출 지양)
 │       ├── publish-api.core.ps1
 │       ├── publish-hydra.core.ps1
 │       ├── publish-admin.core.ps1
 │       ├── publish-auth-ui.core.ps1
 │       ├── publish-landing.core.ps1
+│       ├── check-migration-status.core.ps1
 │       └── deploy-all.core.ps1
 ├── prod/                       # production 배포 (Target=prod 고정 thin wrapper)
 │   ├── .env                     # 실제 secret (git-ignored)
@@ -27,6 +26,7 @@ scripts/deploy/
 │   ├── publish-admin.ps1
 │   ├── publish-auth-ui.ps1
 │   ├── publish-landing.ps1
+│   ├── check-migration-status.ps1
 │   └── deploy-all.ps1
 ├── staging/                    # staging 배포 (Target=staging 고정 thin wrapper)
 │   ├── .env                     # (사용자 생성) staging secret
@@ -35,6 +35,7 @@ scripts/deploy/
 │   ├── publish-hydra.ps1
 │   ├── publish-admin.ps1
 │   ├── publish-auth-ui.ps1
+│   ├── check-migration-status.ps1
 │   └── deploy-all.ps1
 └── verify/                     # 배포 후 검증 (POST-DEPLOY-VERIFY.md)
     ├── verify-hydra-env.ps1
@@ -78,7 +79,7 @@ az --version; docker --version; psql --version; swa --version; npx wrangler@late
 .\staging\deploy-all.ps1
 
 # 옵션
-.\prod\deploy-all.ps1 -SkipMigration -SkipBuild
+.\prod\deploy-all.ps1 -SkipBuild
 .\prod\deploy-all.ps1 -Services hydra,api   # 일부만
 ```
 
@@ -100,11 +101,14 @@ az --version; docker --version; psql --version; swa --version; npx wrangler@late
 
 ### 마이그레이션 상태 확인
 
+마이그레이션은 API 기동 시 Go migrator 가 적용한다(배포 스크립트가 따로 실행하지 않음).
+아래는 읽기 전용 확인 — 대상 DB 의 `schema_migrations` 를 저장소의
+`apps/central/api/internal/database/migrations/*.sql` 과 대조한다.
+
 ```powershell
-# prod/staging DB는 _shared 스크립트가 env를 어떻게 찾는가?
-# 현재: migration helpers는 호출 시 hashtable 전달 방식이라 별도 wrapper가 필요.
-# TODO: staging/check-migration-status.ps1 wrapper 추가 (현재 prod 전용)
-.\_shared\check-migration-status-psql.ps1
+.\prod\check-migration-status.ps1
+.\staging\check-migration-status.ps1
+# 종료 코드: 0 = 보류·실패 없음, 1 = 접속/조회 실패, 2 = 보류 또는 실패 기록 있음
 ```
 
 ## 첫 staging 배포 절차 (2026-04-15 이후)

@@ -12,8 +12,6 @@ param(
 
     [switch]$SkipBuild,
     [switch]$SkipHealthCheck,
-    [switch]$SkipMigration,   # DEPRECATED: migrations are now handled by the Go startup migrator
-    [switch]$ForceMigration,  # DEPRECATED: no longer used
     [string[]]$Services = @("hydra", "api", "admin", "auth-ui")
 )
 
@@ -160,9 +158,8 @@ try {
     # ============================================================
     # 0. DB 마이그레이션 — Go startup migrator가 자동 처리
     # ============================================================
-    # PowerShell 마이그레이션(Invoke-AutoMigration)은 v0.4.0에서 제거됨.
     # 마이그레이션은 API 컨테이너 기동 시 Go migrate.go가 자동 실행한다.
-    # -SkipMigration / -ForceMigration 파라미터는 하위 호환성을 위해 유지하나 무시됨.
+    # 적용 결과 확인: <target>/check-migration-status.ps1
     Write-Host ""
     Write-Host "ℹ️  DB 마이그레이션: Go startup migrator가 API 기동 시 자동 처리합니다." -ForegroundColor Cyan
     Write-Host ""

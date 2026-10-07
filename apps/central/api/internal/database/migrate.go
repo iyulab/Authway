@@ -45,7 +45,6 @@ func RunMigrations(db *gorm.DB, logger *zap.Logger) error {
 	defer tx.Rollback()
 
 	// Acquire exclusive advisory lock — released automatically when tx ends.
-	// Uses the same lock ID as the PowerShell migration helper for cross-tool safety.
 	if _, err = tx.Exec("SELECT pg_advisory_xact_lock(999999)"); err != nil {
 		return fmt.Errorf("failed to acquire migration lock: %w", err)
 	}
@@ -105,46 +104,66 @@ func RunMigrations(db *gorm.DB, logger *zap.Logger) error {
 	return tx.Commit()
 }
 
-// getMigrationFiles reads all migration files from embedded filesystem
+// migrationFilenamePattern is the only accepted shape for a file in migrations/.
+var migrationFilenamePattern = regexp.MustCompile(`^(\d+)_(.+)\.sql$`)
+
+// getMigrationFiles reads all migration files from the embedded filesystem.
 func getMigrationFiles() ([]migrationFile, error) {
-	var migrations []migrationFile
-
-	filenameRegex := regexp.MustCompile(`^(\d+)_(.+)\.sql$`)
-
-	entries, err := fs.ReadDir(migrationFiles, "migrations")
+	sub, err := fs.Sub(migrationFiles, "migrations")
 	if err != nil {
 		return nil, err
 	}
+	return readMigrationFiles(sub)
+}
+
+// readMigrationFiles parses every .sql file at the root of fsys into a migration,
+// ordered by version.
+//
+// It refuses rather than skips anything it cannot apply unambiguously. A .sql file
+// whose name lacks a version would otherwise never run, and two files sharing a
+// version would race for one schema_migrations row: whichever sorted first is
+// applied and the other is recorded as already done without ever executing — a
+// companion rollback file such as 008_x_rollback.sql placed next to its migration
+// is exactly that case. Failing here stops the API at startup and fails the test
+// suite before such a file can ship.
+func readMigrationFiles(fsys fs.FS) ([]migrationFile, error) {
+	entries, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return nil, err
+	}
+
+	var migrations []migrationFile
+	byVersion := make(map[string]string)
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
 
-		matches := filenameRegex.FindStringSubmatch(entry.Name())
+		matches := migrationFilenamePattern.FindStringSubmatch(entry.Name())
 		if len(matches) != 3 {
-			continue
+			return nil, fmt.Errorf("migration file %q does not match <version>_<name>.sql", entry.Name())
 		}
 
 		version := matches[1]
-		name := matches[2]
+		if other, dup := byVersion[version]; dup {
+			return nil, fmt.Errorf("migration files %q and %q share version %s", other, entry.Name(), version)
+		}
+		byVersion[version] = entry.Name()
 
-		// Use forward slash for embed.FS (not filepath.Join which uses OS-specific separator)
-		filePath := "migrations/" + entry.Name()
-		content, err := fs.ReadFile(migrationFiles, filePath)
+		content, err := fs.ReadFile(fsys, entry.Name())
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %s: %w", entry.Name(), err)
 		}
 
 		hash := sha256.Sum256(content)
-		checksum := fmt.Sprintf("%x", hash)[:64]
 
 		migrations = append(migrations, migrationFile{
 			Filename: entry.Name(),
 			Version:  version,
-			Name:     name,
+			Name:     matches[2],
 			Content:  string(content),
-			Checksum: checksum,
+			Checksum: fmt.Sprintf("%x", hash),
 		})
 	}
 

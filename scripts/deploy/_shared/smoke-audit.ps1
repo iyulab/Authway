@@ -28,7 +28,7 @@ $SharedDir = $PSScriptRoot
 if (-not $SharedDir) { $SharedDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 . (Join-Path $SharedDir "load-env.ps1")
-. (Join-Path $SharedDir "migration-helpers.ps1")
+. (Join-Path $SharedDir "psql-helpers.ps1")
 
 Write-Host ""
 Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
@@ -43,7 +43,7 @@ try {
     exit 1
 }
 
-# psql 경로 초기화 (migration-helpers.ps1 내부 상태)
+# psql 경로 초기화 (psql-helpers.ps1 내부 상태)
 if (-not (Initialize-PsqlPath)) {
     Write-Host "❌ psql 미발견 (PATH / 기본 설치경로 모두 없음)" -ForegroundColor Red
     Write-Host "   설치: choco install postgresql  또는  winget install PostgreSQL.PostgreSQL" -ForegroundColor Yellow

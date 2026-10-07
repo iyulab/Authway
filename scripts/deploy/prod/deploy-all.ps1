@@ -2,15 +2,11 @@
 param(
     [switch]$SkipBuild,
     [switch]$SkipHealthCheck,
-    [switch]$SkipMigration,
-    [switch]$ForceMigration,
     [string[]]$Services = @("hydra", "api", "admin", "auth-ui")
 )
 & (Join-Path $PSScriptRoot "..\_shared\lib\deploy-all.core.ps1") `
     -Target "prod" `
     -SkipBuild:$SkipBuild `
     -SkipHealthCheck:$SkipHealthCheck `
-    -SkipMigration:$SkipMigration `
-    -ForceMigration:$ForceMigration `
     -Services $Services
 exit $LASTEXITCODE
