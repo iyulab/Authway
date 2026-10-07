@@ -7,6 +7,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Serve the test document from the API's origin. The console calls the
+    // API with credentials, and jsdom's XMLHttpRequest enforces CORS for
+    // cross-origin calls (a preflight the mocked API does not answer). Same
+    // origin also matches the single-domain deployment the console targets.
+    environmentOptions: { jsdom: { url: 'http://localhost:8080' } },
     setupFiles: ['./src/test/setup.ts'],
     coverage: {
       provider: 'v8',

@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '../i18n'
 import ForgotPasswordPage from './ForgotPasswordPage'
 import { server } from '../test/mocks/server'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw/http'
 
 // ../test/utils.tsx pins this at module load for its own render(); this file
 // renders standalone (MemoryRouter, not BrowserRouter) so it must pin it too.

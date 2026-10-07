@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { render } from '../test/utils'
 import ConsentPage from './ConsentPage'
 import { server } from '../test/mocks/server'
-import { http, HttpResponse, delay } from 'msw'
+import { http, HttpResponse } from 'msw/http'
+import { delay } from 'msw/utils/delay'
 
 // Mock useSearchParams
 const mockSearchParams = new URLSearchParams()

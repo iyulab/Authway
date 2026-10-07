@@ -5,7 +5,7 @@ import { render } from '../test/utils'
 import i18n from '../i18n'
 import LoginPage from './LoginPage'
 import { server } from '../test/mocks/server'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw/http'
 
 // Mock useSearchParams and useNavigate
 const mockNavigate = vi.fn()

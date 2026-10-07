@@ -32,26 +32,27 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
-  # apps/central/admin has its own package-lock.json (npm, not part of the
-  # pnpm workspace — see pnpm-workspace.yaml).
+  # The two UI apps (apps/central/admin, apps/branding/auth-ui) keep their own
+  # package-lock.json — npm, outside the pnpm workspace — but share most of
+  # their dependencies and must stay on the same versions of them. Updating
+  # them from one entry makes every group a single pull request spanning both
+  # apps, so a bump can never land in one app and not the other.
   - package-ecosystem: "npm"
-    directory: "/apps/central/admin"
+    directories:
+      - "/apps/central/admin"
+      - "/apps/branding/auth-ui"
     schedule:
       interval: "weekly"
     groups:
-      admin-dependencies:
+      ui-dependencies:
         patterns: ["*"]
         update-types: ["minor", "patch"]
-
-  # apps/branding/auth-ui — same as admin, its own package-lock.json.
-  - package-ecosystem: "npm"
-    directory: "/apps/branding/auth-ui"
-    schedule:
-      interval: "weekly"
-    groups:
-      auth-ui-dependencies:
+      # Majors arrive together as well: they are applied and verified locally
+      # as one batch (build, tests, lint per app) rather than merged one PR at
+      # a time, where intermediate states that only work as a pair break.
+      ui-major-dependencies:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+        update-types: ["major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
