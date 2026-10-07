@@ -7,14 +7,24 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./ssr": {
-      "types": "./dist/ssr/index.d.ts",
-      "import": "./dist/ssr/index.mjs",
-      "require": "./dist/ssr/index.cjs"
+      "import": {
+        "types": "./dist/ssr/index.d.mts",
+        "default": "./dist/ssr/index.mjs"
+      },
+      "require": {
+        "types": "./dist/ssr/index.d.ts",
+        "default": "./dist/ssr/index.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -28,6 +38,7 @@
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "lint:package": "publint --pack npm && attw --pack . --profile node16",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -38,18 +49,20 @@
     "react-dom": ">=16.8.0"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@eslint/js": "^10.0.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "publint": "^0.3.25",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.3",
-    "@eslint/js": "^10.0.1",
-    "globals": "^17.13.0",
     "typescript-eslint": "^8.71.1",
-    "eslint-plugin-react-hooks": "^7.1.1"
+    "vitest": "^5.0.3"
   },
   "keywords": [
     "authway",
@@ -69,7 +82,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/iyulab/authway.git",
+    "url": "git+https://github.com/iyulab/authway.git",
     "directory": "packages/react"
   },
   "homepage": "https://github.com/iyulab/authway#readme",

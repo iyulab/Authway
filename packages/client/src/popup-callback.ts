@@ -12,7 +12,7 @@
  *
  * Option 2: Add as a script tag
  * ```html
- * <script src="https://unpkg.com/@authway/client/dist/popup-callback.js"></script>
+ * <script type="module" src="https://unpkg.com/@authway/client/dist/popup-callback.mjs"></script>
  * ```
  *
  * This will:

@@ -311,6 +311,11 @@ jobs:
       - name: Lint @authway/client and @authway/react
         run: pnpm --filter @authway/client --filter @authway/react lint
 
+      # Every file package.json points at must exist in the tarball, and each
+      # condition (require/import) must resolve to matching types.
+      - name: Check package manifests @authway/client and @authway/react
+        run: pnpm --filter @authway/client --filter @authway/react lint:package
+
       - name: Test @authway/client
         run: pnpm --filter @authway/client exec vitest run
 

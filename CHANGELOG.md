@@ -25,6 +25,16 @@
   `internal_server_error`. Handlers that refuse with a framework error (for
   example deleting an unknown user) answer this way too.
 
+### Fixed
+
+- **`@authway/client` and `@authway/react` load through `require`.** Their
+  `main` and `exports` pointed CommonJS consumers at `dist/*.cjs`, but the build
+  wrote `dist/*.js`, so `require('@authway/client')` (and CommonJS bundlers or
+  test runners) failed with `MODULE_NOT_FOUND`; `import` was unaffected. The
+  CommonJS build is now `dist/*.cjs`, and `import` and `require` each resolve
+  their own type declarations (`.d.mts` / `.d.ts`). The script-tag example for
+  the popup callback is now `<script type="module" src=".../popup-callback.mjs">`.
+
 ### Security
 
 - **Removed `GET /api/v1/invitations/pending`.** It was public and returned,

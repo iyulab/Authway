@@ -7,14 +7,24 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./popup-callback": {
-      "types": "./dist/popup-callback.d.ts",
-      "import": "./dist/popup-callback.mjs",
-      "require": "./dist/popup-callback.cjs"
+      "import": {
+        "types": "./dist/popup-callback.d.mts",
+        "default": "./dist/popup-callback.mjs"
+      },
+      "require": {
+        "types": "./dist/popup-callback.d.ts",
+        "default": "./dist/popup-callback.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -29,6 +39,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "lint:package": "publint --pack npm && attw --pack . --profile node16",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -50,7 +61,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/iyulab/authway.git",
+    "url": "git+https://github.com/iyulab/authway.git",
     "directory": "packages/client"
   },
   "homepage": "https://github.com/iyulab/authway#readme",
@@ -58,14 +69,16 @@
     "url": "https://github.com/iyulab/authway/issues"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
     "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "publint": "^0.3.25",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.3",
-    "@eslint/js": "^10.0.1",
-    "globals": "^17.13.0",
-    "typescript-eslint": "^8.71.1"
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
   },
   "sideEffects": [
     "./dist/popup-callback.mjs",

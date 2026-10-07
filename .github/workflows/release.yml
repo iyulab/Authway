@@ -17,9 +17,10 @@ name: Release
 #   - Validates tag ↔ package.json version parity
 #   - Builds both packages
 #   - Verifies tarballs do not contain unresolved `workspace:` protocol
+#   - Checks the package manifests (publint, are-the-types-wrong)
 #   - Publishes with `pnpm publish` (resolves workspace:* → real version)
-#   - Smoke-installs the published version from the real registry
 #   - Creates a GitHub Release with auto-generated notes
+#   - Smoke-installs the published version from the real registry and loads it
 
 on:
   push:
@@ -29,6 +30,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: write  # required for `gh release create`
     steps:
@@ -87,6 +89,9 @@ jobs:
             fi
           done
 
+      - name: Check package manifests
+        run: pnpm --filter @authway/client --filter @authway/react lint:package
+
       - name: Publish @authway/client
         working-directory: packages/client
         run: pnpm publish --access public --no-git-checks
@@ -99,9 +104,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Post-publish smoke test: confirms the package is installable from the public
-      # registry exactly as a downstream consumer would see it.
-      # Retries accommodate registry propagation delay (usually < 30s).
+      # Created right after publishing: the versions are out whether or not the
+      # smoke test below passes, so the release record must exist either way.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      # Post-publish smoke test: installs from the public registry exactly as a
+      # downstream consumer would, then loads both packages through require and import.
       - name: Smoke-test npm install
         # Redirect NPM_CONFIG_USERCONFIG away from setup-node's auth-scoped .npmrc.
         # That file contains `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,
@@ -116,29 +130,23 @@ jobs:
           smoke="$(mktemp -d)"
           cd "$smoke"
           npm init -y >/dev/null
-          # Up to 8 attempts × 30s = 4 minutes. npm publish returns before the new
-          # version fully propagates to the install CDN (ETARGET for 30s–2min is normal).
-          for attempt in 1 2 3 4 5 6 7 8; do
-            if npm install "@authway/react@$version" --no-audit --no-fund; then
-              # Read package.json directly via fs — `require(...)` is gated by the package's `exports` map.
+          # Up to 40 attempts × 30s = 20 minutes. npm accepts a publish and then
+          # processes the version before serving it; the metadata and then the
+          # tarball can take several minutes each to appear (ETARGET, then 404).
+          for attempt in $(seq 1 40); do
+            if npm install "@authway/react@$version" react react-dom --no-audit --no-fund; then
               installed="$(jq -r .version node_modules/@authway/client/package.json)"
               if [ "$installed" != "$version" ]; then
                 echo "::error::smoke install resolved @authway/client to $installed, expected $version"
                 exit 1
               fi
-              echo "✓ @authway/react@$version and @authway/client@$installed installed cleanly"
+              node -e "require('@authway/client'); require('@authway/client/popup-callback'); require('@authway/react'); require('@authway/react/ssr')"
+              node --input-type=module -e "await import('@authway/client'); await import('@authway/react'); await import('@authway/react/ssr')"
+              echo "✓ @authway/react@$version and @authway/client@$installed install and load through require and import"
               exit 0
             fi
             echo "install attempt $attempt failed, retrying in 30s..."
             sleep 30
           done
-          echo "::error::npm install @authway/react@$version failed after 8 attempts"
+          echo "::error::npm install @authway/react@$version failed after 40 attempts"
           exit 1
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
