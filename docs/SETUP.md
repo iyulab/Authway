@@ -194,7 +194,7 @@ post_logout_redirect_uris: [
 ```
 
 **Rules**:
-- ✅ Exact match required (no wildcards by default)
+- ✅ Exact match required (no wildcards)
 - ✅ HTTPS required in production
 - ✅ Multiple URIs supported
 - ❌ No path traversal allowed
@@ -206,9 +206,6 @@ Authway minimizes boilerplate by auto-populating logout settings:
 | Field | Explicit Value | Smart Default |
 |-------|----------------|---------------|
 | `post_logout_redirect_uris` | Uses provided value | Copies from `redirect_uris` |
-| `logout_redirect_policy` | Uses provided value | `"strict"` (production-safe) |
-| `default_logout_uri` | Uses provided value | First `redirect_uri` |
-| `allow_wildcard_logout` | Uses provided value | `false` (secure default) |
 
 **Example - Minimal Configuration**:
 ```bash

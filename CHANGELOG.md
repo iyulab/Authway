@@ -450,6 +450,19 @@
 
 ### Removed
 
+- **Client settings `logout_redirect_policy`, `default_logout_uri` and
+  `allow_wildcard_logout` (breaking for the client API).** None of them could
+  take effect: the authorization server checks `post_logout_redirect_uri`
+  against the client's registered `post_logout_redirect_uris` (exact match)
+  before a logout starts and alone decides where the browser goes afterwards,
+  so a policy could only refuse what was already allowed — which the default
+  `strict` one did, for every logout started from the logout screen. They are
+  gone from the client API and the admin console; requests that still send them
+  are accepted and the fields ignored. **Migration:** register every post-logout
+  address in `post_logout_redirect_uris`, one entry per address (wildcards were
+  never honoured by the authorization server). The database columns stay until a
+  later release drops them.
+
 - **SDK methods that had no working backend.** `loginWithPassword` posted to an
   endpoint the API does not have, and `linkAccount`, `unlinkAccount` and
   `getLinkedAccounts` targeted an account-linking feature that does not exist

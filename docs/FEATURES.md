@@ -266,21 +266,20 @@ Access-Control-Allow-Credentials: true
 
 ---
 
-## Logout & Redirect Policies
+## Logout & Redirect URIs
 
-Control where users are redirected after logout with flexible validation policies.
+Control where users are redirected after logout.
 
-> **Where each rule is enforced**: `post_logout_redirect_uris` is a whitelist Hydra itself checks on
-> every RP-initiated logout (Authway syncs it into the Hydra client on create/update). The other
-> three fields — `logout_redirect_policy`, `default_logout_uri`, `allow_wildcard_logout` — are
-> stored and returned by the central API, but the central API does not itself validate anything with
-> them; the auth service's logout handler is what reads and enforces them.
+> **Where it is enforced**: on RP-initiated logout the authorization server checks the requested
+> `post_logout_redirect_uri` against the client's `post_logout_redirect_uris` (exact match; Authway
+> syncs the list into the Hydra client on create/update) and alone decides where the browser goes
+> once the logout completes.
 
 ### Overview
 
 Authway supports:
 - ✅ **Single Logout**: Logout from all sessions
-- ✅ **Redirect Policies**: Whitelist, custom validation
+- ✅ **Registered Redirects**: post-logout addresses are whitelisted per client
 - ✅ **Front-Channel Logout**: Notify all apps
 - ✅ **Session Cleanup**: Clear all tokens and sessions
 - ✅ **Smart Defaults**: Auto-populate logout URIs from redirect URIs
@@ -292,9 +291,6 @@ Authway minimizes configuration by automatically setting logout URIs:
 | Field | Smart Default | When |
 |-------|---------------|------|
 | `post_logout_redirect_uris` | Copies from `redirect_uris` | Not explicitly set |
-| `logout_redirect_policy` | `"strict"` | Not explicitly set |
-| `default_logout_uri` | First `redirect_uri` | Not explicitly set |
-| `allow_wildcard_logout` | `false` | Not explicitly set |
 
 **Minimal Client Creation** (logout works out of the box):
 ```bash
@@ -313,8 +309,9 @@ curl -X POST http://localhost:8080/api/v1/clients \
 ### Logout Flow
 
 ```
-App → /logout?post_logout_redirect_uri=https://app.example.com →
-  Hydra Logout (accept) → Revoke Sessions & Tokens (all clients) → Redirect to URI
+App → end_session_endpoint?id_token_hint=…&post_logout_redirect_uri=https://app.example.com
+  → (URI checked against post_logout_redirect_uris) → logout screen
+  → Hydra logout (accept) → Revoke Sessions & Tokens (all clients) → Redirect to URI
 ```
 
 Accepting the Hydra logout request only ends the browser's login session; by itself it does not
@@ -323,9 +320,9 @@ that session's login and consent grants across all clients right after Hydra acc
 actually invalidates them. This step is best-effort — a failure is logged but does not block the
 redirect.
 
-### Redirect URI Policies
+### Redirect URIs
 
-#### 1. Whitelist Policy (Recommended)
+#### Registered addresses
 
 **Database Configuration**:
 ```sql
@@ -351,18 +348,9 @@ POST /api/v1/clients
 }
 ```
 
-#### 2. Dynamic Policy (Advanced)
-
-**Custom Validation Function**:
-```go
-func ValidateLogoutRedirect(uri string, clientID string) bool {
-  // Custom logic
-  if strings.HasPrefix(uri, "https://") && strings.HasSuffix(uri, ".example.com") {
-    return true
-  }
-  return false
-}
-```
+There is no per-client policy beyond the list: an address that is not registered
+is refused before the logout starts, and a logout started without one ends on the
+authorization server's default page.
 
 ### SDK Usage
 
@@ -424,10 +412,7 @@ Notify all applications when user logs out:
    // ✅ Good - exact match, no configuration needed
    "https://app.example.com/logged-out"
 
-   // ⚠️ Wildcard patterns are supported (opt-in via allow_wildcard_logout)
-   // for cases like preview/staging subdomains, but widen what an attacker
-   // can redirect to — prefer an explicit whitelist where possible.
-   "https://*.example.com/logged-out"
+   // Wildcard patterns are not supported — register each address.
    ```
 
 3. **Validate Client ID**:

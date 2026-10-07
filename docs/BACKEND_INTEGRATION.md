@@ -508,7 +508,7 @@ func main() {
 ```typescript
 // @authway/client
 await client.logout({
-  returnTo: 'https://yourdomain.com'  // Optional with lenient policy
+  returnTo: 'https://yourdomain.com'  // must be one of the client's post_logout_redirect_uris
 })
 
 // @authway/react
@@ -516,42 +516,26 @@ const { logout } = useAuth()
 await logout({ returnTo: 'https://yourdomain.com' })
 ```
 
-### Backend Logout Policy Configuration
+### Where Logout Can Return To
 
-Authway v0.1.5+ supports configurable logout redirect validation:
+`returnTo` (sent as `post_logout_redirect_uri`) must exactly match one of the
+client's registered `post_logout_redirect_uris`; the authorization server checks
+it before the logout starts and sends the browser there afterwards. Without
+`returnTo`, the browser lands on the authorization server's default page.
 
-| Policy | Behavior | Recommended For |
-|--------|----------|----------------|
-| **Strict** | `post_logout_redirect_uri` required | Production |
-| **Lenient** | `post_logout_redirect_uri` optional | Development/Staging |
-| **Disabled** | No validation | Local development only |
-
-**Example Client Configuration**:
 ```json
 {
   "client_id": "your-client-id",
   "post_logout_redirect_uris": [
     "https://yourdomain.com",
     "https://yourdomain.com/signout-callback"
-  ],
-  "logout_redirect_policy": "lenient",
-  "default_logout_uri": "https://yourdomain.com",
-  "allow_wildcard_logout": false
+  ]
 }
 ```
 
-**Development with Wildcards**:
-```json
-{
-  "post_logout_redirect_uris": [
-    "http://localhost:*",
-    "https://*.dev.example.com"
-  ],
-  "logout_redirect_policy": "lenient",
-  "default_logout_uri": "http://localhost:3000",
-  "allow_wildcard_logout": true
-}
-```
+When a client is created without `post_logout_redirect_uris`, its
+`redirect_uris` are used. Wildcard patterns are not supported — register each
+address, including each local development port.
 
 ### Backend Session Management
 

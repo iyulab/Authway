@@ -40,15 +40,10 @@ type Client struct {
 	// Used to validate browser requests to /oauth2/token endpoint
 	AllowedOrigins pq.StringArray `json:"allowed_origins" gorm:"type:text[];column:allowed_origins;default:'{}'"`
 
-	// Logout Redirect Policy Configuration.
-	// PostLogoutRedirectURIs is the whitelist Hydra itself enforces on RP-initiated logout
-	// (synced via SyncAllClientsToHydra). The other three fields are stored and returned
-	// here and enforced by the logout flow (internal/handler/logout_flow.go), which reads
-	// them from this API's response and enforces strict/lenient/disabled itself.
+	// PostLogoutRedirectURIs are the addresses an RP-initiated logout may return
+	// to. Hydra checks the requested post_logout_redirect_uri against them (synced
+	// via SyncAllClientsToHydra) and alone decides where the browser goes.
 	PostLogoutRedirectURIs pq.StringArray `json:"post_logout_redirect_uris" gorm:"type:text[];column:post_logout_redirect_uris;default:'{}'"`
-	LogoutRedirectPolicy   string         `json:"logout_redirect_policy" gorm:"column:logout_redirect_policy;default:'strict'"` // strict, lenient, disabled — enforced by the logout flow (handler/logout_flow.go)
-	DefaultLogoutURI       *string        `json:"default_logout_uri" gorm:"column:default_logout_uri;null"`
-	AllowWildcardLogout    bool           `json:"allow_wildcard_logout" gorm:"column:allow_wildcard_logout;default:false"`
 
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
@@ -123,9 +118,6 @@ type PublicClient struct {
 
 	// Logout Redirect Policy
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	LogoutRedirectPolicy   string   `json:"logout_redirect_policy"` // strict, lenient, disabled
-	DefaultLogoutURI       *string  `json:"default_logout_uri"`
-	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
@@ -197,9 +189,6 @@ func (c *Client) ToPublic() PublicClient {
 
 		// Logout policy
 		PostLogoutRedirectURIs: c.PostLogoutRedirectURIs,
-		LogoutRedirectPolicy:   c.LogoutRedirectPolicy,
-		DefaultLogoutURI:       c.DefaultLogoutURI,
-		AllowWildcardLogout:    c.AllowWildcardLogout,
 
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
@@ -232,9 +221,9 @@ type CreateClientRequest struct {
 	ClientID     string `json:"client_id"`     // Optional: Custom client_id (for both public and confidential)
 	ClientSecret string `json:"client_secret"` // Optional: Required only for confidential clients (ignored for public clients)
 
-	Description  string   `json:"description"`
-	Website      string   `json:"website" validate:"omitempty,url"`
-	Logo         string   `json:"logo" validate:"omitempty,url"`
+	Description string `json:"description"`
+	Website     string `json:"website" validate:"omitempty,url"`
+	Logo        string `json:"logo" validate:"omitempty,url"`
 	// RedirectURIs is required only for redirect-based grants (authorization_code,
 	// implicit) — see validateClientConfig. A struct tag cannot express that
 	// condition, so the presence rule lives in validation.go and this tag only
@@ -261,9 +250,6 @@ type CreateClientRequest struct {
 
 	// Logout Redirect Policy Configuration
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
-	LogoutRedirectPolicy   string   `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
-	DefaultLogoutURI       string   `json:"default_logout_uri" validate:"omitempty,url"`
-	AllowWildcardLogout    bool     `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
@@ -339,8 +325,8 @@ type UpdateClientRequest struct {
 	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,min=1,dive,url"`
 	GrantTypes   []string `json:"grant_types" validate:"omitempty,min=1"`
 	Scopes       []string `json:"scopes" validate:"omitempty,min=1"`
-	Public       *bool    `json:"public"`  // Pointer to allow explicit false
-	Active       *bool    `json:"active"`  // Pointer to allow explicit false
+	Public       *bool    `json:"public"` // Pointer to allow explicit false
+	Active       *bool    `json:"active"` // Pointer to allow explicit false
 
 	// Google OAuth Settings (optional)
 	GoogleOAuthEnabled *bool   `json:"google_oauth_enabled"` // Pointer to allow explicit false
@@ -354,10 +340,6 @@ type UpdateClientRequest struct {
 	// Logout Redirect Policy Configuration
 	// PostLogoutRedirectURIs: empty array means "clear", nil means "not provided"
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
-	LogoutRedirectPolicy   *string  `json:"logout_redirect_policy" validate:"omitempty,oneof=strict lenient disabled"`
-	// DefaultLogoutURI: empty string means "clear", nil means "not provided"
-	DefaultLogoutURI    *string `json:"default_logout_uri" validate:"omitempty"`
-	AllowWildcardLogout *bool   `json:"allow_wildcard_logout"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)

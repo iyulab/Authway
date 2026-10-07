@@ -369,23 +369,19 @@ COMMIT;  -- Only if no errors
 
 Each migration should have a corresponding rollback file:
 
-**Migration**: `003_add_logout_policy.sql`
-**Rollback**: `003_add_logout_policy_rollback.sql`
+**Migration**: `0NN_add_example_column.sql`
+**Rollback**: `0NN_add_example_column_rollback.sql`
 
 ```sql
--- 003_add_logout_policy_rollback.sql
+-- 0NN_add_example_column_rollback.sql
 BEGIN;
 
 -- Reverse the changes
-ALTER TABLE clients DROP COLUMN IF EXISTS post_logout_redirect_uris;
-ALTER TABLE clients DROP COLUMN IF EXISTS logout_redirect_policy;
-ALTER TABLE clients DROP COLUMN IF EXISTS default_logout_uri;
-ALTER TABLE clients DROP COLUMN IF EXISTS allow_wildcard_logout;
-
-DROP INDEX IF EXISTS idx_clients_logout_policy;
+ALTER TABLE clients DROP COLUMN IF EXISTS example_column;
+DROP INDEX IF EXISTS idx_clients_example_column;
 
 -- Remove from tracking (optional - keep for audit trail)
--- DELETE FROM schema_migrations WHERE version = '003';
+-- DELETE FROM schema_migrations WHERE version = '0NN';
 
 COMMIT;
 ```
