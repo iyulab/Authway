@@ -18,7 +18,7 @@ yarn add @authway/react @authway/client
 
 ## 주요 기능
 
-- ✅ **Config 자동 검색** - Auth Backend URL만 지정, 나머지 자동 검색
+- ✅ **OIDC Discovery** - Authway API URL만 지정, 엔드포인트는 OpenID Connect Discovery 로 자동 해석
 - ✅ **React Hooks** - useAuth, useUser, useClaims, useWorkspace
 - ✅ **팝업 로그인** - 페이지 이동 없이 팝업으로 인증
 - ✅ **자동 콜백 처리** - OAuth 콜백 자동 감지 및 처리
@@ -37,7 +37,7 @@ function App() {
   return (
     <AuthwayProvider
       config={{
-        domain: 'http://localhost:8081',  // Auth Backend URL만 지정!
+        domain: 'http://localhost:8080',  // Authway API URL
         clientId: 'your-client-id'
       }}
     >
@@ -47,7 +47,7 @@ function App() {
 }
 ```
 
-**중요**: `domain`은 Auth Backend URL(기본 포트 8081)을 지정합니다. OAuth URL, API URL 등은 자동으로 검색됩니다.
+**중요**: `domain`은 Authway API URL 입니다. OIDC 엔드포인트는 issuer 의 discovery 문서에서 자동으로 해석됩니다.
 
 ### 2. 로그인 구현
 
@@ -337,7 +337,7 @@ function DataFetcher() {
   useEffect(() => {
     const fetchData = async () => {
       const token = await getAccessToken()
-      const response = await fetch('http://localhost:8081/api/v1/profile/me', {
+      const response = await fetch('http://localhost:8080/api/v1/profile/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -417,7 +417,7 @@ function CustomAuth() {
 ```tsx
 <AuthwayProvider
   config={{
-    domain: 'http://localhost:8081',
+    domain: 'http://localhost:8080',
     clientId: 'your-client-id',
 
     // 선택적 설정
@@ -457,7 +457,7 @@ import {
 } from '@authway/react'
 
 const config: AuthwayConfig = {
-  domain: 'http://localhost:8081',
+  domain: 'http://localhost:8080',
   clientId: 'your-client-id'
 }
 

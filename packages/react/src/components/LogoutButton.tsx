@@ -35,7 +35,7 @@ export function LogoutButton({
   const { logout, isLoading } = useAuth()
 
   const handleClick = () => {
-    logout(logoutOptions)
+    void logout(logoutOptions)
   }
 
   return (

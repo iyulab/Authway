@@ -1,7 +1,7 @@
 // Configuration
 export const CONFIG = {
   // Local development configuration
-  domain: 'http://localhost:8081',  // Auth Backend (proxies to Central API on 8080)
+  domain: 'http://localhost:8080',  // Authway API
   issuer: 'http://localhost:4444',  // Hydra OAuth Server (for discovery and token validation)
   clientId: 'authway_spa_sample_local',
   redirectUri: window.location.origin,
@@ -10,5 +10,5 @@ export const CONFIG = {
   apiBaseUrl: 'http://localhost:5222',  // ASP.NET Backend
 
   // Authway endpoints (via Auth Backend)
-  centralApiUrl: 'http://localhost:8081'  // Auth Backend proxies to Central API
+  centralApiUrl: 'http://localhost:8080'
 };

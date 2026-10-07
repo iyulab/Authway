@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from './useAuth'
 
 export interface UseAccessTokenResult {
@@ -36,13 +36,7 @@ export function useAccessToken(): UseAccessTokenResult {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      getToken()
-    }
-  }, [isAuthenticated])
-
-  const getToken = async (): Promise<string> => {
+  const getToken = useCallback(async (): Promise<string> => {
     try {
       setIsLoading(true)
       setError(null)
@@ -55,7 +49,14 @@ export function useAccessToken(): UseAccessTokenResult {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [client])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      // The failure is already reported through `error`.
+      getToken().catch(() => {})
+    }
+  }, [isAuthenticated, getToken])
 
   return {
     token,

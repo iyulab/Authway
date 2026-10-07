@@ -16,7 +16,7 @@ export default function ApiTestTab() {
 
     try {
       const token = await getAccessToken()
-      const response = await fetch(`http://localhost:8081${endpoint}`, {
+      const response = await fetch(`http://localhost:8080${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

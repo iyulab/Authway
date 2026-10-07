@@ -18,7 +18,7 @@ Write-Host "══════════════════════�
 Write-Host ""
 
 # Configuration
-$AUTH_BACKEND = "http://localhost:8081"
+$AUTH_BACKEND = "http://localhost:8080"
 $CENTRAL_API = "http://localhost:8080"
 $HYDRA_PUBLIC = "http://localhost:4444"
 $HYDRA_ADMIN = "http://localhost:4445"

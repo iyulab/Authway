@@ -18,7 +18,7 @@ Write-Host ""
 $ScriptDir = $PSScriptRoot
 
 # Configuration
-$AUTH_BACKEND = "http://localhost:8081"
+$AUTH_BACKEND = "http://localhost:8080"
 $CENTRAL_API = "http://localhost:8080"
 $HYDRA_PUBLIC = "http://localhost:4444"
 $FRONTEND_PORT = "5174"  # Different port from React version
@@ -191,7 +191,7 @@ Write-Host "  Vanilla Frontend: http://localhost:$FRONTEND_PORT" -ForegroundColo
 Write-Host "  Backend API:      http://localhost:5222" -ForegroundColor White
 Write-Host ""
 Write-Host "📌 Authway Services:" -ForegroundColor Cyan
-Write-Host "  Auth Backend:     http://localhost:8081" -ForegroundColor Gray
+Write-Host "  Authway API:      http://localhost:8080" -ForegroundColor Gray
 Write-Host "  Central API:      http://localhost:8080" -ForegroundColor Gray
 Write-Host "  Hydra OAuth:      http://localhost:4444" -ForegroundColor Gray
 Write-Host "  Admin UI:         http://localhost:3000" -ForegroundColor Gray

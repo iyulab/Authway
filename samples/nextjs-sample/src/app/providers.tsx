@@ -5,7 +5,7 @@ import { AuthwayProvider } from '@authway/react'
 import { useRouter } from 'next/navigation'
 
 const authConfig = {
-  domain: process.env.NEXT_PUBLIC_AUTHWAY_DOMAIN || 'http://localhost:8081',
+  domain: process.env.NEXT_PUBLIC_AUTHWAY_DOMAIN || 'http://localhost:8080',
   clientId: process.env.NEXT_PUBLIC_AUTHWAY_CLIENT_ID || 'nextjs-sample-client',
   redirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3100',
 }

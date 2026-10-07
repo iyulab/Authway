@@ -189,9 +189,19 @@ jobs:
       - name: Typecheck @authway/react
         run: pnpm --filter @authway/react typecheck
 
+      - name: Lint @authway/client and @authway/react
+        run: pnpm --filter @authway/client --filter @authway/react lint
+
+      - name: Test @authway/client
+        run: pnpm --filter @authway/client exec vitest run
+
+      # The conformance scenarios need a running provider, so CI only checks
+      # that they compile.
+      - name: Typecheck @authway/conformance
+        run: pnpm --filter @authway/conformance typecheck
+
       # Guards against regression to `npm publish`, which leaves `workspace:*`
       # unresolved in the tarball and breaks every downstream `npm install`.
-      # See claudedocs/issues/closed/ISSUE-Authway-20260413-pnpm-publish-workspace-protocol.md
       - name: Verify tarballs contain no `workspace:` protocol
         run: |
           set -euo pipefail

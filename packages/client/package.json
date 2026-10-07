@@ -28,7 +28,7 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -58,13 +58,14 @@
     "url": "https://github.com/iyulab/authway/issues"
   },
   "devDependencies": {
-    "@types/node": "^20.19.39",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "eslint": "^8.57.1",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.12.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^1.6.1"
+    "vitest": "^5.0.3",
+    "@eslint/js": "^10.0.1",
+    "globals": "^17.13.0",
+    "typescript-eslint": "^8.71.1"
   },
   "sideEffects": [
     "./dist/popup-callback.mjs",

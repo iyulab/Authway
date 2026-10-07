@@ -63,8 +63,9 @@ constructor(config: AuthwayConfig)
 
 ```typescript
 interface AuthwayConfig {
-  domain: string              // Auth Backend URL (e.g., 'http://localhost:8081')
+  domain: string              // Authway API URL (e.g., 'http://localhost:8080')
   clientId: string            // OAuth client ID
+  issuer?: string             // OIDC issuer (default: discovered from domain)
   redirectUri?: string        // Redirect URI (default: window.location.origin)
   scope?: string              // OAuth scopes (default: 'openid profile email')
   audience?: string           // Token audience
@@ -78,7 +79,7 @@ interface AuthwayConfig {
 import { AuthwayClient } from '@authway/client'
 
 const client = new AuthwayClient({
-  domain: 'http://localhost:8081',
+  domain: 'http://localhost:8080',
   clientId: 'my-client-id'
 })
 ```
@@ -87,7 +88,7 @@ const client = new AuthwayClient({
 
 ##### `waitForReady()`
 
-Wait for config to load from Auth Backend.
+Wait for provider discovery: the OIDC issuer named by `domain`'s `/.well-known/authway-config` (or `domain` itself), then that issuer's OpenID Connect discovery document. Rejects with `ConfigurationError` when discovery fails.
 
 ```typescript
 await client.waitForReady(): Promise<void>
@@ -189,7 +190,7 @@ Returns `null` if not authenticated or token expired.
 Log out user and clear tokens.
 
 ```typescript
-client.logout(options?: LogoutOptions): void
+await client.logout(options?: LogoutOptions): Promise<void>
 ```
 
 **Parameters**:
@@ -262,7 +263,7 @@ function App() {
   return (
     <AuthwayProvider
       config={{
-        domain: 'http://localhost:8081',
+        domain: 'http://localhost:8080',
         clientId: 'my-client-id'
       }}
     >
@@ -525,7 +526,7 @@ import { AuthwayProvider, useAuth } from '@authway/react'
 ```
 
 **Key Differences**:
-- Config discovery: Authway uses `domain` (Auth Backend URL), Auth0 uses `domain` + `audience`
+- Config discovery: Authway uses `domain` (Authway API URL) and OpenID Connect discovery, Auth0 uses `domain` + `audience`
 - Methods: Similar API surface, minor naming differences
 
 ### From Firebase Auth

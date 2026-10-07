@@ -3,14 +3,13 @@
  */
 export interface AuthwayConfig {
   /**
-   * Auth Backend URL (e.g., 'http://localhost:8081' or 'https://auth.authway.example.com')
-   * This is the Auth Backend server that proxies API calls to Central API and handles CORS.
+   * URL of your Authway deployment (e.g. 'https://auth.example.com', or
+   * 'http://localhost:8080' in local development).
    *
-   * For local development:
-   * - Use 'http://localhost:8081' (Auth Backend - recommended for SPAs)
-   * - Auth Backend proxies API calls to Central API (port 8080) and provides CORS support
-   *
-   * OAuth server (Hydra) is auto-detected from this URL (port 8080/8081 → 4444)
+   * The client asks it for `/.well-known/authway-config` to find the OIDC
+   * issuer, then takes every endpoint from the issuer's OpenID Connect
+   * discovery document. A deployment that serves no such document is treated
+   * as its own issuer.
    */
   domain: string
 
@@ -20,21 +19,11 @@ export interface AuthwayConfig {
   clientId: string
 
   /**
-   * OAuth server URL (advanced usage only)
-   * Auto-detected from domain for most cases
-   * For local dev: domain with :8080 or :8081 → auto-changed to :4444 for Hydra
-   * Only override this if you have a custom OAuth server setup
-   * @default auto-detected from domain
+   * OIDC issuer URL. Set it only to skip asking `domain` for it — every
+   * endpoint is still read from the issuer's discovery document.
+   * @default discovered from domain
    */
-  oauthServerUrl?: string
-
-  /**
-   * Central API URL (advanced usage only)
-   * Explicitly specify the Central API URL if different from domain
-   * @deprecated Use 'domain' instead - this will be removed in future versions
-   * @default same as domain
-   */
-  authwayUrl?: string
+  issuer?: string
 
   /**
    * Redirect URI after authentication
@@ -108,11 +97,8 @@ export interface AuthwayConfig {
 /**
  * Normalized configuration with defaults applied
  */
-export interface NormalizedConfig extends Required<Omit<AuthwayConfig, 'audience' | 'tenantId' | 'authwayUrl' | 'oauthServerUrl'>> {
-  oauthServerUrl: string  // OAuth server (Hydra) URL
-  centralApiUrl: string   // Central API URL for user/claims APIs
+export interface NormalizedConfig extends Required<Omit<AuthwayConfig, 'audience' | 'tenantId' | 'issuer'>> {
   audience?: string
   tenantId?: string
-  /** @deprecated Use centralApiUrl instead */
-  authwayUrl: string
+  issuer?: string
 }

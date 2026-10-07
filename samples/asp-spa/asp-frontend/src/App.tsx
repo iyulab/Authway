@@ -5,11 +5,11 @@ import { API_BASE_URL } from './config'
 import './App.css'
 
 // Authway Configuration
-// domain: Auth Backend URL (port 8081)
+// domain: Authway API URL (port 8080)
 // Auth Backend acts as a proxy to Central API and handles CORS
 // The SDK will auto-detect OAuth server (Hydra on port 4444)
 const authConfig = {
-  domain: 'http://localhost:8081',  // Auth Backend (proxies to Central API on 8080)
+  domain: 'http://localhost:8080',  // Authway API
   clientId: 'authway_spa_sample_local',
   useDPoP: false
 }

@@ -5,7 +5,7 @@ export interface WithAuthRequiredOptions {
   /**
    * Component to display while checking authentication
    */
-  onRedirecting?: () => JSX.Element
+  onRedirecting?: () => React.JSX.Element
 
   /**
    * URL to return to after authentication
@@ -39,14 +39,14 @@ export function withAuthRequired<P extends object>(
 ): React.FC<P> {
   return function WithAuthRequiredWrapper(props: P) {
     const { isAuthenticated, isLoading, loginWithRedirect } = useAuth()
-    const {
-      onRedirecting = () => <div>Loading...</div>,
-      returnTo,
-      loginOptions = {}
-    } = options
+    const { onRedirecting = () => <div>Loading...</div> } = options
 
     useEffect(() => {
       if (!isLoading && !isAuthenticated) {
+        // `options` is fixed when the component is wrapped (outer scope, not
+        // a dependency); reading it here rather than from per-render
+        // defaults keeps the effect from re-running on every render.
+        const { returnTo, loginOptions = {} } = options
         const opts = {
           ...loginOptions,
           appState: {

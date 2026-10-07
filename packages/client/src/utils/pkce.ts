@@ -1,39 +1,31 @@
 import { PKCEChallenge } from '../types'
 
+// 64 unreserved characters (RFC 7636 §4.1): 256 is a multiple of 64, so
+// mapping a random byte onto the set with `% 64` introduces no bias.
+const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
+function webCrypto(): Crypto {
+  const crypto = globalThis.crypto
+  if (!crypto?.getRandomValues || !crypto.subtle) {
+    throw new Error('Web Crypto is not available in this environment')
+  }
+  return crypto
+}
+
 /**
  * Generate cryptographically random string
  */
 function generateRandomString(length: number): string {
-  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
   const randomValues = new Uint8Array(length)
-
-  if (typeof window !== 'undefined' && window.crypto) {
-    window.crypto.getRandomValues(randomValues)
-  } else if (typeof global !== 'undefined' && global.crypto) {
-    global.crypto.getRandomValues(randomValues)
-  } else {
-    throw new Error('No secure random number generator available')
-  }
-
-  return Array.from(randomValues)
-    .map(x => charset[x % charset.length])
-    .join('')
+  webCrypto().getRandomValues(randomValues)
+  return Array.from(randomValues, x => CHARSET[x % CHARSET.length]).join('')
 }
 
 /**
  * SHA-256 hash
  */
 async function sha256(plain: string): Promise<ArrayBuffer> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(plain)
-
-  if (typeof window !== 'undefined' && window.crypto.subtle) {
-    return window.crypto.subtle.digest('SHA-256', data)
-  } else if (typeof global !== 'undefined' && global.crypto?.subtle) {
-    return global.crypto.subtle.digest('SHA-256', data)
-  }
-
-  throw new Error('No crypto.subtle available')
+  return webCrypto().subtle.digest('SHA-256', new TextEncoder().encode(plain))
 }
 
 /**

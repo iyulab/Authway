@@ -36,15 +36,6 @@ export interface RedirectLoginOptions {
 }
 
 /**
- * Password credentials for direct login
- */
-export interface PasswordCredentials {
-  email: string
-  password: string
-  tenantId?: string
-}
-
-/**
  * Popup login options
  */
 export interface PopupLoginOptions {

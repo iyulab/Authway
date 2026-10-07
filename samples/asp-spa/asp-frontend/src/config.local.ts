@@ -1,6 +1,6 @@
 // Authway Configuration - Local Development
 export const AUTHWAY_CONFIG = {
-  domain: 'http://localhost:8081',  // Auth Backend URL (auto-detects Hydra)
+  domain: 'http://localhost:8080',  // Authway API URL (discovers the OIDC issuer)
   clientId: 'authway_spa_sample_local',
   redirectUri: window.location.origin,
   scope: 'openid profile email',

@@ -3,7 +3,7 @@ export default function Footer() {
     <footer className="footer">
       <p>
         <strong>Authway Next.js Sample</strong> |
-        Auth Backend: <code>http://localhost:8081</code>
+        Authway API: <code>http://localhost:8080</code>
       </p>
       <p className="footer-links">
         <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer">Admin Dashboard</a>

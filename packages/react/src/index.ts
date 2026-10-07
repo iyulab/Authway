@@ -10,6 +10,5 @@ export type {
   User,
   Claims,
   RedirectLoginOptions,
-  PasswordCredentials,
   LogoutOptions
 } from '@authway/client'

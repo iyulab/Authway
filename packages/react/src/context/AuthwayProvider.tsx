@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, ReactNode } from 'react'
-import { AuthwayClient, AuthwayConfig, PasswordCredentials, LinkAccountOptions } from '@authway/client'
+import { AuthwayClient, AuthwayConfig, LogoutOptions } from '@authway/client'
 import { AuthwayContext, AuthState } from './AuthwayContext'
 
 export interface AuthwayProviderProps {
@@ -126,38 +126,15 @@ export function AuthwayProvider({
     [client]
   )
 
-  const loginWithPassword = useCallback(
-    async (credentials: PasswordCredentials) => {
-      try {
-        setState(prev => ({ ...prev, isLoading: true, error: null }))
-        const result = await client.loginWithPassword(credentials)
-        setState({
-          isAuthenticated: true,
-          isLoading: false,
-          user: result.user,
-          error: null
-        })
-      } catch (error) {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: error as Error
-        }))
-        throw error
-      }
-    },
-    [client]
-  )
-
   const logout = useCallback(
-    (options?: any) => {
-      client.logout(options)
+    async (options?: LogoutOptions) => {
       setState({
         isAuthenticated: false,
         isLoading: false,
         user: null,
         error: null
       })
+      await client.logout(options)
     },
     [client]
   )
@@ -193,41 +170,16 @@ export function AuthwayProvider({
     [client]
   )
 
-  const getLinkedAccounts = useCallback(
-    async () => {
-      return await client.getLinkedAccounts()
-    },
-    [client]
-  )
-
-  const linkAccount = useCallback(
-    async (options: LinkAccountOptions) => {
-      return await client.linkAccount(options)
-    },
-    [client]
-  )
-
-  const unlinkAccount = useCallback(
-    async (provider: string, userId: string) => {
-      await client.unlinkAccount(provider, userId)
-    },
-    [client]
-  )
-
   const contextValue = {
     ...state,
     client,
     loginWithRedirect,
     loginWithPopup,
-    loginWithPassword,
     logout,
     getAccessToken,
     getAccessTokenWithPopup,
     getIdTokenClaims,
-    updateClaims,
-    getLinkedAccounts,
-    linkAccount,
-    unlinkAccount
+    updateClaims
   }
 
   return (

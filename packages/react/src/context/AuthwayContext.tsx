@@ -1,5 +1,5 @@
 import { createContext } from 'react'
-import { AuthwayClient, User, Identity, LinkAccountOptions } from '@authway/client'
+import { AuthwayClient, LogoutOptions, User } from '@authway/client'
 
 export interface AuthState {
   isAuthenticated: boolean
@@ -12,15 +12,11 @@ export interface AuthContextValue extends AuthState {
   client: AuthwayClient
   loginWithRedirect: (options?: any) => Promise<void>
   loginWithPopup: (options?: any) => Promise<void>
-  loginWithPassword: (credentials: any) => Promise<void>
-  logout: (options?: any) => void
+  logout: (options?: LogoutOptions) => Promise<void>
   getAccessToken: () => Promise<string>
   getAccessTokenWithPopup: (options?: any) => Promise<string>
   getIdTokenClaims: () => Promise<any | null>
   updateClaims: (claims: any) => Promise<void>
-  getLinkedAccounts: () => Promise<Identity[]>
-  linkAccount: (options: LinkAccountOptions) => Promise<Identity>
-  unlinkAccount: (provider: string, userId: string) => Promise<void>
 }
 
 export const AuthwayContext = createContext<AuthContextValue | null>(null)

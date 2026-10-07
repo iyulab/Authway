@@ -4,7 +4,7 @@ import { useState } from 'react'
 // Authway SDK Configuration
 // 🎯 Only specify Auth Backend URL - all other endpoints are auto-discovered!
 const config = {
-  domain: 'http://localhost:8081',  // Auth Backend URL (auto-discovers Hydra, etc.)
+  domain: 'http://localhost:8080',  // Authway API URL (discovers the OIDC issuer)
   clientId: 'react-sdk-sample-client',
   useDPoP: false  // DPoP (Demonstrating Proof-of-Possession) - 토큰 보안 강화
 }
@@ -403,7 +403,7 @@ function ApiTestTab() {
 
     try {
       const token = await getAccessToken()
-      const response = await fetch(`http://localhost:8081${endpoint}`, {
+      const response = await fetch(`http://localhost:8080${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -995,7 +995,7 @@ function Footer() {
     <footer className="footer">
       <p>
         <strong>Authway React SDK Sample</strong> |
-        로컬 개발 환경: <code>http://localhost:8081</code> (Auth Backend)
+        로컬 개발 환경: <code>http://localhost:8080</code> (Authway API)
       </p>
       <p className="footer-links">
         <a href="http://localhost:3000" target="_blank" rel="noopener">Admin Dashboard</a>

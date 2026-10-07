@@ -35,6 +35,10 @@
 
 ### Fixed
 
+- **PKCE verifiers and state values were slightly biased.** They mapped random
+  bytes onto a 66-character set with `% 66`; the set is now the 64 unreserved
+  characters, which divides 256 evenly.
+
 - **A wrong password no longer ends the sign-in.** The password endpoint used
   to reject the whole authorization request on bad credentials, so a single
   typo sent the user back to the application with an `invalid_credentials`
@@ -52,6 +56,20 @@
   address or the raw upstream error.
 
 ### Changed
+
+- **`@authway/client` and `@authway/react` resolve every endpoint through
+  OpenID Connect discovery (breaking).** `domain` is the URL of your Authway
+  deployment: the client reads the OIDC issuer from its
+  `/.well-known/authway-config` (a deployment without that document is its own
+  issuer) and takes the authorize, token and end-session endpoints from the
+  issuer's `/.well-known/openid-configuration`, checking that the published
+  `issuer` matches. Paths are no longer hard-coded and ports are no longer
+  rewritten (`:8080`/`:8081` → `:4444`), so the SDK works with any
+  OIDC-compliant Authway deployment. Discovery failures surface as
+  `ConfigurationError`. Migration: point `domain` at the Authway API (the
+  former separate login backend URL is gone); replace `oauthServerUrl` with
+  the new `issuer` option if you set it; drop `authwayUrl`; `logout()` now
+  returns a promise.
 
 - **The central API now serves the whole login backend.** It completes Hydra
   logout requests at `GET /logout` (the client's logout-redirect policy is
@@ -334,6 +352,13 @@
   used.
 
 ### Removed
+
+- **SDK methods that had no working backend.** `loginWithPassword` posted to an
+  endpoint the API does not have, and `linkAccount`, `unlinkAccount` and
+  `getLinkedAccounts` targeted an account-linking feature that does not exist
+  — `linkAccount` also put the user's access token in a URL. Removed from
+  `@authway/client` and `@authway/react`, with the `PasswordCredentials`,
+  `Identity` and `LinkAccountOptions` types.
 
 - **The separate login backend (`apps/branding/auth-api`).** Everything it did
   is served by the central API; its Dockerfile, CI job and Dependabot entry

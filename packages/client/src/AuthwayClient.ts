@@ -2,7 +2,6 @@ import {
   AuthwayConfig,
   NormalizedConfig,
   RedirectLoginOptions,
-  PasswordCredentials,
   PopupLoginOptions,
   LogoutOptions,
   AuthResult,
@@ -10,8 +9,6 @@ import {
   GetTokenOptions,
   User,
   Claims,
-  Identity,
-  LinkAccountOptions,
   SessionState,
   PKCEChallenge,
   ConfigurationError,
@@ -31,12 +28,14 @@ import {
   IStorage,
   buildUrl,
   parseCallbackUrl,
-  post,
   postForm,
   patch,
   createSessionStorage,
   getDPoPKeyPair,
-  createDPoPProof
+  createDPoPProof,
+  resolveProvider,
+  ResolvedProvider,
+  ProviderEndpoints
 } from './utils'
 
 const DEFAULT_SCOPE = 'openid profile email'
@@ -61,6 +60,7 @@ export class AuthwayClient {
   }
 
   private configReady: Promise<void>
+  private provider?: ResolvedProvider
 
   /**
    * Static method to handle popup callback context.
@@ -84,10 +84,10 @@ export class AuthwayClient {
     if (!hasOAuthParams) return false
 
     // Check if we're in a popup (window.opener exists)
-    let isPopup = false
+    let isPopup: boolean
     try {
       isPopup = !!(window.opener && !window.opener.closed)
-    } catch (e) {
+    } catch {
       // COOP policy may block access to window.opener
       // Try alternative detection via window.name or sessionStorage
       isPopup = window.name === 'authway-login' ||
@@ -149,8 +149,11 @@ export class AuthwayClient {
       this.initializeDPoP()
     }
     
-    // Fetch remote config (async)
-    this.configReady = this.fetchRemoteConfig()
+    // Discover the provider's endpoints. Methods that need them await this;
+    // the no-op catch only keeps an unobserved failure from being reported
+    // as an unhandled rejection before anyone asks.
+    this.configReady = this.discoverProvider()
+    this.configReady.catch(() => {})
   }
 
   /**
@@ -177,31 +180,16 @@ export class AuthwayClient {
 
   private normalizeConfig(config: AuthwayConfig): NormalizedConfig {
     if (!config.domain) {
-      throw new ConfigurationError('domain is required - this should be your Central API URL (e.g., http://localhost:8080)')
+      throw new ConfigurationError('domain is required — the URL of your Authway deployment')
     }
 
     if (!config.clientId) {
       throw new ConfigurationError('clientId is required')
     }
 
-    // Normalize domain (Central API URL)
-    let centralApiUrl = config.domain
-    if (!centralApiUrl.startsWith('http://') && !centralApiUrl.startsWith('https://')) {
-      centralApiUrl = `https://${centralApiUrl}`
-    }
-
-    // Support legacy authwayUrl (deprecated)
-    if (config.authwayUrl) {
-      console.warn('⚠️ authwayUrl is deprecated. Use "domain" instead to specify Central API URL.')
-      centralApiUrl = config.authwayUrl
-    }
-
-    // Auto-detect OAuth server URL (Hydra) from Central API URL
-    // For local dev: http://localhost:8080 or :8081 -> http://localhost:4444
-    // For production: Use oauthServerUrl if provided, otherwise same as Central API
-    let oauthServerUrl = config.oauthServerUrl || centralApiUrl
-    if (oauthServerUrl.includes(':8080') || oauthServerUrl.includes(':8081')) {
-      oauthServerUrl = oauthServerUrl.replace(/:(8080|8081)/, ':4444')
+    let domain = config.domain
+    if (!domain.startsWith('http://') && !domain.startsWith('https://')) {
+      domain = `https://${domain}`
     }
 
     let redirectUri = config.redirectUri
@@ -216,26 +204,9 @@ export class AuthwayClient {
       redirectUri = ''
     }
 
-    // Configuration info logging
-    if (centralApiUrl.includes(':8081')) {
-      console.log(
-        '✅ Using Auth Backend (port 8081) as API endpoint.\n' +
-        'Auth Backend will proxy API calls to Central API (port 8080) and handle CORS.'
-      )
-    } else if (centralApiUrl.includes(':8080')) {
-      console.warn(
-        '⚠️ WARNING: domain is set to port 8080 (Central API).\n' +
-        'Direct access to Central API may have CORS issues for browser apps.\n' +
-        'For SPAs, consider using Auth Backend (port 8081) which provides CORS support.\n' +
-        'Recommended config: { domain: "http://localhost:8081", ... }'
-      )
-    }
-
     return {
-      domain: oauthServerUrl,        // OAuth server URL (Hydra) - for backwards compatibility
-      oauthServerUrl,                // OAuth server URL (Hydra) - new field
-      centralApiUrl,                 // Central API URL - new field
-      authwayUrl: centralApiUrl,     // Deprecated - kept for backwards compatibility
+      domain: domain.replace(/\/+$/, ''),
+      issuer: config.issuer,
       clientId: config.clientId,
       redirectUri,
       audience: config.audience,
@@ -251,37 +222,20 @@ export class AuthwayClient {
     }
   }
 
-  /**
-   * Fetch remote configuration from Central API
-   * Allows dynamic discovery of OAuth server and other endpoints
-   */
-  private async fetchRemoteConfig(): Promise<void> {
-    try {
-      const configUrl = `${this.config.centralApiUrl}/.well-known/authway-config`
-      const response = await fetch(configUrl)
+  private async discoverProvider(): Promise<void> {
+    this.provider = await resolveProvider(this.config.domain, this.config.issuer)
+  }
 
-      if (response.ok) {
-        const remoteConfig = await response.json()
+  /** The provider's OIDC endpoints, once discovery has finished. */
+  private async endpoints(): Promise<ProviderEndpoints> {
+    await this.configReady
+    return this.provider!.endpoints
+  }
 
-        // Update config with remote values
-        if (remoteConfig.oauth_url) {
-          this.config.oauthServerUrl = remoteConfig.oauth_url
-          this.config.domain = remoteConfig.oauth_url  // Backwards compatibility
-        }
-        if (remoteConfig.api_url) {
-          this.config.centralApiUrl = remoteConfig.api_url
-          this.config.authwayUrl = remoteConfig.api_url  // Backwards compatibility
-        }
-
-        console.log('✅ Authway config loaded:', {
-          oauth_url: this.config.oauthServerUrl,
-          api_url: this.config.centralApiUrl
-        })
-      }
-    } catch (err) {
-      // Silently fail - use default config
-      console.warn('Failed to fetch remote config, using defaults:', err)
-    }
+  /** Base URL for Authway-specific APIs (claims), once discovery has finished. */
+  private async apiUrl(): Promise<string> {
+    await this.configReady
+    return this.provider!.apiUrl
   }
 
   // ==========================================
@@ -301,7 +255,7 @@ export class AuthwayClient {
       this.sessionStorage.set('appState', JSON.stringify(options.appState))
     }
 
-    const authUrl = this.buildAuthorizationUrl(pkce, options)
+    const authUrl = await this.buildAuthorizationUrl(pkce, options)
 
     if (typeof window !== 'undefined') {
       window.location.assign(authUrl)
@@ -361,32 +315,6 @@ export class AuthwayClient {
   }
 
   /**
-   * Login with password (custom UI)
-   */
-  async loginWithPassword(credentials: PasswordCredentials): Promise<AuthResult> {
-    const url = `${this.config.centralApiUrl}/api/v1/auth/login`
-
-    const response = await post<any>(url, {
-      email: credentials.email,
-      password: credentials.password,
-      tenant_id: credentials.tenantId || this.config.tenantId,
-      client_id: this.config.clientId,
-      scope: this.config.scope
-    })
-
-    const result: AuthResult = {
-      accessToken: response.access_token,
-      idToken: response.id_token,
-      refreshToken: response.refresh_token,
-      expiresIn: response.expires_in,
-      user: extractUser(response.id_token)
-    }
-
-    this.saveTokens(result)
-    return result
-  }
-
-  /**
    * Login with popup - opens login UI in popup window
    * User remains on the app, popup closes automatically after auth
    */
@@ -397,7 +325,7 @@ export class AuthwayClient {
     this.sessionStorage.set('pkce_popup', JSON.stringify(pkce))
 
     // Build authorization URL
-    const authUrl = this.buildAuthorizationUrl(pkce, options)
+    const authUrl = await this.buildAuthorizationUrl(pkce, options)
 
     // Open popup window
     const popup = window.open(
@@ -413,9 +341,6 @@ export class AuthwayClient {
 
     // Wait for popup to complete OAuth flow
     return new Promise((resolve, reject) => {
-      let timeoutId: number | undefined
-      let intervalId: number | undefined
-
       // Cleanup function
       const cleanup = () => {
         if (timeoutId) clearTimeout(timeoutId)
@@ -424,11 +349,11 @@ export class AuthwayClient {
       }
 
       // Timeout handler
-      timeoutId = window.setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
         cleanup()
         try {
           popup.close()
-        } catch (err) {
+        } catch {
           // Ignore COOP error on close
         }
         this.sessionStorage.remove('pkce_popup')
@@ -452,7 +377,7 @@ export class AuthwayClient {
 
           try {
             popup.close()
-          } catch (err) {
+          } catch {
             // Ignore COOP error
           }
 
@@ -499,7 +424,7 @@ export class AuthwayClient {
       window.addEventListener('message', messageHandler)
 
       // Fallback: Check if popup is closed or localStorage fallback result
-      intervalId = window.setInterval(async () => {
+      const intervalId = window.setInterval(async () => {
         // Check localStorage fallback (for COOP-blocked scenarios)
         try {
           const fallbackResult = localStorage.getItem('authway_popup_result')
@@ -522,7 +447,7 @@ export class AuthwayClient {
               localStorage.removeItem('authway_popup_result')
             }
           }
-        } catch (err) {
+        } catch {
           // Ignore localStorage errors
         }
 
@@ -533,7 +458,7 @@ export class AuthwayClient {
             this.sessionStorage.remove('pkce_popup')
             reject(new PopupCancelledError('Popup was closed by user', popup))
           }
-        } catch (err) {
+        } catch {
           // COOP policy blocks popup.closed access - continue
         }
       }, 500) // Check every 500ms for faster response
@@ -543,7 +468,7 @@ export class AuthwayClient {
   /**
    * Logout
    */
-  logout(options: LogoutOptions = {}): void {
+  async logout(options: LogoutOptions = {}): Promise<void> {
     // Local only logout
     if (options.localOnly) {
       this.clearTokens()
@@ -568,8 +493,8 @@ export class AuthwayClient {
 
     // Redirect to logout endpoint
     if (typeof window !== 'undefined') {
-      const logoutUrl = this.buildLogoutUrl(options, idToken)
-      window.location.assign(logoutUrl)
+      const logoutUrl = await this.buildLogoutUrl(options, idToken)
+      if (logoutUrl) window.location.assign(logoutUrl)
     }
   }
 
@@ -631,7 +556,7 @@ export class AuthwayClient {
       throw new MissingRefreshTokenError()
     }
 
-    const url = `${this.config.domain}/oauth2/token`
+    const url = (await this.endpoints()).tokenEndpoint
 
     // Add DPoP header if enabled
     const headers: Record<string, string> = {}
@@ -722,7 +647,7 @@ export class AuthwayClient {
     // 2. Get dynamic claims from backend API
     try {
       const accessToken = await this.getAccessToken()
-      const url = `${this.config.centralApiUrl}/api/v1/claims`
+      const url = `${await this.apiUrl()}/api/v1/claims`
 
       const response = await fetch(url, {
         headers: {
@@ -760,13 +685,13 @@ export class AuthwayClient {
     }
 
     const accessToken = await this.getAccessToken()
-    const url = `${this.config.centralApiUrl}/api/v1/claims`
+    const url = `${await this.apiUrl()}/api/v1/claims`
 
     // Backend requires client_id and redirect_uri for OAuth flow
     const payload = {
       claims,
       client_id: this.config.clientId,
-      redirect_uri: typeof window !== 'undefined' ? window.location.origin : this.config.centralApiUrl
+      redirect_uri: typeof window !== 'undefined' ? window.location.origin : this.config.redirectUri
     }
 
     const response = await patch<{ success: boolean; auth_url: string; message: string }>(
@@ -795,7 +720,7 @@ export class AuthwayClient {
    */
   async updateUserClaims(claims: Partial<Claims>): Promise<void> {
     const accessToken = await this.getAccessToken()
-    const url = `${this.config.centralApiUrl}/api/v1/claims/user`
+    const url = `${await this.apiUrl()}/api/v1/claims/user`
 
     await patch(
       url,
@@ -809,7 +734,7 @@ export class AuthwayClient {
    */
   async getUserClaims(): Promise<Claims> {
     const accessToken = await this.getAccessToken()
-    const url = `${this.config.centralApiUrl}/api/v1/claims/user`
+    const url = `${await this.apiUrl()}/api/v1/claims/user`
 
     const response = await fetch(url, {
       headers: {
@@ -823,174 +748,6 @@ export class AuthwayClient {
 
     const data = await response.json()
     return data.claims || {}
-  }
-
-  // ==========================================
-  // Account Linking
-  // ==========================================
-
-  /**
-   * Get linked accounts (identities)
-   * Similar to Auth0's getUser() with identities field
-   */
-  async getLinkedAccounts(): Promise<Identity[]> {
-    const accessToken = await this.getAccessToken()
-    const url = `${this.config.centralApiUrl}/api/v1/user/identities`
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    })
-
-    if (!response.ok) {
-      throw new AuthenticationError('Failed to get linked accounts')
-    }
-
-    const data = await response.json()
-    return data.identities || []
-  }
-
-  /**
-   * Link a new account (identity)
-   * Opens a popup to authenticate with another provider and link it
-   * Similar to Auth0's linkWithPopup()
-   */
-  async linkAccount(options: LinkAccountOptions): Promise<Identity> {
-    const { provider, connection, redirectUri } = options
-    const accessToken = await this.getAccessToken()
-
-    // Generate PKCE challenge for the linking flow
-    const pkce = await generatePKCEChallenge()
-    this.sessionStorage.set('pkce_link', JSON.stringify(pkce))
-
-    // Build authorization URL for account linking
-    const params = new URLSearchParams({
-      client_id: this.config.clientId,
-      response_type: 'code',
-      redirect_uri: redirectUri || this.config.redirectUri,
-      scope: this.config.scope || DEFAULT_SCOPE,
-      state: pkce.state,
-      code_challenge: pkce.codeChallenge,
-      code_challenge_method: 'S256',
-      prompt: 'login', // Force re-authentication
-      // Special parameter to indicate this is a linking flow
-      link_account: 'true',
-      // Pass current access token to backend for linking
-      access_token: accessToken
-    })
-
-    if (connection) {
-      params.set('connection', connection)
-    }
-
-    const authUrl = `${this.config.domain}/oauth2/authorize?${params.toString()}`
-
-    // Open popup
-    const popup = window.open(
-      authUrl,
-      'authway-link-account',
-      'width=500,height=700,scrollbars=yes,location=no,toolbar=no,menubar=no'
-    )
-
-    if (!popup) {
-      this.sessionStorage.remove('pkce_link')
-      throw new AuthenticationError('Popup was blocked. Please allow popups for this site.')
-    }
-
-    // Wait for popup to complete
-    return new Promise((resolve, reject) => {
-      const checkInterval = 100
-      let timeoutCounter = 0
-      const maxTimeout = 300000 // 5 minutes
-
-      const timer = setInterval(async () => {
-        timeoutCounter += checkInterval
-
-        if (popup.closed) {
-          clearInterval(timer)
-          this.sessionStorage.remove('pkce_link')
-          return reject(new PopupCancelledError('Popup was closed by user', popup))
-        }
-
-        if (timeoutCounter >= maxTimeout) {
-          clearInterval(timer)
-          popup.close()
-          this.sessionStorage.remove('pkce_link')
-          return reject(new PopupTimeoutError('Account linking timeout', popup))
-        }
-
-        try {
-          const popupUrl = popup.location.href
-          const redirectUriToCheck = redirectUri || this.config.redirectUri
-
-          if (popupUrl.startsWith(redirectUriToCheck)) {
-            clearInterval(timer)
-            const params = parseCallbackUrl(popupUrl)
-            popup.close()
-            this.sessionStorage.remove('pkce_link')
-
-            if (params.error) {
-              return reject(new AuthenticationError(
-                params.error_description || params.error,
-                params.error
-              ))
-            }
-
-            if (!params.code || !params.state) {
-              return reject(new AuthenticationError('Missing code or state parameter'))
-            }
-
-            if (!verifyState(params.state, pkce.state)) {
-              return reject(new AuthenticationError('State mismatch'))
-            }
-
-            try {
-              // Exchange code for the linked identity info
-              const url = `${this.config.centralApiUrl}/api/v1/user/identities/link`
-              const response = await post<any>(url, {
-                code: params.code,
-                code_verifier: pkce.codeVerifier,
-                provider: provider
-              }, {
-                Authorization: `Bearer ${accessToken}`
-              })
-
-              resolve(response.identity)
-            } catch (err) {
-              reject(err)
-            }
-          }
-        } catch (err) {
-          // Can't access popup.location.href (cross-origin)
-          // Continue polling
-        }
-      }, checkInterval)
-    })
-  }
-
-  /**
-   * Unlink an account (identity)
-   * Similar to Auth0's unlinkUser()
-   */
-  async unlinkAccount(provider: string, userId: string): Promise<void> {
-    const accessToken = await this.getAccessToken()
-    const url = `${this.config.centralApiUrl}/api/v1/user/identities/${provider}/${userId}`
-
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    })
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      throw new AuthenticationError(
-        data.error_description || 'Failed to unlink account',
-        data.error || 'unlink_failed'
-      )
-    }
   }
 
   // ==========================================
@@ -1034,7 +791,7 @@ export class AuthwayClient {
   // Private Methods
   // ==========================================
 
-  private buildAuthorizationUrl(pkce: PKCEChallenge, options: RedirectLoginOptions): string {
+  private async buildAuthorizationUrl(pkce: PKCEChallenge, options: RedirectLoginOptions): Promise<string> {
     // Determine redirect URI with fallback
     let redirectUri = options.redirectUri || this.config.redirectUri
     if (!redirectUri && typeof window !== 'undefined') {
@@ -1059,10 +816,15 @@ export class AuthwayClient {
 
     delete params.appState
 
-    return buildUrl(`${this.config.domain}/oauth2/auth`, params)
+    return buildUrl((await this.endpoints()).authorizationEndpoint, params)
   }
 
-  private buildLogoutUrl(options: LogoutOptions, idToken: string | null): string {
+  /**
+   * The RP-initiated logout URL, or — when the provider publishes no
+   * end-session endpoint — the post-logout URI itself (the local session is
+   * already cleared). Null when there is nowhere to send the user.
+   */
+  private async buildLogoutUrl(options: LogoutOptions, idToken: string | null): Promise<string | null> {
     const params: any = {
       client_id: this.config.clientId
     }
@@ -1098,11 +860,13 @@ export class AuthwayClient {
       params.federated = 'true'
     }
 
-    return buildUrl(`${this.config.domain}/oauth2/sessions/logout`, params)
+    const { endSessionEndpoint } = await this.endpoints()
+    if (!endSessionEndpoint) return params.post_logout_redirect_uri || null
+    return buildUrl(endSessionEndpoint, params)
   }
 
   private async exchangeCodeForTokens(code: string, codeVerifier: string, redirectUri?: string): Promise<AuthResult> {
-    const url = `${this.config.domain}/oauth2/token`
+    const url = (await this.endpoints()).tokenEndpoint
 
     // Add DPoP header if enabled
     const headers: Record<string, string> = {}
