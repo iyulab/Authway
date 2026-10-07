@@ -39,7 +39,7 @@ const AcceptInvitationPage: React.FC = () => {
   const [success, setSuccess] = useState(false)
 
   const token = searchParams.get('token') ?? ''
-  const loginChallenge = searchParams.get('login_challenge')
+  const flow = searchParams.get('flow')
   const apiUrl = getConfig().apiUrl
 
   const acceptSchema = createAcceptSchema(t)
@@ -90,7 +90,7 @@ const AcceptInvitationPage: React.FC = () => {
       setSuccess(true)
       setError(null)
       setTimeout(() => {
-        navigate(loginChallenge ? `/login?login_challenge=${loginChallenge}` : '/login')
+        navigate(flow ? `/login?flow=${encodeURIComponent(flow)}` : '/login')
       }, 3000)
     },
     onError: (err: Error) => {
@@ -121,7 +121,7 @@ const AcceptInvitationPage: React.FC = () => {
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.invalidMessage')}</p>
         <button
           type="button"
-          onClick={() => navigate(loginChallenge ? `/login?login_challenge=${loginChallenge}` : '/login')}
+          onClick={() => navigate(flow ? `/login?flow=${encodeURIComponent(flow)}` : '/login')}
           className="mt-6 text-sm text-indigo-600 hover:text-indigo-500"
         >
           {t('auth:invitation.backToLogin')}

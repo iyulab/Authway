@@ -194,3 +194,42 @@ func TestLoginRateLimit_SuccessResetsCounter(t *testing.T) {
 		}
 	}
 }
+
+// TestRateLimit_CountsPerRouteNotPerPath pins that a path parameter does not
+// split the counter: each failed attempt below uses a different flow id, as an
+// attacker restarting the sign-in would, and the limit still applies.
+func TestRateLimit_CountsPerRouteNotPerPath(t *testing.T) {
+	cfg := RateLimitConfig{
+		RedisClient:    newTestRedis(t),
+		MaxAttempts:    3,
+		WindowDuration: time.Minute,
+		BlockDuration:  15 * time.Minute,
+		KeyPrefix:      "ratelimit:test:",
+		SkipOnError:    true,
+	}
+	app := fiber.New()
+	app.Post("/flows/:flow/password", RateLimit(cfg), func(c *fiber.Ctx) error {
+		IncrementRateLimitOnFailure(c)
+		return c.SendStatus(fiber.StatusUnauthorized)
+	})
+
+	statusFor := func(flow string) int {
+		req := httptest.NewRequest("POST", "/flows/"+flow+"/password", nil)
+		req.RemoteAddr = "203.0.113.9:1234"
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	for i, flow := range []string{"a", "b", "c"} {
+		if status := statusFor(flow); status != fiber.StatusUnauthorized {
+			t.Fatalf("attempt %d: status = %d, want 401", i+1, status)
+		}
+	}
+	if status := statusFor("d"); status != fiber.StatusTooManyRequests {
+		t.Fatalf("attempt on a fresh flow id: status = %d, want 429", status)
+	}
+}

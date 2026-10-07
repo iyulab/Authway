@@ -29,6 +29,7 @@ if (-not $VerifyDir) { $VerifyDir = Split-Path -Parent $MyInvocation.MyCommand.P
 $SharedDir = Join-Path (Split-Path -Parent $VerifyDir) "_shared"
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "hydra-flow-urls.ps1")
 
 Write-Host ""
 Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
@@ -93,11 +94,36 @@ foreach ($app in $apps) {
     Write-Host "✅ $($app.Label): opaque 확인" -ForegroundColor Green
 }
 
+# Flow URLs on the public app: where Hydra sends the browser during sign-in.
+$publicApp = $envVars['CONTAINER_APP_HYDRA']
+if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
+    Write-Host "🔍 public ($publicApp) — URLS_LOGIN/CONSENT/LOGOUT/ERROR" -ForegroundColor Gray
+    $expected = Get-HydraFlowUrls -EnvVars $envVars
+    $raw = az containerapp show -n $publicApp -g $resourceGroup `
+        --query "properties.template.containers[0].env[?starts_with(name, 'URLS_')]" `
+        -o json 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ public: az containerapp show 실패 — $raw" -ForegroundColor Red
+        $failed = $true
+    } else {
+        $actual = @{}
+        foreach ($e in ($raw | ConvertFrom-Json)) { $actual[$e.name] = $e.value }
+        foreach ($name in $expected.Keys) {
+            if ($actual[$name] -ne $expected[$name]) {
+                Write-Host "❌ public: $name = '$($actual[$name])' (기대: '$($expected[$name])')" -ForegroundColor Red
+                $failed = $true
+            } else {
+                Write-Host "✅ public: $name = $($expected[$name])" -ForegroundColor Green
+            }
+        }
+    }
+}
+
 Write-Host ""
 if ($failed) {
     Write-Host "❌ Hydra env 검증 실패 — 위 항목 참조. publish-hydra.core.ps1의 배열 전개를 재확인할 것." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 STRATEGIES_ACCESS_TOKEN=opaque)" -ForegroundColor Green
+Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 STRATEGIES_ACCESS_TOKEN=opaque, public 흐름 URL 4종)" -ForegroundColor Green
 exit 0

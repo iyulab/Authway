@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -19,13 +18,8 @@ import (
 //   - {"next":"form","flow":…,"client":{…}} — show the sign-in form, with the
 //     sign-in methods the client allows.
 //
-// The flow id travels in a path segment. Fiber does not percent-decode path
-// params, and Hydra challenges end in "=" (sent as %3D), so it is decoded here.
 func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
-	flow := c.Params("flow")
-	if decoded, err := url.PathUnescape(flow); err == nil {
-		flow = decoded
-	}
+	flow := flowParam(c)
 
 	loginReq, err := h.hydraClient.GetLoginRequest(flow)
 	if err != nil {
@@ -55,7 +49,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"next":            "form",
+		"next":            nextForm,
 		"flow":            flow,
 		"client_name":     loginReq.Client.ClientName,
 		"requested_scope": loginReq.RequestedScope,
@@ -90,7 +84,7 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 		if err != nil {
 			return nil, false, err
 		}
-		return fiber.Map{"next": "redirect", "redirect_to": resp.RedirectTo, "session_cleared": true}, true, nil
+		return fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo, "session_cleared": true}, true, nil
 	}
 
 	userID, err := uuid.Parse(loginReq.Subject)
@@ -129,5 +123,5 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 	if err != nil {
 		return nil, false, err
 	}
-	return fiber.Map{"next": "redirect", "redirect_to": resp.RedirectTo, "sso": true}, true, nil
+	return fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo, "sso": true}, true, nil
 }

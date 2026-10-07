@@ -121,7 +121,7 @@ VITE_API_URL=$($envVars['API_URL'])
         Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
         Write-Host ""
         Write-Host "🌐 URL: https://$projectName.pages.dev" -ForegroundColor Cyan
-        Write-Host "🌐 LOGIN_URL: $($envVars['LOGIN_URL'])" -ForegroundColor Cyan
+        Write-Host "🌐 AUTH_UI_URL: $($envVars['AUTH_UI_URL'])" -ForegroundColor Cyan
     }
     else {
         Write-Host "📍 Static Web App: $($envVars['STATIC_WEB_APP_AUTH_UI'])" -ForegroundColor Gray
@@ -138,7 +138,7 @@ VITE_API_URL=$($envVars['API_URL'])
         Write-Host "  ✅ Auth UI 배포 완료! (Azure SWA)" -ForegroundColor Green
         Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
         Write-Host ""
-        Write-Host "🌐 URL: $($envVars['LOGIN_URL'])" -ForegroundColor Cyan
+        Write-Host "🌐 URL: $($envVars['AUTH_UI_URL'])" -ForegroundColor Cyan
 
         $tempZipFiles = Get-ChildItem -Path $AuthUIPath -Filter "*-app.zip" -ErrorAction SilentlyContinue
         if ($tempZipFiles) {

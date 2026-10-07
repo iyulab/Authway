@@ -280,7 +280,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient)
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL)
+	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
@@ -288,11 +288,12 @@ func main() {
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
-	// Auth routes for Hydra login/consent flow
+	// The authorization server sends the browser here to start a login; it is
+	// handed on to the login UI with an opaque flow id.
+	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL)
 	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
-	app.Post("/authenticate", loginRateLimit, authHandler.Login)                  // Actual login submission
-	app.Post("/mfa/verify", loginRateLimit, authHandler.VerifyMFALogin)           // Second factor for a TOTP-pending login
-	app.Post("/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin) // Recovery-code counterpart
+	app.Get("/login", flowEntryHandler.Login)
+
 	app.Get("/consent", authHandler.ConsentPage)
 	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
 	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission
@@ -315,26 +316,13 @@ func main() {
 	// and social-login flows still auto-provision users.
 	// See claudedocs/issues/ISSUE-Authway-20260721-magic-link-bypasses-invitation-only.md
 
-	// Social login routes - Google
-	app.Get("/auth/google/login", socialHandler.GoogleLogin)
-	app.Post("/auth/google/login", socialHandler.GoogleLogin) // Support POST for long login_challenge
+	// Social provider callbacks. Sign-in starts at
+	// /api/v1/login-flows/:flow/social/:provider.
 	app.Get("/auth/google/callback", socialHandler.GoogleCallback)
-
-	// Social login routes - GitHub
-	app.Get("/auth/github/login", socialHandler.GitHubLogin)
-	app.Post("/auth/github/login", socialHandler.GitHubLogin)
 	app.Get("/auth/github/callback", socialHandler.GitHubCallback)
-
-	// Social login routes - Microsoft
-	app.Get("/auth/microsoft/login", socialHandler.MicrosoftLogin)
-	app.Post("/auth/microsoft/login", socialHandler.MicrosoftLogin)
 	app.Get("/auth/microsoft/callback", socialHandler.MicrosoftCallback)
-
-	// Social login routes - Apple
-	app.Get("/auth/apple/login", socialHandler.AppleLogin)
-	app.Post("/auth/apple/login", socialHandler.AppleLogin)
 	app.Post("/auth/apple/callback", socialHandler.AppleCallback) // Apple uses POST with form_post response mode
-	app.Get("/auth/apple/callback", socialHandler.AppleCallback)  // Also support GET
+	app.Get("/auth/apple/callback", socialHandler.AppleCallback)
 
 	// API routes
 	api := app.Group("/api")
@@ -348,6 +336,11 @@ func main() {
 	// What the sign-in screen should do with a login flow: show the form (and
 	// which sign-in methods the client allows) or redirect.
 	v1.Get("/login-flows/:flow", authHandler.GetLoginFlow)
+	v1.Post("/login-flows/:flow/password", loginRateLimit, authHandler.SubmitPassword)
+	v1.Post("/login-flows/:flow/mfa", loginRateLimit, authHandler.VerifyMFALogin)
+	v1.Post("/login-flows/:flow/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin)
+	// A page navigation (not fetch): the browser goes on to the provider.
+	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)

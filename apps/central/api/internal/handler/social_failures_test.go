@@ -36,7 +36,7 @@ func newCallbackTestApp(t *testing.T) (*fiber.App, *OAuthStateStore, *[]string) 
 	t.Cleanup(hydraSrv.Close)
 
 	store := NewOAuthStateStore(newTestRedisClient(t))
-	h := NewSocialHandlerWithAllProviders(nil, nil, nil, nil, nil, hydra.NewClient(hydraSrv.URL), zap.NewNop(), nil, store, testFrontendURL)
+	h := NewSocialHandlerWithAllProviders(nil, nil, nil, nil, nil, nil, hydra.NewClient(hydraSrv.URL), zap.NewNop(), nil, store, testFrontendURL)
 	app := fiber.New()
 	app.Get("/auth/google/callback", h.GoogleCallback)
 	return app, store, &rejected

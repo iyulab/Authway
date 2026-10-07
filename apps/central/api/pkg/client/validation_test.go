@@ -271,3 +271,26 @@ func TestSyncStatus_OK(t *testing.T) {
 		}
 	}
 }
+
+func TestClient_AllowsSignInMethod(t *testing.T) {
+	cases := []struct {
+		name   string
+		client Client
+		method string
+		want   bool
+	}{
+		{"default list allows password", Client{AllowEmailLogin: true}, "email", true},
+		{"default list allows google", Client{}, "google", true},
+		{"default list excludes github", Client{}, "github", false},
+		{"password needs allow_email_login", Client{EnabledAuthProviders: []string{"email"}}, "email", false},
+		{"explicit list is honoured", Client{EnabledAuthProviders: []string{"github"}}, "github", true},
+		{"explicit list drops the default", Client{EnabledAuthProviders: []string{"github"}, AllowEmailLogin: true}, "email", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.client.AllowsSignInMethod(tc.method); got != tc.want {
+				t.Fatalf("AllowsSignInMethod(%q) = %v, want %v", tc.method, got, tc.want)
+			}
+		})
+	}
+}

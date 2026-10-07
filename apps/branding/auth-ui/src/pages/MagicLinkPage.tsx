@@ -15,7 +15,7 @@ const MagicLinkPage: React.FC = () => {
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const challenge = searchParams.get('login_challenge')
+  const flow = searchParams.get('flow')
   const token = searchParams.get('token')
 
   // Handle magic link verification
@@ -83,7 +83,7 @@ const MagicLinkPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
-          login_challenge: challenge,
+          login_challenge: flow,
         }),
         credentials: 'include',
       })
@@ -245,7 +245,7 @@ const MagicLinkPage: React.FC = () => {
           <div className="text-center">
             <button
               type="button"
-              onClick={() => navigate(`/login${challenge ? `?login_challenge=${challenge}` : ''}`)}
+              onClick={() => navigate(`/login${flow ? `?flow=${encodeURIComponent(flow)}` : ''}`)}
               className="text-sm text-indigo-600 hover:text-indigo-500"
             >
               {t('auth:magicLink.backToLogin', 'Back to login')}

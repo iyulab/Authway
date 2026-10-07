@@ -48,10 +48,10 @@ describe('password login through the authorization-code flow', () => {
   })
 
   it('rejects an unknown flow id as a client error, not a server error', async () => {
-    const res = await fetch(`${provider.config.api}/authenticate`, {
+    const res = await fetch(provider.loginFlowUrl('not-a-real-flow', '/password'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenge: 'not-a-real-flow', email: user.email, password: user.password }),
+      body: JSON.stringify({ email: user.email, password: user.password }),
     })
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(res.status).toBeLessThan(500)

@@ -263,7 +263,7 @@ try {
         }
 
         if ($Services -contains "auth-ui") {
-            $healthResults += Test-HealthEndpoint -Name "Auth UI" -Url $envVars['LOGIN_URL']
+            $healthResults += Test-HealthEndpoint -Name "Auth UI" -Url $envVars['AUTH_UI_URL']
         }
 
         $healthyCount = ($healthResults | Where-Object { $_ -eq $true }).Count
@@ -321,7 +321,7 @@ try {
     Write-Host ""
     Write-Host "  🌐 서비스 URL:" -ForegroundColor Cyan
     Write-Host "    - Admin Dashboard: $($envVars['ADMIN_URL'])" -ForegroundColor Gray
-    Write-Host "    - Auth UI: $($envVars['LOGIN_URL'])" -ForegroundColor Gray
+    Write-Host "    - Auth UI: $($envVars['AUTH_UI_URL'])" -ForegroundColor Gray
     Write-Host "    - Hydra (OAuth): $($envVars['HYDRA_ISSUER'])" -ForegroundColor Gray
     Write-Host "    - Central API: $($envVars['API_URL'])" -ForegroundColor Gray
     Write-Host ""

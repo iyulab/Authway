@@ -43,6 +43,26 @@
 
 ### Fixed
 
+- **The login rate limit now counts per route, not per address.** The limiter
+  keyed its counter on the request path, so once a flow id is part of the path
+  every new sign-in attempt started a fresh counter. It now keys on the route,
+  so five failed passwords from one address are five, whichever flow they used.
+
+- **Social sign-in now works when the login UI and the API are on different
+  sites.** The sign-in used to start with a cross-origin `fetch` whose response
+  set the cookie that binds the provider round trip to the browser; browsers
+  drop such a cookie when the two origins are different sites, and the callback
+  then refused every sign-in. Sign-in now starts with a page navigation to the
+  API, which sets the cookie first-party (`Secure; SameSite=None` over HTTPS,
+  so Apple's `form_post` callback also carries it) and redirects to the
+  provider.
+
+- **The API enforces which sign-in methods a client allows.** The password step
+  and social sign-in are refused for a method the client has not enabled
+  (`sign_in_method_not_allowed`, or an OAuth `invalid_request` back to the
+  application); before, only the login screen hid them. Social sign-in also
+  takes the client from the login flow instead of from the request.
+
 - **A failed social sign-in now ends in the browser flow.** When Google,
   GitHub, Microsoft or Apple sent the user back with an error, or the exchange
   failed, the callback answered with a JSON error page — including hints about
@@ -74,6 +94,25 @@
   address or the raw upstream error.
 
 ### Changed
+
+- **The login screen talks to the API through login-flow endpoints, keyed by
+  an opaque flow id (breaking for custom login screens).** The authorization
+  server now sends the browser to the API's `GET /login`, which hands the login
+  screen `/login?flow=<id>`; the screen never sees `login_challenge`. The steps
+  of a flow are:
+  - `POST /api/v1/login-flows/{flow}/password` — `{email, password, remember}`
+  - `POST /api/v1/login-flows/{flow}/mfa` and `/mfa/recovery` —
+    `{mfa_challenge, code}`; the `mfa_challenge` from the password step is
+    required and only completes the flow it was issued for
+  - `GET /api/v1/login-flows/{flow}/social/{provider}` — a page navigation that
+    continues to the provider
+
+  Each answers with `next`: `redirect` (with `redirect_to`) or `mfa` (with
+  `mfa_challenge`). `POST /authenticate`, `POST /mfa/verify`,
+  `POST /mfa/recovery` and `/auth/{provider}/login` are removed.
+  **Migration:** point Hydra's `URLS_LOGIN` at `<API>/login` (the deploy
+  scripts derive all four `URLS_*` from `API_URL` and `AUTH_UI_URL`; the
+  `LOGIN_URL`, `CONSENT_URL` and `ERROR_URL` keys are gone).
 
 - **`@authway/client` and `@authway/react` resolve every endpoint through
   OpenID Connect discovery (breaking).** `domain` is the URL of your Authway

@@ -101,41 +101,46 @@ func min(a, b int) int {
 	return b
 }
 
-type LoginRequest struct {
-	Challenge string `json:"challenge"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	Remember  bool   `json:"remember"`
+// PasswordLoginRequest is the body of POST /api/v1/login-flows/:flow/password.
+type PasswordLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Remember bool   `json:"remember"`
 }
 
-func (h *AuthHandler) Login(c *fiber.Ctx) error {
-	var req LoginRequest
+// SubmitPassword signs a user in to a login flow with email and password.
+// It answers {"next":"redirect","redirect_to":…} once the flow is accepted,
+// or {"next":"mfa","mfa_challenge":…} when the user has a second factor.
+func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
+	flow := flowParam(c)
+	var req PasswordLoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+			"code":  "invalid_request",
 		})
 	}
 
-	// Get login request from Hydra
-	loginReq, err := h.hydraClient.GetLoginRequest(req.Challenge)
+	loginReq, err := h.hydraClient.GetLoginRequest(flow)
 	if err != nil {
 		return respondFlowLookupError(c, err)
 	}
 
-	// Resolve the requesting client's tenant first — GetByEmail (deprecated)
-	// matches globally in undefined order, but the schema allows the same
-	// email to exist in more than one tenant (idx_users_tenant_email). The
-	// sibling GetLoginFlow handler already does this same lookup for its SSO
-	// tenant check; Login needs it too since it is the one that actually
-	// verifies the password.
+	// The password is checked against the requesting client's tenant: the
+	// same email may exist in more than one tenant (idx_users_tenant_email).
 	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
 	if err != nil {
-		h.logger.Error("Failed to resolve OAuth client for login",
+		h.logger.Error("OAuth client is not registered in Authway",
 			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to resolve OAuth client"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "This application is not registered with Authway.",
+			"code":  "client_not_registered",
+		})
+	}
+	if !requestedClient.AllowsSignInMethod("email") {
+		return respondSignInMethodNotAllowed(c)
 	}
 
-	// Authenticate user
 	user, err := h.userService.GetByEmailAndTenant(requestedClient.TenantID, req.Email)
 	if err != nil {
 		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
@@ -143,7 +148,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return respondInvalidCredentials(c)
 	}
 
-	// Verify password
 	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]any{
 			"user_id": user.ID.String(),
@@ -158,9 +162,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// A password alone is not enough for a TOTP-enabled user — park the
-	// verified-but-not-yet-accepted login and hand the client a fresh
-	// mfa_challenge instead of touching Hydra. Verify()/VerifyRecoveryCode()
-	// complete the accept once the second factor checks out.
+	// verified-but-not-yet-accepted login and hand the screen an
+	// mfa_challenge instead of touching Hydra. The mfa_challenge proves the
+	// password step passed; the flow id alone must not open the second step.
 	if user.TOTPEnabled {
 		challenge, err := tokenhash.Generate()
 		if err != nil {
@@ -168,7 +172,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			return c.Status(500).JSON(fiber.Map{"error": "Failed to start MFA challenge"})
 		}
 		h.mfaStore.Set(challenge, &pendingMFALogin{
-			HydraChallenge: req.Challenge,
+			HydraChallenge: flow,
 			UserID:         user.ID,
 			Remember:       req.Remember,
 			RememberFor:    rememberFor,
@@ -176,12 +180,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 		h.logger.Info("Password verified, MFA required", zap.String("user_id", user.ID.String()))
 		return c.JSON(fiber.Map{
-			"mfa_required":  true,
+			"next":          nextMFA,
 			"mfa_challenge": challenge,
 		})
 	}
 
-	return h.completeLogin(c, req.Challenge, user, req.Remember, rememberFor, "password")
+	return h.completeLogin(c, flow, user, req.Remember, rememberFor, "password")
 }
 
 // completeLogin accepts the Hydra login request for an already-authenticated
@@ -228,82 +232,69 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 	})
 
 	return c.JSON(fiber.Map{
+		"next":        nextRedirect,
 		"redirect_to": resp.RedirectTo,
 	})
 }
 
-// VerifyMFALoginRequest is the body for the two login-time MFA endpoints
-// below. Code holds either a 6-digit TOTP code or a recovery code depending
-// on which endpoint is called.
+// VerifyMFALoginRequest is the body of the two login-time second-factor
+// endpoints. Code holds a 6-digit TOTP code or a recovery code depending on
+// the endpoint.
 type VerifyMFALoginRequest struct {
-	Challenge string `json:"challenge"`
-	Code      string `json:"code"`
+	MFAChallenge string `json:"mfa_challenge"`
+	Code         string `json:"code"`
 }
 
-// VerifyMFALogin completes a login that Login() parked pending TOTP.
-// POST /mfa/verify — unauthenticated: the mfa_challenge itself is the bearer
-// credential for this one-shot exchange, same trust model as a Hydra
-// login_challenge.
+// VerifyMFALogin completes a login that SubmitPassword parked pending TOTP.
+// POST /api/v1/login-flows/:flow/mfa — the mfa_challenge is the bearer
+// credential for this one-shot exchange and must belong to the flow.
 func (h *AuthHandler) VerifyMFALogin(c *fiber.Ctx) error {
-	var req VerifyMFALoginRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
-	}
-
-	pending, ok := h.mfaStore.Get(req.Challenge)
-	if !ok {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
-	}
-
-	u, err := h.userService.GetByID(pending.UserID)
-	if err != nil || u == nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
-	}
-
-	valid, err := h.mfaService.Verify(pending.UserID, req.Code)
-	if err != nil || !valid {
-		h.logMFALoginFailure(c, u, "totp")
-		middleware.IncrementRateLimitOnFailure(c)
-		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
-			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
-		}
-		return c.Status(401).JSON(fiber.Map{"error": "invalid verification code"})
-	}
-
-	h.mfaStore.Delete(req.Challenge)
-	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, "password+totp")
+	return h.verifySecondFactor(c, "totp", h.mfaService.Verify, "invalid verification code")
 }
 
 // VerifyMFARecoveryLogin is VerifyMFALogin's recovery-code counterpart.
-// POST /mfa/recovery
+// POST /api/v1/login-flows/:flow/mfa/recovery
 func (h *AuthHandler) VerifyMFARecoveryLogin(c *fiber.Ctx) error {
+	return h.verifySecondFactor(c, "recovery_code", h.mfaService.VerifyRecoveryCode, "invalid recovery code")
+}
+
+func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func(uuid.UUID, string) (bool, error), invalidMessage string) error {
+	flow := flowParam(c)
 	var req VerifyMFALoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body", "code": "invalid_request"})
 	}
 
-	pending, ok := h.mfaStore.Get(req.Challenge)
-	if !ok {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+	pending, ok := h.mfaStore.Get(req.MFAChallenge)
+	if !ok || pending.HydraChallenge != flow {
+		return respondInvalidMFAChallenge(c)
 	}
 
 	u, err := h.userService.GetByID(pending.UserID)
 	if err != nil || u == nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge"})
+		return respondInvalidMFAChallenge(c)
 	}
 
-	valid, err := h.mfaService.VerifyRecoveryCode(pending.UserID, req.Code)
+	valid, err := verify(pending.UserID, req.Code)
 	if err != nil || !valid {
-		h.logMFALoginFailure(c, u, "recovery_code")
+		h.logMFALoginFailure(c, u, phase)
 		middleware.IncrementRateLimitOnFailure(c)
-		if locked := h.mfaStore.RecordFailure(req.Challenge); locked {
-			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again"})
+		if locked := h.mfaStore.RecordFailure(req.MFAChallenge); locked {
+			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again", "code": "mfa_locked"})
 		}
-		return c.Status(401).JSON(fiber.Map{"error": "invalid recovery code"})
+		return c.Status(401).JSON(fiber.Map{"error": invalidMessage, "code": "invalid_code"})
 	}
 
-	h.mfaStore.Delete(req.Challenge)
-	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, "password+recovery_code")
+	h.mfaStore.Delete(req.MFAChallenge)
+	method := "password+totp"
+	if phase == "recovery_code" {
+		method = "password+recovery_code"
+	}
+	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, method)
+}
+
+func respondInvalidMFAChallenge(c *fiber.Ctx) error {
+	return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge", "code": "invalid_mfa_challenge"})
 }
 
 // logMFALoginFailure emits a sync audit entry for a failed login-time MFA
@@ -954,5 +945,15 @@ func respondInvalidCredentials(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 		"error": "Invalid email or password",
 		"code":  "invalid_credentials",
+	})
+}
+
+// respondSignInMethodNotAllowed answers a sign-in attempt with a method the
+// client has not enabled. The screen hides such methods; this is the server's
+// own check.
+func respondSignInMethodNotAllowed(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+		"error": "This sign-in method is not available for this application.",
+		"code":  "sign_in_method_not_allowed",
 	})
 }

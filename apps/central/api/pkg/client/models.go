@@ -147,6 +147,31 @@ type PublicClient struct {
 }
 
 // ToPublic converts Client to PublicClient
+// defaultSignInMethods applies when a client has no provider list stored,
+// matching the column default.
+var defaultSignInMethods = []string{"email", "google"}
+
+// AllowsSignInMethod reports whether users of this client may sign in with
+// method: "email" (password) or a social provider name such as "google".
+// Password sign-in additionally requires AllowEmailLogin.
+func (c *Client) AllowsSignInMethod(method string) bool {
+	methods := []string(c.EnabledAuthProviders)
+	if len(methods) == 0 {
+		methods = defaultSignInMethods
+	}
+	listed := false
+	for _, m := range methods {
+		if m == method {
+			listed = true
+			break
+		}
+	}
+	if method == "email" {
+		return listed && c.AllowEmailLogin
+	}
+	return listed
+}
+
 func (c *Client) ToPublic() PublicClient {
 	return PublicClient{
 		ID:           c.ID,

@@ -5,10 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
-import GoogleLoginButton from '../components/GoogleLoginButton'
-import { GitHubLoginButton, MicrosoftLoginButton, AppleLoginButton } from '../components/SocialLoginButtons'
+import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { getConfig } from '../config'
+import { loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep } from '../utils/loginFlow'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -19,25 +18,11 @@ const createLoginSchema = (t: (key: string) => string) => z.object({
 
 type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>
 
-interface LoginRequest {
-  challenge: string
-  email: string
-  password: string
-  remember: boolean
-}
-
-interface LoginResponse {
-  redirect_to?: string
-  error?: string
-  code?: string
-  mfa_required?: boolean
-  mfa_challenge?: string
-}
-
 // Backend error codes that have a localized message on this screen.
 const LOGIN_ERROR_KEYS: Record<string, string> = {
   invalid_credentials: 'auth:errors.invalidCredentials',
   invalid_flow: 'auth:errors.flowInvalid',
+  sign_in_method_not_allowed: 'auth:errors.signInMethodNotAllowed',
   flow_expired: 'auth:errors.flowExpired',
 }
 
@@ -67,13 +52,12 @@ const LoginPage: React.FC = () => {
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [clientId, setClientId] = useState<string | null>(null)
   const [autoGoogleLogin, setAutoGoogleLogin] = useState(false)
 
-  // Ref to track which challenge has been processed to prevent duplicates
-  const processedChallengeRef = useRef<string | null>(null)
+  // Ref to track which flow has been processed to prevent duplicates
+  const processedFlowRef = useRef<string | null>(null)
 
-  const challenge = searchParams.get('login_challenge')
+  const flow = searchParams.get('flow')
   const connection = searchParams.get('connection')
 
   // Helper function to handle popup mode redirect
@@ -123,7 +107,7 @@ const LoginPage: React.FC = () => {
     },
   })
 
-  // Fetch login challenge info
+  // Fetch what the login flow needs
   useEffect(() => {
     const hasWindowOpener = window.opener !== null && window.opener !== window
     const hasSessionStorage = sessionStorage.getItem('authway_popup_mode') === 'true'
@@ -136,14 +120,12 @@ const LoginPage: React.FC = () => {
       detectionMethod: hasWindowOpener ? 'window.opener' : (hasSessionStorage ? 'sessionStorage' : 'none')
     })
 
-    if (!challenge) {
+    if (!flow) {
       setIsLoading(false)
       return
     }
 
-    console.log('[LoginPage] Fetching login info with challenge:', challenge.substring(0, 20) + '...')
-
-    fetch(`${getConfig().apiUrl}/api/v1/login-flows/${encodeURIComponent(challenge)}`)
+    fetch(loginFlowUrl(flow))
       .then(res => res.json())
       .then(data => {
         // SSO auto-login or a cleared session — either way no form is needed
@@ -173,102 +155,42 @@ const LoginPage: React.FC = () => {
           setError(key ? t(key) : data.error)
         } else {
           setLoginInfo(data)
-          // Extract client_id from login info if available
-          if (data.client && data.client.client_id) {
-            setClientId(data.client.client_id)
-          }
         }
       })
       .catch(err => {
-        console.error('Login challenge fetch error:', err)
+        console.error('Login flow fetch error:', err)
         setError(t('auth:errors.loginInfoFailed'))
       })
       .finally(() => {
         setIsLoading(false)
       })
-  }, [challenge, t])
+  }, [flow, t])
 
-  // Auto-trigger Google login if connection=google
+  // Auto-start Google sign-in if connection=google
   useEffect(() => {
-    if (!loginInfo || !challenge || autoGoogleLogin) return
+    if (!loginInfo || !flow || autoGoogleLogin) return
     if (connection !== 'google') return
 
-    // Prevent duplicate execution by checking if this exact challenge was already processed
-    // This persists across React Strict Mode double-mounting and component remounts
-    if (processedChallengeRef.current === challenge) {
-      console.log('[Auto-Google] Challenge already processed, skipping duplicate execution')
-      return
-    }
-
-    // Mark this challenge as being processed
-    processedChallengeRef.current = challenge
+    // Strict Mode mounts twice; leave for the provider only once per flow.
+    if (processedFlowRef.current === flow) return
+    processedFlowRef.current = flow
     setAutoGoogleLogin(true)
-
-    // Auto-start Google OAuth flow
-    const startGoogleLogin = async () => {
-      try {
-        console.log('[Auto-Google] Starting OAuth flow with challenge:', challenge.substring(0, 10) + '...')
-
-        // Use Auth Backend URL for OAuth endpoints
-        const apiUrl = getConfig().apiUrl
-        const response = await fetch(`${apiUrl}/auth/google/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            login_challenge: challenge,
-            client_id: clientId || '',
-          }),
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Google login failed')
-        }
-
-        const data = await response.json()
-        if (data.redirect_url) {
-          console.log('[Auto-Google] Redirecting to Google OAuth')
-          window.location.href = data.redirect_url
-        } else {
-          throw new Error('No redirect URL in response')
-        }
-      } catch (err) {
-        console.error('Auto-Google login error:', err)
-        setError(err instanceof Error ? err.message : 'Google login failed')
-        setAutoGoogleLogin(false)
-        processedChallengeRef.current = null  // Clear challenge on error to allow retry
-      }
-    }
-
-    startGoogleLogin()
-  }, [loginInfo, challenge, connection, clientId, autoGoogleLogin])
+    startSocialSignIn(flow, 'google')
+  }, [loginInfo, flow, connection, autoGoogleLogin])
 
   // Login mutation
   const loginMutation = useMutation({
-    mutationFn: async (data: LoginFormData): Promise<LoginResponse> => {
-      const response = await fetch(`${getConfig().apiUrl}/authenticate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          challenge,
-          email: data.email,
-          password: data.password,
-          remember: data.remember,
-        } as LoginRequest),
-      })
-
-      return response.json()
-    },
+    mutationFn: (data: LoginFormData): Promise<FlowStep> =>
+      submitLoginStep(flow ?? '', '/password', {
+        email: data.email,
+        password: data.password,
+        remember: data.remember,
+      }),
     onSuccess: (data) => {
-      if (data.mfa_required && data.mfa_challenge) {
-        console.log('[LoginPage] Password verified, MFA required — navigating to verify page')
-        navigate(`/mfa/verify?mfa_challenge=${encodeURIComponent(data.mfa_challenge)}`)
-      } else if (data.redirect_to) {
+      if (data.next === 'mfa' && data.mfa_challenge && flow) {
+        const params = new URLSearchParams({ flow, mfa_challenge: data.mfa_challenge })
+        navigate(`/mfa/verify?${params}`)
+      } else if (data.next === 'redirect' && data.redirect_to) {
         console.log('[LoginPage] Email/password login successful, redirecting...')
         console.log('[LoginPage] redirect_to URL:', data.redirect_to)
 
@@ -318,8 +240,8 @@ const LoginPage: React.FC = () => {
            isProviderEnabled('apple')
   }
 
-  // No challenge - direct access (should not happen in normal OAuth flow)
-  if (!challenge) {
+  // No flow - direct access (should not happen in normal OAuth flow)
+  if (!flow) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -459,7 +381,7 @@ const LoginPage: React.FC = () => {
                     </label>
                   </div>
                   <Link
-                    to={clientId ? `/forgot-password?client_id=${encodeURIComponent(clientId)}` : '/forgot-password'}
+                    to={loginInfo?.client?.client_id ? `/forgot-password?client_id=${encodeURIComponent(loginInfo.client.client_id)}` : '/forgot-password'}
                     className="text-sm text-indigo-600 hover:underline"
                   >
                     {t('auth:login.forgotPassword')}
@@ -502,34 +424,14 @@ const LoginPage: React.FC = () => {
               )}
 
               <div className="space-y-3">
-                {isProviderEnabled('google') && (
-                  <GoogleLoginButton
-                    onError={(error) => setError(error)}
+                {SOCIAL_PROVIDERS.filter(isProviderEnabled).map((provider) => (
+                  <SocialLoginButton
+                    key={provider}
+                    provider={provider}
+                    flow={flow}
                     disabled={isSubmitting || loginMutation.isPending}
-                    clientId={clientId || undefined}
                   />
-                )}
-                {isProviderEnabled('github') && (
-                  <GitHubLoginButton
-                    onError={(error) => setError(error)}
-                    disabled={isSubmitting || loginMutation.isPending}
-                    clientId={clientId || undefined}
-                  />
-                )}
-                {isProviderEnabled('microsoft') && (
-                  <MicrosoftLoginButton
-                    onError={(error) => setError(error)}
-                    disabled={isSubmitting || loginMutation.isPending}
-                    clientId={clientId || undefined}
-                  />
-                )}
-                {isProviderEnabled('apple') && (
-                  <AppleLoginButton
-                    onError={(error) => setError(error)}
-                    disabled={isSubmitting || loginMutation.isPending}
-                    clientId={clientId || undefined}
-                  />
-                )}
+                ))}
               </div>
             </div>
           )}

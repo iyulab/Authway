@@ -20,18 +20,12 @@ vi.mock('react-router', async () => {
   }
 })
 
-// Mock GoogleLoginButton
-vi.mock('../components/GoogleLoginButton', () => ({
-  default: ({ onError, disabled, clientId }: any) => (
-    <button
-      data-testid="google-login-button"
-      disabled={disabled}
-      onClick={() => onError('Google login error')}
-    >
-      Google로 로그인 {clientId ? `(${clientId})` : ''}
-    </button>
-  )
-}))
+// Social sign-in leaves the page; record where it would go instead.
+const mockStartSocialSignIn = vi.fn()
+vi.mock('../utils/loginFlow', async () => {
+  const actual = await vi.importActual<typeof import('../utils/loginFlow')>('../utils/loginFlow')
+  return { ...actual, startSocialSignIn: (...args: unknown[]) => mockStartSocialSignIn(...args) }
+})
 
 // Vite env vars (VITE_API_URL) is provided globally
 // via vi.stubEnv in src/test/setup.ts.
@@ -41,7 +35,7 @@ describe('LoginPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSearchParams.set('login_challenge', 'test-challenge')
+    mockSearchParams.set('flow', 'test-challenge')
   })
 
   afterEach(() => {
@@ -56,10 +50,10 @@ describe('LoginPage', () => {
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
 
-    it('shows the Authway home fallback when login_challenge is missing', async () => {
-      // Direct access without an OAuth login_challenge is not part of the
-      // normal flow; the page renders a plain Authway landing instead of a form.
-      mockSearchParams.delete('login_challenge')
+    it('shows the Authway home fallback when the flow is missing', async () => {
+      // Direct access without a login flow is not part of the normal flow;
+      // the page renders a plain Authway landing instead of a form.
+      mockSearchParams.delete('flow')
 
       render(<LoginPage />)
 
@@ -86,7 +80,7 @@ describe('LoginPage', () => {
 
   it('asks the backend about the flow with the id escaped in the path', async () => {
     // Hydra challenges are padded base64 and end in "=".
-    mockSearchParams.set('login_challenge', 'abc+/==')
+    mockSearchParams.set('flow', 'abc+/==')
     let requested = ''
     server.use(
       http.get('http://localhost:8080/api/v1/login-flows/:flow', ({ request }) => {
@@ -176,13 +170,13 @@ describe('LoginPage', () => {
       })
     })
 
-    it('shows Google login button with client ID', async () => {
+    it('starts social sign-in for the flow when a provider button is pressed', async () => {
       render(<LoginPage />)
 
-      await waitFor(() => {
-        expect(screen.getByTestId('google-login-button')).toBeInTheDocument()
-        expect(screen.getByText('Google로 로그인 (test-client-id)')).toBeInTheDocument()
-      })
+      const google = await screen.findByRole('button', { name: /Google/ })
+      await user.click(google)
+
+      expect(mockStartSocialSignIn).toHaveBeenCalledWith('test-challenge', 'google')
     })
 
     it('links "forgot password" to the forgot-password page carrying the client_id', async () => {
@@ -286,8 +280,8 @@ describe('LoginPage', () => {
 
     it('handles successful login with redirect', async () => {
       server.use(
-        http.post('http://localhost:8080/authenticate', () => {
-          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
         })
       )
 
@@ -310,7 +304,7 @@ describe('LoginPage', () => {
 
     it('handles login error from server', async () => {
       server.use(
-        http.post('http://localhost:8080/authenticate', () => {
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
           return HttpResponse.json({ error: 'Invalid credentials' })
         })
       )
@@ -330,7 +324,7 @@ describe('LoginPage', () => {
 
     it('keeps the form open with a localized message on a wrong password', async () => {
       server.use(
-        http.post('http://localhost:8080/authenticate', () => {
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
           return HttpResponse.json(
             { error: 'Invalid email or password', code: 'invalid_credentials' },
             { status: 401 }
@@ -352,8 +346,8 @@ describe('LoginPage', () => {
 
     it('navigates to the MFA verify page when the server requires a second factor', async () => {
       server.use(
-        http.post('http://localhost:8080/authenticate', () => {
-          return HttpResponse.json({ mfa_required: true, mfa_challenge: 'chal-123' })
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
+          return HttpResponse.json({ next: 'mfa', mfa_challenge: 'chal-123' })
         })
       )
 
@@ -366,17 +360,19 @@ describe('LoginPage', () => {
       await user.click(submitButton)
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/mfa/verify?mfa_challenge=chal-123')
+        expect(mockNavigate).toHaveBeenCalledWith('/mfa/verify?flow=test-challenge&mfa_challenge=chal-123')
       })
     })
 
     it('sends correct request data', async () => {
       let requestBody: any
+      let requestFlow = ''
 
       server.use(
-        http.post('http://localhost:8080/authenticate', async ({ request }) => {
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', async ({ request, params }) => {
+          requestFlow = params.flow as string
           requestBody = await request.json()
-          return HttpResponse.json({ redirect_to: 'http://example.com/callback' })
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
         })
       )
 
@@ -391,8 +387,8 @@ describe('LoginPage', () => {
       await user.click(submitButton)
 
       await waitFor(() => {
+        expect(requestFlow).toBe('test-challenge')
         expect(requestBody).toEqual({
-          challenge: 'test-challenge',
           email: 'test@example.com',
           password: 'password123',
           remember: true

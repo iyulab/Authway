@@ -19,16 +19,9 @@ const provider = new Provider(loadConfig())
  * machine-readable API contract.
  */
 const LOGIN_UI_POSTS: { path: string; knownBroken?: boolean }[] = [
-  { path: '/authenticate' },
   { path: '/consent' },
   { path: '/consent/accept' },
   { path: '/consent/reject' },
-  { path: '/mfa/verify' },
-  { path: '/mfa/recovery' },
-  { path: '/auth/google/login' },
-  { path: '/auth/github/login' },
-  { path: '/auth/microsoft/login' },
-  { path: '/auth/apple/login' },
   { path: '/api/v1/auth/magic-link/verify' },
   // The magic-link request form posts here, but the backend has no
   // magic-link step inside the sign-in flow yet.
@@ -56,7 +49,7 @@ describe('login UI backend routes', () => {
       code_challenge: createPkce().challenge,
       code_challenge_method: 'S256',
     }).toString()
-    flow = provider.loginFlowFrom(await new Browser().redirectFrom(authorize.toString()))
+    flow = provider.loginFlowFrom(await provider.openLoginScreen(new Browser(), authorize.toString()))
   })
 
   afterAll(async () => {
@@ -73,6 +66,39 @@ describe('login UI backend routes', () => {
     expect(body.flow).toBe(flow)
     expect(body.client?.client_id).toBe(client.clientId)
     expect(Array.isArray(body.client?.enabled_auth_providers)).toBe(true)
+  })
+
+  // The login-flow steps are asserted by what they answer, not by being routed:
+  // each must reach the check it exists for.
+  it('checks the password step against the user directory', async () => {
+    const res = await fetch(provider.loginFlowUrl(flow, '/password'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `nobody-${randomToken(4)}@example.test`, password: 'not-the-password' }),
+    })
+    const body = await res.json()
+    expect(res.status, JSON.stringify(body)).toBe(401)
+    expect(body.code).toBe('invalid_credentials')
+  })
+
+  for (const step of ['/mfa', '/mfa/recovery']) {
+    it(`refuses the ${step} step without the challenge the password step issues`, async () => {
+      const res = await fetch(provider.loginFlowUrl(flow, step), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mfa_challenge: 'not-issued', code: '000000' }),
+      })
+      const body = await res.json()
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      expect(body.code).toBe('invalid_mfa_challenge')
+    })
+  }
+
+  it('starts social sign-in as a page navigation that leaves the backend', async () => {
+    const res = await new Browser().fetch(provider.loginFlowUrl(flow, '/social/google'))
+    expect(res.status).toBe(302)
+    const location = new URL(res.headers.get('location') ?? '', provider.config.api)
+    expect(location.origin).not.toBe(new URL(provider.config.api).origin)
   })
 
   for (const { path, knownBroken } of LOGIN_UI_POSTS) {

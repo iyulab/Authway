@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { getConfig } from '../config'
+import { submitLoginStep } from '../utils/loginFlow'
 
 const MFAVerifyPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
@@ -14,7 +14,8 @@ const MFAVerifyPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const challenge = searchParams.get('mfa_challenge')
+  const flow = searchParams.get('flow')
+  const mfaChallenge = searchParams.get('mfa_challenge')
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,36 +29,16 @@ const MFAVerifyPage: React.FC = () => {
     setError(null)
 
     try {
-      const apiUrl = getConfig().apiUrl
-      const endpoint = useRecovery ? '/mfa/recovery' : '/mfa/verify'
-
-      const response = await fetch(`${apiUrl}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          challenge,
-          code: code.replace(/\s/g, ''),
-        }),
-        credentials: 'include',
+      const data = await submitLoginStep(flow ?? '', useRecovery ? '/mfa/recovery' : '/mfa', {
+        mfa_challenge: mfaChallenge,
+        code: code.replace(/\s/g, ''),
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Verification failed')
-      }
-
-      const data = await response.json()
-
-      if (data.redirect_to) {
-        // Handle popup mode
-        const isPopupMode = window.opener !== null && window.opener !== window ||
-          sessionStorage.getItem('authway_popup_mode') === 'true'
-
-        if (isPopupMode) {
-          window.location.href = data.redirect_to
-        } else {
-          window.location.href = data.redirect_to
-        }
+      if (data.next === 'redirect' && data.redirect_to) {
+        // Popups stay in place too: the redirect lands on the client's callback.
+        window.location.href = data.redirect_to
+      } else if (data.error) {
+        throw new Error(data.error)
       } else {
         navigate('/')
       }
@@ -68,7 +49,7 @@ const MFAVerifyPage: React.FC = () => {
     }
   }
 
-  if (!challenge) {
+  if (!flow || !mfaChallenge) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">

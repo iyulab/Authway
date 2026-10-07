@@ -51,7 +51,8 @@ export type LoginOutcome =
  * Drives one provider through its public surfaces. The login-UI backend calls
  * (`submitPassword`, `acceptConsent`) are the only part that encodes how a
  * provider's own login screens talk to it; everything else is OIDC or the
- * admin API.
+ * admin API. Login-flow answers carry `next`: "form", "redirect" (with
+ * `redirect_to`) or "mfa" (with `mfa_challenge`).
  */
 export class Provider {
   private discoveryDoc?: Discovery
@@ -146,11 +147,29 @@ export class Provider {
 
   // ---- login-UI backend (provider-specific protocol) ----------------------
 
-  /** Extracts the opaque flow id from the redirect to the login screen. */
+  /** Extracts the opaque flow id from the login screen's address. */
   loginFlowFrom(location: URL): string {
-    const flow = location.searchParams.get('flow') ?? location.searchParams.get('login_challenge')
-    if (!flow) throw new Error(`Redirect to the login screen carries no flow id: ${location}`)
+    const flow = location.searchParams.get('flow')
+    if (!flow) throw new Error(`The login screen was opened without a flow id: ${location}`)
     return flow
+  }
+
+  /**
+   * Follows the authorization server's redirects to the login screen. A
+   * provider may pass through its own backend first; the screen is the first
+   * address that carries a flow id.
+   */
+  async openLoginScreen(browser: Browser, authorizeUrl: string): Promise<URL> {
+    let next = await browser.redirectFrom(authorizeUrl)
+    for (let hops = 0; hops < 5 && !next.searchParams.has('flow'); hops++) {
+      next = await browser.redirectFrom(next.toString())
+    }
+    return next
+  }
+
+  /** URL of a login-flow endpoint of the login UI's backend. */
+  loginFlowUrl(flow: string, path = ''): string {
+    return `${this.config.api}/api/v1/login-flows/${encodeURIComponent(flow)}${path}`
   }
 
   consentFlowFrom(location: URL): string {
@@ -160,10 +179,10 @@ export class Provider {
   }
 
   async submitPassword(browser: Browser, flow: string, user: TestUser, remember = false): Promise<Response> {
-    return browser.fetch(`${this.config.api}/authenticate`, {
+    return browser.fetch(this.loginFlowUrl(flow, '/password'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenge: flow, email: user.email, password: user.password, remember }),
+      body: JSON.stringify({ email: user.email, password: user.password, remember }),
     })
   }
 
@@ -231,7 +250,7 @@ export class Provider {
       code_challenge: pkce.challenge,
       code_challenge_method: 'S256',
     }).toString()
-    const loginScreen = await browser.redirectFrom(authorize.toString())
+    const loginScreen = await this.openLoginScreen(browser, authorize.toString())
     return { client, scopes, browser, pkce, flow: this.loginFlowFrom(loginScreen) }
   }
 
@@ -241,8 +260,8 @@ export class Provider {
     const loginRes = await this.submitPassword(browser, flow, user, remember)
     const loginBody = await loginRes.text()
     if (!loginRes.ok) return { kind: 'rejected', status: loginRes.status, body: loginBody }
-    const { redirect_to: afterLogin } = JSON.parse(loginBody) as { redirect_to?: string }
-    if (!afterLogin) return { kind: 'rejected', status: loginRes.status, body: loginBody }
+    const { next: step, redirect_to: afterLogin } = JSON.parse(loginBody) as { next?: string; redirect_to?: string }
+    if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: loginRes.status, body: loginBody }
 
     let next = await browser.redirectFrom(afterLogin)
     if (next.searchParams.has('error')) {

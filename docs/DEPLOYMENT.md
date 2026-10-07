@@ -78,7 +78,7 @@ az containerapp create \
     DSN="postgres://user:password@authway-db.postgres.database.azure.com/hydra?sslmode=require" \
     SECRETS_SYSTEM="<random-32-char-string>" \
     URLS_SELF_ISSUER="https://oauth.authway.in" \
-    URLS_LOGIN="https://auth.authway.in/login" \
+    URLS_LOGIN="https://api.authway.in/login" \
     URLS_CONSENT="https://auth.authway.in/consent" \
     URLS_LOGOUT="https://auth.authway.in/logout"
 ```
@@ -222,7 +222,7 @@ services:
       DSN: postgres://authway:${DB_PASSWORD}@postgres:5432/hydra?sslmode=disable
       SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
       URLS_SELF_ISSUER: https://oauth.example.com
-      URLS_LOGIN: https://auth.example.com/login
+      URLS_LOGIN: https://api.example.com/login
       URLS_CONSENT: https://auth.example.com/consent
       URLS_LOGOUT: https://auth.example.com/logout
     ports:
@@ -385,7 +385,7 @@ COOKIE_SECURE=true
 DSN=postgres://user:password@host:5432/hydra?sslmode=require
 SECRETS_SYSTEM=<at-least-32-random-characters>
 URLS_SELF_ISSUER=https://oauth.authway.in
-URLS_LOGIN=https://auth.authway.in/login
+URLS_LOGIN=https://api.authway.in/login  # the API hands the login UI an opaque flow id
 URLS_CONSENT=https://auth.authway.in/consent
 URLS_LOGOUT=https://auth.authway.in/logout
 

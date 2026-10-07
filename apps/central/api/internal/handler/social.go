@@ -2,11 +2,11 @@ package handler
 
 import (
 	"context"
-	"net/http"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service/social"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -22,6 +22,7 @@ type SocialHandler struct {
 	hydraClient      *hydra.Client
 	logger           *zap.Logger
 	auditService     audit.Service
+	clientService    client.Service
 	stateStore       *OAuthStateStore
 	frontendURL      string // login UI, for the error screen
 }
@@ -33,6 +34,7 @@ func NewSocialHandlerWithAllProviders(
 	microsoftService *social.MicrosoftService,
 	appleService *social.AppleService,
 	userService user.Service,
+	clientService client.Service,
 	hydraClient *hydra.Client,
 	logger *zap.Logger,
 	auditService audit.Service,
@@ -47,6 +49,7 @@ func NewSocialHandlerWithAllProviders(
 		microsoftService: microsoftService,
 		appleService:     appleService,
 		userService:      userService,
+		clientService:    clientService,
 		hydraClient:      hydraClient,
 		logger:           logger,
 		auditService:     auditService,
@@ -101,102 +104,6 @@ func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason str
 	if err := s.auditService.Log(context.Background(), entry); err != nil {
 		s.logger.Warn("Failed to record social auth-failure audit", zap.Error(err), zap.String("provider", provider))
 	}
-}
-
-// GoogleLoginRequest for POST request body
-type GoogleLoginRequest struct {
-	LoginChallenge string `json:"login_challenge"`
-	ClientID       string `json:"client_id"`
-}
-
-// GoogleLogin initiates Google OAuth flow
-func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
-	var loginChallenge, clientID string
-
-	// Support both GET and POST methods to avoid HTTP 431 errors with long login_challenge
-	if c.Method() == "POST" {
-		// POST method: get parameters from body
-		var req GoogleLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":             "invalid_request_body",
-				"error_description": "Failed to parse request body",
-			})
-		}
-		loginChallenge = req.LoginChallenge
-		clientID = req.ClientID
-	} else {
-		// GET method: get parameters from query string
-		// IMPORTANT: Make copies of query strings because Fiber reuses internal buffers
-		loginChallengeRaw := c.Query("login_challenge")
-		clientIDRaw := c.Query("client_id")
-		loginChallenge = string([]byte(loginChallengeRaw))
-		clientID = string([]byte(clientIDRaw))
-	}
-
-	// Validate login_challenge
-	if loginChallenge == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "missing_login_challenge",
-			"error_description": "login_challenge parameter is required for OAuth flow",
-			"hint":              "Include login_challenge in the URL or POST body",
-			"example":           "POST /auth/google/login with body: {\"login_challenge\":\"...\",\"client_id\":\"...\"}",
-		})
-	}
-
-	// If client_id is not provided, extract it from login_challenge
-	if clientID == "" {
-		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
-		if err != nil {
-			s.logger.Error("Failed to get login request from Hydra",
-				zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]),
-				zap.Error(err))
-			return respondFlowLookupError(c, err)
-		}
-		clientID = loginReq.Client.ClientID
-		s.logger.Info("Extracted client_id from login_challenge",
-			zap.String("client_id", clientID))
-	}
-
-	state, err := s.stateStore.Save(c.Context(), oauthState{LoginChallenge: loginChallenge, ClientID: clientID})
-	if err != nil {
-		s.logger.Error("Failed to store OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to start sign-in",
-		})
-	}
-
-	// Get Google authorization URL (client-specific or central)
-	// Now using just the short state value instead of encoding all data
-	authURL := s.googleService.GetAuthURLForClient(state, clientID)
-
-	// Set state cookie for additional security
-	c.Cookie(&fiber.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		MaxAge:   600, // 10 minutes
-		HTTPOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: "Lax",
-	})
-
-	s.logger.Info("Initiating Google OAuth flow",
-		zap.String("client_id", clientID),
-		zap.String("login_challenge", loginChallenge))
-
-	// For POST requests from fetch API, return JSON with redirect URL
-	// (Cannot use HTTP redirect due to CORS with cross-origin OAuth providers)
-	if c.Method() == "POST" {
-		return c.JSON(fiber.Map{
-			"redirect_url": authURL,
-			"state":        state,
-		})
-	}
-
-	// For GET requests (backward compatibility), use HTTP redirect
-	return c.Redirect(authURL, http.StatusTemporaryRedirect)
 }
 
 // GoogleCallback handles the Google OAuth callback
@@ -343,82 +250,6 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 // GitHub OAuth Handlers
 // ======================================
 
-// GitHubLogin initiates GitHub OAuth flow
-func (s *SocialHandler) GitHubLogin(c *fiber.Ctx) error {
-	if s.githubService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "github_not_configured",
-			"error_description": "GitHub OAuth is not configured",
-		})
-	}
-
-	var loginChallenge, clientID string
-	if c.Method() == "POST" {
-		var req GoogleLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":             "invalid_request_body",
-				"error_description": "Failed to parse request body",
-			})
-		}
-		loginChallenge = req.LoginChallenge
-		clientID = req.ClientID
-	} else {
-		loginChallenge = string([]byte(c.Query("login_challenge")))
-		clientID = string([]byte(c.Query("client_id")))
-	}
-
-	if loginChallenge == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "missing_login_challenge",
-			"error_description": "login_challenge parameter is required for OAuth flow",
-		})
-	}
-
-	if clientID == "" {
-		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
-		if err != nil {
-			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return respondFlowLookupError(c, err)
-		}
-		clientID = loginReq.Client.ClientID
-	}
-
-	state, err := s.stateStore.Save(c.Context(), oauthState{LoginChallenge: loginChallenge, ClientID: clientID})
-	if err != nil {
-		s.logger.Error("Failed to store OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to start sign-in",
-		})
-	}
-
-	authURL := s.githubService.GetAuthURLForClient(state, clientID)
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		MaxAge:   600,
-		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "Lax",
-	})
-
-	s.logger.Info("Initiating GitHub OAuth flow",
-		zap.String("client_id", clientID),
-		zap.String("login_challenge", loginChallenge))
-
-	if c.Method() == "POST" {
-		return c.JSON(fiber.Map{
-			"redirect_url": authURL,
-			"state":        state,
-		})
-	}
-
-	return c.Redirect(authURL, http.StatusTemporaryRedirect)
-}
-
 // GitHubCallback handles the GitHub OAuth callback
 func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	if s.githubService == nil {
@@ -510,82 +341,6 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 // Microsoft OAuth Handlers
 // ======================================
 
-// MicrosoftLogin initiates Microsoft OAuth flow
-func (s *SocialHandler) MicrosoftLogin(c *fiber.Ctx) error {
-	if s.microsoftService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "microsoft_not_configured",
-			"error_description": "Microsoft OAuth is not configured",
-		})
-	}
-
-	var loginChallenge, clientID string
-	if c.Method() == "POST" {
-		var req GoogleLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":             "invalid_request_body",
-				"error_description": "Failed to parse request body",
-			})
-		}
-		loginChallenge = req.LoginChallenge
-		clientID = req.ClientID
-	} else {
-		loginChallenge = string([]byte(c.Query("login_challenge")))
-		clientID = string([]byte(c.Query("client_id")))
-	}
-
-	if loginChallenge == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "missing_login_challenge",
-			"error_description": "login_challenge parameter is required for OAuth flow",
-		})
-	}
-
-	if clientID == "" {
-		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
-		if err != nil {
-			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return respondFlowLookupError(c, err)
-		}
-		clientID = loginReq.Client.ClientID
-	}
-
-	state, err := s.stateStore.Save(c.Context(), oauthState{LoginChallenge: loginChallenge, ClientID: clientID})
-	if err != nil {
-		s.logger.Error("Failed to store OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to start sign-in",
-		})
-	}
-
-	authURL := s.microsoftService.GetAuthURLForClient(state, clientID)
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		MaxAge:   600,
-		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "Lax",
-	})
-
-	s.logger.Info("Initiating Microsoft OAuth flow",
-		zap.String("client_id", clientID),
-		zap.String("login_challenge", loginChallenge))
-
-	if c.Method() == "POST" {
-		return c.JSON(fiber.Map{
-			"redirect_url": authURL,
-			"state":        state,
-		})
-	}
-
-	return c.Redirect(authURL, http.StatusTemporaryRedirect)
-}
-
 // MicrosoftCallback handles the Microsoft OAuth callback
 func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	if s.microsoftService == nil {
@@ -676,82 +431,6 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 // ======================================
 // Apple OAuth Handlers
 // ======================================
-
-// AppleLogin initiates Apple OAuth flow
-func (s *SocialHandler) AppleLogin(c *fiber.Ctx) error {
-	if s.appleService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "apple_not_configured",
-			"error_description": "Apple OAuth is not configured",
-		})
-	}
-
-	var loginChallenge, clientID string
-	if c.Method() == "POST" {
-		var req GoogleLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":             "invalid_request_body",
-				"error_description": "Failed to parse request body",
-			})
-		}
-		loginChallenge = req.LoginChallenge
-		clientID = req.ClientID
-	} else {
-		loginChallenge = string([]byte(c.Query("login_challenge")))
-		clientID = string([]byte(c.Query("client_id")))
-	}
-
-	if loginChallenge == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "missing_login_challenge",
-			"error_description": "login_challenge parameter is required for OAuth flow",
-		})
-	}
-
-	if clientID == "" {
-		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
-		if err != nil {
-			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return respondFlowLookupError(c, err)
-		}
-		clientID = loginReq.Client.ClientID
-	}
-
-	state, err := s.stateStore.Save(c.Context(), oauthState{LoginChallenge: loginChallenge, ClientID: clientID})
-	if err != nil {
-		s.logger.Error("Failed to store OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to start sign-in",
-		})
-	}
-
-	authURL := s.appleService.GetAuthURLForClient(state, clientID)
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		Path:     "/",
-		MaxAge:   600,
-		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "Lax",
-	})
-
-	s.logger.Info("Initiating Apple OAuth flow",
-		zap.String("client_id", clientID),
-		zap.String("login_challenge", loginChallenge))
-
-	if c.Method() == "POST" {
-		return c.JSON(fiber.Map{
-			"redirect_url": authURL,
-			"state":        state,
-		})
-	}
-
-	return c.Redirect(authURL, http.StatusTemporaryRedirect)
-}
 
 // AppleCallback handles the Apple OAuth callback (POST because of form_post response_mode)
 func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {

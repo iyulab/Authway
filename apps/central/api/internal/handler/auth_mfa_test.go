@@ -83,15 +83,15 @@ func newAuthTestApp(t *testing.T, password string, totpEnabled bool, totpCode, r
 	t.Helper()
 	u := buildTestUser(t, password, totpEnabled)
 	users := newFakeUserService(u)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID})
+	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 
 	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t))
 
 	app := fiber.New()
-	app.Post("/authenticate", h.Login)
-	app.Post("/mfa/verify", h.VerifyMFALogin)
-	app.Post("/mfa/recovery", h.VerifyMFARecoveryLogin)
+	app.Post("/login-flows/:flow/password", h.SubmitPassword)
+	app.Post("/login-flows/:flow/mfa", h.VerifyMFALogin)
+	app.Post("/login-flows/:flow/mfa/recovery", h.VerifyMFARecoveryLogin)
 	return app, h, acceptCount
 }
 
@@ -113,7 +113,7 @@ func doJSON(t *testing.T, app *fiber.App, path, body string) (int, map[string]an
 func TestLogin_NoMFA_AcceptsImmediately(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", false, "", "")
 
-	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	if status != fiber.StatusOK {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
@@ -132,12 +132,12 @@ func TestLogin_NoMFA_AcceptsImmediately(t *testing.T) {
 func TestLogin_MFAEnabled_DoesNotAcceptYet(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	if status != fiber.StatusOK {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
-	if body["mfa_required"] != true {
-		t.Errorf("mfa_required = %v, want true", body["mfa_required"])
+	if body["next"] != "mfa" {
+		t.Errorf("next = %v, want mfa", body["next"])
 	}
 	challenge, _ := body["mfa_challenge"].(string)
 	if challenge == "" {
@@ -154,15 +154,15 @@ func TestLogin_MFAEnabled_DoesNotAcceptYet(t *testing.T) {
 func TestLogin_WrongPassword_NeverReachesMFABranch(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"wrong"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"wrong"}`)
 	if status != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
 	if body["redirect_to"] != nil {
 		t.Errorf("redirect_to = %v, want absent — a wrong password must not end the login flow", body["redirect_to"])
 	}
-	if body["mfa_required"] != nil {
-		t.Errorf("mfa_required = %v, want absent — password never verified", body["mfa_required"])
+	if body["mfa_challenge"] != nil {
+		t.Errorf("mfa_challenge = %v, want absent — password never verified", body["mfa_challenge"])
 	}
 	if *acceptCount != 0 {
 		t.Errorf("hydra accept called %d times, want 0", *acceptCount)
@@ -172,10 +172,10 @@ func TestLogin_WrongPassword_NeverReachesMFABranch(t *testing.T) {
 func TestVerifyMFALogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	_, loginBody := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	_, loginBody := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	challenge := loginBody["mfa_challenge"].(string)
 
-	status, body := doJSON(t, app, "/mfa/verify", `{"challenge":"`+challenge+`","code":"123456"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"123456"}`)
 	if status != fiber.StatusOK {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
@@ -188,7 +188,7 @@ func TestVerifyMFALogin_CompletesLoginOnCorrectCode(t *testing.T) {
 
 	// One-time use: replaying the same challenge (even with the right code)
 	// must fail now that it has been consumed.
-	status, body = doJSON(t, app, "/mfa/verify", `{"challenge":"`+challenge+`","code":"123456"}`)
+	status, body = doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"123456"}`)
 	if status != fiber.StatusBadRequest {
 		t.Errorf("replay status = %d, want 400, body = %v", status, body)
 	}
@@ -197,10 +197,10 @@ func TestVerifyMFALogin_CompletesLoginOnCorrectCode(t *testing.T) {
 func TestVerifyMFALogin_WrongCodeDoesNotAccept(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	_, loginBody := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	_, loginBody := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	challenge := loginBody["mfa_challenge"].(string)
 
-	status, body := doJSON(t, app, "/mfa/verify", `{"challenge":"`+challenge+`","code":"000000"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"000000"}`)
 	if status != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want 401, body = %v", status, body)
 	}
@@ -212,20 +212,20 @@ func TestVerifyMFALogin_WrongCodeDoesNotAccept(t *testing.T) {
 func TestVerifyMFALogin_LocksAfterMaxAttempts(t *testing.T) {
 	app, _, _ := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	_, loginBody := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	_, loginBody := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	challenge := loginBody["mfa_challenge"].(string)
 
 	var lastStatus int
 	var lastBody map[string]any
 	for range maxMFAAttempts {
-		lastStatus, lastBody = doJSON(t, app, "/mfa/verify", `{"challenge":"`+challenge+`","code":"000000"}`)
+		lastStatus, lastBody = doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"000000"}`)
 	}
 	if lastStatus != fiber.StatusUnauthorized || lastBody["error"] != "too many failed attempts — please sign in again" {
 		t.Fatalf("after %d attempts: status=%d body=%v", maxMFAAttempts, lastStatus, lastBody)
 	}
 
 	// The challenge is gone now, even with the right code.
-	status, body := doJSON(t, app, "/mfa/verify", `{"challenge":"`+challenge+`","code":"123456"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"123456"}`)
 	if status != fiber.StatusBadRequest {
 		t.Errorf("after lockout status = %d, want 400, body = %v", status, body)
 	}
@@ -234,10 +234,10 @@ func TestVerifyMFALogin_LocksAfterMaxAttempts(t *testing.T) {
 func TestVerifyMFARecoveryLogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "AAAA-BBBB-CCCC")
 
-	_, loginBody := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"correct-horse"}`)
+	_, loginBody := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
 	challenge := loginBody["mfa_challenge"].(string)
 
-	status, body := doJSON(t, app, "/mfa/recovery", `{"challenge":"`+challenge+`","code":"AAAA-BBBB-CCCC"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/mfa/recovery", `{"mfa_challenge":"`+challenge+`","code":"AAAA-BBBB-CCCC"}`)
 	if status != fiber.StatusOK {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
@@ -268,16 +268,16 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	}
 
 	users := newFakeUserService(rightUser, wrongTenantUser)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID})
+	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t))
 	app := fiber.New()
-	app.Post("/authenticate", h.Login)
+	app.Post("/login-flows/:flow/password", h.SubmitPassword)
 
 	// The other tenant's password must NOT authenticate this login — if
 	// Login matched by email alone (GetByEmail, deprecated), an
 	// undefined-order global lookup could authenticate against either row.
-	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"`+rightUser.Email+`","password":"other-tenant-password"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/password", `{"email":"`+rightUser.Email+`","password":"other-tenant-password"}`)
 	if status != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
@@ -289,7 +289,7 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	}
 
 	// The requesting client's own tenant's password succeeds.
-	status, body = doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"`+rightUser.Email+`","password":"correct-horse"}`)
+	status, body = doJSON(t, app, "/login-flows/c1/password", `{"email":"`+rightUser.Email+`","password":"correct-horse"}`)
 	if status != fiber.StatusOK || body["redirect_to"] != "https://example.com/callback" {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
@@ -298,8 +298,57 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 func TestVerifyMFALogin_UnknownChallenge(t *testing.T) {
 	app, _, _ := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
-	status, body := doJSON(t, app, "/mfa/verify", `{"challenge":"`+uuid.NewString()+`","code":"123456"}`)
+	status, body := doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+uuid.NewString()+`","code":"123456"}`)
 	if status != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want 400, body = %v", status, body)
+	}
+}
+
+// The mfa_challenge proves the password step of one flow; quoting it on
+// another flow must not complete that other flow.
+func TestVerifyMFALogin_ChallengeIsBoundToItsFlow(t *testing.T) {
+	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
+
+	_, loginBody := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
+	challenge := loginBody["mfa_challenge"].(string)
+
+	status, body := doJSON(t, app, "/login-flows/other-flow/mfa", `{"mfa_challenge":"`+challenge+`","code":"123456"}`)
+	if status != fiber.StatusBadRequest || body["code"] != "invalid_mfa_challenge" {
+		t.Fatalf("status = %d, body = %v, want 400 invalid_mfa_challenge", status, body)
+	}
+	if *acceptCount != 0 {
+		t.Errorf("hydra accept called %d times, want 0", *acceptCount)
+	}
+}
+
+func TestSubmitPassword_RefusedWhenClientDisablesPasswordSignIn(t *testing.T) {
+	u := buildTestUser(t, "correct-horse", false)
+	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID,
+		EnabledAuthProviders: []string{"google"}, AllowEmailLogin: true})
+	hydraClient, acceptCount := newTestHydraServer(t)
+	h := NewAuthHandler(newFakeUserService(u), clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t))
+	app := fiber.New()
+	app.Post("/login-flows/:flow/password", h.SubmitPassword)
+
+	status, body := doJSON(t, app, "/login-flows/c1/password", `{"email":"user@example.com","password":"correct-horse"}`)
+	if status != fiber.StatusForbidden || body["code"] != "sign_in_method_not_allowed" {
+		t.Fatalf("status = %d, body = %v, want 403 sign_in_method_not_allowed", status, body)
+	}
+	if *acceptCount != 0 {
+		t.Errorf("hydra accept called %d times, want 0", *acceptCount)
+	}
+}
+
+// Hydra challenges end in "=", which the login screen percent-encodes in
+// the path; the handler must look up the decoded id.
+func TestSubmitPassword_DecodesTheFlowID(t *testing.T) {
+	app, _, acceptCount := newAuthTestApp(t, "correct-horse", false, "", "")
+
+	status, body := doJSON(t, app, "/login-flows/abc%3D%3D/password", `{"email":"user@example.com","password":"correct-horse"}`)
+	if status != fiber.StatusOK || body["next"] != "redirect" {
+		t.Fatalf("status = %d, body = %v", status, body)
+	}
+	if *acceptCount != 1 {
+		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
 	}
 }

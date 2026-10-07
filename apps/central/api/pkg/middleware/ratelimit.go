@@ -57,7 +57,11 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		}
 		ctx := context.Background()
 		ip := realClientIP(c)
-		path := c.Path()
+		// Count per route, not per request path: on a route such as
+		// /api/v1/login-flows/:flow/password every new flow id would otherwise
+		// start a fresh counter, and starting a new flow costs an attacker one
+		// request.
+		path := c.Route().Path
 		key := fmt.Sprintf("%s%s:%s", cfg.KeyPrefix, path, ip)
 		blockKey := fmt.Sprintf("%sblock:%s:%s", cfg.KeyPrefix, path, ip)
 		blocked, err := cfg.RedisClient.Exists(ctx, blockKey).Result()

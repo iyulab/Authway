@@ -19,6 +19,7 @@ $LibDir = $PSScriptRoot
 $SharedDir = Split-Path -Parent $LibDir
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "hydra-flow-urls.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
@@ -46,6 +47,14 @@ $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 # are additionally mirrored to the top level, which resource servers that read
 # claims by their bare name require. The *names* are deployment configuration —
 # they are consumer domain concepts and must not be hard-coded here.
+# Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1).
+try {
+    $FlowUrlEnv = @((Get-HydraFlowUrls -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+} catch {
+    Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
+    exit 1
+}
+
 $TokenEnv = @(
     "STRATEGIES_ACCESS_TOKEN=opaque"
 )
@@ -75,13 +84,11 @@ try {
             --resource-group $RESOURCE_GROUP `
             --set-env-vars `
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
-                "URLS_LOGIN=$($envVars['LOGIN_URL'])" `
-                "URLS_CONSENT=$($envVars['CONSENT_URL'])" `
-                "URLS_ERROR=$($envVars['ERROR_URL'])" `
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
+                $FlowUrlEnv `
                 $TokenEnv
 
         if ($LASTEXITCODE -eq 0) {
@@ -127,13 +134,11 @@ try {
                 "DSN=$DSN" `
                 "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
-                "URLS_LOGIN=$($envVars['LOGIN_URL'])" `
-                "URLS_CONSENT=$($envVars['CONSENT_URL'])" `
-                "URLS_ERROR=$($envVars['ERROR_URL'])" `
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
+                $FlowUrlEnv `
                 $TokenEnv
 
         if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }

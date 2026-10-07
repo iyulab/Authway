@@ -14,34 +14,6 @@ const mockUser = {
 }
 
 export const handlers = [
-  // Login endpoint
-  http.post('http://localhost:8080/auth/login', () => {
-    return HttpResponse.json({
-      user: mockUser,
-      tokens: {
-        access_token: 'mock-access-token'
-      }
-    })
-  }),
-
-  // Register endpoint
-  http.post('http://localhost:8080/register', () => {
-    return HttpResponse.json({
-      message: 'User registered successfully',
-      user: mockUser
-    })
-  }),
-
-  // Google OAuth endpoint
-  http.get('http://localhost:8080/auth/google', () => {
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: 'https://accounts.google.com/oauth/authorize?client_id=mock'
-      }
-    })
-  }),
-
   // Login flow info (LoginPage asks what to show for the flow)
   http.get('http://localhost:8080/api/v1/login-flows/:flow', ({ params }) => {
     return HttpResponse.json({
@@ -55,9 +27,10 @@ export const handlers = [
     })
   }),
 
-  // Email/password authentication endpoint (proxied to Central /authenticate)
-  http.post('http://localhost:8080/authenticate', () => {
+  // Password step of a login flow
+  http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
     return HttpResponse.json({
+      next: 'redirect',
       redirect_to: 'http://localhost:3000/callback?code=mock-auth-code'
     })
   }),
