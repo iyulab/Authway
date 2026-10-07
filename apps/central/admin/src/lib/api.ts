@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useTenantStore } from '@/stores/tenant'
 import { getConfig } from '../config'
 
 const API_BASE_URL = getConfig().apiUrl
@@ -10,14 +11,23 @@ export const api = axios.create({
   timeout: 30000, // 30 seconds for operations like OAuth client creation
 })
 
-// Request interceptor to add auth token.
-// Reads the store rather than a mirrored localStorage key, so there is exactly
+// Request interceptor to add the auth token and the selected tenant.
+// Reads the stores rather than mirrored localStorage keys, so there is exactly
 // one answer to "are we authenticated" — see stores/auth.ts.
+//
+// Tenant-scoped admin calls (invitations, webhooks, audit, impersonation) act on
+// the tenant named by X-Tenant-ID. Sending it on every request means no single
+// call can forget it; a list call's tenant_id query parameter still decides its
+// filter.
 api.interceptors.request.use(
   (config) => {
     const token = useAuthStore.getState().token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    const tenant = useTenantStore.getState().selectedTenant
+    if (tenant && !config.headers['X-Tenant-ID']) {
+      config.headers['X-Tenant-ID'] = tenant.id
     }
     return config
   },

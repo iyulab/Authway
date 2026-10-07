@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"authway/apps/central/api/pkg/apierror"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -69,5 +70,25 @@ func TestErrorHandler_NamesStatusOnlyRefusals(t *testing.T) {
 		if resp.StatusCode != status || body["code"] != want || body["error"] != "refused" {
 			t.Errorf("status %d: got %d %v, want code %s", status, resp.StatusCode, body, want)
 		}
+	}
+}
+
+// A refusal decided before the handler holds the response is returned as an
+// apierror.Refusal and written with its own status and code.
+func TestErrorHandler_WritesRefusals(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+	app.Get("/", func(c *fiber.Ctx) error {
+		return apierror.Reject(fiber.StatusBadRequest, "tenant_required", "name the tenant")
+	})
+	resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 400 || body["code"] != "tenant_required" || body["error"] != "name the tenant" {
+		t.Errorf("got %d %v", resp.StatusCode, body)
 	}
 }

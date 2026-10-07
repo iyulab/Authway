@@ -76,10 +76,9 @@ const WebhooksPage: React.FC = () => {
 
   const webhooks = data?.data.webhooks || []
 
-  // Create mutation - tenant_id is set automatically by backend auth middleware
+  // Create mutation — the API client sends the selected tenant as X-Tenant-ID
   const createMutation = useMutation({
-    mutationFn: (data: WebhookFormData) =>
-      webhooksApi.create({ ...data, tenant_id: selectedTenantId }),
+    mutationFn: (data: WebhookFormData) => webhooksApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
       setShowCreateModal(false)

@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 	"time"
 
@@ -26,14 +27,9 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 // QueryAuditLogs queries audit logs with filters
 // GET /api/v1/audit/logs
 func (h *Handler) QueryAuditLogs(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	query := &AuditLogQuery{
@@ -129,14 +125,9 @@ func (h *Handler) GetAuditLog(c *fiber.Ctx) error {
 // GetUserActivity gets recent activity for a specific user
 // GET /api/v1/audit/users/:userId/activity
 func (h *Handler) GetUserActivity(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	userIDStr := c.Params("userId")
@@ -168,14 +159,9 @@ func (h *Handler) GetUserActivity(c *fiber.Ctx) error {
 // GetSecurityEvents gets recent security-related events
 // GET /api/v1/audit/security
 func (h *Handler) GetSecurityEvents(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	hours := 24
@@ -201,14 +187,9 @@ func (h *Handler) GetSecurityEvents(c *fiber.Ctx) error {
 // GetAuditSummary gets a summary of audit activity
 // GET /api/v1/audit/summary
 func (h *Handler) GetAuditSummary(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	// Get counts for different time periods
@@ -240,11 +221,11 @@ func (h *Handler) GetAuditSummary(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"summary": fiber.Map{
-			"total_24h":          total24h,
-			"total_7d":           total7d,
-			"total_30d":          total30d,
-			"security_events":    len(securityEvents),
-			"failed_operations":  totalFailed,
+			"total_24h":         total24h,
+			"total_7d":          total7d,
+			"total_30d":         total30d,
+			"security_events":   len(securityEvents),
+			"failed_operations": totalFailed,
 		},
 	})
 }
@@ -291,14 +272,9 @@ func (h *Handler) GetAvailableActions(c *fiber.Ctx) error {
 // PurgeOldLogs purges old audit logs (admin only)
 // DELETE /api/v1/audit/logs/purge
 func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	retentionDays := 90 // default

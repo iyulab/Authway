@@ -1,6 +1,7 @@
 package invitation
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"errors"
 	"net/url"
 
@@ -27,14 +28,9 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 // CreateInvitation creates a new organization invitation
 // POST /api/v1/invitations
 func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required", "name the tenant with the X-Tenant-ID header or the tenant_id query parameter")
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid tenant ID")
+		return err
 	}
 
 	// A signed-in user is attributed as the inviter. The Admin Console
@@ -94,14 +90,9 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 // ListInvitations lists all invitations for the tenant
 // GET /api/v1/invitations
 func (h *Handler) ListInvitations(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required", "name the tenant with the X-Tenant-ID header or the tenant_id query parameter")
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid tenant ID")
+		return err
 	}
 
 	status := InvitationStatus(c.Query("status"))

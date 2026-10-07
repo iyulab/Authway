@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 
 	"authway/apps/central/api/pkg/apierror"
@@ -43,14 +44,9 @@ func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditA
 // CreateWebhook creates a new webhook
 // POST /api/v1/webhooks
 func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	var req CreateWebhookRequest
@@ -95,14 +91,9 @@ func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
 // ListWebhooks lists all webhooks for the tenant
 // GET /api/v1/webhooks
 func (h *Handler) ListWebhooks(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	webhooks, err := h.service.ListByTenant(tenantID)

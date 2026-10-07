@@ -3,6 +3,8 @@ package middleware
 import (
 	"errors"
 
+	"authway/apps/central/api/pkg/apierror"
+
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
@@ -48,6 +50,11 @@ func codeForStatus(status int) string {
 
 // ErrorHandler answers errors no handler turned into a response.
 func ErrorHandler(c *fiber.Ctx, err error) error {
+	var refusal *apierror.Refusal
+	if errors.As(err, &refusal) {
+		return c.Status(refusal.Status).JSON(ErrorResponse{Error: refusal.Message, Code: refusal.Code})
+	}
+
 	var fiberErr *fiber.Error
 	if errors.As(err, &fiberErr) {
 		return c.Status(fiberErr.Code).JSON(ErrorResponse{

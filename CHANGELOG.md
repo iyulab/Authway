@@ -57,10 +57,13 @@
 
 ### Fixed
 
-- **Inviting someone from the admin console works.** The console sent the
-  invitation without naming the selected tenant; the API refused it with `401`
-  and the console signed the administrator out. The invitations list also
-  showed every invitation on every page and ignored the status filter.
+- **Inviting someone, creating a webhook and starting an impersonation from
+  the admin console work.** These calls did not name the selected tenant; the
+  API refused them with `401` and the console signed the administrator out. The
+  console now names the selected tenant on every request (`X-Tenant-ID`), and
+  every admin call that needs a tenant and gets none — invitations, webhooks,
+  audit, impersonation — answers `400 tenant_required`. The invitations list
+  also showed every invitation on every page and ignored the status filter.
 - **Saving a client in the admin console no longer turns off consent
   skipping.** Reading a client did not return `skip_consent` or
   `skip_logout_consent`, so the edit form loaded them as off and wrote that

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/tenantscope"
 	"crypto/subtle"
 	"strings"
 
@@ -294,7 +295,7 @@ func (h *Handler) setTenantIDLocal(c *fiber.Ctx) {
 		tenantID = c.Get("X-Tenant-ID")
 	}
 	if tenantID != "" {
-		c.Locals("tenant_id", tenantID)
+		c.Locals(tenantscope.LocalKey, tenantID)
 	}
 }
 

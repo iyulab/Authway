@@ -1,6 +1,7 @@
 package impersonation
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 
 	"authway/apps/central/api/pkg/apierror"
@@ -26,14 +27,9 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 // StartImpersonation starts an impersonation session
 // POST /api/v1/admin/impersonate
 func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - tenant_id required"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	// A signed-in admin is attributed by id. The Admin Console authenticates
@@ -90,10 +86,10 @@ func (h *Handler) StartImpersonation(c *fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"message":       "impersonation session started",
-		"token":         response.Token,
-		"expires_at":    response.ExpiresAt,
-		"target_user":   response.TargetUser,
+		"message":     "impersonation session started",
+		"token":       response.Token,
+		"expires_at":  response.ExpiresAt,
+		"target_user": response.TargetUser,
 	})
 }
 
@@ -154,14 +150,9 @@ func (h *Handler) EndImpersonation(c *fiber.Ctx) error {
 // GetActiveSessions gets all active impersonation sessions
 // GET /api/v1/admin/impersonate/sessions
 func (h *Handler) GetActiveSessions(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	sessions, err := h.service.GetActiveSessions(tenantID)
@@ -179,14 +170,9 @@ func (h *Handler) GetActiveSessions(c *fiber.Ctx) error {
 // GetSessionHistory gets impersonation session history
 // GET /api/v1/admin/impersonate/history
 func (h *Handler) GetSessionHistory(c *fiber.Ctx) error {
-	tenantIDStr := c.Locals("tenant_id")
-	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-
-	tenantID, err := uuid.Parse(tenantIDStr.(string))
+	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return err
 	}
 
 	limit := 50

@@ -91,8 +91,8 @@ export const webhooksApi = {
   get: (id: string) =>
     api.get<{ webhook: Webhook }>(`/api/v1/webhooks/${id}`),
 
+  // Created in the selected tenant, which the API client sends as X-Tenant-ID.
   create: (data: {
-    tenant_id: string
     name: string
     url: string
     events: string[]
@@ -155,20 +155,14 @@ export const invitationsApi = {
   get: (id: string) =>
     api.get<{ invitation: Invitation }>(`/api/v1/invitations/${id}`),
 
-  // The invitation is created in tenantId's tenant; the API refuses one that
-  // names no tenant.
-  create: (
-    tenantId: string,
-    data: {
-      email: string
-      role?: string
-      message?: string
-      expires_in_hours?: number
-    },
-  ) =>
-    api.post<{ invitation: Invitation; message: string }>('/api/v1/invitations', data, {
-      params: { tenant_id: tenantId },
-    }),
+  // Created in the selected tenant, which the API client sends as X-Tenant-ID.
+  create: (data: {
+    email: string
+    role?: string
+    message?: string
+    expires_in_hours?: number
+  }) =>
+    api.post<{ invitation: Invitation; message: string }>('/api/v1/invitations', data),
 
   revoke: (id: string) =>
     api.delete<{ message: string }>(`/api/v1/invitations/${id}`),

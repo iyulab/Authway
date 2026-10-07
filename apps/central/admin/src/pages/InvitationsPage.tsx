@@ -68,7 +68,7 @@ const InvitationsPage: React.FC = () => {
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: InvitationFormData) =>
-      invitationsApi.create(selectedTenantId, data),
+      invitationsApi.create(data),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setShowCreateModal(false)

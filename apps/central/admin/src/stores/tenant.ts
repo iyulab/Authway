@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Tenant } from '@/lib/api'
+import type { Tenant } from '@/lib/api'
 
 interface TenantState {
   selectedTenant: Tenant | null

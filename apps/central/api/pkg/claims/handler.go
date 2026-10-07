@@ -1,6 +1,7 @@
 package claims
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -27,7 +28,10 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 func (h *Handler) HandleUpdateClaims(c *fiber.Ctx) error {
 	// Get user ID and tenant ID from context (set by auth middleware)
 	userID := c.Locals("user_id").(uuid.UUID)
-	tenantID := c.Locals("tenant_id").(uuid.UUID)
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
 
 	// Parse request body
 	var req UpdateClaimsRequest
@@ -63,7 +67,10 @@ func (h *Handler) HandleUpdateClaims(c *fiber.Ctx) error {
 func (h *Handler) HandleGetClaims(c *fiber.Ctx) error {
 	// Get user ID and tenant ID from context (set by auth middleware)
 	userID := c.Locals("user_id").(uuid.UUID)
-	tenantID := c.Locals("tenant_id").(uuid.UUID)
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
 
 	// Get claims
 	resp, err := h.service.GetClaims(c.Context(), userID, tenantID)
@@ -81,7 +88,10 @@ func (h *Handler) HandleGetClaims(c *fiber.Ctx) error {
 func (h *Handler) HandleDeleteClaim(c *fiber.Ctx) error {
 	// Get user ID and tenant ID from context (set by auth middleware)
 	userID := c.Locals("user_id").(uuid.UUID)
-	tenantID := c.Locals("tenant_id").(uuid.UUID)
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
 
 	// Get claim key from URL parameter
 	claimKey := c.Params("claim_key")
@@ -110,7 +120,10 @@ func (h *Handler) HandleDeleteClaim(c *fiber.Ctx) error {
 func (h *Handler) HandleUpdateUserClaims(c *fiber.Ctx) error {
 	// Get user ID and tenant ID from context (set by auth middleware)
 	userID := c.Locals("user_id").(uuid.UUID)
-	tenantID := c.Locals("tenant_id").(uuid.UUID)
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
 
 	// Parse request body
 	var req UpdateUserClaimsRequest
@@ -146,7 +159,10 @@ func (h *Handler) HandleUpdateUserClaims(c *fiber.Ctx) error {
 func (h *Handler) HandleGetUserClaims(c *fiber.Ctx) error {
 	// Get user ID and tenant ID from context (set by auth middleware)
 	userID := c.Locals("user_id").(uuid.UUID)
-	tenantID := c.Locals("tenant_id").(uuid.UUID)
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
 
 	// Get user claims
 	resp, err := h.service.GetUserClaims(c.Context(), userID, tenantID)
