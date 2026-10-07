@@ -69,7 +69,7 @@ foreach ($app in $apps) {
     Write-Host "🔍 $($app.Label) ($($app.Name)) — STRATEGIES_ACCESS_TOKEN" -ForegroundColor Gray
     $raw = az containerapp show -n $app.Name -g $resourceGroup `
         --query "properties.template.containers[0].env[?name=='STRATEGIES_ACCESS_TOKEN']" `
-        -o json 2>&1
+        -o json --only-show-errors 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ $($app.Label): az containerapp show 실패 — $raw" -ForegroundColor Red
@@ -101,7 +101,7 @@ if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
     $expected = Get-HydraFlowUrls -EnvVars $envVars
     $raw = az containerapp show -n $publicApp -g $resourceGroup `
         --query "properties.template.containers[0].env[?starts_with(name, 'URLS_')]" `
-        -o json 2>&1
+        -o json --only-show-errors 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ public: az containerapp show 실패 — $raw" -ForegroundColor Red
         $failed = $true
