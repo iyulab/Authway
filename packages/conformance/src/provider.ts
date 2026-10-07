@@ -94,10 +94,12 @@ export class Provider {
     return this.tenant
   }
 
-  async createPublicClient(): Promise<TestClient> {
+  /** Registers a public client; `signInMethods` overrides the provider's default sign-in methods. */
+  async createPublicClient(options: { signInMethods?: string[] } = {}): Promise<TestClient> {
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
+        ...(options.signInMethods ? { enabled_auth_providers: options.signInMethods } : {}),
         tenant_id: await this.tenantId(),
         name: `conformance-${randomToken(4)}`,
         public: true,
@@ -272,18 +274,55 @@ export class Provider {
 
   /** Submits a password on an open login screen and, if accepted, finishes the flow. */
   async continueLogin(attempt: LoginAttempt, user: TestUser): Promise<LoginOutcome> {
-    const { browser, client, scopes, pkce, flow, remember } = attempt
+    const { browser, flow, remember } = attempt
     const loginRes = await this.submitPassword(browser, flow, user, remember)
     const loginBody = await loginRes.text()
     if (!loginRes.ok) return { kind: 'rejected', status: loginRes.status, body: loginBody }
     const { next: step, redirect_to: afterLogin } = JSON.parse(loginBody) as { next?: string; redirect_to?: string }
     if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: loginRes.status, body: loginBody }
+    return this.finishAuthorization(attempt, afterLogin, loginRes.status)
+  }
+
+  /**
+   * Signs in with an emailed link: asks the login flow to send one, reads it
+   * from the mail capture, and redeems it in the browser that started the
+   * sign-in.
+   */
+  async continueWithMagicLink(attempt: LoginAttempt, email: string): Promise<LoginOutcome> {
+    const { browser, flow } = attempt
+    const sendRes = await browser.fetch(this.loginFlowUrl(flow, '/magic-link'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    const sendBody = await sendRes.text()
+    if (!sendRes.ok) return { kind: 'rejected', status: sendRes.status, body: sendBody }
+    if ((JSON.parse(sendBody) as { next?: string }).next !== 'email_sent') throw new Error(`Unexpected answer: ${sendBody}`)
+
+    const link = await waitForLink(this.config.mailApi, email, '/magic-link')
+    const token = link.searchParams.get('token')
+    if (!token) throw new Error(`Sign-in link carries no token: ${link}`)
+    const redeemRes = await browser.fetch(`${this.config.api}/api/v1/magic-links/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    const redeemBody = await redeemRes.text()
+    if (!redeemRes.ok) return { kind: 'rejected', status: redeemRes.status, body: redeemBody }
+    const { next: step, redirect_to: afterLogin } = JSON.parse(redeemBody) as { next?: string; redirect_to?: string }
+    if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: redeemRes.status, body: redeemBody }
+    return this.finishAuthorization(attempt, afterLogin, redeemRes.status)
+  }
+
+  /** From the authorization server's answer to an accepted login to tokens: consent if asked, then the code exchange. */
+  private async finishAuthorization(attempt: LoginAttempt, afterLogin: string, status: number): Promise<LoginOutcome> {
+    const { browser, client, scopes, pkce } = attempt
 
     // After login the authorization server either answers the client or opens the consent screen.
     let next = await this.followUntil(browser, afterLogin, (u) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error'))
     if (next.searchParams.has('error')) {
       // The provider ended the whole authorization request instead of answering the login screen.
-      return { kind: 'rejected', status: loginRes.status, body: next.toString() }
+      return { kind: 'rejected', status, body: next.toString() }
     }
     if (!next.searchParams.has('code')) {
       const consentRes = await this.acceptConsent(browser, this.consentFlowFrom(next), scopes)

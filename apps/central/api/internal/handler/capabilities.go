@@ -23,7 +23,8 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - multi_tenant: tenants are a dimension of the admin API
 //   - providers: social providers this deployment has credentials for (a
 //     client may add its own credentials for some of them)
-//   - magic_link: email sign-in links complete a login flow
+//   - magic_link: emailed sign-in links (opened in the browser that started
+//     the sign-in) complete a login flow
 //   - mfa: second factors a user can enrol
 //   - signup_modes: the values a tenant's signup_mode accepts
 //   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
@@ -32,7 +33,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"multi_tenant":   true,
 		"providers":      h.social.ConfiguredProviders(),
-		"magic_link":     false,
+		"magic_link":     true,
 		"mfa":            []string{"totp"},
 		"signup_modes":   []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
 		"token_exchange": false,

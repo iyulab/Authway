@@ -26,16 +26,16 @@ type MagicLink struct {
 	// TokenHash is the SHA-256 hex digest of the emailed token. The plaintext
 	// never touches the database — a magic link is a login factor on its own,
 	// so a DB read must not yield a usable one. See migration 019.
-	TokenHash   string             `json:"-" gorm:"column:token_hash;size:64;not null;uniqueIndex"`
-	TokenType   MagicLinkTokenType `json:"token_type" gorm:"size:50;not null"`
-	ClientID    string             `json:"client_id" gorm:"size:255"`
-	RedirectURI string             `json:"redirect_uri" gorm:"size:2048"`
-	State       string             `json:"state" gorm:"size:255"`
-	IPAddress   string             `json:"ip_address" gorm:"size:45"`
-	UserAgent   string             `json:"user_agent" gorm:"size:512"`
-	UsedAt      *time.Time         `json:"used_at"`
-	ExpiresAt   time.Time          `json:"expires_at" gorm:"not null;index"`
-	CreatedAt   time.Time          `json:"created_at"`
+	TokenHash string             `json:"-" gorm:"column:token_hash;size:64;not null;uniqueIndex"`
+	TokenType MagicLinkTokenType `json:"token_type" gorm:"size:50;not null"`
+	// LoginFlow is the login flow the link signs in to. Redeeming the link
+	// completes that flow, so the application receives ordinary OAuth tokens.
+	LoginFlow string     `json:"-" gorm:"column:login_flow"`
+	IPAddress string     `json:"ip_address" gorm:"size:45"`
+	UserAgent string     `json:"user_agent" gorm:"size:512"`
+	UsedAt    *time.Time `json:"used_at"`
+	ExpiresAt time.Time  `json:"expires_at" gorm:"not null;index"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // IsExpired checks if the magic link has expired
@@ -46,19 +46,6 @@ func (m *MagicLink) IsExpired() bool {
 // IsUsed checks if the magic link has been used
 func (m *MagicLink) IsUsed() bool {
 	return m.UsedAt != nil
-}
-
-// SendMagicLinkRequest represents the request to send a magic link
-type SendMagicLinkRequest struct {
-	Email       string `json:"email" validate:"required,email"`
-	ClientID    string `json:"client_id"`
-	RedirectURI string `json:"redirect_uri"`
-	State       string `json:"state"`
-}
-
-// VerifyMagicLinkRequest represents the request to verify a magic link
-type VerifyMagicLinkRequest struct {
-	Token string `json:"token" validate:"required"`
 }
 
 // MagicLinkResponse represents the response after sending a magic link

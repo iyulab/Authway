@@ -2,6 +2,18 @@
 
 ### Added
 
+- **Sign-in with an emailed link, as a step of the login flow.** A client that
+  enables `magic_link` gets an "Email me a sign-in link" option on the login
+  screen. `POST /api/v1/login-flows/{flow}/magic-link` (`{email}`, answers
+  `next: email_sent` whether or not the address may sign in) emails a link;
+  its landing page shows whose link it is (`POST /api/v1/magic-links/inspect`,
+  which does not use it up) and completes the login only when the user
+  continues (`POST /api/v1/magic-links/redeem`, answering `next: redirect`).
+  The application receives ordinary OAuth tokens. The link must be opened in
+  the browser that started the sign-in — the authorization server binds the
+  login to that browser. Sending is limited to 5 requests per 15 minutes from
+  one IP address.
+
 - **`GET /api/v1/capabilities`** — what a deployment offers: `multi_tenant`,
   `providers` (social providers it has credentials for), `magic_link`, `mfa`,
   `signup_modes`, and `token_exchange`/`ciba` (both `false`). The admin console
@@ -48,6 +60,9 @@
   invite-only behavior unchanged.
 
 ### Fixed
+
+- **Following a magic link now marks the address verified.** The flag was set
+  on the in-memory user only and never saved.
 
 - **RP-initiated logout no longer fails for clients on the default logout
   policy.** The logout backend looked for `post_logout_redirect_uri` in its
@@ -464,6 +479,14 @@
   used.
 
 ### Removed
+
+- **`POST /api/v1/auth/magic-link/send`, `POST /api/v1/auth/magic-link/verify`
+  and `GET /api/v1/auth/magic-link/status` (breaking).** The send endpoint was
+  public and took the tenant and the return address from the caller, and
+  verifying a link answered with user details but no credential an
+  application could trust — so nothing could safely sign a user in with it.
+  **Migration:** sign users in through the authorization-code flow and enable
+  `magic_link` on the client; the login screen offers the link.
 
 - **Client settings `logout_redirect_policy`, `default_logout_uri` and
   `allow_wildcard_logout` (breaking for the client API).** None of them could

@@ -3,7 +3,6 @@ package passwordless
 import (
 	"authway/apps/central/api/pkg/apierror"
 	"fmt"
-	"net/url"
 	"time"
 
 	"authway/apps/central/api/pkg/maillink"
@@ -36,7 +35,9 @@ type InvitationGate interface {
 
 // Service provides passwordless authentication functionality
 type Service interface {
-	SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, ipAddress, userAgent string) (*MagicLinkResponse, error)
+	// SendMagicLink emails a link that signs email in to loginFlow. An
+	// address that may not sign in gets the same answer and no link.
+	SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent string) (*MagicLinkResponse, error)
 	// VerifyMagicLink consumes the token: it marks the link used and may
 	// provision a user. It is not idempotent and must never back a GET.
 	VerifyMagicLink(token string) (*MagicLink, *user.User, error)
@@ -91,22 +92,22 @@ func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
 	return allowed
 }
 
-func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, ipAddress, userAgent string) (*MagicLinkResponse, error) {
+func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent string) (*MagicLinkResponse, error) {
 	token, err := generateToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 	expiresAt := time.Now().Add(s.tokenExpiry)
 	tokenType := TokenTypeLogin
-	if _, err := s.userService.GetByEmailAndTenant(tenantID, req.Email); err != nil {
+	if _, err := s.userService.GetByEmailAndTenant(tenantID, email); err != nil {
 		// No user yet — this link would provision one, which the
 		// invitation-only policy allows solely for an invited address.
-		if !s.mayProvision(tenantID, req.Email) {
+		if !s.mayProvision(tenantID, email) {
 			// Deliberately indistinguishable from success: a differing response
 			// would turn this public endpoint into a membership oracle. No link
 			// is created, so there is nothing to verify later.
 			s.logger.Warn("Magic link suppressed for uninvited address",
-				zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
+				zap.String("email", email), zap.String("tenant_id", tenantID.String()))
 			return &MagicLinkResponse{
 				Message:   "Magic link sent to your email",
 				ExpiresAt: expiresAt,
@@ -115,36 +116,29 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, req *SendMagicLinkRequest, i
 		tokenType = TokenTypeRegister
 	}
 	magicLink := &MagicLink{
-		TenantID:    tenantID,
-		Email:       req.Email,
-		TokenHash:   tokenhash.Hash(token),
-		TokenType:   tokenType,
-		ClientID:    req.ClientID,
-		RedirectURI: req.RedirectURI,
-		State:       req.State,
-		IPAddress:   ipAddress,
-		UserAgent:   userAgent,
-		ExpiresAt:   expiresAt,
+		TenantID:  tenantID,
+		Email:     email,
+		TokenHash: tokenhash.Hash(token),
+		TokenType: tokenType,
+		LoginFlow: loginFlow,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		ExpiresAt: expiresAt,
 	}
 	if err := s.db.Create(magicLink).Error; err != nil {
 		return nil, fmt.Errorf("failed to create magic link: %w", err)
 	}
-	// frontendURL is the auth UI, not the API — this link is opened by a human, and
-	// the page then POSTs the token to /auth/magic-link/verify. It previously
-	// pointed at /auth/magic-link/verify on the UI, a route that does not exist
-	// there (the page is mounted at /magic-link), so every emailed link 404'd.
+	// frontendURL is the auth UI, not the API — this link is opened by a
+	// human, and the page redeems the token only when they confirm.
 	linkURL := maillink.MagicLink(s.frontendURL, token)
-	if req.State != "" {
-		linkURL = fmt.Sprintf("%s&state=%s", linkURL, url.QueryEscape(req.State))
-	}
 	if s.emailSender != nil {
 		isNewUser := tokenType == TokenTypeRegister
-		if err := s.emailSender.SendMagicLinkEmail(req.Email, linkURL, isNewUser); err != nil {
-			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", req.Email))
+		if err := s.emailSender.SendMagicLinkEmail(email, linkURL, isNewUser); err != nil {
+			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", email))
 			return nil, fmt.Errorf("failed to send magic link email: %w", err)
 		}
 	}
-	s.logger.Info("Magic link sent", zap.String("email", req.Email), zap.String("token_type", string(tokenType)), zap.String("tenant_id", tenantID.String()))
+	s.logger.Info("Magic link sent", zap.String("email", email), zap.String("token_type", string(tokenType)), zap.String("tenant_id", tenantID.String()))
 	return &MagicLinkResponse{
 		Message:   "Magic link sent to your email",
 		ExpiresAt: expiresAt,
@@ -204,17 +198,26 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create user: %w", err)
 		}
-		u.EmailVerified = true
-		s.userService.Update(u.ID, &user.UpdateUserRequest{})
+		s.markEmailVerified(u)
 		s.logger.Info("Created user via magic link", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
 	} else {
 		if !u.EmailVerified {
-			u.EmailVerified = true
-			s.userService.Update(u.ID, &user.UpdateUserRequest{})
+			s.markEmailVerified(u)
 		}
 		s.logger.Info("User authenticated via magic link", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
 	}
 	return &magicLink, u, nil
+}
+
+// markEmailVerified records that the user proved control of the address by
+// following the link. A failure is logged, not fatal: the sign-in itself is
+// valid either way.
+func (s *service) markEmailVerified(u *user.User) {
+	if err := s.userService.UpdateEmailVerified(u.ID, true); err != nil {
+		s.logger.Error("Failed to mark email verified after magic link", zap.String("user_id", u.ID.String()), zap.Error(err))
+		return
+	}
+	u.EmailVerified = true
 }
 
 func (s *service) CleanupExpired() (int64, error) {

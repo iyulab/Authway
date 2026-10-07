@@ -19,7 +19,6 @@ import (
 //     client.sign_in_methods lists what to offer ("email" for the password
 //     form, then social providers): what the client allows and this
 //     deployment can actually run.
-//
 func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	flow := flowParam(c)
 

@@ -10,19 +10,10 @@ const provider = new Provider(loadConfig())
  * Every backend path the bundled login UI posts to, as the UI calls it. A path the
  * UI calls but the backend does not route is a screen that cannot work.
  *
- * Paths marked `knownBroken` currently 404 on the single backend the login UI
- * is meant to talk to. They are asserted with `it.fails`, so the moment one is
- * fixed this suite turns red and the marker has to be removed — the list can
- * only shrink.
- *
  * This hand-kept list goes away once the login UI and the backend share a
  * machine-readable API contract.
  */
-const LOGIN_UI_POSTS: { path: string; knownBroken?: boolean }[] = [
-  { path: '/api/v1/auth/magic-link/verify' },
-  // The magic-link request form posts here, but the backend has no
-  // magic-link step inside the sign-in flow yet.
-  { path: '/auth/magic-link/request', knownBroken: true },
+const LOGIN_UI_POSTS: { path: string }[] = [
   { path: '/api/email/forgot-password' },
   { path: '/api/email/send-verification' },
   { path: '/api/email/reset-password' },
@@ -147,9 +138,8 @@ describe('login UI backend routes', () => {
     })
   }
 
-  for (const { path, knownBroken } of LOGIN_UI_POSTS) {
-    const test = knownBroken ? it.fails : it
-    test(`routes POST ${path}`, async () => {
+  for (const { path } of LOGIN_UI_POSTS) {
+    it(`routes POST ${path}`, async () => {
       const res = await fetch(`${provider.config.api}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

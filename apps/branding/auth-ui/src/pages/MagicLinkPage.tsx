@@ -1,259 +1,223 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { getConfig } from '../config'
+import { followRedirect, submitLoginStep } from '../utils/loginFlow'
 
+interface LinkInfo {
+  valid: boolean
+  email?: string
+  error?: string
+}
+
+// Full class names, so the stylesheet build sees them.
+const TONES = {
+  indigo: { circle: 'bg-indigo-100', icon: 'text-indigo-600' },
+  green: { circle: 'bg-green-100', icon: 'text-green-600' },
+  red: { circle: 'bg-red-100', icon: 'text-red-600' },
+}
+
+const cardIcon = (tone: keyof typeof TONES, path: string) => (
+  <div className={`mx-auto h-12 w-12 flex items-center justify-center rounded-full ${TONES[tone].circle}`}>
+    <svg className={`h-6 w-6 ${TONES[tone].icon}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+    </svg>
+  </div>
+)
+const MAIL_ICON = 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
+const LINK_ICON = 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1'
+const ERROR_ICON = 'M6 18L18 6M6 6l12 12'
+
+/**
+ * Sign-in by emailed link, in two halves:
+ *  - `?flow=` — part of a login: ask for the address and send the link.
+ *  - `?token=` — the link's landing page: confirm, then complete the login.
+ *    It must be the browser that started the sign-in.
+ * The landing page never redeems on load: mail scanners open links too.
+ */
 const MagicLinkPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-
-  const [email, setEmail] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSent, setIsSent] = useState(false)
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
   const flow = searchParams.get('flow')
   const token = searchParams.get('token')
 
-  // Handle magic link verification
+  const [email, setEmail] = useState('')
+  const [isSent, setIsSent] = useState(false)
+  const [isBusy, setIsBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null)
+
+  const post = async (path: string, body: unknown) => {
+    const res = await fetch(`${getConfig().apiUrl}/api/v1${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return res.json()
+  }
+
+  // Landing: say whose link this is before anything is used up.
   useEffect(() => {
     if (!token) return
+    post('/magic-links/inspect', { token })
+      .then((data: LinkInfo) => setLinkInfo(data))
+      .catch(() => setLinkInfo({ valid: false }))
+  }, [token])
 
-    const verifyToken = async () => {
-      setIsVerifying(true)
-      setError(null)
-
-      try {
-        const apiUrl = getConfig().apiUrl
-        const response = await fetch(`${apiUrl}/api/v1/auth/magic-link/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Verification failed')
-        }
-
-        const data = await response.json()
-
-        if (data.redirect_to) {
-          // Handle popup mode
-          const isPopupMode = window.opener !== null && window.opener !== window ||
-            sessionStorage.getItem('authway_popup_mode') === 'true'
-
-          if (isPopupMode) {
-            sessionStorage.removeItem('authway_popup_mode')
-          }
-
-          window.location.href = data.redirect_to
-        } else {
-          navigate('/')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Verification failed')
-      } finally {
-        setIsVerifying(false)
-      }
-    }
-
-    verifyToken()
-  }, [token, navigate])
-
-  const handleRequestMagicLink = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!email) {
-      setError(t('auth:validation.emailRequired', 'Email is required'))
-      return
-    }
-
-    setIsSubmitting(true)
+    if (!flow || !email) return
+    setIsBusy(true)
     setError(null)
-
     try {
-      const apiUrl = getConfig().apiUrl
-      const response = await fetch(`${apiUrl}/auth/magic-link/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          login_challenge: flow,
-        }),
-        credentials: 'include',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to send magic link')
+      const data = await submitLoginStep(flow, '/magic-link', { email })
+      if (data.next === 'email_sent') {
+        setIsSent(true)
+      } else {
+        setError(data.error || t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
       }
-
-      setIsSent(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send magic link')
+    } catch {
+      setError(t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
     } finally {
-      setIsSubmitting(false)
+      setIsBusy(false)
     }
   }
 
-  // Verifying token
-  if (token) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 px-4">
-          {isVerifying ? (
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">
-                {t('auth:magicLink.verifying', 'Verifying your magic link...')}
-              </p>
-            </div>
-          ) : error ? (
-            <div className="text-center">
-              <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-red-100">
-                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-              <h2 className="mt-6 text-2xl font-bold text-gray-900">
-                {t('auth:magicLink.invalidLink', 'Invalid Magic Link')}
-              </h2>
-              <p className="mt-2 text-sm text-red-600">{error}</p>
-              <button
-                onClick={() => navigate('/login')}
-                className="mt-4 text-indigo-600 hover:text-indigo-500"
-              >
-                {t('auth:magicLink.tryAgain', 'Try logging in again')}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )
+  const handleRedeem = async () => {
+    setIsBusy(true)
+    setError(null)
+    try {
+      const data = await post('/magic-links/redeem', { token })
+      if (data.next === 'redirect' && data.redirect_to) {
+        followRedirect(data.redirect_to)
+        return
+      }
+      setError(data.error || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+    } catch {
+      setError(t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+    }
+    setIsBusy(false)
   }
 
-  // Email sent success
-  if (isSent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-        <div className="absolute top-4 right-4">
-          <LanguageSwitcher variant="minimal" />
-        </div>
-
-        <div className="max-w-md w-full space-y-8">
-          <div className="text-center">
-            <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-green-100">
-              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-              {t('auth:magicLink.checkEmail', 'Check your email')}
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              {t('auth:magicLink.sentTo', 'We sent a magic link to')}
-            </p>
-            <p className="font-medium text-gray-900">{email}</p>
-            <p className="mt-4 text-sm text-gray-500">
-              {t('auth:magicLink.clickLink', 'Click the link in the email to sign in. The link expires in 15 minutes.')}
-            </p>
-          </div>
-
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                setIsSent(false)
-                setEmail('')
-              }}
-              className="text-sm text-indigo-600 hover:text-indigo-500"
-            >
-              {t('auth:magicLink.useDifferentEmail', 'Use a different email')}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Request magic link form
-  return (
+  const page = (children: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
       <div className="absolute top-4 right-4">
         <LanguageSwitcher variant="minimal" />
       </div>
-
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
-            <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-          </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            {t('auth:magicLink.title', 'Sign in with Magic Link')}
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            {t('auth:magicLink.description', 'We\'ll send you a secure link to sign in without a password')}
-          </p>
-        </div>
-
-        <form onSubmit={handleRequestMagicLink} className="mt-8 space-y-6">
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{error}</div>
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              {t('auth:login.emailLabel', 'Email address')}
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder={t('auth:login.emailPlaceholder', 'you@example.com')}
-              autoComplete="email"
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting || !email}
-              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {t('common:sending', 'Sending...')}
-                </span>
-              ) : (
-                t('auth:magicLink.sendLink', 'Send Magic Link')
-              )}
-            </button>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate(`/login${flow ? `?flow=${encodeURIComponent(flow)}` : ''}`)}
-              className="text-sm text-indigo-600 hover:text-indigo-500"
-            >
-              {t('auth:magicLink.backToLogin', 'Back to login')}
-            </button>
-          </div>
-        </form>
-      </div>
+      <div className="max-w-md w-full space-y-8">{children}</div>
     </div>
+  )
+
+  // ---- landing page of an emailed link ----
+  if (token) {
+    if (!linkInfo) {
+      return page(
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+        </div>
+      )
+    }
+    if (!linkInfo.valid || error) {
+      return page(
+        <div className="text-center">
+          {cardIcon('red', ERROR_ICON)}
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
+          <p className="mt-2 text-sm text-red-600">{error || linkInfo.error}</p>
+          <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
+        </div>
+      )
+    }
+    return page(
+      <div className="text-center">
+        {cardIcon('indigo', LINK_ICON)}
+        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.confirmTitle', 'Sign in')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.confirmAs', 'Continue as')}</p>
+        <p className="font-medium text-gray-900">{linkInfo.email}</p>
+        <button
+          type="button"
+          onClick={handleRedeem}
+          disabled={isBusy}
+          className="mt-6 w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+        >
+          {t('auth:magicLink.continue', 'Continue')}
+        </button>
+      </div>
+    )
+  }
+
+  // ---- part of a login: send the link ----
+  if (!flow) {
+    return page(
+      <div className="text-center">
+        {cardIcon('red', ERROR_ICON)}
+        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
+        <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
+      </div>
+    )
+  }
+
+  if (isSent) {
+    return page(
+      <div className="text-center">
+        {cardIcon('green', MAIL_ICON)}
+        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.checkEmail', 'Check your email')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.sentTo', 'If this address can sign in, we sent a link to')}</p>
+        <p className="font-medium text-gray-900">{email}</p>
+        <p className="mt-4 text-sm text-gray-500">
+          {t('auth:magicLink.sameBrowser', 'Open the link in this browser within 15 minutes to sign in.')}
+        </p>
+      </div>
+    )
+  }
+
+  return page(
+    <>
+      <div className="text-center">
+        {cardIcon('indigo', LINK_ICON)}
+        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.title', 'Sign in with an email link')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.description', "We'll email you a link to sign in without a password")}</p>
+      </div>
+      <form onSubmit={handleSend} className="mt-8 space-y-6">
+        {error && (
+          <div className="rounded-md bg-red-50 p-4">
+            <div className="text-sm text-red-700">{error}</div>
+          </div>
+        )}
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            {t('auth:login.emailLabel', 'Email address')}
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            placeholder={t('auth:login.emailPlaceholder', 'you@example.com')}
+            autoComplete="email"
+            autoFocus
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={isBusy || !email}
+          className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {t('auth:magicLink.sendLink', 'Email me a sign-in link')}
+        </button>
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => navigate(`/login?flow=${encodeURIComponent(flow)}`)}
+            className="text-sm text-indigo-600 hover:text-indigo-500"
+          >
+            {t('auth:magicLink.backToLogin', 'Back to sign in')}
+          </button>
+        </div>
+      </form>
+    </>
   )
 }
 

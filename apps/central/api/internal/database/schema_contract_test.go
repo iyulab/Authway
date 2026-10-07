@@ -109,7 +109,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		}, "impersonation_sessions"},
 		{"magic_link", &passwordless.MagicLink{
 			TenantID: tenantID, Email: "c@example.com", TokenHash: tokenhash.Hash(uuid.New().String()),
-			TokenType: passwordless.TokenTypeLogin, ExpiresAt: future,
+			TokenType: passwordless.TokenTypeLogin, LoginFlow: "flow", ExpiresAt: future,
 		}, "magic_link_tokens"},
 		{"webhook", &webhook.Webhook{
 			TenantID: tenantID, Name: "contract", URL: "https://example.com/hook",

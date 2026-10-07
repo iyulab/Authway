@@ -25,7 +25,6 @@ type NewFeatureServices struct {
 	InvitationService    invitation.Service
 	InvitationHandler    *invitation.Handler
 	PasswordlessService  passwordless.Service
-	PasswordlessHandler  *passwordless.Handler
 	ImpersonationService impersonation.Service
 	ImpersonationHandler *impersonation.Handler
 }
@@ -61,7 +60,6 @@ func InitNewFeatureServices(
 	// invitationService doubles as the passwordless invitation gate — magic-link
 	// provisioning is allowed only for an invited address (invitation-only).
 	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL)
-	passwordlessHandler := passwordless.NewHandler(passwordlessService, logger)
 
 	// Impersonation Service
 	impersonationService := impersonation.NewService(db, userService, auditService, logger)
@@ -75,7 +73,6 @@ func InitNewFeatureServices(
 		InvitationService:    invitationService,
 		InvitationHandler:    invitationHandler,
 		PasswordlessService:  passwordlessService,
-		PasswordlessHandler:  passwordlessHandler,
 		ImpersonationService: impersonationService,
 		ImpersonationHandler: impersonationHandler,
 	}
@@ -83,8 +80,6 @@ func InitNewFeatureServices(
 
 // RegisterRoutes registers all new feature routes
 func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth fiber.Handler) {
-	// Passwordless authentication routes (public endpoints)
-	s.PasswordlessHandler.RegisterRoutes(v1)
 
 	// Invitation routes (mixed public/protected)
 	s.InvitationHandler.RegisterRoutes(v1, jwtAuth, adminAuth)

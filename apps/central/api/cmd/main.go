@@ -337,6 +337,13 @@ func main() {
 	// A page navigation (not fetch): the browser goes on to the provider.
 	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
 
+	// Emailed sign-in links: sent from the login screen, redeemed from the
+	// link's landing page in the same browser.
+	magicLinkHandler := handler.NewMagicLinkFlowHandler(authHandler, newFeatureServices.PasswordlessService)
+	v1.Post("/login-flows/:flow/magic-link", ratelimitmw.MagicLinkRateLimit(redisClient), magicLinkHandler.Send)
+	v1.Post("/magic-links/inspect", magicLinkHandler.Inspect)
+	v1.Post("/magic-links/redeem", loginRateLimit, magicLinkHandler.Redeem)
+
 	// Consent and logout screens: what to ask, and the user's answer.
 	v1.Get("/consent-flows/:flow", authHandler.GetConsentFlow)
 	v1.Post("/consent-flows/:flow/accept", authHandler.AcceptConsent)

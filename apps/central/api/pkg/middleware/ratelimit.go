@@ -71,8 +71,8 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		if blocked > 0 {
 			ttl, _ := cfg.RedisClient.TTL(ctx, blockKey).Result()
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "too_many_requests",
-				"message": "Too many failed attempts. Please try again later.",
+				"error":       "too_many_requests",
+				"message":     "Too many failed attempts. Please try again later.",
 				"retry_after": int(ttl.Seconds()),
 			})
 		}
@@ -85,8 +85,8 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 			cfg.RedisClient.Set(ctx, blockKey, "1", cfg.BlockDuration)
 			cfg.RedisClient.Del(ctx, key)
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "too_many_requests",
-				"message": "Rate limit exceeded. You have been temporarily blocked.",
+				"error":       "too_many_requests",
+				"message":     "Rate limit exceeded. You have been temporarily blocked.",
 				"retry_after": int(cfg.BlockDuration.Seconds()),
 			})
 		}
@@ -95,6 +95,7 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		return c.Next()
 	}
 }
+
 // IncrementRateLimitOnFailure increments rate limit counter on failed attempt
 func IncrementRateLimitOnFailure(c *fiber.Ctx) {
 	key, ok := c.Locals("rate_limit_key").(string)
@@ -137,6 +138,19 @@ func LoginRateLimit(redisClient *redis.Client) fiber.Handler {
 		SkipOnError:    true,
 	}
 	return RateLimit(cfg)
+}
+
+// MagicLinkRateLimit limits sign-in link emails. The handler counts every
+// request (each one may send an email), not just failures.
+func MagicLinkRateLimit(redisClient *redis.Client) fiber.Handler {
+	return RateLimit(RateLimitConfig{
+		RedisClient:    redisClient,
+		MaxAttempts:    5,
+		WindowDuration: 15 * time.Minute,
+		BlockDuration:  15 * time.Minute,
+		KeyPrefix:      "ratelimit:magiclink:",
+		SkipOnError:    true,
+	})
 }
 
 // RegisterRateLimit creates rate limiting for registration endpoints

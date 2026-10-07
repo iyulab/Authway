@@ -333,8 +333,8 @@ const LoginPage: React.FC = () => {
             </>
           )}
 
-          {/* Social Login Providers */}
-          {hasSocialProviders() && (
+          {/* Other sign-in methods: an emailed link, social providers */}
+          {(hasSocialProviders() || isProviderEnabled('magic_link')) && (
             <div className="mt-6">
               {/* Divider - only show if email login is also enabled */}
               {isEmailLoginEnabled() && (
@@ -349,6 +349,14 @@ const LoginPage: React.FC = () => {
               )}
 
               <div className="space-y-3">
+                {isProviderEnabled('magic_link') && (
+                  <Link
+                    to={`/magic-link?flow=${encodeURIComponent(flow)}`}
+                    className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    {t('auth:magicLink.useLink', 'Email me a sign-in link')}
+                  </Link>
+                )}
                 {SOCIAL_PROVIDERS.filter(isProviderEnabled).map((provider) => (
                   <SocialLoginButton
                     key={provider}

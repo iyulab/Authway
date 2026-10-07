@@ -4,7 +4,7 @@ export type SocialProvider = 'google' | 'github' | 'microsoft' | 'apple'
 
 /** What a login-flow endpoint tells the screen to do next. */
 export interface FlowStep {
-  next?: 'form' | 'redirect' | 'mfa'
+  next?: 'form' | 'redirect' | 'mfa' | 'email_sent'
   redirect_to?: string
   mfa_challenge?: string
   error?: string

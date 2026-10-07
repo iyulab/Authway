@@ -82,12 +82,15 @@ func (s *SocialHandler) provider(name string) socialProvider {
 }
 
 // SignInMethodsFor lists how users of cl can sign in here: "email" when the
-// client allows passwords, then each social provider the client enables and
-// someone (the client or the deployment) has credentials for.
+// client allows passwords, "magic_link" when it allows emailed links, then
+// each social provider the client enables and someone (the client or the
+// deployment) has credentials for.
 func (s *SocialHandler) SignInMethodsFor(cl *client.Client) []string {
 	out := []string{}
-	if cl.AllowsSignInMethod("email") {
-		out = append(out, "email")
+	for _, method := range []string{"email", "magic_link"} {
+		if cl.AllowsSignInMethod(method) {
+			out = append(out, method)
+		}
 	}
 	for _, name := range socialProviderNames {
 		if p := s.provider(name); p != nil && cl.AllowsSignInMethod(name) && p.ConfiguredFor(cl.ClientID) {

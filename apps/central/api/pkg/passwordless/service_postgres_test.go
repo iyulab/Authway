@@ -128,7 +128,7 @@ func TestSendMagicLink_UninvitedAddress_IssuesNoToken(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("stranger-%s@example.com", uuid.New().String()[:8])
 
-	resp, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test")
+	resp, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test")
 	if err != nil {
 		t.Fatalf("response must not reveal that the address is uninvited, got error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestMagicLink_InvitedAddress_ProvisionsUser(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	if n := f.linkCount(t, email); n != 1 {
@@ -191,7 +191,7 @@ func TestVerifyMagicLink_RevokedInvitation_Denies(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -221,7 +221,7 @@ func TestSendMagicLink_ExistingUser_IsUnaffected(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM users WHERE id = ?`, u.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	if n := f.linkCount(t, email); n != 1 {
@@ -248,7 +248,7 @@ func TestInspectMagicLink_DoesNotConsume(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -292,7 +292,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, &SendMagicLinkRequest{Email: email}, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -302,6 +302,16 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 		t.Fatalf("first verify: %v", err)
 	}
 	defer f.db.Exec(`DELETE FROM users WHERE id = ?`, u.ID)
+
+	// Following the link proves control of the address, and that must be
+	// stored — not only set on the returned value.
+	var verified bool
+	if err := f.db.Raw(`SELECT email_verified FROM users WHERE id = ?`, u.ID).Scan(&verified).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !verified {
+		t.Error("email_verified was not saved after redeeming a magic link")
+	}
 
 	if _, _, err := f.svc.VerifyMagicLink(token); err == nil {
 		t.Error("a magic link must be redeemable only once")

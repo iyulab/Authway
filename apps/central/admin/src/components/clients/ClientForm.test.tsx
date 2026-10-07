@@ -223,7 +223,7 @@ describe('ClientForm — social providers follow the server capabilities', () =>
   const capabilities = {
     multi_tenant: true,
     providers: ['google'],
-    magic_link: false,
+    magic_link: true,
     mfa: ['totp'],
     signup_modes: ['invite_only', 'open'],
     token_exchange: false,
@@ -237,6 +237,7 @@ describe('ClientForm — social providers follow the server capabilities', () =>
     await waitFor(() => expect(screen.getByLabelText('GitHub')).toBeDisabled())
     expect(screen.getByLabelText('Google')).toBeEnabled()
     expect(screen.getAllByText('Not configured on this server').length).toBe(3) // GitHub, Microsoft, Apple
+    expect(screen.getByLabelText('Email link (passwordless)')).toBeEnabled()
   })
 
   it('keeps a provider the client has its own credentials for', async () => {
