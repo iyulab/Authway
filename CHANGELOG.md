@@ -604,7 +604,7 @@
   (`AUTHWAY_APP_FRONTEND_URL`), and startup fails if it is missing, equal to
   `base_url`, or a loopback address in production — the last case because Viper
   ignores an empty environment variable and silently falls back to the localhost
-  default. Reported by VibeBase.
+  default.
 
 - **A fresh instance can be given its first user.** Onboarding is
   invitation-only and the sole admin-side surface for creating a user is
@@ -790,9 +790,8 @@
 
 ## [0.4.0] - 2026-07-20
 
-> Run-17, triggered by consumer-reported issues from VibeBase. Minor because
-> `access_token_strategy` is a new backward-compatible API field; everything
-> else is a fix or docs.
+> Minor because `access_token_strategy` is a new backward-compatible API
+> field; everything else is a fix or docs.
 >
 > Verified on staging (see `scripts/deploy/POST-DEPLOY-VERIFY.md`): the client
 > validation rules, migration 015, per-client JWT issuance including offline
@@ -833,12 +832,11 @@
   Machine-to-machine clients previously had to invent a placeholder URI, which
   then propagated into `post_logout_redirect_uris` / `default_logout_uri` and
   became permanent configuration pollution. The Admin Console mirrors the rule.
-  Reported by VibeBase.
 - **Partial confidential-client credentials now return 400, not 500.** Supplying
   `client_id` without `client_secret` (or vice versa) is a caller mistake; it now
   returns a structured `ConfigError` (`confidential_client_partial_credentials`)
   naming the missing field, like every other client-config violation. The masked
-  secret is no longer echoed in the error message. Reported by VibeBase.
+  secret is no longer echoed in the error message.
 - **Hydra client payloads send `[]` rather than `null`** for a client with no
   redirect URIs.
 - **Creating a machine-to-machine client still failed with 500 after the rule
@@ -883,9 +881,9 @@
 
 ## [0.3.2] - 2026-04-15
 
-> **Note**: This entry was opened in Run-3 (2026-04-15) for the audit P4
-> wiring described below, then expanded in Run-7 (2026-04-27) with the
-> deployment-infrastructure changes recorded under "Operational (Run-7)"
+> **Note**: This entry was opened on 2026-04-15 for the audit wiring
+> described below, then expanded on 2026-04-27 with the
+> deployment-infrastructure changes recorded under "Operational"
 > at the bottom. Both sets of changes ship together when prod is updated
 > to `v0.3.2`. Date reflects original merge of the entry to follow the
 > per-merge-date convention used by 0.3.0/0.3.1.
@@ -930,18 +928,6 @@
   does **not** record audit (central API is the single source of truth).
   Prevents double-recording during future refactors.
 
-### Carry-Forward Issues Filed
-
-- `ISSUE-Authway-20260415-stale-auth-handler-tests.md` — `internal/handler/auth_test.go`
-  is `integration`-tagged and fails to compile due to drift (User field rename,
-  two added constructor arguments). Option A (real-DB integration rewrite)
-  recommended.
-- `ISSUE-Authway-20260415-admin-session-token-hashing.md` — Admin session tokens
-  are stored plaintext in the DB. Needs SHA-256 hash + constant-time compare.
-  Blocked on staging environment availability.
-- `ISSUE-Authway-20260415-module-consolidation.md` — `apps/branding/auth-api`
-  separate `go.mod` blocks shared-pkg reuse. Awaiting architecture review.
-
 ### Notes
 
 - `user.password_changed` constant remains unemitted. The only current
@@ -953,7 +939,7 @@
   session revocation is captured as `user.logout`.
 - `token.*` constants are owned by Hydra; central API does not record them.
 
-### Operational (Run-7, 2026-04-27)
+### Operational (2026-04-27)
 
 - **`scripts/deploy/` is now git-tracked** (commit `3c83b66`). Previously the
   entire directory was `.gitignore`d, so every deploy machine drifted
@@ -962,7 +948,7 @@
   logic, target wrappers, and `.env.example` templates are versioned.
 - **Hydra entrypoint args explicit on every deploy.**
   `publish-hydra.core.ps1` passes `--command "/bin/sh" --args "-c" "hydra serve all --dev"`
-  on each `az containerapp update`. Run-6 staging hit a regression where the
+  on each `az containerapp update`. A staging deploy hit a regression where the
   Container App had `args=["serve all --dev"]` as a single token; forcing
   prod's working pattern on every deploy prevents the regression returning.
 - **Migration 009** (`009_audit_logs_p4_columns.sql`, commit `cd8e35a`)
@@ -975,15 +961,14 @@
   Client" `Printf`, and marked `_shared/deploy-with-migration.ps1` as
   DEPRECATED (no callers across `scripts/deploy/` or `.github/`).
 
-### Removed (Run-7 pre-flight cleanup)
+### Removed (pre-deploy cleanup)
 
 - 4 dead helper files in `scripts/deploy/_shared/` that contained inline
   secrets: `hydra-admin-config.yaml`, `hydra-container-config.yaml`,
   `update-hydra-admin.ps1`, `test-oauth-client.ps1`. All confirmed never
   committed (git ledger empty for each path) — no rotation needed. The
   underlying `JWT_ACCESS_SECRET == Hydra SECRETS_SYSTEM` reuse pattern
-  observed in `prod/.env` is tracked separately in
-  `claudedocs/issues/ISSUE-Authway-20260427-hydra-secrets-system-jwt-reuse.md`.
+  observed in the production environment file is tracked separately.
 
 ## [0.3.1] - 2026-04-14
 
