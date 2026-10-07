@@ -47,7 +47,7 @@ https://auth.example.com/login?lang=en
 **Via SDK (future)**:
 ```typescript
 const client = new AuthwayClient({
-  domain: 'http://localhost:8081',
+  domain: 'http://localhost:8080',
   clientId: 'my-client-id',
   locale: 'ko' // Force specific language
 })
@@ -240,7 +240,7 @@ App → Popup (Google OAuth) → Consent → Redirect → postMessage → App (a
 {
   "redirect_uris": [
     "http://localhost:3000",           // Main app
-    "http://localhost:8081/callback"   // OAuth callback (for popup)
+    "http://localhost:3000/callback"   // Popup callback page in your app (imports @authway/client/popup-callback)
   ]
 }
 ```

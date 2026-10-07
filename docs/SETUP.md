@@ -261,7 +261,7 @@ function App() {
   return (
     <AuthwayProvider
       config={{
-        domain: 'http://localhost:8081',  // Your Auth Backend URL
+        domain: 'http://localhost:8080',  // Your Authway deployment (the API URL)
         clientId: 'my_spa_app',
         redirectUri: window.location.origin
       }}
@@ -308,7 +308,7 @@ npm install @authway/client
 import { AuthwayClient } from '@authway/client'
 
 const client = new AuthwayClient({
-  domain: 'http://localhost:8081',
+  domain: 'http://localhost:8080',
   clientId: 'my_spa_app',
   redirectUri: window.location.origin
 })
@@ -341,48 +341,30 @@ await client.logout()
 
 ## Configuration
 
-### Auth Backend Configuration
-
-The Auth Backend (port 8081) is your app's entry point.
-
-**Required Environment Variables**:
-
-```bash
-# Server
-PORT=8081
-HOST=localhost
-
-# Central API (internal)
-CENTRAL_API_URL=http://localhost:8080
-
-# OAuth
-OAUTH_CLIENT_ID=auth-backend-client
-OAUTH_CLIENT_SECRET=your-secret
-
-# Session
-SESSION_SECRET=random-session-secret
-COOKIE_DOMAIN=localhost
-```
+Server settings for the API (database, OAuth server, email, CORS) are in
+[CONFIGURATION.md](../CONFIGURATION.md).
 
 ### Auto-Discovery Endpoint
 
-Apps automatically discover OAuth configuration:
+The SDK finds the OAuth server from the deployment's bootstrap document:
 
 ```bash
-GET http://localhost:8081/.well-known/authway-config
+GET http://localhost:8080/.well-known/authway-config
 ```
 
 **Response**:
 ```json
 {
   "issuer": "http://localhost:4444",
-  "authorization_endpoint": "http://localhost:4444/oauth2/auth",
-  "token_endpoint": "http://localhost:4444/oauth2/token",
-  "userinfo_endpoint": "http://localhost:8081/userinfo",
-  "end_session_endpoint": "http://localhost:8081/logout",
-  "jwks_uri": "http://localhost:4444/.well-known/jwks.json"
+  "oauth_url": "http://localhost:4444",
+  "api_url": "http://localhost:8080",
+  "version": "0.5.0"
 }
 ```
+
+Endpoints (authorize, token, userinfo, end session, JWKS) then come from the
+issuer's standard OpenID Connect discovery document,
+`<issuer>/.well-known/openid-configuration`.
 
 ### CORS Configuration
 

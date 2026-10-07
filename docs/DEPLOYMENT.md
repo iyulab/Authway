@@ -33,8 +33,7 @@ Complete guide for deploying Authway to production environments.
 ```
 Internet → Azure Front Door → Container Apps Environment
   ├─ Hydra (OAuth Server)
-  ├─ Central API (Internal)
-  ├─ Auth Backend (Public)
+  ├─ Central API (Public — admin API and the login screens' backend)
   └─ Static Web Apps (Admin Dashboard, Auth UI)
 
 PostgreSQL ← Container Apps
@@ -98,30 +97,18 @@ az containerapp create \
   --environment authway-env \
   --image <registry>/authway-api:latest \
   --target-port 8080 \
-  --ingress internal \
+  --ingress external \
   --env-vars \
     DATABASE_URL="postgres://user:password@authway-db.postgres.database.azure.com/authway?sslmode=require" \
     HYDRA_ADMIN_URL="http://authway-hydra:4445" \
     HYDRA_PUBLIC_URL="https://oauth.authway.in"
 ```
 
-### 4. Deploy Auth Backend
+The central API is the login screens' backend too, so it takes external
+traffic: the authorization server sends browsers to its `/login`, `/consent`
+and `/logout`, which hand the login UI a flow id.
 
-```bash
-az containerapp create \
-  --name authway-auth-backend \
-  --resource-group authway \
-  --environment authway-env \
-  --image <registry>/auth-api:latest \
-  --target-port 8081 \
-  --ingress external \
-  --env-vars \
-    CENTRAL_API_URL="http://authway-api" \
-    OAUTH_CLIENT_ID="auth-backend" \
-    OAUTH_CLIENT_SECRET="<secure-secret>"
-```
-
-### 5. Deploy Static Web Apps
+### 4. Deploy Static Web Apps
 
 ```bash
 # Admin Dashboard
@@ -140,20 +127,20 @@ az staticwebapp create \
 The landing page (apex domain marketing site) is **not** an Azure Static Web
 App — see the Cloudflare Pages subsection below.
 
-### 6. Custom Domains & SSL
+### 5. Custom Domains & SSL
 
 ```bash
 # Add custom domain
 az containerapp hostname add \
-  --name authway-auth-backend \
+  --name authway-api \
   --resource-group authway \
-  --hostname auth.authway.in
+  --hostname api.authway.in
 
 # Bind SSL certificate
 az containerapp hostname bind \
-  --name authway-auth-backend \
+  --name authway-api \
   --resource-group authway \
-  --hostname auth.authway.in \
+  --hostname api.authway.in \
   --certificate <certificate-id>
 ```
 
@@ -243,17 +230,6 @@ services:
       - postgres
       - hydra
 
-  auth-backend:
-    build: ./apps/branding/auth-api
-    environment:
-      CENTRAL_API_URL: http://central-api:8080
-      OAUTH_CLIENT_ID: auth-backend
-      OAUTH_CLIENT_SECRET: ${AUTH_BACKEND_SECRET}
-    ports:
-      - "8081:8081"
-    depends_on:
-      - central-api
-
 volumes:
   postgres_data:
 ```
@@ -276,7 +252,7 @@ docker-compose up -d
 
 ### Overview
 
-CORS (Cross-Origin Resource Sharing) allows your frontend to communicate with the Auth Backend from different domains.
+CORS (Cross-Origin Resource Sharing) allows your frontend to communicate with the API from different domains.
 
 ### Database Configuration (Recommended)
 
@@ -361,21 +337,6 @@ HYDRA_PUBLIC_URL=https://oauth.authway.in
 PORT=8080
 LOG_LEVEL=info
 ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
-```
-
-### Auth Backend
-
-```bash
-# Required
-CENTRAL_API_URL=http://central-api:8080
-OAUTH_CLIENT_ID=auth-backend
-OAUTH_CLIENT_SECRET=<secure-secret>
-
-# Optional
-PORT=8081
-SESSION_SECRET=<random-32-char-string>
-COOKIE_DOMAIN=.authway.in
-COOKIE_SECURE=true
 ```
 
 ### Hydra
@@ -473,13 +434,14 @@ See [DATABASE.md](./DATABASE.md) for complete migration guide.
 
 **Full Deployment**:
 ```powershell
-# Deploy all services
-.\scripts\deploy\deploy-all.ps1 -ForceMigration
+# Deploy all services (prod/ or staging/ wrappers; see scripts/deploy/README.md)
+.\scripts\deploy\prod\deploy-all.ps1
 
 # Deploy individual services
-.\scripts\deploy\deploy-hydra.ps1
-.\scripts\deploy\deploy-api.ps1
-.\scripts\deploy\deploy-auth-backend.ps1
+.\scripts\deploy\prod\publish-hydra.ps1
+.\scripts\deploy\prod\publish-api.ps1
+.\scripts\deploy\prod\publish-auth-ui.ps1
+.\scripts\deploy\prod\publish-admin.ps1
 ```
 
 ### Health Checks
@@ -489,11 +451,9 @@ See [DATABASE.md](./DATABASE.md) for complete migration guide.
 # Hydra
 curl https://oauth.authway.in/health/ready
 
-# Central API
+# Central API (also serves the SDK bootstrap document)
 curl https://api.authway.in/health
-
-# Auth Backend
-curl https://auth.authway.in/.well-known/authway-config
+curl https://api.authway.in/.well-known/authway-config
 ```
 
 ---

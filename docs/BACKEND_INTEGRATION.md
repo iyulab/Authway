@@ -13,13 +13,13 @@ Authway uses a **dual-endpoint architecture** where frontend and backend compone
 
 | Component | Endpoint | Purpose |
 |-----------|----------|---------|
-| **Frontend** (SDK) | Auth Backend (`http://localhost:8081`) | User authentication, login flow |
+| **Frontend** (SDK) | Authway API (`http://localhost:8080`) | Sign-in; the SDK discovers the OAuth server from it |
 | **Backend** (API) | Ory Hydra (`http://localhost:4444`) | JWT token validation — **requires `access_token_strategy: "jwt"` on the client, see below** |
 
 ```
 ┌─────────────┐
 │  Frontend   │  @authway/react or @authway/client
-│   (SPA)     │  → Auth Backend (8081) for login
+│   (SPA)     │  → Authway API (8080) → OAuth server for login
 └─────────────┘  → Sends Bearer token to API
       │
       ↓ Authorization: Bearer {token}
@@ -152,7 +152,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // ✅ Use Hydra OAuth endpoint (NOT Auth Backend!)
+        // ✅ Use the OAuth server (issuer), not the Authway API
         var authority = builder.Configuration["Authway:Authority"];
         if (!string.IsNullOrEmpty(authority))
         {
@@ -566,20 +566,20 @@ app.post('/api/auth/logout', (req, res) => {
 
 ## Common Issues & Solutions
 
-### Issue 1: "Unable to obtain configuration from Auth Backend"
+### Issue 1: "Unable to obtain configuration" from the Authway API
 
 **Error**:
 ```
 IDX20803: Unable to obtain configuration from:
-'http://localhost:8081/.well-known/openid-configuration'
+'http://localhost:8080/.well-known/openid-configuration'
 ```
 
-**Cause**: Using Auth Backend URL as Authority
+**Cause**: Using the Authway API URL as Authority
 
 **Solution**: Use Hydra OAuth endpoint instead
 
 ```diff
-- options.Authority = "http://localhost:8081";  // ❌ Auth Backend
+- options.Authority = "http://localhost:8080";  // ❌ Authway API
 + options.Authority = "http://localhost:4444";  // ✅ Hydra
 ```
 
@@ -635,7 +635,7 @@ Use frontend to login and get access token, or use curl:
 
 ```bash
 # Login via Authway (returns authorization code)
-curl "http://localhost:8081/oauth2/auth?client_id=your-client-id&response_type=code&redirect_uri=http://localhost:3000&scope=openid%20profile%20email&audience=api"
+curl "http://localhost:4444/oauth2/auth?client_id=your-client-id&response_type=code&redirect_uri=http://localhost:3000&scope=openid%20profile%20email&audience=api"
 
 # Exchange code for token
 curl -X POST "http://localhost:4444/oauth2/token" \
