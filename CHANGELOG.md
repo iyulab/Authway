@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-07
+
+> Minor: the central API is the only login backend, and login, consent and
+> logout screens talk to it through flow endpoints keyed by an opaque flow id
+> (breaking for custom login screens — see `docs/api/login-flows.md`). New:
+> capabilities, sign-in by emailed link, per-tenant open sign-up, runtime
+> configuration for the UI apps, scoped service credentials. The SDK packages
+> are versioned separately.
+
 ### Added
 
 - **Sign-in with an emailed link, as a step of the login flow.** A client that
