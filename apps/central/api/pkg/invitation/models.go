@@ -34,9 +34,9 @@ type Invitation struct {
 	// InviterID is NULL for invitations created by the system actor (admin API
 	// key). The FK is ON DELETE SET NULL, so deleting a user orphans their
 	// invitations rather than destroying them.
-	InviterID  *uuid.UUID       `json:"inviter_id" gorm:"type:uuid"`
-	Email      string           `json:"email" gorm:"size:255;not null;index"`
-	Role       string           `json:"role" gorm:"size:50;default:member"`
+	InviterID *uuid.UUID `json:"inviter_id" gorm:"type:uuid"`
+	Email     string     `json:"email" gorm:"size:255;not null;index"`
+	Role      string     `json:"role" gorm:"size:50;default:member"`
 	// TokenHash is the SHA-256 hex digest of the invitation token. The
 	// plaintext never touches the database — an invitation token grants
 	// account-creation capability on its own, so a DB read must not yield a
@@ -81,11 +81,11 @@ type AcceptInvitationRequest struct {
 
 // InvitationResponse represents the invitation details response
 type InvitationResponse struct {
-	ID         string `json:"id"`
-	TenantName string `json:"tenant_name"`
-	InviterName string `json:"inviter_name"`
-	Email      string `json:"email"`
-	Role       string `json:"role"`
-	Message    string `json:"message"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	ID          string    `json:"id"`
+	TenantName  string    `json:"tenant_name"`
+	InviterName string    `json:"inviter_name"`
+	Email       string    `json:"email"`
+	Role        string    `json:"role"`
+	Message     string    `json:"message"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }

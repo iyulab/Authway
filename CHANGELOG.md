@@ -2,9 +2,10 @@
 
 ### Added
 
-- **The contract covers managing tenants, clients and users.** Creating,
-  reading, updating and deleting tenants; listing, reading and updating
-  clients and regenerating a secret; listing, reading and updating users. Every
+- **The contract covers managing tenants, clients, users and invitations.**
+  Creating, reading, updating and deleting tenants; listing, reading and
+  updating clients and regenerating a secret; listing, reading and updating
+  users; listing, reading, resending and revoking invitations. Every
   admin operation lists its `401`, and the conformance suite exercises each of
   them.
 
@@ -28,6 +29,15 @@
   Tenant refusals name their reason: `tenant_slug_taken`,
   `default_tenant_protected`, `tenant_has_users`, `tenant_has_clients`,
   `tenant_has_service_clients`.
+- **Invitation administration answers with codes and pages.** An admin call
+  that names no tenant answers `400 tenant_required` (it answered `401`, which
+  sent the admin console to its sign-in screen). Inviting an existing member or
+  an already-invited address answers `409` with `user_already_member` or
+  `invitation_already_pending`; revoking or resending one that is no longer
+  pending answers `409 invitation_not_pending`, and an unknown id `404`.
+  `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
+  `{invitations, total, limit, offset}` — it ignored them and answered
+  `{invitations, count}`.
 - **`email.sendway_base_url` has no default.** Set
   `AUTHWAY_EMAIL_SENDWAY_BASE_URL` when `AUTHWAY_EMAIL_USE_SENDWAY=true`; the API
   refuses to start without it.
@@ -47,6 +57,10 @@
 
 ### Fixed
 
+- **Inviting someone from the admin console works.** The console sent the
+  invitation without naming the selected tenant; the API refused it with `401`
+  and the console signed the administrator out. The invitations list also
+  showed every invitation on every page and ignored the status filter.
 - **Saving a client in the admin console no longer turns off consent
   skipping.** Reading a client did not return `skip_consent` or
   `skip_logout_consent`, so the edit form loaded them as off and wrote that

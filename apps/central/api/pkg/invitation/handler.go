@@ -1,6 +1,7 @@
 package invitation
 
 import (
+	"errors"
 	"net/url"
 
 	"authway/apps/central/api/pkg/apierror"
@@ -28,12 +29,12 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 	tenantIDStr := c.Locals("tenant_id")
 	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - tenant_id required"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required", "name the tenant with the X-Tenant-ID header or the tenant_id query parameter")
 	}
 
 	tenantID, err := uuid.Parse(tenantIDStr.(string))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid tenant ID")
 	}
 
 	// A signed-in user is attributed as the inviter. The Admin Console
@@ -48,28 +49,40 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 	if userIDStr != nil {
 		parsed, err := uuid.Parse(userIDStr.(string))
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
+			return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid user ID")
 		}
 		inviterID = &parsed
 	} else if isAdminConsole != nil && isAdminConsole.(bool) {
 		// system actor — nil inviter
 	} else {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized - user_id required"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized - user_id required")
 	}
 
 	var req CreateInvitationRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
 	}
 
 	if req.Email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "email is required"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "email is required")
 	}
 
 	invitation, err := h.service.Create(tenantID, inviterID, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to create invitation")})
+		switch {
+		case errors.Is(err, ErrAlreadyMember):
+			return apierror.Refuse(c, fiber.StatusConflict, "user_already_member", err.Error())
+		case errors.Is(err, ErrAlreadyInvited):
+			return apierror.Refuse(c, fiber.StatusConflict, "invitation_already_pending", err.Error())
+		case errors.Is(err, ErrTenantNotFound):
+			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", err.Error())
+		}
+		var pub *apierror.Public
+		if errors.As(err, &pub) {
+			return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", pub.Error())
+		}
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "failed to create invitation")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -83,23 +96,40 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 func (h *Handler) ListInvitations(c *fiber.Ctx) error {
 	tenantIDStr := c.Locals("tenant_id")
 	if tenantIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required", "name the tenant with the X-Tenant-ID header or the tenant_id query parameter")
 	}
 
 	tenantID, err := uuid.Parse(tenantIDStr.(string))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid tenant ID"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid tenant ID")
 	}
 
-	invitations, err := h.service.ListByTenant(tenantID)
+	status := InvitationStatus(c.Query("status"))
+	switch status {
+	case "", StatusPending, StatusAccepted, StatusDeclined, StatusExpired, StatusRevoked:
+	default:
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "status must be one of pending, accepted, declined, expired, revoked")
+	}
+	limit := c.QueryInt("limit", 20)
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := c.QueryInt("offset", 0)
+	if offset < 0 {
+		offset = 0
+	}
+
+	invitations, total, err := h.service.ListByTenant(tenantID, status, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to list invitations", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list invitations"})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "failed to list invitations")
 	}
 
 	return c.JSON(fiber.Map{
 		"invitations": invitations,
-		"count":       len(invitations),
+		"total":       total,
+		"limit":       limit,
+		"offset":      offset,
 	})
 }
 
@@ -109,12 +139,12 @@ func (h *Handler) GetInvitation(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid invitation ID"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
 	}
 
 	invitation, err := h.service.GetByID(id)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invitation not found"})
+		return h.refuseByID(c, err, "failed to get invitation")
 	}
 
 	return c.JSON(fiber.Map{"invitation": invitation})
@@ -219,12 +249,12 @@ func (h *Handler) DeclineInvitation(c *fiber.Ctx) error {
 	}
 
 	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
 	}
 
 	if err := h.service.Decline(token); err != nil {
 		h.logger.Warn("Failed to decline invitation", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to decline invitation")})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invitation_not_acceptable", apierror.Message(err, "failed to decline invitation"))
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation declined"})
@@ -236,12 +266,12 @@ func (h *Handler) RevokeInvitation(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid invitation ID"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
 	}
 
 	if err := h.service.Revoke(id); err != nil {
 		h.logger.Warn("Failed to revoke invitation", zap.Error(err), zap.String("invitation_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to revoke invitation")})
+		return h.refuseByID(c, err, "failed to revoke invitation")
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation revoked"})
@@ -253,15 +283,27 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid invitation ID"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
 	}
 
 	if err := h.service.Resend(id); err != nil {
 		h.logger.Warn("Failed to resend invitation", zap.Error(err), zap.String("invitation_id", idStr))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to resend invitation")})
+		return h.refuseByID(c, err, "failed to resend invitation")
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation resent"})
+}
+
+// refuseByID answers a failed lookup or state change of one invitation.
+func (h *Handler) refuseByID(c *fiber.Ctx, err error, fallback string) error {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", err.Error())
+	case errors.Is(err, ErrNotPending):
+		return apierror.Refuse(c, fiber.StatusConflict, "invitation_not_pending", err.Error())
+	}
+	h.logger.Error(fallback, zap.Error(err))
+	return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", fallback)
 }
 
 // RegisterRoutes registers invitation routes

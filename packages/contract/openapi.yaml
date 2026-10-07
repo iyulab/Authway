@@ -22,9 +22,8 @@ tags:
       Administration, authenticated with the deployment's admin key (or an
       admin session) as a bearer token. Tenant-scoped calls name the tenant
       in X-Tenant-ID. A missing or rejected credential answers 401 with
-      code unauthorized. This document covers tenants, clients and users;
-      invitations beyond creating one, webhooks, audit and impersonation
-      follow.
+      code unauthorized. This document covers tenants, clients, users and
+      invitations; webhooks, audit and impersonation follow.
 
 security: []
 
@@ -647,6 +646,36 @@ paths:
         '502': { $ref: '#/components/responses/SyncFailed' }
 
   /api/v1/invitations:
+    get:
+      tags: [admin]
+      operationId: listInvitations
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [pending, accepted, declined, expired, revoked] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of the tenant's invitations, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitations, total, limit, offset]
+                properties:
+                  invitations:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminInvitation' }
+                  total: { type: integer, minimum: 0 }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400':
+          description: Malformed request, or no tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
     post:
       tags: [admin]
       operationId: createInvitation
@@ -681,8 +710,73 @@ paths:
                       status: { type: string }
                       expires_at: { type: string }
                   message: { type: string }
+        '400':
+          description: Malformed request, or no tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: Already a member (user_already_member) or already invited (invitation_already_pending)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/invitations/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: getInvitation
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The invitation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation]
+                properties:
+                  invitation: { $ref: '#/components/schemas/AdminInvitation' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [admin]
+      operationId: revokeInvitation
+      description: Revokes a pending invitation; its link stops working.
+      security: [{ adminKey: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: Not pending any more (code invitation_not_pending)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/invitations/{id}/resend:
+    post:
+      tags: [admin]
+      operationId: resendInvitation
+      description: Mails a new link for a pending invitation; the previous link stops working.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: Not pending any more (code invitation_not_pending)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/users:
     get:
@@ -794,6 +888,7 @@ components:
       name: X-Tenant-ID
       in: header
       required: false
+      description: The tenant the call acts on. A tenant_id query parameter works too.
       schema: { type: string }
     Token:
       name: token
@@ -958,6 +1053,25 @@ components:
         message: { type: string }
         expires_at: { type: string }
 
+    AdminInvitation:
+      type: object
+      required: [id, tenant_id, email, status, expires_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        email: { type: string }
+        role: { type: string }
+        status: { type: string, enum: [pending, accepted, declined, expired, revoked] }
+        message: { type: string }
+        inviter_id: { type: ['null', string], description: null when issued with the admin key. }
+        inviter_name: { type: string }
+        tenant_name: { type: string }
+        accepted_at: { type: ['null', string] }
+        accepted_by: { type: ['null', string] }
+        expires_at: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+
     Tenant:
       type: object
       required: [id, name, slug]
@@ -1067,6 +1181,8 @@ components:
             forbidden, insufficient_scope, admin_api_not_configured, conflict,
             public_client_has_no_secret, upstream_sync_failed,
             tenant_slug_taken, default_tenant_protected, tenant_has_users,
-            tenant_has_clients, tenant_has_service_clients,
+            tenant_has_clients, tenant_has_service_clients, tenant_required,
+            user_already_member, invitation_already_pending,
+            invitation_not_pending,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.

@@ -62,13 +62,13 @@ const InvitationsPage: React.FC = () => {
   })
 
   const invitations = data?.data.invitations || []
-  const totalInvitations = data?.data.count || 0
+  const totalInvitations = data?.data.total || 0
   const totalPages = Math.ceil(totalInvitations / pageSize)
 
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: InvitationFormData) =>
-      invitationsApi.create(data),
+      invitationsApi.create(selectedTenantId, data),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setShowCreateModal(false)

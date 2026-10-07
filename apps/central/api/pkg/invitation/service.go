@@ -1,6 +1,7 @@
 package invitation
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,16 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+)
+
+// Refusals a caller can act on. They are apierror.Public, so their text is safe
+// to show, and handlers tell them apart with errors.Is.
+var (
+	ErrNotFound       = apierror.NewPublic("invitation not found")
+	ErrNotPending     = apierror.NewPublic("the invitation is no longer pending")
+	ErrTenantNotFound = apierror.NewPublic("tenant not found")
+	ErrAlreadyMember  = apierror.NewPublic("user already exists in this organization")
+	ErrAlreadyInvited = apierror.NewPublic("pending invitation already exists for this email")
 )
 
 // EmailSender interface for sending emails
@@ -35,7 +46,9 @@ type Service interface {
 	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 	GetByToken(token string) (*Invitation, error)
 	GetByID(id uuid.UUID) (*Invitation, error)
-	ListByTenant(tenantID uuid.UUID) ([]Invitation, error)
+	// ListByTenant returns one page of a tenant's invitations, newest first,
+	// optionally only those in one status, and how many match in total.
+	ListByTenant(tenantID uuid.UUID, status InvitationStatus, limit, offset int) ([]Invitation, int64, error)
 	Accept(token string, userID *uuid.UUID, name, password string) (*user.User, error)
 	Decline(token string) error
 	Revoke(id uuid.UUID) error
@@ -76,7 +89,7 @@ func generateToken() (string, error) {
 func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {
 	t, err := s.tenantService.GetTenantByID(tenantID)
 	if err != nil {
-		return nil, apierror.NewPublic("tenant not found")
+		return nil, ErrTenantNotFound
 	}
 	// A nil inviter is the system actor (admin API key): there is no user row to
 	// look up, and requiring one is what made a fresh instance un-bootstrappable.
@@ -93,11 +106,11 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	}
 	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, req.Email)
 	if existingUser != nil {
-		return nil, apierror.NewPublic("user already exists in this organization")
+		return nil, ErrAlreadyMember
 	}
 	var existing Invitation
 	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, req.Email, StatusPending).First(&existing).Error; err == nil {
-		return nil, apierror.NewPublic("pending invitation already exists for this email")
+		return nil, ErrAlreadyInvited
 	}
 	token, err := generateToken()
 	if err != nil {
@@ -197,19 +210,30 @@ func (s *service) GetByToken(token string) (*Invitation, error) {
 func (s *service) GetByID(id uuid.UUID) (*Invitation, error) {
 	var inv Invitation
 	if err := s.db.Where("id = ?", id).First(&inv).Error; err != nil {
-		return nil, apierror.NewPublic("invitation not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get invitation: %w", err)
 	}
 	s.hydrate(&inv)
 	return &inv, nil
 }
 
-func (s *service) ListByTenant(tenantID uuid.UUID) ([]Invitation, error) {
+func (s *service) ListByTenant(tenantID uuid.UUID, status InvitationStatus, limit, offset int) ([]Invitation, int64, error) {
+	q := s.db.Model(&Invitation{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count invitations: %w", err)
+	}
 	var invitations []Invitation
-	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&invitations).Error; err != nil {
-		return nil, fmt.Errorf("failed to list invitations: %w", err)
+	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&invitations).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list invitations: %w", err)
 	}
 	s.hydrateAll(invitations)
-	return invitations, nil
+	return invitations, total, nil
 }
 
 // hydrateAll hydrates a slice in place (the elements, not copies).
@@ -297,7 +321,7 @@ func (s *service) Revoke(id uuid.UUID) error {
 		return err
 	}
 	if inv.Status != StatusPending {
-		return apierror.NewPublic("only pending invitations can be revoked")
+		return ErrNotPending
 	}
 	inv.Status = StatusRevoked
 	if err := s.db.Save(inv).Error; err != nil {
@@ -313,7 +337,7 @@ func (s *service) Resend(id uuid.UUID) error {
 		return err
 	}
 	if inv.Status != StatusPending {
-		return apierror.NewPublic("only pending invitations can be resent")
+		return ErrNotPending
 	}
 	token, err := generateToken()
 	if err != nil {

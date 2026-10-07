@@ -150,18 +150,25 @@ export const auditLogsApi = {
 // Invitations API
 export const invitationsApi = {
   list: (params?: { tenant_id?: string; status?: string; limit?: number; offset?: number }) =>
-    api.get<{ invitations: Invitation[]; count: number }>('/api/v1/invitations', { params }),
+    api.get<{ invitations: Invitation[]; total: number; limit: number; offset: number }>('/api/v1/invitations', { params }),
 
   get: (id: string) =>
     api.get<{ invitation: Invitation }>(`/api/v1/invitations/${id}`),
 
-  create: (data: {
-    email: string
-    role?: string
-    message?: string
-    expires_in_hours?: number
-  }) =>
-    api.post<{ invitation: Invitation; message: string }>('/api/v1/invitations', data),
+  // The invitation is created in tenantId's tenant; the API refuses one that
+  // names no tenant.
+  create: (
+    tenantId: string,
+    data: {
+      email: string
+      role?: string
+      message?: string
+      expires_in_hours?: number
+    },
+  ) =>
+    api.post<{ invitation: Invitation; message: string }>('/api/v1/invitations', data, {
+      params: { tenant_id: tenantId },
+    }),
 
   revoke: (id: string) =>
     api.delete<{ message: string }>(`/api/v1/invitations/${id}`),
