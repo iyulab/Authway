@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"authway/apps/central/api/internal/database"
+	"authway/apps/central/api/pkg/admin"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
@@ -192,6 +194,85 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 		}
 		if !exists {
 			t.Errorf("%s is mapped by a model but no migration creates it", table)
+		}
+	}
+}
+
+// mappedModels is every GORM model that owns a table. The two tests below hold
+// the migrated schema to exactly this set.
+func mappedModels() []any {
+	return []any{
+		&admin.AdminSession{}, &audit.AuditLog{}, &client.Client{},
+		&email.EmailVerification{}, &email.PasswordReset{},
+		&impersonation.ImpersonationSession{}, &invitation.Invitation{},
+		&passwordless.MagicLink{}, &serviceclient.ServiceClient{},
+		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
+		&webhook.Webhook{}, &webhook.WebhookDelivery{},
+	}
+}
+
+func parseModel(t *testing.T, db *gorm.DB, m any) *gorm.Statement {
+	t.Helper()
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(m); err != nil {
+		t.Fatalf("parse %T: %v", m, err)
+	}
+	return stmt
+}
+
+// TestMigratedTablesHaveNoUnmappedColumns is the reverse of the write test
+// above: every column the migrations leave on a model's table must be one the
+// model maps. A column nothing reads or writes is not harmless — it keeps
+// constraints and defaults the application no longer means, and it hides
+// which data is live. Columns pile up this way when code stops using them and
+// the drop never follows.
+func TestMigratedTablesHaveNoUnmappedColumns(t *testing.T) {
+	db := setup(t)
+
+	for _, m := range mappedModels() {
+		stmt := parseModel(t, db, m)
+		mapped := make(map[string]bool, len(stmt.Schema.DBNames))
+		for _, name := range stmt.Schema.DBNames {
+			mapped[name] = true
+		}
+
+		var columns []string
+		if err := db.Raw(`SELECT column_name FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = ? ORDER BY ordinal_position`,
+			stmt.Schema.Table).Scan(&columns).Error; err != nil {
+			t.Fatalf("columns of %s: %v", stmt.Schema.Table, err)
+		}
+		for _, c := range columns {
+			if !mapped[c] {
+				t.Errorf("%s.%s exists in the migrated schema but %T does not map it", stmt.Schema.Table, c, m)
+			}
+		}
+	}
+}
+
+// TestEveryMigratedTableIsMapped closes the same gap one level up: a table no
+// model owns is one nothing in the application reads or writes.
+func TestEveryMigratedTableIsMapped(t *testing.T) {
+	db := setup(t)
+
+	owned := map[string]bool{}
+	for _, m := range mappedModels() {
+		owned[parseModel(t, db, m).Schema.Table] = true
+	}
+
+	// Not ours: the migrator's own bookkeeping, and the authorization server's
+	// tables when it shares the database (hydra_*, networks, schema_migration).
+	var tables []string
+	if err := db.Raw(`SELECT table_name FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		  AND table_name NOT IN ('schema_migrations', 'schema_migration', 'networks')
+		  AND table_name NOT LIKE 'hydra\_%'
+		ORDER BY table_name`).Scan(&tables).Error; err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	for _, table := range tables {
+		if !owned[table] {
+			t.Errorf("%s exists in the migrated schema but no model maps it", table)
 		}
 	}
 }

@@ -91,6 +91,13 @@
   `scripts/test/`). The API applies migrations at startup; these had no effect
   or no longer ran. `scripts/deploy/<target>/check-migration-status.ps1` shows
   what a deployed database has applied.
+- **Columns and tables nothing used** (migration 024): the per-client logout
+  policy on `clients`, the OAuth parameters, login challenge and `used` flag on
+  `magic_link_tokens`, `audit_logs.description`/`metadata`, the summary columns
+  on `webhooks` and `webhook_deliveries`, and the `sessions` and
+  `system_config` tables. If you wrote to any of them yourself, copy the data
+  out before upgrading. Tests now fail when the migrated schema has a column or
+  table no model maps.
 
 ### Security
 
