@@ -113,6 +113,125 @@ jobs:
             fi
           done
 
+  # Black-box conformance scenarios (packages/conformance) against a real
+  # stack: the API built from this commit, Hydra, Postgres, Redis and an SMTP
+  # capture service. They drive the public surfaces only — the same scenarios
+  # any Authway implementation has to pass.
+  conformance:
+    name: Conformance scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: authway
+          POSTGRES_USER: authway
+          POSTGRES_PASSWORD: authway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U authway -d authway"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mailhog:
+        image: mailhog/mailhog:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
+
+    env:
+      ADMIN_API_KEY: ci-conformance-admin-key
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
+
+      - name: Start Hydra
+        run: |
+          set -euo pipefail
+          docker run -d --name hydra-ci --network host \
+            -e DSN=memory \
+            -e SECRETS_SYSTEM="$(openssl rand -hex 16)" \
+            -e URLS_SELF_ISSUER=http://localhost:4444 \
+            -e URLS_LOGIN=http://localhost:3001/login \
+            -e URLS_CONSENT=http://localhost:3001/consent \
+            -e URLS_LOGOUT=http://localhost:3001/logout \
+            oryd/hydra:v26.2.0 serve all --dev
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:4445/health/ready >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::Hydra never became ready"
+          docker logs hydra-ci
+          exit 1
+
+      - name: Start the API
+        env:
+          AUTHWAY_DATABASE_HOST: localhost
+          AUTHWAY_DATABASE_PORT: '5432'
+          AUTHWAY_DATABASE_USER: authway
+          AUTHWAY_DATABASE_PASSWORD: authway
+          AUTHWAY_DATABASE_NAME: authway
+          AUTHWAY_REDIS_HOST: localhost
+          AUTHWAY_REDIS_PORT: '6379'
+          AUTHWAY_EMAIL_SMTP_HOST: localhost
+          AUTHWAY_EMAIL_SMTP_PORT: '1025'
+          AUTHWAY_ADMIN_API_KEY: ${{ env.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/authway-api" ./apps/central/api/cmd
+          (cd "$RUNNER_TEMP" && nohup ./authway-api > api.log 2>&1 &)
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:8080/health >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::The API never became healthy"
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Run conformance scenarios
+        env:
+          CONFORMANCE_ISSUER: http://localhost:4444
+          CONFORMANCE_API: http://localhost:8080
+          CONFORMANCE_ADMIN_KEY: ${{ env.ADMIN_API_KEY }}
+          CONFORMANCE_MAIL_API: http://localhost:8025
+        run: pnpm --filter @authway/conformance test
+
+      - name: Show service logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/api.log" || true
+          docker logs hydra-ci || true
+
   # The two Vite apps live outside the pnpm workspace (each has its own
   # package-lock.json), so they were invisible to CI — their test suites only ever
   # ran on a developer machine. Build + test them here; no artifacts are uploaded
