@@ -1,0 +1,4 @@
+[submodule "apps/dotnet"]
+	path = apps/dotnet
+	url = https://github.com/iyulab/Authway.NET.git
+	branch = main
