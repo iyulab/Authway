@@ -197,7 +197,7 @@ try {
     }
 
     # ============================================================
-    # Post-deploy verification (version parity + admin-auth smoke)
+    # Post-deploy verification (version parity + admin-auth smoke + mail links + migrations)
     # ============================================================
     # 관리 API 가 인증 없이 열린 채 배포되는 회귀를 막는 게이트.
     #   1. /health.version == ImageTag        → 실제 새 이미지가 서빙 중인가
@@ -337,6 +337,26 @@ try {
         Write-Host "   auth UI 가 배포되지 않았거나, SPA 딥링크 fallback(_redirects 200 rewrite)이" -ForegroundColor Yellow
         Write-Host "   설정되지 않았습니다. 이 상태로는 초대 메일을 받은 사용자가 전원 404 를 봅니다." -ForegroundColor Yellow
         throw "mail-link smoke 검증 실패"
+    }
+
+    # ------------------------------------------------------------
+    # Migrations: did the new image apply everything this tree ships?
+    # ------------------------------------------------------------
+    # The API applies migrations at startup and exits on failure, so a healthy
+    # new version already implies success — this makes it explicit and catches
+    # a migration file that never reached the image. Compared against this
+    # working tree, i.e. the code being deployed. Runs in its own process
+    # because the checker ends with exit.
+    Write-Host "🗄  migration status..." -ForegroundColor Yellow
+    $checker = Join-Path $LibDir "check-migration-status.core.ps1"
+    & (Get-Process -Id $PID).Path -NoProfile -File $checker -Target $Target | Out-Host
+    switch ($LASTEXITCODE) {
+        0 { Write-Host "✓ 마이그레이션 보류·실패 없음" -ForegroundColor Green }
+        2 { throw "마이그레이션 검증 실패: 새 이미지 기동 후에도 보류 또는 실패 기록이 있음" }
+        default {
+            Write-Host "⚠️  마이그레이션 상태를 확인하지 못함(exit $LASTEXITCODE) — psql·DB 접근을 확인하고" -ForegroundColor Yellow
+            Write-Host "   <target>/check-migration-status.ps1 로 직접 확인할 것. 배포 자체는 통과 처리." -ForegroundColor Yellow
+        }
     }
 
     Write-Host ""
