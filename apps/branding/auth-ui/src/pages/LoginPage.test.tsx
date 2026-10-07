@@ -305,6 +305,28 @@ describe('LoginPage', () => {
       })
     })
 
+    it('keeps the form open with a localized message on a wrong password', async () => {
+      server.use(
+        http.post('http://localhost:8080/authenticate', () => {
+          return HttpResponse.json(
+            { error: 'Invalid email or password', code: 'invalid_credentials' },
+            { status: 401 }
+          )
+        })
+      )
+
+      await user.type(screen.getByLabelText('이메일'), 'test@example.com')
+      await user.type(screen.getByLabelText('비밀번호'), 'wrongpassword')
+      await user.click(screen.getByRole('button', { name: '로그인' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('이메일 또는 비밀번호가 올바르지 않습니다.')).toBeInTheDocument()
+      })
+      // The user can correct the password and submit again on the same screen.
+      expect(screen.getByRole('button', { name: '로그인' })).toBeEnabled()
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
     it('navigates to the MFA verify page when the server requires a second factor', async () => {
       server.use(
         http.post('http://localhost:8080/authenticate', () => {

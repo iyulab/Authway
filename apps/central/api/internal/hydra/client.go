@@ -3,6 +3,7 @@ package hydra
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,28 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrFlowNotFound is returned when Hydra does not know a login or consent
+// challenge — the caller sent an id that was never issued or is malformed.
+var ErrFlowNotFound = errors.New("login or consent flow not found")
+
+// ErrFlowExpired is returned when Hydra knows the challenge but it can no
+// longer be acted on — it was already accepted or rejected, or it timed out.
+var ErrFlowExpired = errors.New("login or consent flow expired or already handled")
+
+// flowError classifies a non-200 response to a challenge lookup. Lookups of
+// a client-supplied id fail for reasons the caller caused (unknown, used,
+// expired), which must surface as client errors, not as Hydra being down.
+func flowError(status int, body []byte) error {
+	switch status {
+	case http.StatusNotFound:
+		return fmt.Errorf("%w: hydra returned %d", ErrFlowNotFound, status)
+	case http.StatusGone:
+		return fmt.Errorf("%w: hydra returned %d", ErrFlowExpired, status)
+	default:
+		return fmt.Errorf("hydra returned status %d: %s", status, string(body))
+	}
+}
 
 type Client struct {
 	AdminURL string
@@ -256,7 +279,7 @@ func (c *Client) GetLoginRequest(challenge string) (*LoginRequest, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("hydra returned status %d: %s", resp.StatusCode, string(body))
+		return nil, flowError(resp.StatusCode, body)
 	}
 
 	var loginReq LoginRequest
@@ -398,7 +421,7 @@ func (c *Client) GetConsentRequest(challenge string) (*ConsentRequest, error) {
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hydra get consent failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, flowError(resp.StatusCode, bodyBytes)
 	}
 
 	var consentReq ConsentRequest

@@ -2,6 +2,15 @@
 
 ### Added
 
+- **Conformance suite (`packages/conformance`).** Black-box scenarios that
+  drive a running provider only through its public surfaces — OIDC
+  discovery, authorization code + PKCE, userinfo, the login-screen backend
+  and the admin API — plus an SMTP capture service. A user is provisioned the
+  way a real one arrives (admin invitation, accepted from the mailed link).
+  Covers login, retry after a wrong password, client-error answers for bad
+  flow ids, token invalidation on logout, and that every backend path the
+  bundled login screens call is routed.
+
 - **Scoped service credentials for consumer-app client provisioning.**
   Consumer apps that need to programmatically create OAuth clients (e.g. a
   deploy pipeline registering a new environment's client) previously had
@@ -23,6 +32,24 @@
   sign-up (the admin console's tenant creation form has an "Allow public
   sign-up" toggle, off by default) — every other tenant keeps the existing
   invite-only behavior unchanged.
+
+### Fixed
+
+- **A wrong password no longer ends the sign-in.** The password endpoint used
+  to reject the whole authorization request on bad credentials, so a single
+  typo sent the user back to the application with an `invalid_credentials`
+  OAuth error and they had to start over. It now answers `401` with
+  `code: "invalid_credentials"` and leaves the request open; the login screen
+  shows a localized message and the user retries in place (attempts remain
+  bounded by the login rate limit). Unknown email and wrong password still
+  produce the same answer.
+- **Unknown or spent login/consent requests are client errors.** Looking up a
+  login or consent challenge that does not exist now returns `400`
+  (`invalid_flow`), and one that was already handled or expired returns `410`
+  (`flow_expired`), instead of `500`. Only a failure to reach the
+  authorization server is reported as an upstream error (`502`). Error bodies
+  on these paths no longer include the authorization server's internal admin
+  address or the raw upstream error.
 
 ### Changed
 

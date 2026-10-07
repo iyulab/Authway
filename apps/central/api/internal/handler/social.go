@@ -190,11 +190,7 @@ func (s *SocialHandler) GoogleLogin(c *fiber.Ctx) error {
 			s.logger.Error("Failed to get login request from Hydra",
 				zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]),
 				zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":             "failed_to_get_login_request",
-				"error_description": "Failed to retrieve OAuth client information",
-				"details":           apierror.Message(err, "unable to reach Hydra"),
-			})
+			return respondFlowLookupError(c, err)
 		}
 		clientID = loginReq.Client.ClientID
 		s.logger.Info("Extracted client_id from login_challenge",
@@ -564,10 +560,7 @@ func (s *SocialHandler) GitHubLogin(c *fiber.Ctx) error {
 		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
 		if err != nil {
 			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":             "failed_to_get_login_request",
-				"error_description": "Failed to retrieve OAuth client information",
-			})
+			return respondFlowLookupError(c, err)
 		}
 		clientID = loginReq.Client.ClientID
 	}
@@ -763,10 +756,7 @@ func (s *SocialHandler) MicrosoftLogin(c *fiber.Ctx) error {
 		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
 		if err != nil {
 			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":             "failed_to_get_login_request",
-				"error_description": "Failed to retrieve OAuth client information",
-			})
+			return respondFlowLookupError(c, err)
 		}
 		clientID = loginReq.Client.ClientID
 	}
@@ -962,10 +952,7 @@ func (s *SocialHandler) AppleLogin(c *fiber.Ctx) error {
 		loginReq, err := s.hydraClient.GetLoginRequest(loginChallenge)
 		if err != nil {
 			s.logger.Error("Failed to get login request from Hydra", zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":             "failed_to_get_login_request",
-				"error_description": "Failed to retrieve OAuth client information",
-			})
+			return respondFlowLookupError(c, err)
 		}
 		clientID = loginReq.Client.ClientID
 	}

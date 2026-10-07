@@ -155,8 +155,11 @@ func TestLogin_WrongPassword_NeverReachesMFABranch(t *testing.T) {
 	app, _, acceptCount := newAuthTestApp(t, "correct-horse", true, "123456", "")
 
 	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"user@example.com","password":"wrong"}`)
-	if status != fiber.StatusOK { // handler always 200s with an error field for this path, matching prior behavior
+	if status != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %v", status, body)
+	}
+	if body["redirect_to"] != nil {
+		t.Errorf("redirect_to = %v, want absent — a wrong password must not end the login flow", body["redirect_to"])
 	}
 	if body["mfa_required"] != nil {
 		t.Errorf("mfa_required = %v, want absent — password never verified", body["mfa_required"])
@@ -275,7 +278,7 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	// Login matched by email alone (GetByEmail, deprecated), an
 	// undefined-order global lookup could authenticate against either row.
 	status, body := doJSON(t, app, "/authenticate", `{"challenge":"c1","email":"`+rightUser.Email+`","password":"other-tenant-password"}`)
-	if status != fiber.StatusOK {
+	if status != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
 	if body["error"] != "Invalid email or password" {

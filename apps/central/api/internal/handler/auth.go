@@ -134,15 +134,7 @@ func (h *AuthHandler) LoginPage(c *fiber.Ctx) error {
 		h.logger.Error("Failed to get login request from Hydra",
 			zap.String("challenge", challenge),
 			zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error":   "Failed to get login request from Hydra",
-			"details": apierror.Message(err, "unable to reach Hydra"),
-			"hint":    "Verify that Ory Hydra is running and accessible. Check the HYDRA_ADMIN_URL environment variable.",
-			"debug": fiber.Map{
-				"hydra_admin_url": h.hydraClient.AdminURL,
-				"challenge":       challenge[:min(50, len(challenge))] + "...",
-			},
-		})
+		return respondFlowLookupError(c, err)
 	}
 
 	// Get client information to check tenant
@@ -298,9 +290,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	// Get login request from Hydra
 	loginReq, err := h.hydraClient.GetLoginRequest(req.Challenge)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get login request",
-		})
+		return respondFlowLookupError(c, err)
 	}
 
 	// Resolve the requesting client's tenant first — GetByEmail (deprecated)
@@ -321,15 +311,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		h.logAuthFailure(c, uuid.Nil, audit.ActionUserLoginFailed, req.Email, "user_not_found", nil)
 		middleware.IncrementRateLimitOnFailure(c)
-		// Reject login request
-		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
-		if rejectErr != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to reject login request"})
-		}
-		return c.JSON(fiber.Map{
-			"error":       "Invalid email or password",
-			"redirect_to": resp.RedirectTo,
-		})
+		return respondInvalidCredentials(c)
 	}
 
 	// Verify password
@@ -338,15 +320,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			"user_id": user.ID.String(),
 		})
 		middleware.IncrementRateLimitOnFailure(c)
-		// Reject login request
-		resp, rejectErr := h.hydraClient.RejectLoginRequest(req.Challenge, "invalid_credentials", "Invalid email or password")
-		if rejectErr != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to reject login request"})
-		}
-		return c.JSON(fiber.Map{
-			"error":       "Invalid email or password",
-			"redirect_to": resp.RedirectTo,
-		})
+		return respondInvalidCredentials(c)
 	}
 
 	rememberFor := 0
@@ -551,15 +525,7 @@ func (h *AuthHandler) ConsentPage(c *fiber.Ctx) error {
 	// Get consent request from Hydra
 	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error":   "Failed to get consent request from Hydra",
-			"details": apierror.Message(err, "unable to reach Hydra"),
-			"hint":    "Verify that Ory Hydra is running and the consent_challenge is valid. The challenge may have expired or been used already.",
-			"debug": fiber.Map{
-				"hydra_admin_url": h.hydraClient.AdminURL,
-				"challenge":       challenge[:min(50, len(challenge))] + "...",
-			},
-		})
+		return respondFlowLookupError(c, err)
 	}
 
 	// Get user information first
@@ -693,9 +659,7 @@ func (h *AuthHandler) Consent(c *fiber.Ctx) error {
 	// Get consent request from Hydra
 	consentReq, err := h.hydraClient.GetConsentRequest(req.Challenge)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get consent request",
-		})
+		return respondFlowLookupError(c, err)
 	}
 
 	// Get user information for session
@@ -1148,4 +1112,18 @@ func (h *AuthHandler) PopupCallback(c *fiber.Ctx) error {
 	c.Set("Expires", "0")
 
 	return c.SendString(html)
+}
+
+// respondInvalidCredentials answers a failed password check without ending
+// the login flow. Rejecting the Hydra login request here would send the user
+// back to the application with an OAuth error after a single typo; the
+// challenge stays valid, so the login screen can show the error and let them
+// retry (attempts are bounded by the login rate limit). Unknown email and
+// wrong password produce the same answer so the response does not reveal
+// which accounts exist.
+func respondInvalidCredentials(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		"error": "Invalid email or password",
+		"code":  "invalid_credentials",
+	})
 }

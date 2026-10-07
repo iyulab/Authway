@@ -28,8 +28,16 @@ interface LoginRequest {
 interface LoginResponse {
   redirect_to?: string
   error?: string
+  code?: string
   mfa_required?: boolean
   mfa_challenge?: string
+}
+
+// Backend error codes that have a localized message on this screen.
+const LOGIN_ERROR_KEYS: Record<string, string> = {
+  invalid_credentials: 'auth:errors.invalidCredentials',
+  invalid_flow: 'auth:errors.flowInvalid',
+  flow_expired: 'auth:errors.flowExpired',
 }
 
 interface ClientAuthConfig {
@@ -288,7 +296,8 @@ const LoginPage: React.FC = () => {
           window.location.href = data.redirect_to
         }
       } else if (data.error) {
-        setError(data.error)
+        const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
+        setError(key ? t(key) : data.error)
       }
     },
     onError: (error) => {
