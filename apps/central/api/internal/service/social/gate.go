@@ -1,6 +1,8 @@
 package social
 
 import (
+	"errors"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -44,4 +46,4 @@ func mayProvision(gate InvitationGate, logger *zap.Logger, tenantID uuid.UUID, e
 // ErrNotInvited is returned when a social sign-in would have to create an
 // account for an address nobody invited. The wording is deliberately the same
 // across providers so the UI can present one message.
-const ErrNotInvited = "no account for this address; ask an administrator for an invitation"
+var ErrNotInvited = errors.New("no account for this address; ask an administrator for an invitation")

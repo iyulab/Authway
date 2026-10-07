@@ -43,6 +43,16 @@
 
 ### Fixed
 
+- **A failed social sign-in now ends in the browser flow.** When Google,
+  GitHub, Microsoft or Apple sent the user back with an error, or the exchange
+  failed, the callback answered with a JSON error page — including hints about
+  the server's OAuth configuration and, on one path, the authorization
+  server's admin address. Once the sign-in request is known it is now rejected
+  and the user returns to the application with a standard OAuth error;
+  otherwise the login UI's error screen explains what happened. An address
+  without an invitation is reported as `access_denied`, not as a server
+  failure.
+
 - **PKCE verifiers and state values were slightly biased.** They mapped random
   bytes onto a 66-character set with `% 66`; the set is now the 64 unreserved
   characters, which divides 256 evenly.

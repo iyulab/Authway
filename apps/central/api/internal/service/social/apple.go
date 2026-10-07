@@ -222,7 +222,7 @@ func (a *AppleService) HandleCallbackForClient(ctx context.Context, code, state 
 	// only for an address that was invited into this tenant.
 	if !mayProvision(a.invitations, a.logger, clientTenantID, appleUser.Email) {
 		a.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", appleUser.Email))
-		return nil, fmt.Errorf("%s", ErrNotInvited)
+		return nil, ErrNotInvited
 	}
 	createReq := &user.CreateUserRequest{Email: appleUser.Email, Password: "", Name: ""}
 	newUser, err := a.userService.Create(clientTenantID, createReq)

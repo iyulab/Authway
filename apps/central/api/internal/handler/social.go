@@ -6,7 +6,6 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service/social"
-	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
@@ -24,6 +23,7 @@ type SocialHandler struct {
 	logger           *zap.Logger
 	auditService     audit.Service
 	stateStore       *OAuthStateStore
+	frontendURL      string // login UI, for the error screen
 }
 
 // NewSocialHandlerWithAllProviders creates a SocialHandler with all OAuth providers
@@ -37,9 +37,11 @@ func NewSocialHandlerWithAllProviders(
 	logger *zap.Logger,
 	auditService audit.Service,
 	stateStore *OAuthStateStore,
+	frontendURL string,
 ) *SocialHandler {
 	return &SocialHandler{
 		stateStore:       stateStore,
+		frontendURL:      frontendURL,
 		googleService:    googleService,
 		githubService:    githubService,
 		microsoftService: microsoftService,
@@ -212,18 +214,12 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 	// Check for OAuth error
 	if errorParam != "" {
 		s.logger.Warn("Google OAuth error", zap.String("error", errorParam))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             errorParam,
-			"error_description": c.Query("error_description"),
-		})
+		return s.endSignIn(c, s.recoverChallenge(c, state), "access_denied", msgProviderRefused)
 	}
 
 	// Validate required parameters
 	if code == "" || state == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	// Verify state against cookie (CSRF protection)
@@ -233,25 +229,16 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		s.logger.Warn("State mismatch",
 			zap.String("cookie_state", stateCookie),
 			zap.String("param_state", state))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "state_mismatch",
-			"error_description": "State parameter does not match",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stored, found, err := s.stateStore.Consume(c.Context(), state)
 	if err != nil {
 		s.logger.Error("Failed to read OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to complete sign-in",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	if !found {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "This sign-in has expired or was already completed. Start again from the application.",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	loginChallenge := stored.LoginChallenge
 	retrievedClientID := stored.ClientID
@@ -275,22 +262,8 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "oauth_callback_failed",
-			"error_description": "Failed to process Google OAuth callback",
-			"details":           apierror.Message(err, "OAuth callback failed"),
-			"hint":              "Verify Google OAuth configuration. Check client_id, client_secret, and redirect_uri in your environment variables.",
-			"debug": fiber.Map{
-				"client_id": retrievedClientID,
-				"has_code":  len(code) > 0,
-			},
-			"possible_causes": []string{
-				"Invalid Google OAuth credentials (CLIENT_ID or CLIENT_SECRET)",
-				"Incorrect redirect_uri configuration",
-				"Google API quota exceeded",
-				"User denied permission",
-			},
-		})
+		errCode, description := socialFailure(err)
+		return s.endSignIn(c, loginChallenge, errCode, description)
 	}
 
 	// Update last login time using the service
@@ -323,22 +296,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		s.logger.Error("Failed to accept Hydra login request",
 			zap.Error(err),
 			zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "hydra_login_failed",
-			"error_description": "Failed to complete OAuth login with Hydra",
-			"details":           apierror.Message(err, "unable to reach Hydra"),
-			"hint":              "Verify Hydra is accessible and the login_challenge is still valid",
-			"debug": fiber.Map{
-				"hydra_admin_url": s.hydraClient.AdminURL,
-				"challenge":       loginChallenge[:min(50, len(loginChallenge))] + "...",
-				"user_id":         authUser.ID.String(),
-			},
-			"possible_causes": []string{
-				"Hydra admin API is not accessible",
-				"Login challenge expired or already used",
-				"Network connectivity issue",
-			},
-		})
+		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
 	}
 
 	s.logger.Info("Google OAuth login successful",
@@ -464,10 +422,7 @@ func (s *SocialHandler) GitHubLogin(c *fiber.Ctx) error {
 // GitHubCallback handles the GitHub OAuth callback
 func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	if s.githubService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "github_not_configured",
-			"error_description": "GitHub OAuth is not configured",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	code := string([]byte(c.Query("code")))
@@ -476,40 +431,25 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 
 	if errorParam != "" {
 		s.logger.Warn("GitHub OAuth error", zap.String("error", errorParam))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             errorParam,
-			"error_description": c.Query("error_description"),
-		})
+		return s.endSignIn(c, s.recoverChallenge(c, state), "access_denied", msgProviderRefused)
 	}
 
 	if code == "" || state == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stateCookie := string([]byte(c.Cookies("oauth_state")))
 	if stateCookie != state {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "state_mismatch",
-			"error_description": "State parameter does not match",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stored, found, err := s.stateStore.Consume(c.Context(), state)
 	if err != nil {
 		s.logger.Error("Failed to read OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to complete sign-in",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	if !found {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "This sign-in has expired or was already completed. Start again from the application.",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	loginChallenge := stored.LoginChallenge
 	retrievedClientID := stored.ClientID
@@ -529,11 +469,8 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "oauth_callback_failed",
-			"error_description": "Failed to process GitHub OAuth callback",
-			"details":           apierror.Message(err, "OAuth callback failed"),
-		})
+		errCode, description := socialFailure(err)
+		return s.endSignIn(c, loginChallenge, errCode, description)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
@@ -555,10 +492,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "hydra_login_failed",
-			"error_description": "Failed to complete OAuth login with Hydra",
-		})
+		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
 	}
 
 	s.logger.Info("GitHub OAuth login successful",
@@ -655,10 +589,7 @@ func (s *SocialHandler) MicrosoftLogin(c *fiber.Ctx) error {
 // MicrosoftCallback handles the Microsoft OAuth callback
 func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	if s.microsoftService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "microsoft_not_configured",
-			"error_description": "Microsoft OAuth is not configured",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	code := string([]byte(c.Query("code")))
@@ -667,40 +598,25 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 
 	if errorParam != "" {
 		s.logger.Warn("Microsoft OAuth error", zap.String("error", errorParam))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             errorParam,
-			"error_description": c.Query("error_description"),
-		})
+		return s.endSignIn(c, s.recoverChallenge(c, state), "access_denied", msgProviderRefused)
 	}
 
 	if code == "" || state == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stateCookie := string([]byte(c.Cookies("oauth_state")))
 	if stateCookie != state {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "state_mismatch",
-			"error_description": "State parameter does not match",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stored, found, err := s.stateStore.Consume(c.Context(), state)
 	if err != nil {
 		s.logger.Error("Failed to read OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to complete sign-in",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	if !found {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "This sign-in has expired or was already completed. Start again from the application.",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	loginChallenge := stored.LoginChallenge
 	retrievedClientID := stored.ClientID
@@ -720,11 +636,8 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "oauth_callback_failed",
-			"error_description": "Failed to process Microsoft OAuth callback",
-			"details":           apierror.Message(err, "OAuth callback failed"),
-		})
+		errCode, description := socialFailure(err)
+		return s.endSignIn(c, loginChallenge, errCode, description)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
@@ -746,10 +659,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "hydra_login_failed",
-			"error_description": "Failed to complete OAuth login with Hydra",
-		})
+		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
 	}
 
 	s.logger.Info("Microsoft OAuth login successful",
@@ -846,10 +756,7 @@ func (s *SocialHandler) AppleLogin(c *fiber.Ctx) error {
 // AppleCallback handles the Apple OAuth callback (POST because of form_post response_mode)
 func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 	if s.appleService == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":             "apple_not_configured",
-			"error_description": "Apple OAuth is not configured",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	// Apple uses form_post response mode
@@ -870,40 +777,25 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 
 	if errorParam != "" {
 		s.logger.Warn("Apple OAuth error", zap.String("error", errorParam))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             errorParam,
-			"error_description": c.FormValue("error_description"),
-		})
+		return s.endSignIn(c, s.recoverChallenge(c, state), "access_denied", msgProviderRefused)
 	}
 
 	if code == "" || state == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stateCookie := string([]byte(c.Cookies("oauth_state")))
 	if stateCookie != state {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "state_mismatch",
-			"error_description": "State parameter does not match",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 
 	stored, found, err := s.stateStore.Consume(c.Context(), state)
 	if err != nil {
 		s.logger.Error("Failed to read OAuth state", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "internal_server_error",
-			"error_description": "Failed to complete sign-in",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	if !found {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_state",
-			"error_description": "This sign-in has expired or was already completed. Start again from the application.",
-		})
+		return s.endSignIn(c, "", "invalid_request", msgInvalidSignIn)
 	}
 	loginChallenge := stored.LoginChallenge
 	retrievedClientID := stored.ClientID
@@ -923,11 +815,8 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 			"client_id": retrievedClientID,
 			"error":     err.Error(),
 		})
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "oauth_callback_failed",
-			"error_description": "Failed to process Apple OAuth callback",
-			"details":           apierror.Message(err, "OAuth callback failed"),
-		})
+		errCode, description := socialFailure(err)
+		return s.endSignIn(c, loginChallenge, errCode, description)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
@@ -949,10 +838,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 	acceptResp, err := s.hydraClient.AcceptLoginRequest(loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "hydra_login_failed",
-			"error_description": "Failed to complete OAuth login with Hydra",
-		})
+		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
 	}
 
 	s.logger.Info("Apple OAuth login successful",

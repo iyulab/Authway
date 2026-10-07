@@ -291,7 +291,7 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 	// only for an address that was invited into this tenant.
 	if !mayProvision(g.invitations, g.logger, clientTenantID, googleUser.Email) {
 		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", googleUser.Email))
-		return nil, fmt.Errorf("%s", ErrNotInvited)
+		return nil, ErrNotInvited
 	}
 	// Create new user account in this tenant
 	fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)

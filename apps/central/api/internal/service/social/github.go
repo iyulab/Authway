@@ -252,7 +252,7 @@ func (g *GitHubService) HandleCallbackForClient(ctx context.Context, code, state
 	// only for an address that was invited into this tenant.
 	if !mayProvision(g.invitations, g.logger, clientTenantID, githubUser.Email) {
 		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", githubUser.Email))
-		return nil, fmt.Errorf("%s", ErrNotInvited)
+		return nil, ErrNotInvited
 	}
 	fullName := githubUser.Name
 	if fullName == "" {

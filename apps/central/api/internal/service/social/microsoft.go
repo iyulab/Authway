@@ -207,7 +207,7 @@ func (m *MicrosoftService) HandleCallbackForClient(ctx context.Context, code, st
 	// only for an address that was invited into this tenant.
 	if !mayProvision(m.invitations, m.logger, clientTenantID, email) {
 		m.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", email))
-		return nil, fmt.Errorf("%s", ErrNotInvited)
+		return nil, ErrNotInvited
 	}
 	fullName := msUser.DisplayName
 	if fullName == "" {
