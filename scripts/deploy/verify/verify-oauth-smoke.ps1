@@ -3,7 +3,7 @@
 # ============================================================
 # authorization_code + password 로그인의 전 구간을 실제로 구동한다 —
 # Hydra 로그인 챌린지 발급부터 access token 교환까지. 이 구간은 로컬에서
-# 선검증할 수 없다(배포된 실제 Hydra·central-api·auth-api가 서로 맞물려
+# 선검증할 수 없다(배포된 실제 Hydra·central API가 서로 맞물려
 # 동작하는지가 검증 대상 자체이므로), 그래서 지금까지 사람이 매 배포마다
 # 브라우저로 반복해 왔다.
 #
@@ -85,10 +85,9 @@ Write-Host ""
 $envVars = Get-DeployEnv -Target $Target
 $issuer = $envVars['HYDRA_ISSUER']
 $apiUrl = $envVars['API_URL']
-$authApiUrl = $envVars['AUTH_API_URL']
 $adminKey = $envVars['ADMIN_API_KEY']
 
-foreach ($pair in @(@{n='HYDRA_ISSUER';v=$issuer}, @{n='API_URL';v=$apiUrl}, @{n='AUTH_API_URL';v=$authApiUrl}, @{n='ADMIN_API_KEY';v=$adminKey})) {
+foreach ($pair in @(@{n='HYDRA_ISSUER';v=$issuer}, @{n='API_URL';v=$apiUrl}, @{n='ADMIN_API_KEY';v=$adminKey})) {
     if ([string]::IsNullOrWhiteSpace($pair.v)) {
         Write-Host "❌ $($pair.n) 미설정 ($($envVars['__ENV_FILE__']))" -ForegroundColor Red
         exit 1
@@ -170,7 +169,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     $loginBody = @{ challenge = $loginChallenge; email = $verifyEmail; password = $VerifyPassword } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $loginBody -NoNewline -Encoding UTF8
-    $loginResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$authApiUrl/authenticate" `
+    $loginResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/authenticate" `
         -H "Content-Type: application/json" --data "@$tmpBody"
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
     $loginJson = $loginResp | ConvertFrom-Json
@@ -195,7 +194,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     $consentBody = @{ challenge = $consentChallenge; grant_scope = @("openid") } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $consentBody -NoNewline -Encoding UTF8
-    $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$authApiUrl/consent/accept" `
+    $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/consent/accept" `
         -H "Content-Type: application/json" --data "@$tmpBody"
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
     $consentJson = $consentResp | ConvertFrom-Json

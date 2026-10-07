@@ -32,10 +32,12 @@ $ProjectRoot = Split-Path -Parent $ScriptsDir
 try {
     $envVars = Get-DeployEnv -Target $Target
 
-    # 중앙 API는 ADMIN_API_KEY / INTERNAL_API_KEY / TOTP 암호화 키가 비어 있으면
-    # 기동 시점에 fail-closed로 거부한다. 2026-04 prod 사고 재발 방지 게이트.
-    # (AUTHWAY_TOTP_ENCRYPTION_KEY 는 D-e — TOTP secret at-rest 암호화 — 필수)
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'INTERNAL_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY')
+    # 중앙 API는 ADMIN_API_KEY / TOTP 암호화 키가 비어 있으면 기동 시점에
+    # fail-closed로 거부한다. 2026-04 prod 사고 재발 방지 게이트.
+    # (AUTHWAY_TOTP_ENCRYPTION_KEY 는 TOTP secret at-rest 암호화용 — 필수)
+    # Google 자격증명은 기동을 막지 않지만, 비어 있으면 Google 로그인만 조용히
+    # 실패하므로 여기서 함께 막는다.
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET')
 
     Set-AzureSubscription -EnvVars $envVars
 } catch {
@@ -113,6 +115,19 @@ try {
     Write-Host "✓ 레지스트리 인증 설정 완료" -ForegroundColor Green
     Write-Host ""
 
+    # Google client secret 은 평문 env 가 아니라 Container App secret 으로 둔다
+    # (sendway-api-key 와 같은 방식). update 가 secretref 로 참조하므로 먼저 써야 한다.
+    Write-Host "🔐 Google client secret 반영 중..." -ForegroundColor Yellow
+    az containerapp secret set `
+        --name $CONTAINER_APP_API `
+        --resource-group $RESOURCE_GROUP `
+        --secrets "google-client-secret=$($envVars['GOOGLE_CLIENT_SECRET'])" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Google client secret 설정 실패"
+    }
+    Write-Host "✓ Google client secret 반영 완료" -ForegroundColor Green
+    Write-Host ""
+
     Write-Host "🔄 이미지 및 환경 변수 업데이트 중..." -ForegroundColor Yellow
 
     az containerapp update `
@@ -143,8 +158,11 @@ try {
             "AUTHWAY_HYDRA_PUBLIC_URL=$($envVars['HYDRA_ISSUER'])" `
             "AUTHWAY_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
             "AUTHWAY_ADMIN_API_KEY=$($envVars['ADMIN_API_KEY'])" `
-            "AUTHWAY_ADMIN_INTERNAL_API_KEY=$($envVars['INTERNAL_API_KEY'])" `
             "AUTHWAY_TOTP_ENCRYPTION_KEY=$($envVars['AUTHWAY_TOTP_ENCRYPTION_KEY'])" `
+            "AUTHWAY_GOOGLE_ENABLED=true" `
+            "AUTHWAY_GOOGLE_CLIENT_ID=$($envVars['GOOGLE_CLIENT_ID'])" `
+            "AUTHWAY_GOOGLE_CLIENT_SECRET=secretref:google-client-secret" `
+            "AUTHWAY_GOOGLE_REDIRECT_URL=$($envVars['API_URL'])/auth/google/callback" `
             "AUTHWAY_EMAIL_USE_SENDWAY=$($envVars['EMAIL_USE_SENDWAY'])" `
             "AUTHWAY_EMAIL_SENDWAY_BASE_URL=$($envVars['EMAIL_SENDWAY_BASE_URL'])" `
             "AUTHWAY_EMAIL_SENDWAY_API_KEY=secretref:sendway-api-key" `
@@ -154,6 +172,26 @@ try {
 
     if ($LASTEXITCODE -ne 0) {
         throw "Container App 업데이트 실패"
+    }
+
+    # The login backend no longer accepts calls from a separate service, so the
+    # shared key it used to check is obsolete. Removed only after the new image
+    # is in place: older images refuse to start without it.
+    $staleEnv = @('AUTHWAY_ADMIN_INTERNAL_API_KEY')
+    $presentEnv = az containerapp show `
+        --name $CONTAINER_APP_API `
+        --resource-group $RESOURCE_GROUP `
+        --query "properties.template.containers[0].env[].name" -o tsv
+    $toRemove = $staleEnv | Where-Object { $presentEnv -contains $_ }
+    if ($toRemove) {
+        Write-Host "🧹 더 이상 쓰지 않는 환경 변수 제거: $($toRemove -join ', ')" -ForegroundColor Yellow
+        az containerapp update `
+            --name $CONTAINER_APP_API `
+            --resource-group $RESOURCE_GROUP `
+            --remove-env-vars @toRemove | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "환경 변수 제거 실패"
+        }
     }
 
     # ============================================================

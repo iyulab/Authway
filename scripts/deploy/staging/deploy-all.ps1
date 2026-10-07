@@ -4,7 +4,7 @@ param(
     [switch]$SkipHealthCheck,
     [switch]$SkipMigration,
     [switch]$ForceMigration,
-    [string[]]$Services = @("hydra", "api", "auth-api", "admin", "auth-ui")
+    [string[]]$Services = @("hydra", "api", "admin", "auth-ui")
 )
 & (Join-Path $PSScriptRoot "..\_shared\lib\deploy-all.core.ps1") `
     -Target "staging" `

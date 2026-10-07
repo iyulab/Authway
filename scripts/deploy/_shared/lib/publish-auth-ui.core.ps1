@@ -77,11 +77,9 @@ try {
 
     Write-Host "📝 환경 변수 설정 중..." -ForegroundColor Yellow
     $prodEnvContent = @"
-VITE_AUTH_BACKEND_URL=$($envVars['AUTH_API_URL'])
 VITE_API_URL=$($envVars['API_URL'])
 "@
     $prodEnvContent | Out-File -FilePath ".env.production" -Encoding UTF8 -Force
-    Write-Host "✓ Auth Backend URL: $($envVars['AUTH_API_URL'])" -ForegroundColor Green
     Write-Host "✓ API URL: $($envVars['API_URL'])" -ForegroundColor Green
     Write-Host ""
 

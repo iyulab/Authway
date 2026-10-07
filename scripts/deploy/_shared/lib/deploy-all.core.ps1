@@ -14,7 +14,7 @@ param(
     [switch]$SkipHealthCheck,
     [switch]$SkipMigration,   # DEPRECATED: migrations are now handled by the Go startup migrator
     [switch]$ForceMigration,  # DEPRECATED: no longer used
-    [string[]]$Services = @("hydra", "api", "auth-api", "admin", "auth-ui")
+    [string[]]$Services = @("hydra", "api", "admin", "auth-ui")
 )
 
 Write-Host ""
@@ -183,14 +183,6 @@ try {
             -Params $params
     }
 
-    if ($Services -contains "auth-api") {
-        $params = @{}
-        if ($SkipBuild) { $params["SkipBuild"] = $true }
-        Deploy-Service -ServiceName "Auth Backend" `
-            -ScriptPath (Join-Path $LibDir "publish-auth-api.core.ps1") `
-            -Params $params
-    }
-
     # ============================================================
     # 2. Static Web Apps 배포
     # ============================================================
@@ -266,10 +258,6 @@ try {
             $healthResults += Test-AdminAuthSmoke -ApiUrl $envVars['API_URL']
         }
 
-        if ($Services -contains "auth-api") {
-            $healthResults += Test-HealthEndpoint -Name "Auth Backend" -Url "$($envVars['AUTH_API_URL'])/health"
-        }
-
         if ($Services -contains "admin") {
             $healthResults += Test-HealthEndpoint -Name "Admin Dashboard" -Url $envVars['ADMIN_URL']
         }
@@ -336,7 +324,6 @@ try {
     Write-Host "    - Auth UI: $($envVars['LOGIN_URL'])" -ForegroundColor Gray
     Write-Host "    - Hydra (OAuth): $($envVars['HYDRA_ISSUER'])" -ForegroundColor Gray
     Write-Host "    - Central API: $($envVars['API_URL'])" -ForegroundColor Gray
-    Write-Host "    - Auth Backend: $($envVars['AUTH_API_URL'])" -ForegroundColor Gray
     Write-Host ""
 
     if ($failCount -eq 0) {

@@ -12,34 +12,33 @@ scripts/deploy/
 │   ├── smoke-audit.ps1          # audit_logs 배포 smoke (fail-closed)
 │   ├── check-migration-status*.ps1
 │   ├── run-migration*.ps1
-│   ├── deploy-with-migration.ps1
-│   ├── deploy-cors-update.ps1
-│   ├── azure-plan.md
 │   └── lib/                     # 타겟 주입형 publish 코어 (직접 호출 지양)
 │       ├── publish-api.core.ps1
 │       ├── publish-hydra.core.ps1
-│       ├── publish-auth-api.core.ps1
 │       ├── publish-admin.core.ps1
 │       ├── publish-auth-ui.core.ps1
+│       ├── publish-landing.core.ps1
 │       └── deploy-all.core.ps1
 ├── prod/                       # production 배포 (Target=prod 고정 thin wrapper)
 │   ├── .env                     # 실제 secret (git-ignored)
 │   ├── .env.example
 │   ├── publish-api.ps1
 │   ├── publish-hydra.ps1
-│   ├── publish-auth-api.ps1
+│   ├── publish-admin.ps1
+│   ├── publish-auth-ui.ps1
+│   ├── publish-landing.ps1
+│   └── deploy-all.ps1
+├── staging/                    # staging 배포 (Target=staging 고정 thin wrapper)
+│   ├── .env                     # (사용자 생성) staging secret
+│   ├── .env.example             # 기존 리소스 재사용 기반 (RG=authway, Redis DB=1, authway_staging DB)
+│   ├── publish-api.ps1
+│   ├── publish-hydra.ps1
 │   ├── publish-admin.ps1
 │   ├── publish-auth-ui.ps1
 │   └── deploy-all.ps1
-└── staging/                    # staging 배포 (Target=staging 고정 thin wrapper)
-    ├── .env                     # (사용자 생성) staging secret
-    ├── .env.example             # 기존 리소스 재사용 기반 (RG=authway, Redis DB=1, authway_staging DB)
-    ├── publish-api.ps1
-    ├── publish-hydra.ps1
-    ├── publish-auth-api.ps1
-    ├── publish-admin.ps1
-    ├── publish-auth-ui.ps1
-    └── deploy-all.ps1
+└── verify/                     # 배포 후 검증 (POST-DEPLOY-VERIFY.md)
+    ├── verify-hydra-env.ps1
+    └── verify-oauth-smoke.ps1   # 로그인 → consent → 토큰 교환 전 구간
 ```
 
 ## 설계 원칙
@@ -114,7 +113,7 @@ az --version; docker --version; psql --version; swa --version; npx wrangler@late
 1. Postgres: `CREATE DATABASE authway_staging;` + `CREATE ROLE authway_staging LOGIN PASSWORD '…';` + `GRANT ALL ON DATABASE authway_staging TO authway_staging;`
 2. Azure: 기존 RG `authway` 내 `-stg` 접미사 Container Apps + Static Web Apps 프로비저닝
 3. DNS: `stg-*.authway.in` CNAME 레코드 (7종)
-4. OAuth: Google Cloud Console에 `https://stg-auth-api.authway.in/auth/google/callback` 추가
+4. OAuth: Google Cloud Console에 `<API_URL>/auth/google/callback` 추가 (central API 가 소셜 로그인 콜백을 받는다)
 5. `staging/.env.example` → `staging/.env` 복사 후 값 채움 (secrets 전용 신규 생성)
 
 **배포**:
@@ -135,7 +134,7 @@ az --version; docker --version; psql --version; swa --version; npx wrangler@late
 
 ## 금기사항
 
-- `scripts/deploy/` 는 `.gitignore` 대상. `git add -f` 금지.
+- 타겟별 `.env` 와 `_shared/hydra-migrate-job.*.yaml` 은 `.gitignore` 대상(실 secret·DSN 포함). `git add -f` 금지.
 - `az account set` 은 preflight가 자동 고정 — 수동 실행 불필요.
 - prod secret을 staging `.env`에 복사 금지. rotation 경계 파괴.
 - core script (`_shared/lib/*.core.ps1`) 를 `-Target` 없이 직접 호출 금지 (param 필수).
