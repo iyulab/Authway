@@ -2,9 +2,11 @@
 
 ### Added
 
-- **The contract covers managing clients.** Listing, reading and updating a
-  client and regenerating its secret are in `packages/contract`, every admin
-  operation lists its `401`, and the conformance suite exercises each of them.
+- **The contract covers managing tenants, clients and users.** Creating,
+  reading, updating and deleting tenants; listing, reading and updating
+  clients and regenerating a secret; listing, reading and updating users. Every
+  admin operation lists its `401`, and the conformance suite exercises each of
+  them.
 
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
   consent and logout flows, sign-in links, capabilities, email verification,
@@ -23,6 +25,9 @@
   (`unauthorized`, `forbidden`, `conflict`, `too_many_requests`,
   `bad_gateway`, `service_unavailable`, `internal_server_error`) instead of
   `request_error`, and the `strict_sync` 502 carries `upstream_sync_failed`.
+  Tenant refusals name their reason: `tenant_slug_taken`,
+  `default_tenant_protected`, `tenant_has_users`, `tenant_has_clients`,
+  `tenant_has_service_clients`.
 - **`email.sendway_base_url` has no default.** Set
   `AUTHWAY_EMAIL_SENDWAY_BASE_URL` when `AUTHWAY_EMAIL_USE_SENDWAY=true`; the API
   refuses to start without it.

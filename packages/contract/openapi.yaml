@@ -22,8 +22,9 @@ tags:
       Administration, authenticated with the deployment's admin key (or an
       admin session) as a bearer token. Tenant-scoped calls name the tenant
       in X-Tenant-ID. A missing or rejected credential answers 401 with
-      code unauthorized. This document covers provisioning and managing
-      clients, and provisioning a user; the rest of the admin API follows.
+      code unauthorized. This document covers tenants, clients and users;
+      invitations beyond creating one, webhooks, audit and impersonation
+      follow.
 
 security: []
 
@@ -341,6 +342,37 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants:
+    post:
+      tags: [admin]
+      operationId: createTenant
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                slug: { type: string, minLength: 2, maxLength: 100 }
+                description: { type: string }
+                settings: { $ref: '#/components/schemas/TenantSettings' }
+                logo: { type: string }
+                primary_color: { type: string, description: A hex color, e.g. '#4F46E5'. }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409':
+          description: The slug is taken (code tenant_slug_taken)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     get:
       tags: [admin]
       operationId: listTenants
@@ -354,6 +386,77 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Tenant' }
         '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/tenants/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: getTenant
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The tenant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      operationId: updateTenant
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Only the fields present change; settings, when present, replaces the whole object.
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                settings: { $ref: '#/components/schemas/TenantSettings' }
+                logo: { type: string }
+                primary_color: { type: string }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403':
+          description: The default tenant cannot be deactivated (code default_tenant_protected)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [admin]
+      operationId: deleteTenant
+      security: [{ adminKey: [] }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403':
+          description: The default tenant cannot be deleted (code default_tenant_protected)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: |
+            The tenant still has users, clients or active service clients
+            (code tenant_has_users, tenant_has_clients or
+            tenant_has_service_clients).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/clients:
     get:
@@ -581,13 +684,85 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of users, every tenant's unless tenant_id is given
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users, total, limit, offset]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+                  total: { type: integer, minimum: 0 }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
   /api/v1/users/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: getUser
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      operationId: updateUser
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: An empty or absent field leaves the stored value alone.
+              properties:
+                name: { type: string }
+                avatar_url: { type: string }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  message: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: deleteUser
       security: [{ adminKey: [] }]
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
       responses:
         '200':
           description: Deleted
@@ -790,7 +965,44 @@ components:
         id: { type: string }
         name: { type: string }
         slug: { type: string }
+        description: { type: string }
+        settings: { $ref: '#/components/schemas/TenantSettings' }
+        logo: { type: string }
+        primary_color: { type: string }
         active: { type: boolean }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    TenantSettings:
+      type: object
+      properties:
+        require_email_verification: { type: boolean }
+        password_min_length: { type: integer }
+        session_timeout: { type: integer, description: Minutes. }
+        allowed_domains: { type: [array, 'null'], items: { type: string } }
+        signup_mode:
+          description: |
+            open lets a first sign-in through a social provider or a sign-in
+            link create the account; anything else (including empty) means
+            invite_only.
+          type: string
+
+    User:
+      type: object
+      required: [id, tenant_id, email]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        avatar_url: { type: string }
+        email_verified: { type: boolean }
+        active: { type: boolean }
+        provider: { type: string }
+        totp_enabled: { type: boolean }
+        last_login_at: { type: ['null', string] }
+        created_at: { type: string }
+        updated_at: { type: string }
 
     Client:
       type: object
@@ -854,5 +1066,7 @@ components:
             too_many_requests, not_found, method_not_allowed, unauthorized,
             forbidden, insufficient_scope, admin_api_not_configured, conflict,
             public_client_has_no_secret, upstream_sync_failed,
+            tenant_slug_taken, default_tenant_protected, tenant_has_users,
+            tenant_has_clients, tenant_has_service_clients,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.

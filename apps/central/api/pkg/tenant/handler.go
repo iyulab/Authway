@@ -62,15 +62,14 @@ func (h *Handler) RegisterRoutes(app *fiber.App, adminMiddleware fiber.Handler) 
 func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 	var req CreateTenantRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	// Validate request
 	if err := h.validate.Struct(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Validation failed",
+			"code":    "invalid_request",
 			"details": err.Error(),
 		})
 	}
@@ -79,13 +78,9 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 	if err != nil {
 		// Handle specific errors with appropriate status codes
 		if errors.Is(err, ErrDuplicateSlug) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "A tenant with this slug already exists",
-			})
+			return apierror.Refuse(c, fiber.StatusConflict, "tenant_slug_taken", "A tenant with this slug already exists")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create tenant",
-		})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to create tenant")
 	}
 
 	h.logAudit(c, tenant.ID, audit.ActionTenantCreated, tenant.ID.String(), map[string]any{
@@ -101,9 +96,7 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 func (h *Handler) ListTenants(c *fiber.Ctx) error {
 	tenants, err := h.service.ListTenants()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": apierror.Message(err, "failed to list tenants"),
-		})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", apierror.Message(err, "failed to list tenants"))
 	}
 
 	// Convert to public format
@@ -121,16 +114,12 @@ func (h *Handler) GetTenant(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid tenant ID format",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID format")
 	}
 
 	tenant, err := h.service.GetTenantByID(id)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": apierror.Message(err, "tenant not found"),
-		})
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", apierror.Message(err, "tenant not found"))
 	}
 
 	return c.JSON(tenant.ToPublic())
@@ -142,22 +131,19 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid tenant ID format",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID format")
 	}
 
 	var req UpdateTenantRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	// Validate request
 	if err := h.validate.Struct(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Validation failed",
+			"code":    "invalid_request",
 			"details": err.Error(),
 		})
 	}
@@ -170,18 +156,12 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 	if err != nil {
 		// Handle specific errors with appropriate status codes
 		if errors.Is(err, ErrNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Tenant not found",
-			})
+			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "Tenant not found")
 		}
 		if errors.Is(err, ErrCannotDeactivateDefault) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Cannot deactivate the default tenant",
-			})
+			return apierror.Refuse(c, fiber.StatusForbidden, "default_tenant_protected", "Cannot deactivate the default tenant")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update tenant",
-		})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to update tenant")
 	}
 
 	// Diff-only details: flagging the *changed* fields makes the audit row
@@ -210,9 +190,7 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid tenant ID format",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID format")
 	}
 
 	// Snapshot before deletion — without this the audit entry cannot answer
@@ -223,33 +201,21 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 	if err := h.service.DeleteTenant(id); err != nil {
 		// Handle specific errors with appropriate status codes
 		if errors.Is(err, ErrNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Tenant not found",
-			})
+			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "Tenant not found")
 		}
 		if errors.Is(err, ErrCannotDeleteDefault) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Cannot delete the default tenant",
-			})
+			return apierror.Refuse(c, fiber.StatusForbidden, "default_tenant_protected", "Cannot delete the default tenant")
 		}
 		if errors.Is(err, ErrHasUsers) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "Cannot delete tenant with existing users",
-			})
+			return apierror.Refuse(c, fiber.StatusConflict, "tenant_has_users", "Cannot delete tenant with existing users")
 		}
 		if errors.Is(err, ErrHasClients) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "Cannot delete tenant with existing clients",
-			})
+			return apierror.Refuse(c, fiber.StatusConflict, "tenant_has_clients", "Cannot delete tenant with existing clients")
 		}
 		if errors.Is(err, ErrHasServiceClients) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "Cannot delete tenant with active service clients",
-			})
+			return apierror.Refuse(c, fiber.StatusConflict, "tenant_has_service_clients", "Cannot delete tenant with active service clients")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete tenant",
-		})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to delete tenant")
 	}
 
 	if beforeTenant != nil {
