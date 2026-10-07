@@ -1,5 +1,5 @@
 # ============================================================
-# Hydra Container Apps env 전달 검증 (POST-DEPLOY-VERIFY.md §5)
+# Hydra Container Apps env 전달 검증 (POST-DEPLOY-VERIFY.md §1-1)
 # ============================================================
 # publish-hydra.core.ps1이 $TokenEnv 배열을 `az containerapp update
 # --set-env-vars`로 넘긴다. PowerShell 쪽 인자 구성은 로컬에서 실측 확인됐지만,
@@ -10,7 +10,7 @@
 # 확인 대상: public·admin 두 Container App 모두, STRATEGIES_ACCESS_TOKEN이
 # 실제로 "opaque"로 반영됐는지(전역 전략 회귀 시 모든 소비자의 토큰 형식이
 # 바뀐다 — 가장 파급이 큰 값이라 이것만 자동 검증한다). 커스텀 클레임
-# 미러링(§4)은 배포마다 값이 다를 수 있어 여기서는 다루지 않는다 — 필요하면
+# 미러링(POST-DEPLOY-VERIFY.md §3)은 배포마다 값이 다를 수 있어 여기서는 다루지 않는다 — 필요하면
 # 이 스크립트가 출력하는 전체 env 목록에서 사람이 직접 확인.
 #
 # 사용:

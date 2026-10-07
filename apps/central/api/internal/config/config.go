@@ -106,8 +106,8 @@ type HydraConfig struct {
 }
 
 type EmailConfig struct {
-	// Sendway (iyulab's own notification service, production) — see
-	// org/dev-docs/sendway.md for the deployment and API contract.
+	// Sendway (https://github.com/iyulab/Sendway). SendwayBaseURL has no default —
+	// it names the deployment to talk to and is required when UseSendway is set.
 	UseSendway     bool   `mapstructure:"use_sendway"`
 	SendwayBaseURL string `mapstructure:"sendway_base_url"`
 	SendwayAPIKey  string `mapstructure:"sendway_api_key"`
@@ -426,6 +426,10 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL outside development, got %q — emailed links would point at the container itself", c.App.FrontendURL))
 	}
 
+	if c.Email.UseSendway && strings.TrimSpace(c.Email.SendwayBaseURL) == "" {
+		errors = append(errors, "email.sendway_base_url (AUTHWAY_EMAIL_SENDWAY_BASE_URL) is required when email.use_sendway is true")
+	}
+
 	// Warn about missing admin password in all environments
 	if c.Admin.Password == "" {
 		errors = append(errors, "WARNING: admin.password is not set - admin console will be inaccessible")
@@ -496,7 +500,7 @@ func setDefaults() {
 
 	// Email defaults
 	viper.SetDefault("email.use_sendway", false) // Default to SMTP for development
-	viper.SetDefault("email.sendway_base_url", "sendway.u-platform.kr")
+	viper.SetDefault("email.sendway_base_url", "")
 	viper.SetDefault("email.sendway_api_key", "")
 	viper.SetDefault("email.smtp_host", "localhost")
 	viper.SetDefault("email.smtp_port", 587)

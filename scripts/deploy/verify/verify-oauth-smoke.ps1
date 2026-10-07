@@ -1,5 +1,5 @@
 # ============================================================
-# 로그인 → consent → 콜백 회귀 스모크 (POST-DEPLOY-VERIFY.md §6)
+# 로그인 → consent → 콜백 회귀 스모크 (POST-DEPLOY-VERIFY.md §1-3)
 # ============================================================
 # authorization_code + password 로그인의 전 구간을 실제로 구동한다 —
 # Hydra 로그인 챌린지 발급부터 access token 교환까지. 이 구간은 로컬에서
@@ -13,9 +13,9 @@
 # 두면 이 스크립트 자체를 실 자격증명 없이도 읽을 수 있다.
 #
 # 로그아웃 회귀는 이번 자동화 범위 밖이다 — Hydra RP-initiated logout의
-# 정확한 파라미터 계약을 이번 사이클에서 실측하지 않았고, 잘못 만든 자동화가
+# 정확한 파라미터 계약을 자동화하지 않았고, 잘못 만든 자동화가
 # "통과"를 잘못 보고하는 편이 사람이 매번 확인하는 것보다 나쁘다고 판단했다.
-# 계속 사람이 확인한다(POST-DEPLOY-VERIFY.md §6 참조).
+# 계속 사람이 확인한다(POST-DEPLOY-VERIFY.md §2 참조).
 #
 # 사용:
 #   verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 테넌트 UUID>
@@ -273,5 +273,5 @@ if (-not $SkipAuditSmoke) {
 
 Write-Host ""
 Write-Host "✅ OAuth 회귀 스모크 통과" -ForegroundColor Green
-Write-Host "   (로그아웃 회귀는 자동화 범위 밖 — 사람이 확인. POST-DEPLOY-VERIFY.md §6 참조)" -ForegroundColor Gray
+Write-Host "   (로그아웃 회귀는 자동화 범위 밖 — 사람이 확인. POST-DEPLOY-VERIFY.md §2 참조)" -ForegroundColor Gray
 exit 0

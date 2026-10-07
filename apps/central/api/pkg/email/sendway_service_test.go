@@ -134,9 +134,9 @@ func TestSendwayEmailService_SendMagicLinkEmail_SubjectVariesByIsNewUser(t *test
 	}
 }
 
-// TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType guards the docket
-// iyulab/Sendway#105 upgrade — every send method must carry an HTML alternative
-// alongside its plain-text body, not just SendVerificationEmail.
+// TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType: every send method
+// must carry an HTML alternative alongside its plain-text body, not just
+// SendVerificationEmail.
 func TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType(t *testing.T) {
 	var captured sendwayEmailRequest
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

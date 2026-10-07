@@ -14,9 +14,8 @@ import (
 	"authway/apps/central/api/pkg/maillink"
 )
 
-// SendwayEmailService sends email through Sendway (https://github.com/iyulab/Sendway),
-// iyulab's own notification-service deployment. See org/dev-docs/sendway.md for the
-// deployment this talks to and the exact request/response contract.
+// SendwayEmailService sends email through a Sendway deployment
+// (https://github.com/iyulab/Sendway) using its POST /messages/email contract.
 type SendwayEmailService struct {
 	baseURL     string
 	apiKey      string
@@ -36,8 +35,7 @@ type SendwayEmailConfig struct {
 }
 
 // sendwayEmailRequest mirrors POST /messages/email. HtmlBody is optional — Sendway
-// sends multipart/alternative when set, keeping Body as the RFC 2046 fallback part
-// (org/dev-docs/sendway.md "Using your own sender identity" / docket iyulab/Sendway#105).
+// sends multipart/alternative when set, keeping Body as the RFC 2046 fallback part.
 type sendwayEmailRequest struct {
 	To       []string `json:"to"`
 	Subject  string   `json:"subject"`
@@ -120,8 +118,7 @@ func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewU
 }
 
 // sendEmail sends an email via Sendway's POST /messages/email, with an HTML
-// alternative alongside the required plain-text body (docket iyulab/Sendway#105 —
-// resolved 2026-08-30, live on sendway.u-platform.kr).
+// alternative alongside the required plain-text body.
 func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) error {
 	req := sendwayEmailRequest{
 		To:       []string{to},
@@ -148,7 +145,7 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Api-Key", s.apiKey)
 	// Lets a transient failure (502) be retried with the same key instead of
-	// risking a duplicate send — see org/dev-docs/sendway.md "Idempotency".
+	// risking a duplicate send.
 	httpReq.Header.Set("Idempotency-Key", uuid.New().String())
 
 	s.logger.Info("Sending email via Sendway",

@@ -21,8 +21,6 @@
 -- it by content in that window, and the backfill runs unconditionally and
 -- idempotently on every startup, so the window closes on the same deploy.
 --
--- See issue: ISSUE-Authway-20260721-213000-invitation-token-plaintext-at-rest.
---
 -- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
 -- outer transaction; an inner COMMIT would leak-commit that outer tx and defeat
 -- its all-or-nothing guarantee (empirically confirmed). Migration files must

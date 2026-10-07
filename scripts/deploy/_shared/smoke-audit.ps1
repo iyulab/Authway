@@ -4,8 +4,7 @@
 # 배포 직후 audit_logs 에 행이 실제 생성되는지 확인 — fail-closed.
 # 0건이면 audit emit 회귀가 prod/staging 에 섞여 들어간 가능성 → 배포 실패 처리.
 #
-# 근거: ISSUE-Authway-20260415-audit-smoke-staging-automation.md
-#   배포 후 audit 배선 검증을 사람 눈이 아닌 스크립트로 강제.
+# 배포 후 audit 배선 검증을 사람 눈이 아닌 스크립트로 강제한다.
 #
 # 사용:
 #   _shared/smoke-audit.ps1 -Target prod

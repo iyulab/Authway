@@ -199,7 +199,7 @@ try {
     # ============================================================
     # Post-deploy verification (version parity + admin-auth smoke)
     # ============================================================
-    # ISSUE-Authway-20260415-prod-admin-api-unauthenticated 재발 방지 게이트.
+    # 관리 API 가 인증 없이 열린 채 배포되는 회귀를 막는 게이트.
     #   1. /health.version == ImageTag        → 실제 새 이미지가 서빙 중인가
     #   2. adminAuth 라우트 4종 == 401|503     → adminAuth 미들웨어가 걸려 있나
 
@@ -276,7 +276,7 @@ try {
     # ------------------------------------------------------------
     # Mail-link smoke: can a human actually reach what we email them?
     # ------------------------------------------------------------
-    # ISSUE-Authway-20260721-170000-frontend-url-config-missing 재발 방지 게이트.
+    # 메일 링크가 가리키는 auth UI 주소가 틀린 채 배포되는 회귀를 막는 게이트.
     # 초대·매직링크·인증·재설정 링크는 전부 auth UI 호스트로 만들어진다. 그 호스트가
     # 틀리거나(구성) 딥링크를 서빙하지 않으면(CDN SPA fallback) 발송은 성공하는데
     # 수신자만 404 를 본다 — 어떤 API 응답으로도 드러나지 않는 침묵형 고장이다.

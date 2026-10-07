@@ -249,8 +249,7 @@ func TestVerifyMFARecoveryLogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	}
 }
 
-// TestLogin_TenantScoped_SameEmailDifferentTenant is the regression this
-// cycle exists for (ISSUE-Authway-20260817-115815): the schema explicitly
+// TestLogin_TenantScoped_SameEmailDifferentTenant: the schema explicitly
 // allows the same email in more than one tenant
 // (idx_users_tenant_email), so Login must authenticate against the
 // requesting OAuth client's tenant, not match the email globally.

@@ -1,4 +1,4 @@
--- Migration: Align audit_logs schema with Run-3 P4 wiring
+-- Migration: Align audit_logs schema with the audit log writer
 -- Version: 009
 -- Date: 2026-04-16
 -- Purpose: Add actor_type / details / error_msg columns expected by AuditLog GORM model.

@@ -165,7 +165,7 @@ func main() {
 	var emailService email.EmailService
 
 	if cfg.Email.UseSendway {
-		// Use Sendway (Production) — see org/dev-docs/sendway.md
+		// Use Sendway (Production)
 		zapLogger.Info("Using Sendway Email Service",
 			zap.String("baseURL", cfg.Email.SendwayBaseURL))
 
@@ -430,7 +430,7 @@ func main() {
 	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 
-	// Service client provisioning (Phase D option A) — admin-only, since
+	// Service client provisioning — admin-only, since
 	// this mints new M2M credentials. The credentials it mints are what
 	// clientCreateAuth (above) accepts on POST /clients.
 	v1.Post("/tenants/:id/service-clients", adminAuth, serviceClientHandler.Create)

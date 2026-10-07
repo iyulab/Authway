@@ -44,7 +44,6 @@ function Set-PackageVersion {
 
 # Verifies the publishable tarball does NOT contain unresolved `workspace:` protocol.
 # Guards against regressing to `npm publish`, which would ship broken packages.
-# See: claudedocs/issues/closed/ISSUE-Authway-20260413-pnpm-publish-workspace-protocol.md
 function Assert-NoWorkspaceProtocol {
     param([string]$packagePath)
 

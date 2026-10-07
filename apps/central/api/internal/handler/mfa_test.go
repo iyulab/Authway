@@ -12,7 +12,7 @@ import (
 	"authway/apps/central/api/pkg/mfa"
 )
 
-// Regression for ISSUE-Authway-20260817-131800: every MFA handler asserted
+// Regression: every MFA handler asserted
 // c.Locals("user_id") to a string, but JWTAuth (internal/middleware/jwt.go)
 // stores a uuid.UUID — every authenticated call panicked into a 500. This
 // wires each route behind a stand-in for JWTAuth (same Locals type, same

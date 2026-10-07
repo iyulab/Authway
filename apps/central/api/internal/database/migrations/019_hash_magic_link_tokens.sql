@@ -12,8 +12,6 @@
 -- All existing links are invalidated (plaintext cannot be reverse-hashed).
 -- They live 15 minutes, so the blast radius is one retry.
 --
--- See issue: ISSUE-Authway-20260721-160500-magic-link-token-plaintext-at-rest.
---
 -- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
 -- outer transaction; an inner COMMIT would leak-commit that outer tx and defeat
 -- its all-or-nothing guarantee (empirically confirmed). Migration files must
