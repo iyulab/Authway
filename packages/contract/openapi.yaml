@@ -14,6 +14,18 @@ info:
     name: Apache-2.0
     identifier: Apache-2.0
 
+tags:
+  - name: login
+    description: Called by the login screens, unauthenticated.
+  - name: admin
+    description: |
+      Administration, authenticated with the deployment's admin key (or an
+      admin session) as a bearer token. Tenant-scoped calls name the tenant
+      in X-Tenant-ID. This document covers the operations needed to
+      provision a client and a user; the rest of the admin API follows.
+
+security: []
+
 paths:
   /api/v1/capabilities:
     get:
@@ -327,8 +339,139 @@ paths:
                       email: { type: string }
         '400': { $ref: '#/components/responses/Error' }
 
+  /api/v1/tenants:
+    get:
+      tags: [admin]
+      operationId: listTenants
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: Every tenant
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Tenant' }
+
+  /api/v1/clients:
+    post:
+      tags: [admin]
+      operationId: createClient
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_id, name, grant_types, scopes]
+              properties:
+                tenant_id: { type: string }
+                name: { type: string }
+                public: { type: boolean }
+                redirect_uris: { type: array, items: { type: string } }
+                post_logout_redirect_uris: { type: array, items: { type: string } }
+                allowed_origins: { type: array, items: { type: string } }
+                grant_types: { type: array, items: { type: string } }
+                scopes: { type: array, items: { type: string } }
+                enabled_auth_providers:
+                  description: Sign-in methods to offer — email, magic_link, google, github, microsoft, apple.
+                  type: array
+                  items: { type: string }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client]
+                properties:
+                  client: { $ref: '#/components/schemas/Client' }
+                  credentials:
+                    type: object
+                    description: The client secret, shown once (confidential clients).
+                  message: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/clients/{id}:
+    delete:
+      tags: [admin]
+      operationId: deleteClient
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/invitations:
+    post:
+      tags: [admin]
+      operationId: createInvitation
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+                role: { type: string }
+                message: { type: string }
+      responses:
+        '201':
+          description: Created and emailed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation]
+                properties:
+                  invitation:
+                    type: object
+                    required: [id, email, status, expires_at]
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      status: { type: string }
+                      expires_at: { type: string }
+                  message: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/{id}:
+    delete:
+      tags: [admin]
+      operationId: deleteUser
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
 components:
+  securitySchemes:
+    adminKey:
+      type: http
+      scheme: bearer
+      description: The deployment's admin API key, or an admin console session token.
+
   parameters:
+    TenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: false
+      schema: { type: string }
     Token:
       name: token
       in: query
@@ -479,6 +622,31 @@ components:
         message: { type: string }
         expires_at: { type: string }
 
+    Tenant:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        active: { type: boolean }
+
+    Client:
+      type: object
+      required: [id, tenant_id, client_id, name, public, grant_types, scopes]
+      properties:
+        id: { type: string, description: Authway's id for the registration (admin API paths). }
+        tenant_id: { type: string }
+        client_id: { type: string, description: The OAuth client_id. }
+        name: { type: string }
+        public: { type: boolean }
+        redirect_uris: { type: [array, 'null'], items: { type: string } }
+        post_logout_redirect_uris: { type: [array, 'null'], items: { type: string } }
+        allowed_origins: { type: [array, 'null'], items: { type: string } }
+        grant_types: { type: array, items: { type: string } }
+        scopes: { type: array, items: { type: string } }
+        enabled_auth_providers: { type: [array, 'null'], items: { type: string } }
+
     Capabilities:
       type: object
       required: [multi_tenant, providers, magic_link, mfa, signup_modes, token_exchange, ciba]
@@ -507,4 +675,4 @@ components:
             invalid_mfa_challenge, invalid_code, mfa_locked, invalid_link,
             invalid_request, client_not_registered, invalid_token,
             token_expired, invitation_not_acceptable, invitation_not_accepted,
-            too_many_requests.
+            too_many_requests, not_found, method_not_allowed.

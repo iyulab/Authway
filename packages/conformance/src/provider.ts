@@ -86,6 +86,7 @@ export class Provider {
       const res = await fetch(`${this.config.api}/api/v1/tenants`, {
         headers: { Authorization: `Bearer ${this.config.adminKey}` },
       })
+      await conform('GET', '/api/v1/tenants', res)
       if (!res.ok) throw new Error(`Listing tenants failed: ${res.status} ${await res.text()}`)
       const body = (await res.json()) as { tenants?: { id: string; slug?: string }[] } | { id: string }[]
       const tenants = Array.isArray(body) ? body : (body.tenants ?? [])
@@ -111,6 +112,7 @@ export class Provider {
         scopes: ['openid', 'profile', 'email'],
       }),
     })
+    await conform('POST', '/api/v1/clients', res)
     const text = await res.text()
     if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
     const { client } = JSON.parse(text) as { client: { id: string; client_id: string } }
@@ -118,7 +120,7 @@ export class Provider {
   }
 
   async deleteClient(client: TestClient): Promise<void> {
-    await this.admin(`/api/v1/clients/${client.id}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/clients/{id}', await this.admin(`/api/v1/clients/${client.id}`, { method: 'DELETE' }))
   }
 
   /** Provisions a user the way a real one arrives: an admin invitation accepted from the mailed link. */
@@ -129,6 +131,7 @@ export class Provider {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
+    await conform('POST', '/api/v1/invitations', invite)
     if (!invite.ok) throw new Error(`Creating invitation failed: ${invite.status} ${await invite.text()}`)
 
     const link = await waitForLink(this.config.mailApi, email, '/invitation/accept')
@@ -151,7 +154,7 @@ export class Provider {
   }
 
   async deleteUser(sub: string): Promise<void> {
-    await this.admin(`/api/v1/users/${sub}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/users/{id}', await this.admin(`/api/v1/users/${sub}`, { method: 'DELETE' }))
   }
 
   // ---- login-UI backend (provider-specific protocol) ----------------------

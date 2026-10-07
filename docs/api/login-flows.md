@@ -4,6 +4,11 @@ How a login screen talks to Authway. The bundled login UI uses exactly this
 contract; a custom screen can replace it without knowing anything about the
 authorization server behind it.
 
+The machine-readable description — including the email verification,
+password reset and invitation endpoints the account screens use — is
+[`packages/contract/openapi.yaml`](../../packages/contract/openapi.yaml)
+(OpenAPI 3.1). The conformance suite checks every answer against it.
+
 ## Flow ids
 
 The authorization server sends the browser to the API, which opens a screen

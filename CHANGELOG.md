@@ -4,7 +4,8 @@
 
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
   consent and logout flows, sign-in links, capabilities, email verification,
-  password reset and invitations, as one OpenAPI 3.1 document. The conformance suite now checks every answer a provider gives
+  password reset and invitations, plus the admin operations that provision a
+  client and a user, as one OpenAPI 3.1 document. The conformance suite now checks every answer a provider gives
   against it — status codes and bodies — so another implementation is held to
   the same document.
 
@@ -17,6 +18,12 @@
   request answers `429` with `error` as a message to show, `code:
   too_many_requests` and `retry_after` — previously `error` held the code and
   the text was in `message`.
+- **Framework-level refusals use the same shape.** An unknown route, a wrong
+  method or an unexpected failure answered `{error: "request_error", message,
+  code: <HTTP status>}`; they now answer `{error: <message>, code}` with codes
+  `not_found`, `method_not_allowed`, `request_too_large`, `invalid_request` and
+  `internal_server_error`. Handlers that refuse with a framework error (for
+  example deleting an unknown user) answer this way too.
 
 ### Security
 
