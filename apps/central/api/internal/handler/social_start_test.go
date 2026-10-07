@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -100,5 +101,46 @@ func TestStartSocialLogin_UnknownFlowShowsTheErrorScreen(t *testing.T) {
 	}
 	if len(*rejected) != 0 {
 		t.Errorf("rejected %v, want none — there is no flow to reject", *rejected)
+	}
+}
+
+// A provider the client lists but nobody has credentials for must not send
+// the user to the provider with an empty client_id.
+func TestStartSocialLogin_ProviderWithoutCredentials(t *testing.T) {
+	app, rejected := newSocialStartTestApp(t, &client.Client{ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"github"}})
+
+	resp := get(t, app, "/login-flows/flow-1/social/github", "")
+
+	if resp.StatusCode != fiber.StatusFound || resp.Header.Get("Location") != "https://app.example.com/callback?error=invalid_request" {
+		t.Fatalf("status %d location %q, want 302 to the rejection redirect", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if len(*rejected) != 1 {
+		t.Errorf("rejected %v, want the flow rejected", *rejected)
+	}
+}
+
+func TestCapabilities_ListsOnlyConfiguredProviders(t *testing.T) {
+	clients := newFakeClientService()
+	google := social.NewGoogleService(&config.GoogleOAuthConfig{ClientID: "google-app"}, nil, nil, clients, zap.NewNop())
+	github := social.NewGitHubService(&config.GitHubOAuthConfig{}, nil, nil, clients, zap.NewNop())
+	h := NewSocialHandlerWithAllProviders(google, github, nil, nil, nil, clients, nil, zap.NewNop(), nil, nil, testFrontendURL)
+	app := fiber.New()
+	app.Get("/capabilities", NewCapabilitiesHandler(h).Get)
+
+	resp := get(t, app, "/capabilities", "")
+	var body struct {
+		Providers     []string `json:"providers"`
+		MagicLink     bool     `json:"magic_link"`
+		TokenExchange bool     `json:"token_exchange"`
+		SignupModes   []string `json:"signup_modes"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Providers) != 1 || body.Providers[0] != "google" {
+		t.Errorf("providers = %v, want [google]", body.Providers)
+	}
+	if body.TokenExchange || len(body.SignupModes) != 2 {
+		t.Errorf("body = %+v", body)
 	}
 }

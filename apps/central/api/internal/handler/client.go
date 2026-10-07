@@ -129,10 +129,10 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 		// so SDKs and the Admin Console can render targeted UX.
 		if cerr, ok := err.(*client.ConfigError); ok {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   cerr.Message,
-				"code":    cerr.Code,
-				"field":   cerr.Field,
-				"hint":    cerr.Hint,
+				"error": cerr.Message,
+				"code":  cerr.Code,
+				"field": cerr.Field,
+				"hint":  cerr.Hint,
 			})
 		}
 		h.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name))

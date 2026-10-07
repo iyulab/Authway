@@ -67,6 +67,14 @@ type GoogleOAuthConfig struct {
 }
 
 // GetOAuthConfig returns the appropriate Google OAuth config (client-specific or central)
+// ConfiguredFor reports whether sign-in with this provider can start for
+// clientID — the client has its own credentials or the deployment does. With
+// an empty clientID it reports the deployment's own configuration.
+func (g *GoogleService) ConfiguredFor(clientID string) bool {
+	cfg, err := g.GetOAuthConfig(clientID)
+	return err == nil && cfg.ClientID != ""
+}
+
 func (g *GoogleService) GetOAuthConfig(clientID string) (*GoogleOAuthConfig, error) {
 	if clientID == "" {
 		// No client specified, use central Authway config

@@ -15,8 +15,10 @@ import (
 //   - {"next":"redirect","redirect_to":…} — no form is needed. Either the user
 //     already has a session in the client's tenant and the flow was accepted,
 //     or a stale session was cleared and the flow restarts.
-//   - {"next":"form","flow":…,"client":{…}} — show the sign-in form, with the
-//     sign-in methods the client allows.
+//   - {"next":"form","flow":…,"client":{…}} — show the sign-in form.
+//     client.sign_in_methods lists what to offer ("email" for the password
+//     form, then social providers): what the client allows and this
+//     deployment can actually run.
 //
 func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	flow := flowParam(c)
@@ -55,14 +57,9 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		"requested_scope": loginReq.RequestedScope,
 		"tenant_id":       requestedClient.TenantID.String(),
 		"client": fiber.Map{
-			"client_id":               requestedClient.ClientID,
-			"enabled_auth_providers":  []string(requestedClient.EnabledAuthProviders),
-			"allow_email_signup":      requestedClient.AllowEmailSignup,
-			"allow_email_login":       requestedClient.AllowEmailLogin,
-			"google_oauth_enabled":    requestedClient.GoogleOAuthEnabled,
-			"github_oauth_enabled":    requestedClient.GithubOAuthEnabled,
-			"microsoft_oauth_enabled": requestedClient.MicrosoftOAuthEnabled,
-			"apple_oauth_enabled":     requestedClient.AppleOAuthEnabled,
+			"client_id":          requestedClient.ClientID,
+			"sign_in_methods":    h.signIn.SignInMethodsFor(requestedClient),
+			"allow_email_signup": requestedClient.AllowEmailSignup,
 		},
 	})
 }

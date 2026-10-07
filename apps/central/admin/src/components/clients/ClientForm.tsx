@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Input, Textarea, Select, Checkbox, CheckboxGroup, Button } from '@/components/ui'
-import { Client } from '@/lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { Client, capabilitiesApi } from '@/lib/api'
 
 // Client form validation schema
 export const clientFormSchema = z.object({
@@ -162,6 +163,35 @@ export const ClientForm: React.FC<ClientFormProps> = ({
     setValue('scopes', values, { shouldValidate: true })
   }
 
+  // A social provider is only worth enabling if someone has credentials for
+  // it: this deployment, or the client itself (its own Google/GitHub app).
+  // Until capabilities load — or if they cannot — nothing is disabled; the
+  // server refuses an unusable provider at sign-in either way.
+  const { data: capabilities } = useQuery({
+    queryKey: ['capabilities'],
+    queryFn: async () => (await capabilitiesApi.get()).data,
+    staleTime: 5 * 60 * 1000,
+  })
+  const clientHasOwnCredentials: Record<string, boolean> = {
+    google: !!initialData?.google_oauth_enabled,
+    github: !!initialData?.github_oauth_enabled,
+  }
+  const authProviderOptions = AVAILABLE_AUTH_PROVIDERS.map((option) => {
+    const unusable =
+      option.value !== 'email' &&
+      capabilities !== undefined &&
+      !capabilities.providers.includes(option.value) &&
+      !clientHasOwnCredentials[option.value]
+    return unusable
+      ? {
+          ...option,
+          description: 'Not configured on this server',
+          // Leave a selected one clickable so it can be turned off.
+          disabled: !enabledAuthProviders.includes(option.value),
+        }
+      : option
+  })
+
   const handleAuthProviderChange = (values: string[]) => {
     setValue('enabled_auth_providers', values, { shouldValidate: true })
   }
@@ -284,7 +314,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
 
         <CheckboxGroup
           label="Enabled Authentication Providers"
-          options={AVAILABLE_AUTH_PROVIDERS}
+          options={authProviderOptions}
           value={enabledAuthProviders}
           onChange={handleAuthProviderChange}
           error={errors.enabled_auth_providers?.message}

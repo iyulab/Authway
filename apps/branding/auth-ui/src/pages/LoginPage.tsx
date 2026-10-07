@@ -28,13 +28,9 @@ const LOGIN_ERROR_KEYS: Record<string, string> = {
 
 interface ClientAuthConfig {
   client_id?: string
-  enabled_auth_providers?: string[]
+  /** What to offer, in order: "email" for the password form, then social providers. */
+  sign_in_methods?: string[]
   allow_email_signup?: boolean
-  allow_email_login?: boolean
-  google_oauth_enabled?: boolean
-  github_oauth_enabled?: boolean
-  microsoft_oauth_enabled?: boolean
-  apple_oauth_enabled?: boolean
 }
 
 interface LoginPageInfo {
@@ -163,25 +159,11 @@ const LoginPage: React.FC = () => {
     loginMutation.mutate(data)
   }
 
-  // Helper functions for checking enabled auth providers
-  const isProviderEnabled = (provider: string): boolean => {
-    // Default providers if not set: email and google
-    const enabledProviders = loginInfo?.client?.enabled_auth_providers || ['email', 'google']
-    return enabledProviders.includes(provider)
-  }
-
-  const isEmailLoginEnabled = (): boolean => {
-    // Default to true if not set
-    return loginInfo?.client?.allow_email_login ?? true
-  }
-
-  // Check if any social provider is enabled
-  const hasSocialProviders = (): boolean => {
-    return isProviderEnabled('google') ||
-           isProviderEnabled('github') ||
-           isProviderEnabled('microsoft') ||
-           isProviderEnabled('apple')
-  }
+  // The backend lists what this client can actually use here.
+  const signInMethods = loginInfo?.client?.sign_in_methods ?? []
+  const isProviderEnabled = (method: string): boolean => signInMethods.includes(method)
+  const isEmailLoginEnabled = (): boolean => isProviderEnabled('email')
+  const hasSocialProviders = (): boolean => SOCIAL_PROVIDERS.some(isProviderEnabled)
 
   // No flow - direct access (should not happen in normal OAuth flow)
   if (!flow) {
@@ -274,7 +256,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Email/Password Login - only show if enabled */}
-          {isProviderEnabled('email') && isEmailLoginEnabled() && (
+          {isEmailLoginEnabled() && (
             <>
               <div className="space-y-4">
                 <div>
@@ -355,7 +337,7 @@ const LoginPage: React.FC = () => {
           {hasSocialProviders() && (
             <div className="mt-6">
               {/* Divider - only show if email login is also enabled */}
-              {isProviderEnabled('email') && isEmailLoginEnabled() && (
+              {isEmailLoginEnabled() && (
                 <div className="relative mb-6">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-gray-300" />

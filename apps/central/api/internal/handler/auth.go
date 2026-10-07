@@ -31,10 +31,18 @@ type AuthHandler struct {
 	logger        *zap.Logger
 	auditService  audit.Service
 	mfaStore      *MFAChallengeStore
+	signIn        SignInMethodSource
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client) *AuthHandler {
+// SignInMethodSource says how a client's users can sign in on this
+// deployment (see SocialHandler.SignInMethodsFor).
+type SignInMethodSource interface {
+	SignInMethodsFor(cl *client.Client) []string
+}
+
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signIn SignInMethodSource) *AuthHandler {
 	return &AuthHandler{
+		signIn:        signIn,
 		userService:   userService,
 		clientService: clientService,
 		claimsService: claimsService,

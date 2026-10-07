@@ -182,3 +182,17 @@ func (fakeClaimsService) GetClaimsForLogin(context.Context, uuid.UUID, uuid.UUID
 func (fakeClaimsService) GetClaimsForConsent(context.Context, string, uuid.UUID, uuid.UUID, *claims.UserInfo) (claims.ClaimMap, error) {
 	return claims.ClaimMap{}, nil
 }
+
+// allowedSignInMethods offers every method the client allows, as if the
+// deployment had credentials for every provider.
+type allowedSignInMethods struct{}
+
+func (allowedSignInMethods) SignInMethodsFor(cl *client.Client) []string {
+	out := []string{}
+	for _, m := range []string{"email", "google", "github", "microsoft", "apple"} {
+		if cl.AllowsSignInMethod(m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}

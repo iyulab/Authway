@@ -8,6 +8,10 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Screen tests type and click through whole forms; on a loaded machine
+    // (CI runners, a local stack running alongside) that exceeds the 5 s
+    // default without anything being wrong.
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

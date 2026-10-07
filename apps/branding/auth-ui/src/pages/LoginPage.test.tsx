@@ -105,7 +105,7 @@ describe('LoginPage', () => {
             flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid', 'email'],
-            client: { client_id: 'test-client-id' }
+            client: { client_id: 'test-client-id', sign_in_methods: ['email', 'google'] }
           })
         })
       )
@@ -158,7 +158,7 @@ describe('LoginPage', () => {
             flow: 'test-challenge',
             client_name: '',
             requested_scope: ['openid'],
-            client: { client_id: 'test-client-id' }
+            client: { client_id: 'test-client-id', sign_in_methods: ['email', 'google'] }
           })
         })
       )
@@ -198,6 +198,7 @@ describe('LoginPage', () => {
             flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid'],
+            client: { sign_in_methods: ['email'] },
           })
         })
       )
@@ -219,7 +220,8 @@ describe('LoginPage', () => {
             next: 'form',
             flow: 'test-challenge',
             client_name: 'Test App',
-            requested_scope: ['openid', 'email']
+            requested_scope: ['openid', 'email'],
+            client: { client_id: 'test-client-id', sign_in_methods: ['email'] },
           })
         })
       )
@@ -266,7 +268,8 @@ describe('LoginPage', () => {
             next: 'form',
             flow: 'test-challenge',
             client_name: 'Test App',
-            requested_scope: ['openid', 'email']
+            requested_scope: ['openid', 'email'],
+            client: { client_id: 'test-client-id', sign_in_methods: ['email'] },
           })
         })
       )

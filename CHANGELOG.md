@@ -2,6 +2,12 @@
 
 ### Added
 
+- **`GET /api/v1/capabilities`** — what a deployment offers: `multi_tenant`,
+  `providers` (social providers it has credentials for), `magic_link`, `mfa`,
+  `signup_modes`, and `token_exchange`/`ciba` (both `false`). The admin console
+  uses it to grey out social providers nobody has credentials for (a client
+  with its own Google or GitHub app keeps them).
+
 - **Runtime configuration for the login UI and the admin console.** Both apps
   load `/config.js` before starting and read their API URL (and the issuer
   shown in settings, and the optional telemetry connection string) from
@@ -109,6 +115,15 @@
   address or the raw upstream error.
 
 ### Changed
+
+- **The login flow names the sign-in methods to offer (breaking for custom
+  login screens).** `GET /api/v1/login-flows/{flow}` answers
+  `client.sign_in_methods` — `"email"` for the password form, then the social
+  providers the client enables *and* someone has credentials for — in place of
+  `enabled_auth_providers`, `allow_email_login` and the per-provider
+  `*_oauth_enabled` flags. Social sign-in with a provider nobody has
+  credentials for is refused instead of sending the user to the provider with
+  an empty `client_id`.
 
 - **The login screen talks to the API through login-flow endpoints, keyed by
   an opaque flow id (breaking for custom login screens).** The authorization

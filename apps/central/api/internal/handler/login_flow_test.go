@@ -56,7 +56,7 @@ func (f *loginFlowHydra) client(t *testing.T) *hydra.Client {
 
 func newLoginFlowApp(t *testing.T, h *loginFlowHydra, u *user.User, c *client.Client) *fiber.App {
 	t.Helper()
-	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t))
+	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{})
 	app := fiber.New()
 	app.Get("/api/v1/login-flows/:flow", handler.GetLoginFlow)
 	return app
@@ -109,11 +109,11 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	if cl["client_id"] != testClientID {
 		t.Errorf("client.client_id = %v", cl["client_id"])
 	}
-	providers, _ := cl["enabled_auth_providers"].([]any)
-	if len(providers) != 2 || providers[0] != "email" || providers[1] != "github" {
-		t.Errorf("client.enabled_auth_providers = %v, want [email github]", cl["enabled_auth_providers"])
+	methods, _ := cl["sign_in_methods"].([]any)
+	if len(methods) != 2 || methods[0] != "email" || methods[1] != "github" {
+		t.Errorf("client.sign_in_methods = %v, want [email github]", cl["sign_in_methods"])
 	}
-	if cl["allow_email_signup"] != false || cl["allow_email_login"] != true || cl["github_oauth_enabled"] != true {
+	if cl["allow_email_signup"] != false {
 		t.Errorf("client sign-in settings = %v", cl)
 	}
 	if h.acceptCount != 0 {

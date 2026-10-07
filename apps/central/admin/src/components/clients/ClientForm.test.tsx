@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@/test/utils'
 import { ClientForm } from './ClientForm'
-import type { Client } from '@/lib/api'
+import { capabilitiesApi, type Client } from '@/lib/api'
 
 /**
  * These tests pin the two client-config rules the console has to mirror from the
@@ -204,5 +204,46 @@ describe('ClientForm — access token strategy', () => {
     // Regression: initialData.redirect_uris used to be dereferenced unconditionally.
     expect(() => renderForm({ initialData: m2m })).not.toThrow()
     expect(screen.getByLabelText('Redirect URIs')).toHaveValue('')
+  })
+})
+
+describe('ClientForm — social providers follow the server capabilities', () => {
+  const baseClient: Client = {
+    id: 'c1',
+    tenant_id: 't1',
+    client_id: 'app',
+    name: 'App',
+    redirect_uris: ['https://app.example.com/callback'],
+    grant_types: ['authorization_code'],
+    scopes: ['openid'],
+    public: false,
+    active: true,
+    enabled_auth_providers: ['email'],
+  } as Client
+  const capabilities = {
+    multi_tenant: true,
+    providers: ['google'],
+    magic_link: false,
+    mfa: ['totp'],
+    signup_modes: ['invite_only', 'open'],
+    token_exchange: false,
+    ciba: false,
+  }
+
+  it('disables a provider nobody has credentials for', async () => {
+    vi.spyOn(capabilitiesApi, 'get').mockResolvedValue({ data: capabilities } as Awaited<ReturnType<typeof capabilitiesApi.get>>)
+    renderForm()
+
+    await waitFor(() => expect(screen.getByLabelText('GitHub')).toBeDisabled())
+    expect(screen.getByLabelText('Google')).toBeEnabled()
+    expect(screen.getAllByText('Not configured on this server').length).toBe(3) // GitHub, Microsoft, Apple
+  })
+
+  it('keeps a provider the client has its own credentials for', async () => {
+    vi.spyOn(capabilitiesApi, 'get').mockResolvedValue({ data: capabilities } as Awaited<ReturnType<typeof capabilitiesApi.get>>)
+    renderForm({ initialData: { ...baseClient, github_oauth_enabled: true } })
+
+    await waitFor(() => expect(screen.getByLabelText('Microsoft')).toBeDisabled())
+    expect(screen.getByLabelText('GitHub')).toBeEnabled()
   })
 })

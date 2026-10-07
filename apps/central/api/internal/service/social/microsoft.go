@@ -51,7 +51,7 @@ func NewMicrosoftService(cfg *config.MicrosoftOAuthConfig, userService user.Serv
 		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -60,6 +60,14 @@ type MicrosoftOAuthConfig struct {
 	ClientSecret string
 	TenantID     string
 	RedirectURL  string
+}
+
+// ConfiguredFor reports whether sign-in with this provider can start for
+// clientID — the client has its own credentials or the deployment does. With
+// an empty clientID it reports the deployment's own configuration.
+func (m *MicrosoftService) ConfiguredFor(clientID string) bool {
+	cfg, err := m.GetOAuthConfig(clientID)
+	return err == nil && cfg.ClientID != ""
 }
 
 func (m *MicrosoftService) GetOAuthConfig(clientID string) (*MicrosoftOAuthConfig, error) {

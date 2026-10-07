@@ -33,8 +33,8 @@ describe('login UI backend routes', () => {
   let client: TestClient
   let flow: string
 
-  beforeAll(async () => {
-    client = await provider.createPublicClient()
+  /** Opens a fresh login flow for the test client. */
+  const startFlow = async (): Promise<string> => {
     const d = await provider.discovery()
     const authorize = new URL(d.authorization_endpoint)
     authorize.search = new URLSearchParams({
@@ -46,7 +46,12 @@ describe('login UI backend routes', () => {
       code_challenge: createPkce().challenge,
       code_challenge_method: 'S256',
     }).toString()
-    flow = provider.loginFlowFrom(await provider.openLoginScreen(new Browser(), authorize.toString()))
+    return provider.loginFlowFrom(await provider.openLoginScreen(new Browser(), authorize.toString()))
+  }
+
+  beforeAll(async () => {
+    client = await provider.createPublicClient()
+    flow = await startFlow()
   })
 
   afterAll(async () => {
@@ -62,7 +67,20 @@ describe('login UI backend routes', () => {
     expect(body.next).toBe('form')
     expect(body.flow).toBe(flow)
     expect(body.client?.client_id).toBe(client.clientId)
-    expect(Array.isArray(body.client?.enabled_auth_providers)).toBe(true)
+    expect(Array.isArray(body.client?.sign_in_methods)).toBe(true)
+  })
+
+  it('publishes what the deployment offers, and offers sign-in only through it', async () => {
+    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
+    expect(Array.isArray(caps.providers), JSON.stringify(caps)).toBe(true)
+    expect(typeof caps.multi_tenant).toBe('boolean')
+    expect(typeof caps.magic_link).toBe('boolean')
+
+    const res = await fetch(provider.loginFlowUrl(flow))
+    const methods: string[] = (await res.json()).client.sign_in_methods
+    for (const m of methods.filter((m) => m !== 'email')) {
+      expect(caps.providers, `sign-in offers ${m}, which the deployment cannot run`).toContain(m)
+    }
   })
 
   // The login-flow steps are asserted by what they answer, not by being routed:
@@ -91,11 +109,21 @@ describe('login UI backend routes', () => {
     })
   }
 
-  it('starts social sign-in as a page navigation that leaves the backend', async () => {
-    const res = await new Browser().fetch(provider.loginFlowUrl(flow, '/social/google'))
-    expect(res.status).toBe(302)
-    const location = new URL(res.headers.get('location') ?? '', provider.config.api)
-    expect(location.origin).not.toBe(new URL(provider.config.api).origin)
+  it('starts social sign-in as a page navigation: to the provider, or back with an error', async () => {
+    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
+    // Its own flow: an unusable provider ends the flow it was started on.
+    const browser = new Browser()
+    let location = await browser.redirectFrom(provider.loginFlowUrl(await startFlow(), '/social/google'))
+    if (caps.providers.includes('google')) {
+      expect(location.origin).not.toBe(new URL(provider.config.api).origin)
+      return
+    }
+    // Not configured here: the authorization request ends, and the client gets an OAuth error.
+    const client = new URL(REDIRECT_URI).origin
+    for (let hops = 0; hops < 5 && location.origin !== client; hops++) {
+      location = await browser.redirectFrom(location.toString())
+    }
+    expect(location.searchParams.get('error'), location.toString()).toBe('invalid_request')
   })
 
   // Consent and logout steps must reach the flow lookup: an unknown flow id is

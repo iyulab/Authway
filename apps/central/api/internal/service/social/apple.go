@@ -62,6 +62,14 @@ type AppleOAuthConfig struct {
 	RedirectURL string
 }
 
+// ConfiguredFor reports whether sign-in with this provider can start for
+// clientID — the client has its own credentials or the deployment does. With
+// an empty clientID it reports the deployment's own configuration.
+func (a *AppleService) ConfiguredFor(clientID string) bool {
+	cfg, err := a.GetOAuthConfig(clientID)
+	return err == nil && cfg.ClientID != ""
+}
+
 func (a *AppleService) GetOAuthConfig(clientID string) (*AppleOAuthConfig, error) {
 	return &AppleOAuthConfig{
 		ClientID:    a.config.ClientID,

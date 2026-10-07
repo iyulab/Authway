@@ -162,6 +162,22 @@ export const usersApi = {
     api.delete<{ message: string }>(`/api/v1/users/${id}`),
 }
 
+/** What this deployment offers (GET /api/v1/capabilities). */
+export interface Capabilities {
+  multi_tenant: boolean
+  /** Social providers this deployment has credentials for. */
+  providers: string[]
+  magic_link: boolean
+  mfa: string[]
+  signup_modes: string[]
+  token_exchange: boolean
+  ciba: boolean
+}
+
+export const capabilitiesApi = {
+  get: () => api.get<Capabilities>('/api/v1/capabilities'),
+}
+
 // Clients API
 export const clientsApi = {
   list: (params?: { limit?: number; offset?: number; tenant_id?: string }) =>

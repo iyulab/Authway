@@ -45,7 +45,7 @@ func newConsentTestApp(t *testing.T, skip bool) (*fiber.App, *[]string) {
 	}))
 	t.Cleanup(srv.Close)
 
-	h := NewAuthHandler(newFakeUserService(u), newFakeClientService(), fakeClaimsService{}, &fakeMFAService{}, hydra.NewClient(srv.URL), zap.NewNop(), nil, newTestRedisClient(t))
+	h := NewAuthHandler(newFakeUserService(u), newFakeClientService(), fakeClaimsService{}, &fakeMFAService{}, hydra.NewClient(srv.URL), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{})
 	app := fiber.New()
 	app.Get("/consent-flows/:flow", h.GetConsentFlow)
 	app.Post("/consent-flows/:flow/accept", h.AcceptConsent)

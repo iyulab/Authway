@@ -22,7 +22,8 @@ export const handlers = [
       client_name: 'Test Application',
       requested_scope: ['openid', 'email'],
       client: {
-        client_id: 'test-client'
+        client_id: 'test-client',
+        sign_in_methods: ['email', 'google']
       }
     })
   }),

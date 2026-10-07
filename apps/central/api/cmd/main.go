@@ -279,8 +279,8 @@ func main() {
 	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient)
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
@@ -304,10 +304,9 @@ func main() {
 	// /api/v1/invitations/accept). There is deliberately no admin "create user"
 	// endpoint: an admin onboards someone by issuing an invitation with the
 	// admin API key (system-actor invite, NULL inviter_id — migration 016).
-	//
-	// Note that this policy is not yet enforced on every path: the magic-link
-	// and social-login flows still auto-provision users.
-	// See claudedocs/issues/ISSUE-Authway-20260721-magic-link-bypasses-invitation-only.md
+	// First-time social and magic-link sign-ins pass the same gate
+	// (invitation.Gate.MayProvision), which a tenant can open with
+	// signup_mode=open.
 
 	// Social provider callbacks. Sign-in starts at
 	// /api/v1/login-flows/:flow/social/:provider.
@@ -325,6 +324,9 @@ func main() {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
+
+	// What this deployment offers, so screens show only what works.
+	v1.Get("/capabilities", handler.NewCapabilitiesHandler(socialHandler).Get)
 
 	// What the sign-in screen should do with a login flow: show the form (and
 	// which sign-in methods the client allows) or redirect.

@@ -3,6 +3,8 @@ package handler
 import (
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
+
+	"authway/apps/central/api/pkg/client"
 )
 
 // StartSocialLogin sends the browser to a social provider for a login flow.
@@ -28,10 +30,10 @@ func (s *SocialHandler) StartSocialLogin(c *fiber.Ctx) error {
 		s.logger.Error("OAuth client is not registered in Authway", zap.String("client_id", clientID), zap.Error(err))
 		return s.endSignIn(c, flow, "invalid_client", msgSignInFailed)
 	}
-	authURLFor := s.authURLBuilder(provider)
-	if authURLFor == nil || !cl.AllowsSignInMethod(provider) {
+	p := s.provider(provider)
+	if p == nil || !p.ConfiguredFor(clientID) || !cl.AllowsSignInMethod(provider) {
 		s.logger.Warn("Social sign-in with a provider the client does not offer",
-			zap.String("client_id", clientID), zap.String("provider", provider), zap.Bool("configured", authURLFor != nil))
+			zap.String("client_id", clientID), zap.String("provider", provider), zap.Bool("configured", p != nil && p.ConfiguredFor(clientID)))
 		return s.endSignIn(c, flow, "invalid_request", msgSignInFailed)
 	}
 
@@ -43,31 +45,67 @@ func (s *SocialHandler) StartSocialLogin(c *fiber.Ctx) error {
 	s.setStateCookie(c, state)
 
 	s.logger.Info("Starting social sign-in", zap.String("provider", provider), zap.String("client_id", clientID))
-	return c.Redirect(authURLFor(state, clientID), fiber.StatusFound)
+	return c.Redirect(p.GetAuthURLForClient(state, clientID), fiber.StatusFound)
 }
 
-// authURLBuilder returns the authorization-URL builder for a configured
-// provider, or nil when the provider is unknown or not configured.
-func (s *SocialHandler) authURLBuilder(provider string) func(state, clientID string) string {
-	switch provider {
+// socialProvider is what starting a sign-in needs from a provider service.
+type socialProvider interface {
+	ConfiguredFor(clientID string) bool
+	GetAuthURLForClient(state, clientID string) string
+}
+
+// socialProviderNames lists the providers in the order sign-in screens show them.
+var socialProviderNames = []string{"google", "github", "microsoft", "apple"}
+
+// provider returns the service for a provider name, or nil when the name is
+// unknown or the service is absent.
+func (s *SocialHandler) provider(name string) socialProvider {
+	switch name {
 	case "google":
 		if s.googleService != nil {
-			return s.googleService.GetAuthURLForClient
+			return s.googleService
 		}
 	case "github":
 		if s.githubService != nil {
-			return s.githubService.GetAuthURLForClient
+			return s.githubService
 		}
 	case "microsoft":
 		if s.microsoftService != nil {
-			return s.microsoftService.GetAuthURLForClient
+			return s.microsoftService
 		}
 	case "apple":
 		if s.appleService != nil {
-			return s.appleService.GetAuthURLForClient
+			return s.appleService
 		}
 	}
 	return nil
+}
+
+// SignInMethodsFor lists how users of cl can sign in here: "email" when the
+// client allows passwords, then each social provider the client enables and
+// someone (the client or the deployment) has credentials for.
+func (s *SocialHandler) SignInMethodsFor(cl *client.Client) []string {
+	out := []string{}
+	if cl.AllowsSignInMethod("email") {
+		out = append(out, "email")
+	}
+	for _, name := range socialProviderNames {
+		if p := s.provider(name); p != nil && cl.AllowsSignInMethod(name) && p.ConfiguredFor(cl.ClientID) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// ConfiguredProviders lists the providers this deployment has credentials for.
+func (s *SocialHandler) ConfiguredProviders() []string {
+	out := []string{}
+	for _, name := range socialProviderNames {
+		if p := s.provider(name); p != nil && p.ConfiguredFor("") {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // setStateCookie binds the sign-in to this browser. Over HTTPS it is

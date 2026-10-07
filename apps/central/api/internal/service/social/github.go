@@ -53,7 +53,7 @@ func NewGitHubService(cfg *config.GitHubOAuthConfig, userService user.Service, i
 		invitations:   invitations,
 		clientService: clientService,
 		logger:        logger,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -61,6 +61,14 @@ type GitHubOAuthConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
+}
+
+// ConfiguredFor reports whether sign-in with this provider can start for
+// clientID — the client has its own credentials or the deployment does. With
+// an empty clientID it reports the deployment's own configuration.
+func (g *GitHubService) ConfiguredFor(clientID string) bool {
+	cfg, err := g.GetOAuthConfig(clientID)
+	return err == nil && cfg.ClientID != ""
 }
 
 func (g *GitHubService) GetOAuthConfig(clientID string) (*GitHubOAuthConfig, error) {
