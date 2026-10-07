@@ -31,17 +31,20 @@ export interface WebhookDelivery {
 export interface AuditLog {
   id: string
   tenant_id: string
-  actor_id?: string
-  actor_email?: string
+  actor_id: string | null
+  actor_email: string
+  actor_type: string
   action: string
   resource_type: string
   resource_id: string
-  description: string
   ip_address: string
   user_agent: string
   severity: 'info' | 'warning' | 'error' | 'critical'
   success: boolean
-  metadata?: Record<string, any>
+  // JSON text recorded with the event ("{}" when there is nothing to add).
+  details: string
+  // Why the action failed; empty when success is true.
+  error_msg: string
   created_at: string
 }
 
