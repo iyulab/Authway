@@ -146,7 +146,6 @@ type TenantConfig struct {
 type AdminConfig struct {
 	APIKey         string `mapstructure:"api_key"`
 	Password       string `mapstructure:"password"`
-	InternalAPIKey string `mapstructure:"internal_api_key"`
 }
 
 type SecurityConfig struct {
@@ -285,9 +284,6 @@ func Load() (*Config, error) {
 	}
 
 	// Manual override for Admin config
-	if internalAPIKey := os.Getenv("AUTHWAY_ADMIN_INTERNAL_API_KEY"); internalAPIKey != "" {
-		config.Admin.InternalAPIKey = internalAPIKey
-	}
 	if adminPassword := os.Getenv("AUTHWAY_ADMIN_PASSWORD"); adminPassword != "" {
 		config.Admin.Password = adminPassword
 	}
@@ -295,8 +291,8 @@ func Load() (*Config, error) {
 		config.Admin.APIKey = adminAPIKey
 	}
 
-	// Dev-mode fallback: auto-generate the admin/internal API keys in local
-	// development so the admin console + auth-api integration remain usable
+	// Dev-mode fallback: auto-generate the admin API key in local
+	// development so the admin console remains usable
 	// without manual setup. Every other environment — including staging — fails
 	// validation (below) to force explicit keys instead of silently minting
 	// ephemeral ones that a peer service can't know.
@@ -309,15 +305,6 @@ func Load() (*Config, error) {
 			config.Admin.APIKey = key
 			fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_API_KEY: %s\n", key)
 			fmt.Printf("⚠️  [dev] Set AUTHWAY_ADMIN_API_KEY env var to use a stable key across restarts.\n")
-		}
-		if config.Admin.InternalAPIKey == "" {
-			key, err := generateRandomKey(32)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate dev internal API key: %w", err)
-			}
-			config.Admin.InternalAPIKey = key
-			fmt.Printf("⚠️  [dev] Auto-generated AUTHWAY_ADMIN_INTERNAL_API_KEY: %s\n", key)
-			fmt.Printf("⚠️  [dev] Branding auth-api integrations must use this value (or set the env var).\n")
 		}
 	}
 
@@ -410,9 +397,6 @@ func (c *Config) Validate() error {
 		// 0.2.1 — it silently bypassed auth).
 		if c.Admin.APIKey == "" {
 			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set outside development — required for /api/v1/clients/* and other admin endpoints")
-		}
-		if c.Admin.InternalAPIKey == "" {
-			errors = append(errors, "CRITICAL: admin.internal_api_key (AUTHWAY_ADMIN_INTERNAL_API_KEY) must be set outside development — required for branding auth-api → central /internal/* calls")
 		}
 		// Fail-closed: TOTP secrets must be encrypted at rest. An absent or
 		// malformed key would silently fall back to plaintext storage.

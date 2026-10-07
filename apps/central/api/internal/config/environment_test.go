@@ -45,8 +45,8 @@ func TestIsProduction(t *testing.T) {
 }
 
 // stagingConfig mirrors what the staging deploy script actually injects today
-// (scripts/deploy/staging/.env: ADMIN_API_KEY, INTERNAL_API_KEY,
-// AUTHWAY_TOTP_ENCRYPTION_KEY, AUTHWAY_ADMIN_PASSWORD, and a public
+// (scripts/deploy/staging/.env: ADMIN_API_KEY, AUTHWAY_TOTP_ENCRYPTION_KEY,
+// AUTHWAY_ADMIN_PASSWORD, and a public
 // AUTH_UI_URL/API_URL pair) so this test fails first if a future deploy drops
 // one of the values staging's fail-closed check now depends on.
 func stagingConfig() *Config {
@@ -56,7 +56,6 @@ func stagingConfig() *Config {
 	c.App.FrontendURL = "https://authway-auth-ui-stg.pages.dev"
 	c.Admin.Password = "a-strong-staging-password"
 	c.Admin.APIKey = "staging-admin-key"
-	c.Admin.InternalAPIKey = "staging-internal-key"
 	c.Security.TOTPEncryptionKey = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
 	return c
 }
@@ -77,15 +76,6 @@ func TestValidateRejectsStagingMissingAdminAPIKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "admin.api_key") {
 		t.Errorf("error should name admin.api_key, got: %v", err)
-	}
-}
-
-func TestValidateRejectsStagingMissingInternalAPIKey(t *testing.T) {
-	c := stagingConfig()
-	c.Admin.InternalAPIKey = ""
-
-	if err := c.Validate(); err == nil {
-		t.Fatal("staging must fail closed on a missing internal API key, not just production")
 	}
 }
 
@@ -123,7 +113,7 @@ func TestValidateRejectsLoopbackFrontendURLInStaging(t *testing.T) {
 func TestValidateStillAcceptsDevelopmentWithoutAdminKeys(t *testing.T) {
 	// The relaxed dev path must remain untouched: it's what lets a bare `go run`
 	// boot without any manual key setup.
-	c := validConfig() // environment: development, no Admin.APIKey/InternalAPIKey set
+	c := validConfig() // environment: development, no Admin.APIKey set
 	if err := c.Validate(); err != nil {
 		t.Fatalf("development config without admin keys should still validate, got: %v", err)
 	}

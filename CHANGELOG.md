@@ -53,6 +53,15 @@
 
 ### Changed
 
+- **The central API now serves the whole login backend.** It completes Hydra
+  logout requests at `GET /logout` (the client's logout-redirect policy is
+  enforced, then every session of the user is revoked so earlier tokens stop
+  working) and publishes the SDK bootstrap document at
+  `/.well-known/authway-config`. Social sign-in state for all four providers
+  now lives in Redis and is consumed exactly once, so a sign-in survives the
+  provider callback landing on a different replica and a replayed callback is
+  refused.
+
 - **Outbound email now sends through Sendway instead of a bespoke Azure Functions
   gateway.** Production email (verification, password reset, invitation, magic
   link) moves to [Sendway](https://github.com/iyulab/Sendway), iyulab's own
@@ -321,6 +330,13 @@
   used.
 
 ### Removed
+
+- **Internal service-to-service endpoints.** `POST /internal/auth/google`,
+  `GET /api/v1/clients/by-client-id/:client_id` and the
+  `AUTHWAY_ADMIN_INTERNAL_API_KEY` setting existed only for a separate login
+  backend that called back into the central API; nothing else used them.
+  `GET /auth/google/url` is gone as well — it issued a state value that was
+  never stored, so a sign-in started from it could not complete.
 
 - **The central API's own `GET /logout` route is gone.** It duplicated the
   branding auth service's OIDC logout flow, which is the endpoint every

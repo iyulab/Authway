@@ -1,9 +1,14 @@
 /**
  * Reads mail captured by a MailHog-compatible SMTP sink.
  */
+interface MailHogPart {
+  Headers?: Record<string, string[]>
+  Body: string
+}
+
 interface MailHogMessage {
-  Content: { Headers: Record<string, string[]>; Body: string }
-  MIME?: { Parts?: { Body: string }[] } | null
+  Content: MailHogPart
+  MIME?: { Parts?: MailHogPart[] } | null
 }
 
 /** Decodes quoted-printable soft line breaks and =XX escapes. */
@@ -13,9 +18,23 @@ function decodeQuotedPrintable(input: string): string {
     .replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
 }
 
+/**
+ * Decodes a part according to its own Content-Transfer-Encoding. Decoding a
+ * part that is not quoted-printable would corrupt any "=XX" it contains — a
+ * token that happens to begin with two hex digits right after "token=".
+ */
+function decodePart(part: MailHogPart): string {
+  const encoding = Object.entries(part.Headers ?? {})
+    .find(([name]) => name.toLowerCase() === 'content-transfer-encoding')?.[1]?.[0]
+    ?.trim()
+    .toLowerCase()
+  if (encoding === 'quoted-printable') return decodeQuotedPrintable(part.Body)
+  if (encoding === 'base64') return Buffer.from(part.Body.replace(/\s+/g, ''), 'base64').toString('utf8')
+  return part.Body
+}
+
 function bodies(message: MailHogMessage): string[] {
-  const parts = message.MIME?.Parts?.map((p) => p.Body) ?? []
-  return [message.Content.Body, ...parts].map(decodeQuotedPrintable)
+  return [message.Content, ...(message.MIME?.Parts ?? [])].map(decodePart)
 }
 
 /**

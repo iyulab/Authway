@@ -233,6 +233,17 @@ func main() {
 
 	// Public configuration endpoint for OIDC discovery
 	// Clients can use this to discover the Hydra (OIDC Authority) URL
+	// Bootstrap document for the Authway SDK: where the OAuth server is and
+	// which backend serves the login screens and Authway's own APIs.
+	app.Get("/.well-known/authway-config", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"oauth_url": cfg.Hydra.PublicURL,
+			"issuer":    cfg.Hydra.PublicURL,
+			"api_url":   cfg.App.BaseURL,
+			"version":   cfg.App.Version,
+		})
+	})
+
 	app.Get("/api/v1/config", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"issuer":      cfg.Hydra.PublicURL,
@@ -265,11 +276,11 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient)
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService)
+	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient))
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
-	internalAuthHandler := handler.NewInternalAuthHandler(userService, invitationGate, clientService, zapLogger, newFeatureServices.AuditService)
+	logoutFlowHandler := handler.NewLogoutFlowHandler(clientService, hydraClient, zapLogger)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
@@ -284,6 +295,10 @@ func main() {
 	app.Post("/consent", authHandler.ConsentPage)    // Support POST for long consent_challenge (from auto-submit form)
 	app.Post("/consent/accept", authHandler.Consent) // Actual consent submission
 	app.Post("/consent/reject", authHandler.RejectConsent)
+
+	// Logout screen backend: validates the post-logout redirect against the
+	// client's policy, accepts the Hydra logout and revokes the user's sessions.
+	app.Get("/logout", logoutFlowHandler.HandleLogout)
 
 	// Popup callback for popup-based authentication (@authway/client, @authway/react)
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
@@ -302,7 +317,6 @@ func main() {
 	app.Get("/auth/google/login", socialHandler.GoogleLogin)
 	app.Post("/auth/google/login", socialHandler.GoogleLogin) // Support POST for long login_challenge
 	app.Get("/auth/google/callback", socialHandler.GoogleCallback)
-	app.Get("/auth/google/url", socialHandler.GetGoogleAuthURL)
 
 	// Social login routes - GitHub
 	app.Get("/auth/github/login", socialHandler.GitHubLogin)
@@ -328,14 +342,6 @@ func main() {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
-
-	// Internal API routes (authenticated with X-API-Key)
-	internalAPI := app.Group("/internal")
-	internalAuth := middleware.InternalAPIAuth(cfg.Admin.InternalAPIKey, zapLogger)
-	internalAPI.Post("/auth/google", internalAuth, internalAuthHandler.AuthenticateGoogleUser)
-
-	// Internal client lookup by client_id (for Auth API logout handler)
-	v1.Get("/clients/by-client-id/:client_id", internalAuth, clientHandler.GetByClientID)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)

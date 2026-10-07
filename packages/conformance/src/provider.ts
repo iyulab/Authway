@@ -4,6 +4,7 @@ import { waitForLink } from './mail.js'
 import { createPkce, randomToken, type Pkce } from './pkce.js'
 
 export const REDIRECT_URI = 'http://localhost:9999/conformance-callback'
+export const POST_LOGOUT_REDIRECT_URI = 'http://localhost:9999/conformance-signed-out'
 
 export interface Discovery {
   issuer: string
@@ -37,11 +38,13 @@ export interface LoginAttempt {
   browser: Browser
   pkce: Pkce
   flow: string
+  /** Ask the provider to keep the user signed in (a persistent login session). */
+  remember?: boolean
 }
 
 /** What a login attempt produced at the step where it stopped. */
 export type LoginOutcome =
-  | { kind: 'code'; code: string; tokens: Tokens; sub: string }
+  | { kind: 'code'; code: string; tokens: Tokens; sub: string; browser: Browser }
   | { kind: 'rejected'; status: number; body: string }
 
 /**
@@ -98,6 +101,7 @@ export class Provider {
         name: `conformance-${randomToken(4)}`,
         public: true,
         redirect_uris: [REDIRECT_URI],
+        post_logout_redirect_uris: [POST_LOGOUT_REDIRECT_URI],
         allowed_origins: ['http://localhost:9999'],
         grant_types: ['authorization_code', 'refresh_token'],
         scopes: ['openid', 'profile', 'email'],
@@ -155,11 +159,11 @@ export class Provider {
     return flow
   }
 
-  async submitPassword(browser: Browser, flow: string, user: TestUser): Promise<Response> {
+  async submitPassword(browser: Browser, flow: string, user: TestUser, remember = false): Promise<Response> {
     return browser.fetch(`${this.config.api}/authenticate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenge: flow, email: user.email, password: user.password }),
+      body: JSON.stringify({ challenge: flow, email: user.email, password: user.password, remember }),
     })
   }
 
@@ -169,6 +173,37 @@ export class Provider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ challenge: flow, grant_scope: scopes }),
     })
+  }
+
+  /**
+   * RP-initiated logout (OIDC RP-Initiated Logout 1.0) through the logout
+   * screen's backend, in the browser that holds the login session. Returns
+   * where the browser finally lands.
+   */
+  async rpInitiatedLogout(browser: Browser, idToken: string): Promise<URL> {
+    const d = await this.discovery()
+    const endSession = d.end_session_endpoint as string | undefined
+    if (!endSession) throw new Error('Discovery publishes no end_session_endpoint')
+    const start = new URL(endSession)
+    start.search = new URLSearchParams({
+      id_token_hint: idToken,
+      post_logout_redirect_uri: POST_LOGOUT_REDIRECT_URI,
+      state: randomToken(),
+    }).toString()
+    const logoutScreen = await browser.redirectFrom(start.toString())
+    const flow = logoutScreen.searchParams.get('flow') ?? logoutScreen.searchParams.get('logout_challenge')
+    if (!flow) throw new Error(`Redirect to the logout screen carries no flow id: ${logoutScreen}`)
+    const backend = new URL(`${this.config.api}/logout`)
+    backend.search = new URLSearchParams({
+      logout_challenge: flow,
+      post_logout_redirect_uri: POST_LOGOUT_REDIRECT_URI,
+    }).toString()
+    let next = await browser.redirectFrom(backend.toString())
+    // Follow the authorization server's own hops until it hands the browser back to the client.
+    for (let hops = 0; hops < 5 && next.origin === new URL(this.config.issuer).origin; hops++) {
+      next = await browser.redirectFrom(next.toString())
+    }
+    return next
   }
 
   async logout(accessToken: string): Promise<Response> {
@@ -202,8 +237,8 @@ export class Provider {
 
   /** Submits a password on an open login screen and, if accepted, finishes the flow. */
   async continueLogin(attempt: LoginAttempt, user: TestUser): Promise<LoginOutcome> {
-    const { browser, client, scopes, pkce, flow } = attempt
-    const loginRes = await this.submitPassword(browser, flow, user)
+    const { browser, client, scopes, pkce, flow, remember } = attempt
+    const loginRes = await this.submitPassword(browser, flow, user, remember)
     const loginBody = await loginRes.text()
     if (!loginRes.ok) return { kind: 'rejected', status: loginRes.status, body: loginBody }
     const { redirect_to: afterLogin } = JSON.parse(loginBody) as { redirect_to?: string }
@@ -240,12 +275,13 @@ export class Provider {
     const tokens = (await tokenRes.json()) as Tokens
     const info = await this.userinfo(tokens.access_token)
     if (info.status !== 200) throw new Error(`userinfo rejected a fresh token: ${info.status}`)
-    return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub }
+    return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub, browser }
   }
 
   /** Full authorization-code + PKCE login with password and consent. */
-  async login(client: TestClient, user: TestUser, scopes?: string[]): Promise<LoginOutcome> {
-    return this.continueLogin(await this.startLogin(client, scopes), user)
+  async login(client: TestClient, user: TestUser, options: { scopes?: string[]; remember?: boolean } = {}): Promise<LoginOutcome> {
+    const attempt = await this.startLogin(client, options.scopes)
+    return this.continueLogin({ ...attempt, remember: options.remember }, user)
   }
 
   async userinfo(accessToken: string): Promise<{ status: number; body: unknown }> {

@@ -628,3 +628,69 @@ func (c *Client) IntrospectToken(token string) (*IntrospectResponse, error) {
 
 	return &introspectResp, nil
 }
+
+// LogoutRequest is Hydra's view of an RP- or browser-initiated logout.
+type LogoutRequest struct {
+	Challenge   string `json:"challenge"`
+	Subject     string `json:"subject"`
+	SessionID   string `json:"sid"`
+	RequestURL  string `json:"request_url"`
+	RPInitiated bool   `json:"rp_initiated"`
+	Client      *struct {
+		ClientID string `json:"client_id"`
+	} `json:"client,omitempty"`
+}
+
+// GetLogoutRequest fetches a logout request. Unknown and already-handled
+// challenges are reported as ErrFlowNotFound / ErrFlowExpired.
+func (c *Client) GetLogoutRequest(challenge string) (*LogoutRequest, error) {
+	resp, err := c.client.Get(fmt.Sprintf("%s/admin/oauth2/auth/requests/logout?logout_challenge=%s",
+		c.AdminURL, url.QueryEscape(challenge)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to request Hydra: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, flowError(resp.StatusCode, body)
+	}
+	var req LogoutRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, fmt.Errorf("failed to decode logout request: %w", err)
+	}
+	return &req, nil
+}
+
+// AcceptLogoutRequest accepts a logout request and returns where Hydra wants
+// the browser to go next. An empty postLogoutRedirectURI leaves the choice to
+// Hydra (its configured default).
+func (c *Client) AcceptLogoutRequest(challenge, postLogoutRedirectURI string) (*LoginResponse, error) {
+	payload := map[string]string{}
+	if postLogoutRedirectURI != "" {
+		payload["post_logout_redirect_uri"] = postLogoutRedirectURI
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/admin/oauth2/auth/requests/logout/accept?logout_challenge=%s",
+		c.AdminURL, url.QueryEscape(challenge)), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to accept logout: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, flowError(resp.StatusCode, respBody)
+	}
+	var out LoginResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, fmt.Errorf("failed to decode logout accept response: %w", err)
+	}
+	return &out, nil
+}

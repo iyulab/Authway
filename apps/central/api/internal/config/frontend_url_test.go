@@ -75,7 +75,6 @@ func TestValidateRejectsLoopbackFrontendURLInProduction(t *testing.T) {
 		c.App.FrontendURL = u
 		// Satisfy the unrelated production fail-closed checks.
 		c.Admin.APIKey = "k"
-		c.Admin.InternalAPIKey = "k"
 		c.Security.TOTPEncryptionKey = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
 
 		err := c.Validate()
