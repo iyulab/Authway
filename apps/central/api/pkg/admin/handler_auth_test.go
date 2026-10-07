@@ -165,8 +165,8 @@ func TestAdminConsoleAuth_NoAuthHeader(t *testing.T) {
 // TestAdminConsoleAuth_LogsAuditOnFailure ensures every auth-failure path
 // (503 no-key, 401 no-token, 401 invalid-token) writes a sync audit entry.
 // Failures must be durable — LogAsync is unacceptable here because buffer
-// drops would blind incident response. This is the regression guard for the
-// "prod admin API had zero audit rows during the 2026-04-15 incident" bug.
+// drops would blind incident response: every rejected admin call must leave an
+// audit row.
 func TestAdminConsoleAuth_LogsAuditOnFailure(t *testing.T) {
 	cases := []struct {
 		name         string

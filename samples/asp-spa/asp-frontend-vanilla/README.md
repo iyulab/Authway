@@ -74,16 +74,16 @@ asp-frontend-vanilla/
 ### Prerequisites
 ```bash
 # 1. Start Authway services (from project root)
-D:\data\Authway> .\start-dev.ps1
+Authway> .\start-dev.ps1
 
 # 2. Register OAuth client (from asp-spa directory)
-D:\data\Authway\samples\asp-spa> pwsh -File setup-client-local.ps1
+Authway\samples\asp-spa> pwsh -File setup-client-local.ps1
 ```
 
 ### Start Application
 ```bash
 # Option 1: Use convenience script (recommended)
-D:\data\Authway\samples\asp-spa> pwsh -File start-vanilla.ps1
+Authway\samples\asp-spa> pwsh -File start-vanilla.ps1
 
 # Option 2: Manual start
 cd asp-frontend-vanilla

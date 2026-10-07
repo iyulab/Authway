@@ -12,12 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// A live invitation token was read out of staging container logs because the
-// GORM logger inlined bound parameters. These tests pin the two paths that kept
-// printing SQL even after the log level was lowered: slow queries and errors.
+// With bound parameters inlined, the GORM logger writes secrets such as
+// invitation tokens into container logs. These tests pin the two paths that
+// kept printing SQL even after the log level was lowered: slow queries and
+// errors.
 //
-// The token below has the shape of the real one (base64-ish, from the incident);
-// any of it reaching the output means a secret would reach the log pipeline.
+// The token below has the shape of a real invitation token (base64-ish); any of
+// it reaching the output means a secret would reach the log pipeline.
 const secretToken = "n_l463qvSbDuD0PLAINTEXTTOKEN="
 
 // traceOutput reproduces how gorm actually logs a statement. The fidelity

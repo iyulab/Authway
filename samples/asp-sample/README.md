@@ -52,7 +52,7 @@ Authway 전체 스택을 로컬에서 실행해야 합니다:
 
 ```powershell
 # Authway 로컬 환경 시작 (권장)
-cd D:\data\Authway
+cd Authway
 .\start-dev.ps1
 
 # 또는 Docker Compose 직접 실행
@@ -65,7 +65,7 @@ docker compose up -d
 
 ```powershell
 # Authway 프로젝트 루트로 이동
-cd D:\data\Authway
+cd Authway
 
 # 모든 서비스 시작 (Docker Compose)
 .\start-dev.ps1
@@ -472,7 +472,7 @@ var idToken = await HttpContext.GetTokenAsync("id_token");
 **해결**:
 ```powershell
 # Authway 루트 디렉토리로 이동
-cd D:\data\Authway
+cd Authway
 
 # 모든 서비스 시작
 .\start-dev.ps1

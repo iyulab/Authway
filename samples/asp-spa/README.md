@@ -88,7 +88,7 @@ asp-spa/
 
 ### 1. Install Dependencies
 
-From the **monorepo root** (`D:\data\Authway`):
+From the **monorepo root**:
 
 ```bash
 # Install all dependencies including @authway/react and @authway/client

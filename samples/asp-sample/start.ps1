@@ -89,7 +89,7 @@ if (-not $servicesHealthy) {
     Write-Host "❌ Some required services are not running!" -ForegroundColor Red
     Write-Host ""
     Write-Host "📝 To start all services:" -ForegroundColor Yellow
-    Write-Host "   1. Navigate to Authway root: cd D:\data\Authway" -ForegroundColor Gray
+    Write-Host "   1. Navigate to Authway root: cd Authway" -ForegroundColor Gray
     Write-Host "   2. Run: .\start-dev.ps1" -ForegroundColor Gray
     Write-Host ""
     Write-Host "   Or manually start Docker services:" -ForegroundColor Yellow

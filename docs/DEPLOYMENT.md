@@ -56,7 +56,7 @@ az postgres flexible-server create \
   --name authway-db \
   --resource-group authway \
   --location koreacentral \
-  --admin-user authwayadmin \
+  --admin-user <admin-user> \
   --admin-password <secure-password> \
   --sku-name Standard_B1ms \
   --tier Burstable \

@@ -18,7 +18,7 @@ The client `authway_spa_sample_local` must be registered in Hydra with the corre
 Run the setup script from the samples directory:
 
 ```bash
-cd D:\data\Authway\samples\asp-spa
+cd Authway\samples\asp-spa
 bash setup-asp-spa-client.sh
 ```
 
@@ -66,7 +66,7 @@ You should see:
 ## Install Dependencies
 
 ```bash
-cd D:\data\Authway\samples\asp-spa\asp-frontend
+cd Authway\samples\asp-spa\asp-frontend
 pnpm install
 ```
 

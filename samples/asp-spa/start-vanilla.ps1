@@ -65,7 +65,7 @@ if (-not $servicesHealthy) {
     Write-Host "❌ Authway services not running!" -ForegroundColor Red
     Write-Host ""
     Write-Host "Start services with:" -ForegroundColor Yellow
-    Write-Host "  cd D:\data\Authway" -ForegroundColor Gray
+    Write-Host "  cd Authway" -ForegroundColor Gray
     Write-Host "  .\start-dev.ps1" -ForegroundColor Gray
     Write-Host ""
     exit 1

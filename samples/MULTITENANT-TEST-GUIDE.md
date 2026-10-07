@@ -232,33 +232,3 @@ docker compose restart hydra
 2. 브라우저 쿠키 삭제 후 재시도
 3. Admin Dashboard에서 client의 tenant_id 확인
 ```
-
-## 다음 단계
-
-이 로컬 테스트가 성공하면:
-
-1. **프로덕션 아키텍처 적용**
-   ```
-   authway-shared: PostgreSQL + Redis
-   
-   iyulab-authway:
-     - API (authway-api.iyulab.com)
-     - Admin (authway-admin.iyulab.com) 
-     - Login (auth.iyulab.com)
-   
-   alldot-authway:
-     - Login (auth.alldot.ai)
-   
-   ironhive-authway:
-     - Login (auth.ironhive.com)
-   ```
-
-2. **각 Login UI별 Google OAuth Client**
-   - auth.iyulab.com → Google Client ID #1
-   - auth.alldot.ai → Google Client ID #2
-   - auth.ironhive.com → Google Client ID #3
-
-3. **Google 동의 화면 브랜딩**
-   - iyulab 사용자 → "iyulab.com" 표시
-   - alldot 사용자 → "alldot.ai" 표시
-   - ironhive 사용자 → "ironhive.com" 표시

@@ -1,9 +1,8 @@
 // Package maillink builds the URLs Authway puts in outgoing mail.
 //
 // Every one of these is opened by a human in a browser, so they must point at
-// the auth UI — never at this API. Two separate incidents came from getting
-// that wrong: the links were once built from the API's own base URL (so all of
-// them 404'd everywhere), and the magic-link path once named an API route that
+// the auth UI — never at this API. Two ways this goes wrong: building the links
+// from the API's own base URL (every one of them 404s), and naming an API route
 // the UI does not serve.
 //
 // Centralising them means the route shape is stated once and can be checked

@@ -58,7 +58,7 @@ Each service is a fully functional OAuth 2.0 client application demonstrating:
 
 1. **Authway Server** running on `http://localhost:8080`
    ```powershell
-   cd D:\data\Authway
+   cd Authway
    .\start-dev.ps1
    ```
 
@@ -358,7 +358,7 @@ Located in `samples/shared/oauth.go`, provides:
 
 **Solution**: Make sure Authway is running:
 ```powershell
-cd D:\data\Authway
+cd Authway
 .\start-dev.ps1
 ```
 

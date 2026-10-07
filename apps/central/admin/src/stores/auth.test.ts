@@ -21,9 +21,9 @@ describe('selectIsAuthenticated', () => {
     expect(selectIsAuthenticated(useAuthStore.getState())).toBe(true)
   })
 
-  // The production incident: admin.authway.in reloaded forever because the app
-  // considered itself signed in while holding a token that expired months
-  // earlier. Presence of a token must never be enough on its own.
+  // The console reloaded forever when it considered itself signed in while
+  // holding a token that had expired months earlier. Presence of a token must
+  // never be enough on its own.
   it('is false for a token whose expiry has passed', () => {
     useAuthStore.setState({ token: 'stale-but-present', expiresAt: past() })
     expect(selectIsAuthenticated(useAuthStore.getState())).toBe(false)
