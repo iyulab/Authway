@@ -42,12 +42,11 @@ export const handlers = [
     })
   }),
 
-  // Login challenge info endpoint (LoginPage fetches login info here)
-  http.get('http://localhost:8080/auth/google/login', ({ request }) => {
-    const url = new URL(request.url)
-    const challenge = url.searchParams.get('login_challenge')
+  // Login flow info (LoginPage asks what to show for the flow)
+  http.get('http://localhost:8080/api/v1/login-flows/:flow', ({ params }) => {
     return HttpResponse.json({
-      challenge,
+      next: 'form',
+      flow: params.flow,
       client_name: 'Test Application',
       requested_scope: ['openid', 'email'],
       client: {

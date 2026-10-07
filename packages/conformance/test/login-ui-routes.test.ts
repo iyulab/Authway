@@ -7,7 +7,7 @@ import { Provider, REDIRECT_URI, type TestClient } from '../src/provider.js'
 const provider = new Provider(loadConfig())
 
 /**
- * Every backend path the bundled login UI calls, as the UI calls it. A path the
+ * Every backend path the bundled login UI posts to, as the UI calls it. A path the
  * UI calls but the backend does not route is a screen that cannot work.
  *
  * Paths marked `knownBroken` currently 404 on the single backend the login UI
@@ -61,6 +61,18 @@ describe('login UI backend routes', () => {
 
   afterAll(async () => {
     if (client) await provider.deleteClient(client)
+  })
+
+  // Routing alone is not enough here: a backend once answered this path by
+  // starting a Google sign-in, and the screen could not show its form at all.
+  it('describes the login flow the sign-in screen opens on', async () => {
+    const res = await fetch(`${provider.config.api}/api/v1/login-flows/${encodeURIComponent(flow)}`)
+    const body = await res.json()
+    expect(res.status, JSON.stringify(body)).toBe(200)
+    expect(body.next).toBe('form')
+    expect(body.flow).toBe(flow)
+    expect(body.client?.client_id).toBe(client.clientId)
+    expect(Array.isArray(body.client?.enabled_auth_providers)).toBe(true)
   })
 
   for (const { path, knownBroken } of LOGIN_UI_POSTS) {

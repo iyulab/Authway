@@ -101,6 +101,19 @@
   every call goes to `VITE_API_URL`. Signing in with GitHub, Microsoft or
   Apple, the MFA step and the magic-link landing page now reach routes that
   exist — through the separate backend they returned 404.
+- **`GET /api/v1/login-flows/{flow}` tells the sign-in screen what to do with
+  a login flow.** It answers `{"next":"redirect","redirect_to":…}` when no
+  form is needed (an existing session in the client's tenant, accepted as
+  single sign-on, or a stale session that was cleared) and otherwise
+  `{"next":"form","flow":…,"client":{…}}` with the sign-in methods the client
+  allows. The login screen used to read this from `GET /auth/google/login`,
+  which on the single backend starts a Google sign-in instead, so the screen
+  could not load. The unused `GET`/`POST /login` handler on the API, which
+  answered the same question without the client's sign-in methods, is
+  removed. An unregistered client is now a `400` with
+  `code: client_not_registered` instead of a `500`. The API also accepts
+  request lines and headers up to 16 KB (was 4 KB), since flow ids travel in
+  URLs.
 
 - **Outbound email now sends through Sendway instead of a bespoke Azure Functions
   gateway.** Production email (verification, password reset, invitation, magic

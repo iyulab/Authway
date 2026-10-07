@@ -70,7 +70,7 @@ describe('LoginPage', () => {
 
     it('shows error when login challenge fetch fails', async () => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({ error: 'Server error' }, { status: 500 })
         })
       )
@@ -84,12 +84,31 @@ describe('LoginPage', () => {
     })
   })
 
+  it('asks the backend about the flow with the id escaped in the path', async () => {
+    // Hydra challenges are padded base64 and end in "=".
+    mockSearchParams.set('login_challenge', 'abc+/==')
+    let requested = ''
+    server.use(
+      http.get('http://localhost:8080/api/v1/login-flows/:flow', ({ request }) => {
+        requested = new URL(request.url).pathname
+        return HttpResponse.json({ next: 'form', flow: 'abc+/==', client_name: 'Test App', requested_scope: [] })
+      })
+    )
+
+    render(<LoginPage />)
+
+    await waitFor(() => {
+      expect(requested).toBe('/api/v1/login-flows/abc%2B%2F%3D%3D')
+    })
+  })
+
   describe('Successful Login Challenge Fetch', () => {
     beforeEach(() => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({
-            challenge: 'test-challenge',
+            next: 'form',
+            flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid', 'email'],
             client: { client_id: 'test-client-id' }
@@ -139,9 +158,10 @@ describe('LoginPage', () => {
 
     it('falls back to a generic subtitle when client_name is missing', async () => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({
-            challenge: 'test-challenge',
+            next: 'form',
+            flow: 'test-challenge',
             client_name: '',
             requested_scope: ['openid'],
             client: { client_id: 'test-client-id' }
@@ -178,9 +198,10 @@ describe('LoginPage', () => {
 
     it('links "forgot password" without a query string when no client_id is known', async () => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({
-            challenge: 'test-challenge',
+            next: 'form',
+            flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid'],
           })
@@ -199,9 +220,10 @@ describe('LoginPage', () => {
   describe('Form Validation', () => {
     beforeEach(async () => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({
-            challenge: 'test-challenge',
+            next: 'form',
+            flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid', 'email']
           })
@@ -245,9 +267,10 @@ describe('LoginPage', () => {
   describe('Login Submission', () => {
     beforeEach(async () => {
       server.use(
-        http.get('http://localhost:8080/auth/google/login', () => {
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
           return HttpResponse.json({
-            challenge: 'test-challenge',
+            next: 'form',
+            flow: 'test-challenge',
             client_name: 'Test App',
             requested_scope: ['openid', 'email']
           })

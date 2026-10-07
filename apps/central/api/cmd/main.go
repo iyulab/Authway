@@ -207,6 +207,10 @@ func main() {
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		ErrorHandler: middleware.ErrorHandler,
+		// Login, consent and logout flow ids are Hydra challenges of 1-2 KB and
+		// travel in URLs. Fiber's 4 KB default for the request line plus headers
+		// leaves too little room once cookies are added.
+		ReadBufferSize: 16 * 1024,
 	})
 
 	// Middleware
@@ -285,8 +289,6 @@ func main() {
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
 	// Auth routes for Hydra login/consent flow
-	app.Get("/login", authHandler.LoginPage)
-	app.Post("/login", authHandler.LoginPage)                     // Support POST for long login_challenge
 	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
 	app.Post("/authenticate", loginRateLimit, authHandler.Login)                  // Actual login submission
 	app.Post("/mfa/verify", loginRateLimit, authHandler.VerifyMFALogin)           // Second factor for a TOTP-pending login
@@ -342,6 +344,10 @@ func main() {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
+
+	// What the sign-in screen should do with a login flow: show the form (and
+	// which sign-in methods the client allows) or redirect.
+	v1.Get("/login-flows/:flow", authHandler.GetLoginFlow)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)

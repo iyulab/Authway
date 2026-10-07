@@ -53,7 +53,8 @@ interface ClientAuthConfig {
 }
 
 interface LoginPageInfo {
-  challenge: string
+  next: 'form'
+  flow: string
   client_name: string
   requested_scope: string[]
   client?: ClientAuthConfig
@@ -142,27 +143,11 @@ const LoginPage: React.FC = () => {
 
     console.log('[LoginPage] Fetching login info with challenge:', challenge.substring(0, 20) + '...')
 
-    // Use POST if challenge is long (>1500 chars) to avoid HTTP 431 errors
-    const usePost = challenge.length > 1500
-    const fetchOptions = usePost
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ login_challenge: challenge })
-        }
-      : { method: 'GET' }
-
-    // Use Auth Backend URL for OAuth endpoints
-    const apiUrl = getConfig().apiUrl
-    const url = usePost
-      ? `${apiUrl}/auth/google/login`
-      : `${apiUrl}/auth/google/login?login_challenge=${challenge}`
-
-    fetch(url, fetchOptions)
+    fetch(`${getConfig().apiUrl}/api/v1/login-flows/${encodeURIComponent(challenge)}`)
       .then(res => res.json())
       .then(data => {
-        // Handle SSO auto-login or session cleared - both need redirect
-        if (data.redirect_to) {
+        // SSO auto-login or a cleared session — either way no form is needed
+        if (data.next === 'redirect' && data.redirect_to) {
           if (data.sso) {
             console.log('[LoginPage] SSO auto-login, redirecting...')
           } else if (data.session_cleared) {
@@ -184,7 +169,8 @@ const LoginPage: React.FC = () => {
         }
 
         if (data.error) {
-          setError(data.error)
+          const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
+          setError(key ? t(key) : data.error)
         } else {
           setLoginInfo(data)
           // Extract client_id from login info if available
