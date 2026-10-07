@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Added
+
+- **OpenAPI description of the login UI API (`packages/contract`).** Login,
+  consent and logout flows, sign-in links and capabilities, as one OpenAPI 3.1
+  document. The conformance suite now checks every answer a provider gives
+  against it — status codes and bodies — so another implementation is held to
+  the same document.
+
 ## [0.5.0] - 2026-10-07
 
 > Minor: the central API is the only login backend, and login, consent and

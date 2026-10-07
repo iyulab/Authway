@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { Provider, type TestClient, type TestUser } from '../src/provider.js'
+import { conform } from '../src/contract.js'
 
 const provider = new Provider(loadConfig())
 
@@ -43,6 +44,7 @@ describe('sign-in with an emailed link', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: user.email }),
       })
+      await conform('POST', '/api/v1/login-flows/{flow}/magic-link', res)
       expect(res.status).toBe(403)
     } finally {
       await provider.deleteClient(other)

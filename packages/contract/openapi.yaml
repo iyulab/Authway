@@ -1,0 +1,341 @@
+openapi: 3.1.0
+info:
+  title: Authway login UI API
+  version: 0.5.0
+  summary: The contract between a login screen and an Authway provider.
+  description: |
+    Every Authway implementation answers these endpoints the same way, so the
+    bundled login screens — or a custom one — work with any of them. Flow ids
+    are opaque: a screen only passes them back, URL-encoded in a path segment.
+    See docs/api/login-flows.md for the walk-through.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+paths:
+  /api/v1/capabilities:
+    get:
+      operationId: getCapabilities
+      summary: What this deployment offers
+      responses:
+        '200':
+          description: Capabilities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Capabilities' }
+
+  /api/v1/login-flows/{flow}:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    get:
+      operationId: getLoginFlow
+      summary: What the sign-in screen should show for a login flow
+      responses:
+        '200':
+          description: Show the form, or continue without one
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LoginForm'
+                  - $ref: '#/components/schemas/Redirect'
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/password:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: submitPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                remember: { type: boolean }
+      responses:
+        '200':
+          description: Signed in, or a second factor is needed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Redirect'
+                  - $ref: '#/components/schemas/MFARequired'
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/mfa:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: submitTOTP
+      requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/mfa/recovery:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: submitRecoveryCode
+      requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/social/{provider}:
+    parameters:
+      - { $ref: '#/components/parameters/Flow' }
+      - name: provider
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: startSocialSignIn
+      summary: A page navigation that continues to the provider
+      description: |
+        Not an API call: the browser navigates here. A provider the client
+        does not offer ends the authorization request with an OAuth error.
+      responses:
+        '302': { description: To the provider, or back to the application or the error screen }
+
+  /api/v1/login-flows/{flow}/magic-link:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: sendMagicLink
+      description: Same answer whether or not the address may sign in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        '200':
+          description: A link was emailed if the address may sign in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailSent' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/magic-links/inspect:
+    post:
+      operationId: inspectMagicLink
+      description: Reports whether a link can be redeemed, without using it up.
+      requestBody: { $ref: '#/components/requestBodies/MagicLinkToken' }
+      responses:
+        '200':
+          description: The link's state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MagicLinkInspection' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/magic-links/redeem:
+    post:
+      operationId: redeemMagicLink
+      description: Uses the link up and completes its login flow. Must run in the browser that started the sign-in.
+      requestBody: { $ref: '#/components/requestBodies/MagicLinkToken' }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/consent-flows/{flow}:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    get:
+      operationId: getConsentFlow
+      responses:
+        '200':
+          description: Ask, or continue without asking
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ConsentForm'
+                  - $ref: '#/components/schemas/Redirect'
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/consent-flows/{flow}/accept:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: acceptConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                grant_scope: { type: array, items: { type: string } }
+                remember: { type: boolean }
+                remember_for: { type: integer, minimum: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/consent-flows/{flow}/reject:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: rejectConsent
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/logout-flows/{flow}:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: completeLogout
+      description: Ends the session and revokes the user's tokens; the authorization server decides the destination.
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+components:
+  parameters:
+    Flow:
+      name: flow
+      in: path
+      required: true
+      description: Opaque flow id, URL-encoded.
+      schema: { type: string, minLength: 1 }
+
+  requestBodies:
+    SecondFactor:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [mfa_challenge, code]
+            properties:
+              mfa_challenge: { type: string, description: Issued by the password step; only valid for its own flow. }
+              code: { type: string }
+    MagicLinkToken:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token]
+            properties:
+              token: { type: string }
+
+  responses:
+    Redirect:
+      description: Continue in the browser
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Redirect' }
+    Error:
+      description: Refused
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Redirect:
+      type: object
+      required: [next, redirect_to]
+      properties:
+        next: { const: redirect }
+        redirect_to: { type: string, minLength: 1 }
+
+    MFARequired:
+      type: object
+      required: [next, mfa_challenge]
+      properties:
+        next: { const: mfa }
+        mfa_challenge: { type: string, minLength: 1 }
+
+    EmailSent:
+      type: object
+      required: [next]
+      properties:
+        next: { const: email_sent }
+
+    LoginForm:
+      type: object
+      required: [next, flow, client_name, requested_scope, client]
+      properties:
+        next: { const: form }
+        flow: { type: string }
+        client_name: { type: string }
+        requested_scope: { type: [array, 'null'], items: { type: string } }
+        client:
+          type: object
+          required: [client_id, sign_in_methods]
+          properties:
+            client_id: { type: string }
+            sign_in_methods:
+              description: What to offer, in order — "email" for the password form, "magic_link", then social providers.
+              type: array
+              items: { type: string }
+            allow_email_signup: { type: boolean }
+
+    ConsentForm:
+      type: object
+      required: [next, flow, client_name, requested_scope, user]
+      properties:
+        next: { const: form }
+        flow: { type: string }
+        client_name: { type: string }
+        requested_scope: { type: [array, 'null'], items: { type: string } }
+        user:
+          type: object
+          required: [email]
+          properties:
+            email: { type: string }
+            name: { type: [string, 'null'] }
+
+    MagicLinkInspection:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        email: { type: string }
+        expires_at: { type: string }
+        error: { type: string }
+
+    Capabilities:
+      type: object
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, token_exchange, ciba]
+      properties:
+        multi_tenant: { type: boolean }
+        providers:
+          description: Social providers this deployment has credentials for.
+          type: array
+          items: { type: string }
+        magic_link: { type: boolean }
+        mfa: { type: array, items: { type: string } }
+        signup_modes: { type: array, items: { type: string } }
+        token_exchange: { type: boolean }
+        ciba: { type: boolean }
+
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string, description: A message to show the user. }
+        code:
+          type: string
+          description: |
+            Stable identifier, for example invalid_flow, flow_expired,
+            invalid_credentials, sign_in_method_not_allowed,
+            invalid_mfa_challenge, invalid_code, mfa_locked, invalid_link,
+            invalid_request, client_not_registered.

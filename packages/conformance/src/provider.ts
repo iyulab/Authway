@@ -1,5 +1,6 @@
 import type { ConformanceConfig } from './config.js'
 import { Browser } from './browser.js'
+import { conform } from './contract.js'
 import { waitForLink } from './mail.js'
 import { createPkce, randomToken, type Pkce } from './pkce.js'
 
@@ -193,19 +194,23 @@ export class Provider {
   }
 
   async submitPassword(browser: Browser, flow: string, user: TestUser, remember = false): Promise<Response> {
-    return browser.fetch(this.loginFlowUrl(flow, '/password'), {
+    const res = await browser.fetch(this.loginFlowUrl(flow, '/password'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: user.email, password: user.password, remember }),
     })
+    await conform('POST', '/api/v1/login-flows/{flow}/password', res)
+    return res
   }
 
   async acceptConsent(browser: Browser, flow: string, scopes: string[]): Promise<Response> {
-    return browser.fetch(this.flowUrl('consent-flows', flow, '/accept'), {
+    const res = await browser.fetch(this.flowUrl('consent-flows', flow, '/accept'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grant_scope: scopes }),
     })
+    await conform('POST', '/api/v1/consent-flows/{flow}/accept', res)
+    return res
   }
 
   /**
@@ -235,6 +240,7 @@ export class Provider {
     const flow = logoutScreen.searchParams.get('flow')
     if (!flow) throw new Error(`The logout screen was opened without a flow id: ${logoutScreen}`)
     const res = await browser.fetch(this.flowUrl('logout-flows', flow), { method: 'POST' })
+    await conform('POST', '/api/v1/logout-flows/{flow}', res)
     const body = await res.text()
     if (!res.ok) throw new Error(`Completing the logout flow failed: ${res.status} ${body}`)
     const { next: step, redirect_to: redirectTo } = JSON.parse(body) as { next?: string; redirect_to?: string }
@@ -295,6 +301,7 @@ export class Provider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     })
+    await conform('POST', '/api/v1/login-flows/{flow}/magic-link', sendRes)
     const sendBody = await sendRes.text()
     if (!sendRes.ok) return { kind: 'rejected', status: sendRes.status, body: sendBody }
     if ((JSON.parse(sendBody) as { next?: string }).next !== 'email_sent') throw new Error(`Unexpected answer: ${sendBody}`)
@@ -307,6 +314,7 @@ export class Provider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
     })
+    await conform('POST', '/api/v1/magic-links/redeem', redeemRes)
     const redeemBody = await redeemRes.text()
     if (!redeemRes.ok) return { kind: 'rejected', status: redeemRes.status, body: redeemBody }
     const { next: step, redirect_to: afterLogin } = JSON.parse(redeemBody) as { next?: string; redirect_to?: string }

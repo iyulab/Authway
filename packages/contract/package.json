@@ -1,0 +1,14 @@
+{
+  "name": "@authway/contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenAPI description of the API Authway login screens use",
+  "type": "module",
+  "exports": {
+    "./openapi.yaml": "./openapi.yaml"
+  },
+  "files": [
+    "openapi.yaml"
+  ],
+  "license": "Apache-2.0"
+}

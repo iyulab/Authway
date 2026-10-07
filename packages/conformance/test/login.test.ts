@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { POST_LOGOUT_REDIRECT_URI, Provider, type TestClient, type TestUser } from '../src/provider.js'
+import { conform } from '../src/contract.js'
 
 const provider = new Provider(loadConfig())
 
@@ -53,6 +54,7 @@ describe('password login through the authorization-code flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: user.email, password: user.password }),
     })
+    await conform('POST', '/api/v1/login-flows/{flow}/password', res)
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(res.status).toBeLessThan(500)
   })

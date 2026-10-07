@@ -3,6 +3,7 @@ import { Browser } from '../src/browser.js'
 import { loadConfig } from '../src/config.js'
 import { createPkce, randomToken } from '../src/pkce.js'
 import { Provider, REDIRECT_URI, type TestClient } from '../src/provider.js'
+import { conform } from '../src/contract.js'
 
 const provider = new Provider(loadConfig())
 
@@ -53,6 +54,7 @@ describe('login UI backend routes', () => {
   // starting a Google sign-in, and the screen could not show its form at all.
   it('describes the login flow the sign-in screen opens on', async () => {
     const res = await fetch(`${provider.config.api}/api/v1/login-flows/${encodeURIComponent(flow)}`)
+    await conform('GET', '/api/v1/login-flows/{flow}', res)
     const body = await res.json()
     expect(res.status, JSON.stringify(body)).toBe(200)
     expect(body.next).toBe('form')
@@ -62,7 +64,9 @@ describe('login UI backend routes', () => {
   })
 
   it('publishes what the deployment offers, and offers sign-in only through it', async () => {
-    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
+    const capsRes = await fetch(`${provider.config.api}/api/v1/capabilities`)
+    await conform('GET', '/api/v1/capabilities', capsRes)
+    const caps = await capsRes.json()
     expect(Array.isArray(caps.providers), JSON.stringify(caps)).toBe(true)
     expect(typeof caps.multi_tenant).toBe('boolean')
     expect(typeof caps.magic_link).toBe('boolean')
@@ -82,6 +86,7 @@ describe('login UI backend routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: `nobody-${randomToken(4)}@example.test`, password: 'not-the-password' }),
     })
+    await conform('POST', '/api/v1/login-flows/{flow}/password', res)
     const body = await res.json()
     expect(res.status, JSON.stringify(body)).toBe(401)
     expect(body.code).toBe('invalid_credentials')
@@ -94,6 +99,7 @@ describe('login UI backend routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mfa_challenge: 'not-issued', code: '000000' }),
       })
+      await conform('POST', `/api/v1/login-flows/{flow}${step}`, res)
       const body = await res.json()
       expect(res.status, JSON.stringify(body)).toBe(400)
       expect(body.code).toBe('invalid_mfa_challenge')
@@ -132,6 +138,7 @@ describe('login UI backend routes', () => {
         headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
         body: method === 'POST' ? '{}' : undefined,
       })
+      await conform(method, `/api/v1/${kind}/{flow}${path}`, res)
       const body = await res.json()
       expect(res.status, JSON.stringify(body)).toBe(400)
       expect(body.code).toBe('invalid_flow')
