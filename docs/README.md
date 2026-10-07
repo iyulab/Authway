@@ -25,9 +25,10 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 - **[SDK Reference](./SDK_REFERENCE.md)** - Full API documentation for React and Vanilla JS SDKs
 
 ### Features & Integration
-- **[Features Guide](./FEATURES.md)** - Dynamic Claims, Popup Login, Logout Policies, OAuth/JWT Best Practices
+- **[Features Guide](./FEATURES.md)** - Dynamic Claims, Popup Login, Logout Redirects, OAuth/JWT Best Practices
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
 - **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
+- **[Login, Consent and Logout Flows](./api/login-flows.md)** - The contract a login screen uses: flow ids, sign-in methods, magic links, capabilities
 
 ### Operations
 - **[Deployment Guide](./DEPLOYMENT.md)** - Azure, Docker, CORS, production checklist

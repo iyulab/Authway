@@ -14,8 +14,6 @@
 export interface RuntimeConfig {
   /** Base URL of the Authway API; "" means the page's own origin. */
   apiUrl: string
-  /** OIDC issuer, shown for reference only. */
-  issuerUrl: string
   /** Application Insights connection string; telemetry is off when empty. */
   appInsightsConnectionString: string
 }
@@ -36,7 +34,6 @@ export function getConfig(): RuntimeConfig {
 
   return {
     apiUrl: trimSlash(pick('apiUrl', env.VITE_API_URL, env.DEV ? 'http://localhost:8080' : '')),
-    issuerUrl: trimSlash(pick('issuerUrl', env.VITE_HYDRA_PUBLIC_URL, env.DEV ? 'http://localhost:4444' : '')),
     appInsightsConnectionString: pick(
       'appInsightsConnectionString',
       env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING,
