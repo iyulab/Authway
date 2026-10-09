@@ -35,11 +35,11 @@ A value outside its range is refused with `400 invalid_request`; nothing is
 silently replaced.
 
 Deliveries go to public addresses only: a URL naming `localhost` or a
-loopback, private, link-local or shared address is refused, and a hostname
+loopback, private, link-local, shared or reserved address is refused, and a hostname
 that resolves to one fails when the delivery connects. Redirects are not
 followed — a `3xx` answer is a failed attempt. A deployment whose receivers
-run on its own network sets `AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS=true`
-(the default in development).
+run on its own network — or a developer testing against a local receiver —
+sets `AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS=true`.
 
 The `201` answer carries the webhook **and its signing secret**:
 

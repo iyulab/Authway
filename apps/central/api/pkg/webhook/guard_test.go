@@ -22,6 +22,13 @@ func TestBlockedIP(t *testing.T) {
 		"fe80::1":         true,
 		"::ffff:10.0.0.1": true,
 		"224.0.0.1":       true,
+		"0.1.2.3":         true,
+		"255.255.255.255": true,
+		"198.18.0.1":      true,
+		"64:ff9b::a00:1":  true,
+		"2002:a00:1::1":   true,
+		"2001:0:a00:1::":  true,
+		"::a00:1":         true,
 		"93.184.216.34":   false,
 		"2606:4700::1111": false,
 	} {

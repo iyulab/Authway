@@ -154,8 +154,9 @@ type SecurityConfig struct {
 	// empty in development the secrets are stored as plaintext.
 	TOTPEncryptionKey string `mapstructure:"totp_encryption_key"`
 	// WebhookAllowPrivateTargets lets webhook deliveries reach loopback and
-	// private addresses (AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS). Defaults to
-	// on in development, where receivers run locally, and off elsewhere.
+	// private addresses (AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS). Off unless set:
+	// an unset environment name reads as development, so tying this to the
+	// environment would open it wherever the name was forgotten.
 	WebhookAllowPrivateTargets bool `mapstructure:"webhook_allow_private_targets"`
 }
 
@@ -316,7 +317,7 @@ func Load() (*Config, error) {
 	if totpKey := os.Getenv("AUTHWAY_TOTP_ENCRYPTION_KEY"); totpKey != "" {
 		config.Security.TOTPEncryptionKey = totpKey
 	}
-	config.Security.WebhookAllowPrivateTargets = IsDevelopment(config.App.Environment)
+	config.Security.WebhookAllowPrivateTargets = false
 	if v := os.Getenv("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS"); v != "" {
 		allow, err := strconv.ParseBool(v)
 		if err != nil {
