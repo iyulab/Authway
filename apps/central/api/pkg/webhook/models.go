@@ -98,7 +98,7 @@ type WebhookDelivery struct {
 	Payload      string    `json:"payload" gorm:"type:text;not null"`
 	StatusCode   int       `json:"status_code"`
 	ResponseBody string    `json:"response_body" gorm:"type:text"`
-	Attempt      int       `json:"attempt" gorm:"default:1"`
+	Attempt      int       `json:"attempt"`
 	DeliveredAt  time.Time `json:"delivered_at"`
 	Success      bool      `json:"success" gorm:"default:false"`
 	ErrorMessage string    `json:"error_message" gorm:"type:text"`

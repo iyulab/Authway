@@ -13,8 +13,8 @@ const SystemActorEmail = "system"
 
 // ImpersonationSession represents an active impersonation session
 type ImpersonationSession struct {
-	ID              uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	TenantID        uuid.UUID  `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	TenantID uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	// AdminID is NULL when the session was started by the system actor (admin
 	// API key), which has no user row. AdminEmail then reads SystemActorEmail
 	// so the audit trail still names who acted.
@@ -26,7 +26,7 @@ type ImpersonationSession struct {
 	IPAddress       string     `json:"ip_address" gorm:"size:45"`
 	UserAgent       string     `json:"user_agent" gorm:"size:512"`
 	Token           string     `json:"-" gorm:"size:255;uniqueIndex"`
-	Active          bool       `json:"active" gorm:"default:true"`
+	Active          bool       `json:"active"`
 	StartedAt       time.Time  `json:"started_at"`
 	EndedAt         *time.Time `json:"ended_at"`
 	ExpiresAt       time.Time  `json:"expires_at" gorm:"not null"`
@@ -46,8 +46,8 @@ type StartImpersonationRequest struct {
 
 // ImpersonationTokenResponse represents the response with impersonation token
 type ImpersonationTokenResponse struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token      string    `json:"token"`
+	ExpiresAt  time.Time `json:"expires_at"`
 	TargetUser struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`

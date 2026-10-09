@@ -1,8 +1,11 @@
 package database_test
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 // Every GORM model must be writable against the schema the migrations actually
@@ -274,5 +278,58 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 		if !owned[table] {
 			t.Errorf("%s exists in the migrated schema but no model maps it", table)
 		}
+	}
+}
+
+// TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
+// falsified audit trail: a field that declares a default is left out of the
+// INSERT whenever it holds its zero value, so the database default is stored
+// instead. For a bool defaulting to true or a number defaulting to non-zero,
+// false and 0 then cannot be written at all — failed events were recorded as
+// successes, disabled sign-up as enabled. Such defaults belong in the code
+// that builds the row, not in the mapping.
+func TestModelsCanStoreZeroValues(t *testing.T) {
+	cache := &sync.Map{}
+	for _, m := range mappedModels() {
+		s, err := schema.Parse(m, cache, schema.NamingStrategy{})
+		if err != nil {
+			t.Fatalf("parse %T: %v", m, err)
+		}
+		for _, f := range s.Fields {
+			if !f.HasDefaultValue || f.DefaultValueInterface == nil {
+				continue
+			}
+			switch f.FieldType.Kind() {
+			case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+				if !reflect.ValueOf(f.DefaultValueInterface).IsZero() {
+					t.Errorf("%T.%s declares gorm default %q: its zero value can never be stored", m, f.Name, f.DefaultValue)
+				}
+			}
+		}
+	}
+}
+
+// TestAuditLogKeepsFailures is the behaviour TestModelsCanStoreZeroValues
+// protects, end to end: an event logged as a failure is stored as one.
+func TestAuditLogKeepsFailures(t *testing.T) {
+	db := setup(t)
+	tenantID, _ := fixtures(t, db)
+	svc := audit.NewService(db, zap.NewNop())
+	resource := uuid.New().String()
+	if err := svc.Log(context.Background(), &audit.AuditEntry{
+		TenantID: tenantID, Action: audit.ActionUserLoginFailed, ResourceType: "user", ResourceID: resource,
+		Success: false, ErrorMsg: "invalid credentials",
+	}); err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM audit_logs WHERE resource_id = ?`, resource) })
+
+	var success bool
+	if err := db.Raw(`SELECT success FROM audit_logs WHERE resource_id = ?`, resource).Scan(&success).Error; err != nil {
+		t.Fatal(err)
+	}
+	if success {
+		t.Fatal("a failure was stored as a success")
 	}
 }

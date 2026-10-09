@@ -23,7 +23,7 @@ type Client struct {
 	GrantTypes   pq.StringArray `json:"grant_types" gorm:"type:text[]"`
 	Scopes       pq.StringArray `json:"scopes" gorm:"type:text[]"`
 	Public       bool           `json:"public" gorm:"default:false"`
-	Active       bool           `json:"active" gorm:"default:true"`
+	Active       bool           `json:"active"`
 
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`
@@ -48,8 +48,8 @@ type Client struct {
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
-	AllowEmailSignup     bool           `json:"allow_email_signup" gorm:"column:allow_email_signup;default:true"`
-	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login;default:true"`
+	AllowEmailSignup     bool           `json:"allow_email_signup" gorm:"column:allow_email_signup"`
+	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login"`
 
 	// Consent Flow Configuration
 	// SkipConsent bypasses the OAuth consent screen; SkipLogoutConsent bypasses

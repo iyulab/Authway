@@ -21,7 +21,7 @@ type Tenant struct {
 	Settings     TenantSettings `json:"settings" gorm:"type:jsonb"`
 	Logo         string         `json:"logo"`
 	PrimaryColor string         `json:"primary_color" gorm:"default:#4F46E5"`
-	Active       bool           `json:"active" gorm:"default:true"`
+	Active       bool           `json:"active"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`

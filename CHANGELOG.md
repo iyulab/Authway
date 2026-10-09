@@ -81,6 +81,14 @@
 
 ### Fixed
 
+- **The audit log records failures as failures.** Every event logged as a
+  failure — failed sign-ins and MFA, refused admin calls — was stored with
+  `success: true`, so filtering on `success=false` found nothing and the
+  summary's `failed_operations` was always 0. Migration 025 corrects the rows
+  already written (failure actions and rows carrying an error message).
+- **A client created with `allow_email_signup` or `allow_email_login` off
+  keeps it off.** Creating one stored both as on; updating was not affected.
+  Clients created before this release should be checked in the console.
 - **A webhook keeps `enabled: false` and `retry_count: 0`.** Creating one
   stored them as `true` and `3`. Changing a webhook's events failed, and the
   admin console's webhook edits never reached the API (it sent `PUT` to a
@@ -138,7 +146,7 @@
   `localhost`, is refused when the webhook is saved. Deliveries no longer
   follow redirects or use proxy settings. Set
   `AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS=true` where receivers run on the same
-  network (the default in development).
+  network or on a developer's machine.
 - **Removed `GET /api/v1/invitations/pending`.** It was public and returned,
   for any email address, its pending invitations with tenant name, inviter
   name and role — enough to map who is being invited to which organization.

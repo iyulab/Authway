@@ -10,20 +10,20 @@ import (
 // User represents a user in the system
 // Users are isolated by tenant - same email can exist in different tenants
 type User struct {
-	ID            uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID      uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index:idx_users_tenant_email"`
-	Email         string         `json:"email" gorm:"not null;index:idx_users_tenant_email;index"`
-	PasswordHash  string         `json:"-" gorm:"not null"`
-	Name          *string        `json:"name"`
-	AvatarURL     *string        `json:"avatar_url"`
-	EmailVerified bool           `json:"email_verified" gorm:"default:false"`
-	Active        bool           `json:"active" gorm:"default:true"`
-	Provider      string         `json:"provider" gorm:"default:local"` // local, google, github, microsoft, apple
-	GoogleID      *string        `json:"-" gorm:"index"`
-	GithubID      *string        `json:"-" gorm:"index"`
-	MicrosoftID   *string        `json:"-" gorm:"index"`
-	AppleID       *string        `json:"-" gorm:"index"`
-	Picture       *string        `json:"picture"`
+	ID            uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index:idx_users_tenant_email"`
+	Email         string    `json:"email" gorm:"not null;index:idx_users_tenant_email;index"`
+	PasswordHash  string    `json:"-" gorm:"not null"`
+	Name          *string   `json:"name"`
+	AvatarURL     *string   `json:"avatar_url"`
+	EmailVerified bool      `json:"email_verified" gorm:"default:false"`
+	Active        bool      `json:"active"`
+	Provider      string    `json:"provider" gorm:"default:local"` // local, google, github, microsoft, apple
+	GoogleID      *string   `json:"-" gorm:"index"`
+	GithubID      *string   `json:"-" gorm:"index"`
+	MicrosoftID   *string   `json:"-" gorm:"index"`
+	AppleID       *string   `json:"-" gorm:"index"`
+	Picture       *string   `json:"picture"`
 
 	// MFA/TOTP fields
 	TOTPSecret     *string    `json:"-" gorm:"column:totp_secret"`

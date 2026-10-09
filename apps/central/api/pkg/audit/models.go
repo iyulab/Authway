@@ -73,7 +73,7 @@ type AuditLog struct {
 	IPAddress    string        `json:"ip_address" gorm:"size:45"`
 	UserAgent    string        `json:"user_agent" gorm:"size:512"`
 	Details      string        `json:"details" gorm:"type:jsonb"`
-	Success      bool          `json:"success" gorm:"default:true"`
+	Success      bool          `json:"success"`
 	ErrorMsg     string        `json:"error_msg" gorm:"type:text"`
 	CreatedAt    time.Time     `json:"created_at" gorm:"index"`
 }
