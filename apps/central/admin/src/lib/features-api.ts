@@ -100,7 +100,7 @@ export const webhooksApi = {
     retry_count?: number
     timeout_secs?: number
   }) =>
-    api.post<{ webhook: Webhook }>('/api/v1/webhooks', data),
+    api.post<{ webhook: Webhook; secret: string }>('/api/v1/webhooks', data),
 
   // PATCH: the API changes only the fields the body names.
   update: (id: string, data: Partial<Webhook>) =>
@@ -108,6 +108,10 @@ export const webhooksApi = {
 
   delete: (id: string) =>
     api.delete<{ message: string }>(`/api/v1/webhooks/${id}`),
+
+  // The old secret stops signing as soon as this answers.
+  rotateSecret: (id: string) =>
+    api.post<{ secret: string }>(`/api/v1/webhooks/${id}/rotate-secret`),
 
   // Sends one test event; a receiver that refuses or cannot be reached still
   // answers 200, and the delivery says how it went.

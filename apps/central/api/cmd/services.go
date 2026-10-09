@@ -37,13 +37,14 @@ func InitNewFeatureServices(
 	tenantService *tenant.Service,
 	emailService email.EmailService,
 	frontendURL string,
+	webhookAllowPrivateTargets bool,
 ) *NewFeatureServices {
 	// Audit Service
 	auditService := audit.NewService(db, logger)
 	auditHandler := audit.NewHandler(auditService, logger)
 
 	// Webhook Service
-	webhookService := webhook.NewService(db, logger)
+	webhookService := webhook.NewService(db, logger, webhook.AllowPrivateTargets(webhookAllowPrivateTargets))
 	webhookHandler := webhook.NewHandler(webhookService, logger, auditService)
 
 	// Invitation Service

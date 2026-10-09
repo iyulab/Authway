@@ -10,6 +10,13 @@
   and their deliveries. Every admin operation lists its `401`, and the
   conformance suite exercises each of them.
 
+- **Webhook receivers can verify deliveries.** Creating a webhook answers its
+  signing secret once (`secret`), and `POST /api/v1/webhooks/{id}/rotate-secret`
+  issues a new one; until now the secret was never shown, so no receiver could
+  check a signature. The admin console shows the secret after creating or
+  rotating. [docs/api/webhooks.md](docs/api/webhooks.md) describes deliveries,
+  retries and verification.
+
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
   consent and logout flows, sign-in links, capabilities, email verification,
   password reset and invitations, plus the admin operations that provision a
@@ -39,6 +46,11 @@
   `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
   `{invitations, total, limit, offset}` — it ignored them and answered
   `{invitations, count}`.
+- **Webhook signatures cover the time they were made.** `X-Webhook-Signature`
+  is `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`, signed afresh
+  for each attempt, so a receiver can refuse a replayed delivery;
+  `X-Webhook-Timestamp` is gone. Retries of one event carry the same payload
+  `id`.
 - **Webhook administration refuses what it used to rewrite.** A
   `retry_count` outside 0–10, a `timeout_secs` outside 1–60 (the limit was
   120), a URL that is not absolute http(s), an empty or unknown event answer
@@ -120,6 +132,13 @@
 
 ### Security
 
+- **Webhooks cannot reach the server's own network.** A delivery to a
+  loopback, private, link-local or shared address is refused when it connects
+  — whatever the URL's hostname resolves to — and a URL naming one, or
+  `localhost`, is refused when the webhook is saved. Deliveries no longer
+  follow redirects or use proxy settings. Set
+  `AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS=true` where receivers run on the same
+  network (the default in development).
 - **Removed `GET /api/v1/invitations/pending`.** It was public and returned,
   for any email address, its pending invitations with tenant name, inviter
   name and role — enough to map who is being invited to which organization.

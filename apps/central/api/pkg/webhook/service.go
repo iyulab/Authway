@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,19 +47,38 @@ type Service interface {
 	// whether or not it is enabled, and returns the recorded delivery.
 	Test(id uuid.UUID) (*WebhookDelivery, error)
 	GetDeliveries(webhookID uuid.UUID, limit int) ([]WebhookDelivery, error)
+	// RotateSecret replaces the signing secret and returns the new one.
+	RotateSecret(id uuid.UUID) (string, error)
 }
 
 type service struct {
-	db         *gorm.DB
-	logger     *zap.Logger
-	httpClient *http.Client
+	db                  *gorm.DB
+	logger              *zap.Logger
+	httpClient          *http.Client
+	allowPrivateTargets bool
 }
 
-func NewService(db *gorm.DB, logger *zap.Logger) Service {
+// Option configures a webhook service.
+type Option func(*options)
+
+type options struct{ allowPrivateTargets bool }
+
+// AllowPrivateTargets lets deliveries reach this host and private networks —
+// for local development, where receivers run on the same machine.
+func AllowPrivateTargets(allow bool) Option {
+	return func(o *options) { o.allowPrivateTargets = allow }
+}
+
+func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	return &service{
-		db:         db,
-		logger:     logger,
-		httpClient: &http.Client{},
+		db:                  db,
+		logger:              logger,
+		httpClient:          deliveryClient(o.allowPrivateTargets),
+		allowPrivateTargets: o.allowPrivateTargets,
 	}
 }
 
@@ -92,13 +112,22 @@ func validateName(name string) error {
 	return nil
 }
 
-func validateURL(raw string) error {
+// validateURL refuses what is plainly not deliverable. A host named by a
+// local or private address is refused here for a clear answer; a hostname
+// that resolves to one is refused when the delivery connects.
+func (s *service) validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return apierror.NewPublic("url must be an absolute http or https URL")
 	}
 	if len(raw) > 2048 {
 		return apierror.NewPublic("url must be at most 2048 characters")
+	}
+	if !s.allowPrivateTargets {
+		host := u.Hostname()
+		if ip := net.ParseIP(host); (ip != nil && blockedIP(ip)) || strings.EqualFold(host, "localhost") {
+			return apierror.NewPublic("url must not point at a local or private address")
+		}
 	}
 	return nil
 }
@@ -158,7 +187,7 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateWebhookRequest) (*Webhoo
 	}
 	if err := errors.Join(
 		validateName(webhook.Name),
-		validateURL(webhook.URL),
+		s.validateURL(webhook.URL),
 		validateEvents(webhook.Events),
 		validateRetryCount(webhook.RetryCount),
 		validateTimeout(webhook.TimeoutSecs),
@@ -223,7 +252,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateWebhookRequest) (*Webhook, err
 		updates["name"] = *req.Name
 	}
 	if req.URL != nil {
-		errs = append(errs, validateURL(*req.URL))
+		errs = append(errs, s.validateURL(*req.URL))
 		updates["url"] = *req.URL
 	}
 	if req.Events != nil {
@@ -284,14 +313,14 @@ func (s *service) Test(id uuid.UUID) (*WebhookDelivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, signature, err := buildPayload(*webhook, EventTypeTest, map[string]any{
+	payload, err := buildPayload(*webhook, EventTypeTest, map[string]any{
 		"test":    true,
 		"message": "This is a test webhook delivery",
 	})
 	if err != nil {
 		return nil, err
 	}
-	delivery := s.attempt(*webhook, EventTypeTest, payload, signature, 1)
+	delivery := s.attempt(*webhook, EventTypeTest, payload, 1)
 	return &delivery, nil
 }
 
@@ -304,7 +333,9 @@ func containsEvent(events []string, event string) bool {
 	return false
 }
 
-func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, string, error) {
+// buildPayload builds the body once per event, so every attempt carries the
+// same event id; each attempt signs it afresh with its own time.
+func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, error) {
 	payload, err := json.Marshal(WebhookPayload{
 		ID:        uuid.New().String(),
 		Type:      eventType,
@@ -313,22 +344,22 @@ func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, strin
 		Data:      data,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to marshal webhook payload: %w", err)
+		return nil, fmt.Errorf("failed to marshal webhook payload: %w", err)
 	}
-	return payload, SignPayload(payload, webhook.Secret), nil
+	return payload, nil
 }
 
 // deliverWebhook makes the first attempt and then up to RetryCount more,
 // stopping at the first 2xx answer.
 func (s *service) deliverWebhook(webhook Webhook, eventType EventType, data any) {
-	payload, signature, err := buildPayload(webhook, eventType, data)
+	payload, err := buildPayload(webhook, eventType, data)
 	if err != nil {
 		s.logger.Error("Failed to build webhook payload", zap.Error(err))
 		return
 	}
 	attempts := 1 + webhook.RetryCount
 	for attempt := 1; attempt <= attempts; attempt++ {
-		if s.attempt(webhook, eventType, payload, signature, attempt).Success {
+		if s.attempt(webhook, eventType, payload, attempt).Success {
 			s.logger.Info("Webhook delivered", zap.String("webhook_id", webhook.ID.String()), zap.String("event", string(eventType)), zap.Int("attempt", attempt))
 			return
 		}
@@ -341,7 +372,7 @@ func (s *service) deliverWebhook(webhook Webhook, eventType EventType, data any)
 
 // attempt posts the payload once and records the outcome. It returns the
 // recorded row, so the caller sees the id the database gave it.
-func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, signature string, n int) WebhookDelivery {
+func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, n int) WebhookDelivery {
 	delivery := WebhookDelivery{
 		WebhookID:   webhook.ID,
 		EventType:   string(eventType),
@@ -349,7 +380,7 @@ func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, 
 		Attempt:     n,
 		DeliveredAt: time.Now(),
 	}
-	s.post(&delivery, webhook, eventType, payload, signature)
+	s.post(&delivery, webhook, eventType, payload)
 	if err := s.db.Create(&delivery).Error; err != nil {
 		s.logger.Error("Failed to record webhook delivery", zap.Error(err), zap.String("webhook_id", webhook.ID.String()))
 	}
@@ -357,7 +388,7 @@ func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, 
 }
 
 // post sends the request and fills in the delivery's outcome.
-func (s *service) post(delivery *WebhookDelivery, webhook Webhook, eventType EventType, payload []byte, signature string) {
+func (s *service) post(delivery *WebhookDelivery, webhook Webhook, eventType EventType, payload []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(webhook.TimeoutSecs)*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(payload))
@@ -367,9 +398,8 @@ func (s *service) post(delivery *WebhookDelivery, webhook Webhook, eventType Eve
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-ID", webhook.ID.String())
-	req.Header.Set("X-Webhook-Signature", signature)
+	req.Header.Set("X-Webhook-Signature", Sign(webhook.Secret, time.Now().Unix(), payload))
 	req.Header.Set("X-Webhook-Event", string(eventType))
-	req.Header.Set("X-Webhook-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		delivery.ErrorMessage = err.Error()
@@ -397,4 +427,19 @@ func (s *service) GetDeliveries(webhookID uuid.UUID, limit int) ([]WebhookDelive
 		return nil, fmt.Errorf("failed to get deliveries: %w", err)
 	}
 	return deliveries, nil
+}
+
+func (s *service) RotateSecret(id uuid.UUID) (string, error) {
+	secret, err := generateSecret()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate secret: %w", err)
+	}
+	res := s.db.Model(&Webhook{}).Where("id = ? AND deleted_at IS NULL", id).Update("secret", secret)
+	if res.Error != nil {
+		return "", fmt.Errorf("failed to rotate secret: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return "", ErrNotFound
+	}
+	return secret, nil
 }

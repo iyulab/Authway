@@ -258,7 +258,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.FrontendURL)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
 
 	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
 	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)

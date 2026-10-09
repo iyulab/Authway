@@ -14,8 +14,9 @@ const json = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) })
 
 describe('admin API: managing webhooks', () => {
   const name = `conformance-${randomToken(6)}`
-  // Nothing listens here, so deliveries fail fast and nothing leaves the test.
-  const url = 'http://127.0.0.1:9/conformance-webhook'
+  // .invalid never resolves (RFC 2606), so deliveries fail at once on any
+  // provider and nothing leaves the test.
+  const url = 'https://conformance.invalid/webhook'
   let webhook: Webhook
 
   it('creates a webhook with the values it was given, including off and zero', async () => {
@@ -25,8 +26,25 @@ describe('admin API: managing webhooks', () => {
     )
     await conform('POST', '/api/v1/webhooks', res)
     expect(res.status).toBe(201)
-    webhook = ((await res.json()) as { webhook: Webhook }).webhook
+    const created = (await res.json()) as { webhook: Webhook; secret: string }
+    webhook = created.webhook
     expect(webhook).toMatchObject({ name, url, events: ['user.created'], enabled: false, retry_count: 0, timeout_secs: 1 })
+    expect(created.secret).toMatch(/^[0-9a-f]{32,}$/)
+    expect(webhook).not.toHaveProperty('secret')
+  })
+
+  it('rotates the signing secret, showing the new one once', async () => {
+    const first = await provider.admin(`/api/v1/webhooks/${webhook.id}/rotate-secret`, { method: 'POST' })
+    await conform('POST', '/api/v1/webhooks/{id}/rotate-secret', first)
+    expect(first.status).toBe(200)
+    const a = ((await first.json()) as { secret: string }).secret
+    const second = await provider.admin(`/api/v1/webhooks/${webhook.id}/rotate-secret`, { method: 'POST' })
+    const b = ((await second.json()) as { secret: string }).secret
+    expect(a).toMatch(/^[0-9a-f]{32,}$/)
+    expect(b).not.toBe(a)
+
+    const read = await provider.admin(`/api/v1/webhooks/${webhook.id}`)
+    expect(((await read.json()) as { webhook: Webhook }).webhook).not.toHaveProperty('secret')
   })
 
   it('refuses values outside their range instead of replacing them', async () => {
@@ -114,6 +132,7 @@ describe('admin API: managing webhooks', () => {
       ['DELETE', `/api/v1/webhooks/${webhook.id}`],
       ['POST', `/api/v1/webhooks/${webhook.id}/test`],
       ['GET', `/api/v1/webhooks/${webhook.id}/deliveries`],
+      ['POST', `/api/v1/webhooks/${webhook.id}/rotate-secret`],
     ] as const) {
       const res = await provider.admin(path, { method })
       expect(res.status, `${method} ${path}`).toBe(404)

@@ -4,6 +4,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,16 +69,16 @@ func knownEvent(e string) bool {
 
 // Webhook represents a webhook endpoint configuration
 type Webhook struct {
-	ID          uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	TenantID    uuid.UUID  `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	Name        string     `json:"name" gorm:"size:255;not null"`
-	URL         string     `json:"url" gorm:"size:2048;not null"`
-	Secret      string     `json:"-" gorm:"size:255;not null"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	TenantID uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	Name     string    `json:"name" gorm:"size:255;not null"`
+	URL      string    `json:"url" gorm:"size:2048;not null"`
+	Secret   string    `json:"-" gorm:"size:255;not null"`
 	// pq.StringArray, not []string: the column is Postgres text[], and a plain
 	// []string is handed to the driver as a bare value it cannot encode
 	// ("malformed array literal"), so every webhook insert failed. Clients
 	// already use pq.StringArray for the same reason.
-	Events      pq.StringArray `json:"events" gorm:"type:text[];not null"`
+	Events pq.StringArray `json:"events" gorm:"type:text[];not null"`
 	// No gorm default tags: GORM leaves a zero value out of the INSERT when the
 	// field declares a default, so enabled=false and retry_count=0 were stored
 	// as the column defaults. The service always sets all three.
@@ -103,22 +106,54 @@ type WebhookDelivery struct {
 
 // WebhookPayload represents the standard webhook payload
 type WebhookPayload struct {
-	ID        string      `json:"id"`
-	Type      EventType   `json:"type"`
-	Timestamp time.Time   `json:"timestamp"`
-	TenantID  string      `json:"tenant_id"`
-	Data      any `json:"data"`
+	ID        string    `json:"id"`
+	Type      EventType `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
+	TenantID  string    `json:"tenant_id"`
+	Data      any       `json:"data"`
 }
 
-// SignPayload generates HMAC-SHA256 signature for payload
-func SignPayload(payload []byte, secret string) string {
+// Sign returns the X-Webhook-Signature value for a body sent at t:
+// "t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">". Signing the time
+// with the body lets a receiver refuse a delivery replayed later.
+func Sign(secret string, t int64, body []byte) string {
+	return fmt.Sprintf("t=%d,v1=%s", t, signature(secret, t, body))
+}
+
+func signature(secret string, t int64, body []byte) string {
 	h := hmac.New(sha256.New, []byte(secret))
-	h.Write(payload)
+	fmt.Fprintf(h, "%d.", t)
+	h.Write(body)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// VerifySignature verifies the HMAC-SHA256 signature
-func VerifySignature(payload []byte, signature, secret string) bool {
-	expected := SignPayload(payload, secret)
-	return hmac.Equal([]byte(expected), []byte(signature))
+// Verify reports whether header is a valid signature of body under secret,
+// made within tolerance of now. It is what a receiver written in Go runs.
+func Verify(header string, body []byte, secret string, tolerance time.Duration, now time.Time) bool {
+	var t int64
+	var v1 string
+	for _, part := range strings.Split(header, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "t":
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return false
+			}
+			t = n
+		case "v1":
+			v1 = v
+		}
+	}
+	if t == 0 || v1 == "" {
+		return false
+	}
+	age := now.Sub(time.Unix(t, 0))
+	if age > tolerance || age < -tolerance {
+		return false
+	}
+	return hmac.Equal([]byte(signature(secret, t, body)), []byte(v1))
 }

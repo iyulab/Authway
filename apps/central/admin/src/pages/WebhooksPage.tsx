@@ -8,6 +8,7 @@ import {
   TrashIcon,
   PlayIcon,
   BuildingOfficeIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline'
 import { webhooksApi, Webhook } from '@/lib/features-api'
 import {
@@ -58,6 +59,9 @@ const WebhooksPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [selectedWebhook, setSelectedWebhook] = useState<Webhook | null>(null)
+  // The signing secret is shown once, right after creation or rotation.
+  const [revealed, setRevealed] = useState<{ name: string; secret: string } | null>(null)
+  const [rotateTarget, setRotateTarget] = useState<Webhook | null>(null)
   const [formData, setFormData] = useState<WebhookFormData>({
     name: '',
     url: '',
@@ -79,11 +83,11 @@ const WebhooksPage: React.FC = () => {
   // Create mutation — the API client sends the selected tenant as X-Tenant-ID
   const createMutation = useMutation({
     mutationFn: (data: WebhookFormData) => webhooksApi.create(data),
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
       setShowCreateModal(false)
       resetForm()
-      toast.success('Webhook created successfully')
+      setRevealed({ name: data.webhook.name, secret: data.secret })
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to create webhook')
@@ -117,6 +121,17 @@ const WebhooksPage: React.FC = () => {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to delete webhook')
+    },
+  })
+
+  const rotateMutation = useMutation({
+    mutationFn: (webhook: Webhook) => webhooksApi.rotateSecret(webhook.id),
+    onSuccess: ({ data }, webhook) => {
+      setRotateTarget(null)
+      setRevealed({ name: webhook.name, secret: data.secret })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to rotate secret')
     },
   })
 
@@ -293,6 +308,13 @@ const WebhooksPage: React.FC = () => {
                           <PlayIcon className="h-5 w-5" />
                         </button>
                         <button
+                          onClick={() => setRotateTarget(webhook)}
+                          className="text-amber-600 hover:text-amber-900"
+                          title="Rotate signing secret"
+                        >
+                          <KeyIcon className="h-5 w-5" />
+                        </button>
+                        <button
                           onClick={() => handleEdit(webhook)}
                           className="text-indigo-600 hover:text-indigo-900"
                           title="Edit"
@@ -421,6 +443,46 @@ const WebhooksPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Signing secret, shown once */}
+      <Modal isOpen={revealed !== null} onClose={() => setRevealed(null)} title="Signing secret">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Deliveries to <strong>{revealed?.name}</strong> are signed with this secret. Copy it now —
+            it is not shown again. Rotate it to get a new one.
+          </p>
+          <code className="block break-all rounded bg-gray-100 p-3 font-mono text-sm" data-testid="webhook-secret">
+            {revealed?.secret}
+          </code>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (revealed) {
+                  navigator.clipboard?.writeText(revealed.secret).then(
+                    () => toast.success('Copied'),
+                    () => toast.error('Copy failed — select and copy it by hand'),
+                  )
+                }
+              }}
+            >
+              Copy
+            </Button>
+            <Button onClick={() => setRevealed(null)}>Done</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={rotateTarget !== null}
+        onClose={() => setRotateTarget(null)}
+        onConfirm={() => rotateTarget && rotateMutation.mutate(rotateTarget)}
+        title="Rotate signing secret"
+        message={`Deliveries to "${rotateTarget?.name}" will be signed with a new secret, and the receiver will reject them until it has it. Continue?`}
+        confirmText="Rotate"
+        variant="danger"
+        isLoading={rotateMutation.isPending}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

@@ -88,8 +88,10 @@ func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
 		"events": req.Events,
 	})
 
+	// The only answer that carries the secret; RotateSecret issues a new one.
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"webhook": webhook,
+		"secret":  webhook.Secret,
 		"message": "webhook created successfully",
 	})
 }
@@ -227,6 +229,29 @@ func (h *Handler) TestWebhook(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"delivery": delivery})
 }
 
+// RotateWebhookSecret replaces the signing secret and answers with the new
+// one; the old secret stops signing at once.
+// POST /api/v1/webhooks/:id/rotate-secret
+func (h *Handler) RotateWebhookSecret(c *fiber.Ctx) error {
+	id, err := webhookID(c)
+	if err != nil {
+		return err
+	}
+	before, err := h.service.GetByID(id)
+	if err != nil {
+		return h.refuse(c, err, "failed to rotate secret")
+	}
+	secret, err := h.service.RotateSecret(id)
+	if err != nil {
+		return h.refuse(c, err, "failed to rotate secret")
+	}
+	h.logAudit(c, before.TenantID, audit.ActionWebhookUpdated, before.ID.String(), map[string]any{
+		"name":   before.Name,
+		"change": "secret_rotated",
+	})
+	return c.JSON(fiber.Map{"secret": secret})
+}
+
 // GetAvailableEvents returns the list of available webhook events
 // GET /api/v1/webhooks/events
 func (h *Handler) GetAvailableEvents(c *fiber.Ctx) error {
@@ -249,4 +274,5 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	webhooks.Delete("/:id", h.DeleteWebhook)
 	webhooks.Get("/:id/deliveries", h.GetWebhookDeliveries)
 	webhooks.Post("/:id/test", h.TestWebhook)
+	webhooks.Post("/:id/rotate-secret", h.RotateWebhookSecret)
 }
