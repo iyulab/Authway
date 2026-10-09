@@ -55,7 +55,7 @@ func (h *Handler) logAuthFailure(c *fiber.Ctx, reason string, errMsg string) {
 	}
 	tenantAttempted := c.Query("tenant_id")
 	if tenantAttempted == "" {
-		tenantAttempted = c.Get("X-Tenant-ID")
+		tenantAttempted = c.Get(tenantscope.Header)
 	}
 
 	entry := &audit.AuditEntry{
@@ -292,7 +292,7 @@ func (h *Handler) checkAdminAuth(c *fiber.Ctx, token string) (ok bool, err error
 func (h *Handler) setTenantIDLocal(c *fiber.Ctx) {
 	tenantID := c.Query("tenant_id")
 	if tenantID == "" {
-		tenantID = c.Get("X-Tenant-ID")
+		tenantID = c.Get(tenantscope.Header)
 	}
 	if tenantID != "" {
 		c.Locals(tenantscope.LocalKey, tenantID)

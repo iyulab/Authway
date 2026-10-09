@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"authway/apps/central/api/internal/config"
@@ -28,7 +27,6 @@ import (
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"go.uber.org/zap"
@@ -216,12 +214,7 @@ func main() {
 	// Middleware
 	app.Use(logger.New())
 	app.Use(recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     strings.Join(cfg.CORS.AllowedOrigins, ","),
-		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Admin-API-Key,X-Admin-Token,Request-Id,Traceparent,Tracestate",
-		AllowCredentials: true,
-	}))
+	app.Use(middleware.CORS(cfg.CORS.AllowedOrigins))
 	app.Use(middleware.RequestLogger(zapLogger))
 	app.Use(telemetry.RequestTracking(telemetryClient, zapLogger))
 

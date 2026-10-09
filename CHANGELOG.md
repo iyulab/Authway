@@ -60,8 +60,9 @@
 - **Inviting someone, creating a webhook and starting an impersonation from
   the admin console work.** These calls did not name the selected tenant; the
   API refused them with `401` and the console signed the administrator out. The
-  console now names the selected tenant on every request (`X-Tenant-ID`), and
-  every admin call that needs a tenant and gets none — invitations, webhooks,
+  console now names the selected tenant on every request (`X-Tenant-ID`, which
+  the API's CORS policy now allows — the unused `X-Admin-API-Key` and
+  `X-Admin-Token` entries are gone from it), and every admin call that needs a tenant and gets none — invitations, webhooks,
   audit, impersonation — answers `400 tenant_required`. The invitations list
   also showed every invitation on every page and ignored the status filter.
 - **Saving a client in the admin console no longer turns off consent

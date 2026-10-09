@@ -16,6 +16,10 @@ import (
 // LocalKey is the fiber.Ctx local the authentication middleware fills.
 const LocalKey = "tenant_id"
 
+// Header names the tenant an admin call acts on. Browser callers send it on
+// cross-origin requests, so the CORS policy has to allow it.
+const Header = "X-Tenant-ID"
+
 // FromRequest returns the tenant the request names, or a refusal to return
 // as-is: 400 tenant_required when none is named, 400 invalid_request when the
 // value is not a tenant id.
@@ -35,5 +39,5 @@ func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
 		}
 	}
 	return uuid.Nil, apierror.Reject(fiber.StatusBadRequest, "tenant_required",
-		"name the tenant with the X-Tenant-ID header or the tenant_id query parameter")
+		"name the tenant with the "+Header+" header or the tenant_id query parameter")
 }
