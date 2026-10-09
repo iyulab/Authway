@@ -2,12 +2,13 @@
 
 ### Added
 
-- **The contract covers managing tenants, clients, users and invitations.**
-  Creating, reading, updating and deleting tenants; listing, reading and
+- **The contract covers managing tenants, clients, users, invitations and
+  webhooks.** Creating, reading, updating and deleting tenants; listing, reading and
   updating clients and regenerating a secret; listing, reading and updating
-  users; listing, reading, resending and revoking invitations. Every
-  admin operation lists its `401`, and the conformance suite exercises each of
-  them.
+  users; listing, reading, resending and revoking invitations; creating,
+  listing, reading, changing, testing and deleting webhooks, their event list
+  and their deliveries. Every admin operation lists its `401`, and the
+  conformance suite exercises each of them.
 
 - **OpenAPI description of the login UI API (`packages/contract`).** Login,
   consent and logout flows, sign-in links, capabilities, email verification,
@@ -38,6 +39,17 @@
   `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
   `{invitations, total, limit, offset}` — it ignored them and answered
   `{invitations, count}`.
+- **Webhook administration refuses what it used to rewrite.** A
+  `retry_count` outside 0–10, a `timeout_secs` outside 1–60 (the limit was
+  120), a URL that is not absolute http(s), an empty or unknown event answer
+  `400 invalid_request`; creating a webhook replaced such values with defaults
+  and changing one skipped them. `retry_count` now counts retries after the
+  first attempt — it counted attempts, so `0` sent nothing. Testing a webhook
+  sends one event to that webhook, enabled or not, and answers `{delivery}`
+  with the outcome; it sent the test event to every enabled webhook of the
+  tenant subscribed to it and answered only a message. An unknown webhook id
+  answers `404 not_found`. The list answers `{webhooks}` and the delivery list
+  `{deliveries}`, without `count`.
 - **`email.sendway_base_url` has no default.** Set
   `AUTHWAY_EMAIL_SENDWAY_BASE_URL` when `AUTHWAY_EMAIL_USE_SENDWAY=true`; the API
   refuses to start without it.
@@ -57,6 +69,10 @@
 
 ### Fixed
 
+- **A webhook keeps `enabled: false` and `retry_count: 0`.** Creating one
+  stored them as `true` and `3`. Changing a webhook's events failed, and the
+  admin console's webhook edits never reached the API (it sent `PUT` to a
+  `PATCH` route).
 - **Inviting someone, creating a webhook and starting an impersonation from
   the admin console work.** These calls did not name the selected tenant; the
   API refused them with `401` and the console signed the administrator out. The

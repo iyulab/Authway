@@ -28,7 +28,41 @@ const (
 	EventClientUpdated       EventType = "client.updated"
 	EventClientDeleted       EventType = "client.deleted"
 	EventTypeTest            EventType = "test"
+
+	// EventAll subscribes a webhook to every event.
+	EventAll EventType = "*"
 )
+
+// Events lists what a webhook can subscribe to, with what triggers each.
+var Events = []struct {
+	Type        EventType
+	Description string
+}{
+	{EventUserCreated, "Triggered when a new user is created"},
+	{EventUserUpdated, "Triggered when a user is updated"},
+	{EventUserDeleted, "Triggered when a user is deleted"},
+	{EventUserLogin, "Triggered when a user logs in"},
+	{EventUserLogout, "Triggered when a user logs out"},
+	{EventUserPasswordChanged, "Triggered when a user changes their password"},
+	{EventUserMFAEnabled, "Triggered when MFA is enabled"},
+	{EventUserMFADisabled, "Triggered when MFA is disabled"},
+	{EventSessionCreated, "Triggered when a new session is created"},
+	{EventSessionRevoked, "Triggered when a session is revoked"},
+	{EventClientCreated, "Triggered when a new OAuth client is created"},
+	{EventClientUpdated, "Triggered when an OAuth client is updated"},
+	{EventClientDeleted, "Triggered when an OAuth client is deleted"},
+	{EventTypeTest, "Sent by the test endpoint"},
+	{EventAll, "Every event"},
+}
+
+func knownEvent(e string) bool {
+	for _, ev := range Events {
+		if string(ev.Type) == e {
+			return true
+		}
+	}
+	return false
+}
 
 // Webhook represents a webhook endpoint configuration
 type Webhook struct {
@@ -42,9 +76,12 @@ type Webhook struct {
 	// ("malformed array literal"), so every webhook insert failed. Clients
 	// already use pq.StringArray for the same reason.
 	Events      pq.StringArray `json:"events" gorm:"type:text[];not null"`
-	Enabled     bool       `json:"enabled" gorm:"default:true"`
-	RetryCount  int        `json:"retry_count" gorm:"default:3"`
-	TimeoutSecs int        `json:"timeout_secs" gorm:"default:30"`
+	// No gorm default tags: GORM leaves a zero value out of the INSERT when the
+	// field declares a default, so enabled=false and retry_count=0 were stored
+	// as the column defaults. The service always sets all three.
+	Enabled     bool       `json:"enabled"`
+	RetryCount  int        `json:"retry_count"`
+	TimeoutSecs int        `json:"timeout_secs"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"-" gorm:"index"`

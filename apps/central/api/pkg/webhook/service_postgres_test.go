@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"authway/apps/central/api/internal/database"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/tenant"
 )
 
@@ -101,47 +103,111 @@ func TestSignAndVerifySignature(t *testing.T) {
 	}
 }
 
-// TestCreateWebhook_AppliesDefaultsAndClampsOutOfRangeValues guards Create's
-// silent-clamp behavior for RetryCount/TimeoutSecs — zero and out-of-range
-// values both fall back to the default rather than being stored verbatim.
-func TestCreateWebhook_AppliesDefaultsAndClampsOutOfRangeValues(t *testing.T) {
+func intp(n int) *int    { return &n }
+func boolp(b bool) *bool { return &b }
+
+// TestCreateWebhook_TakesDefaultsOnlyForWhatIsUnset guards the values a
+// caller sends surviving the INSERT: GORM drops a zero value from the INSERT
+// when the model field declares a default, which stored enabled=false and
+// retry_count=0 as true and 3.
+func TestCreateWebhook_TakesDefaultsOnlyForWhatIsUnset(t *testing.T) {
 	db := setupPostgres(t)
 	svc := NewService(db, zap.NewNop())
 	tenantID := fixtureTenant(t, db)
 
 	cases := []struct {
-		name           string
-		retryCount     int
-		timeoutSecs    int
-		wantRetryCount int
-		wantTimeout    int
+		name        string
+		req         CreateWebhookRequest
+		wantEnabled bool
+		wantRetry   int
+		wantTimeout int
 	}{
-		{"zero values default", 0, 0, 3, 30},
-		{"out-of-range values default", 999, 999, 3, 30},
-		{"in-range values pass through", 5, 60, 5, 60},
+		{"unset values default", CreateWebhookRequest{}, true, DefaultRetryCount, DefaultTimeoutSecs},
+		{"zero and false are kept", CreateWebhookRequest{Enabled: boolp(false), RetryCount: intp(0), TimeoutSecs: intp(1)}, false, 0, 1},
+		{"in-range values pass through", CreateWebhookRequest{RetryCount: intp(5), TimeoutSecs: intp(60)}, true, 5, 60},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			wh, err := svc.Create(tenantID, &CreateWebhookRequest{
-				Name: "test-" + tc.name, URL: "https://example.com/hook",
-				Events: []string{"test"}, RetryCount: tc.retryCount, TimeoutSecs: tc.timeoutSecs,
-			})
+			req := tc.req
+			req.Name, req.URL, req.Events = "test-"+tc.name, "https://example.com/hook", []string{"test"}
+			wh, err := svc.Create(tenantID, &req)
 			if err != nil {
 				t.Fatalf("Create: %v", err)
 			}
 			cleanupWebhook(t, db, wh.ID)
 
-			if wh.RetryCount != tc.wantRetryCount {
-				t.Errorf("RetryCount = %d, want %d", wh.RetryCount, tc.wantRetryCount)
+			stored, err := svc.GetByID(wh.ID)
+			if err != nil {
+				t.Fatalf("GetByID: %v", err)
 			}
-			if wh.TimeoutSecs != tc.wantTimeout {
-				t.Errorf("TimeoutSecs = %d, want %d", wh.TimeoutSecs, tc.wantTimeout)
+			if stored.Enabled != tc.wantEnabled || stored.RetryCount != tc.wantRetry || stored.TimeoutSecs != tc.wantTimeout {
+				t.Errorf("stored enabled=%v retry=%d timeout=%d, want %v %d %d",
+					stored.Enabled, stored.RetryCount, stored.TimeoutSecs, tc.wantEnabled, tc.wantRetry, tc.wantTimeout)
 			}
-			if wh.Secret == "" {
+			if stored.Secret == "" {
 				t.Error("expected a generated, non-empty secret")
 			}
 		})
+	}
+}
+
+// TestCreateAndUpdate_RefuseInvalidValues guards that a value outside its
+// range is refused with a message for the caller, never replaced or skipped.
+func TestCreateAndUpdate_RefuseInvalidValues(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db, zap.NewNop())
+	tenantID := fixtureTenant(t, db)
+
+	valid := func() CreateWebhookRequest {
+		return CreateWebhookRequest{Name: "valid", URL: "https://example.com/hook", Events: []string{"user.created"}}
+	}
+	bad := map[string]func(*CreateWebhookRequest){
+		"blank name":       func(r *CreateWebhookRequest) { r.Name = " " },
+		"relative url":     func(r *CreateWebhookRequest) { r.URL = "/hook" },
+		"non-http url":     func(r *CreateWebhookRequest) { r.URL = "ftp://example.com/hook" },
+		"no events":        func(r *CreateWebhookRequest) { r.Events = nil },
+		"unknown event":    func(r *CreateWebhookRequest) { r.Events = []string{"user.exploded"} },
+		"negative retries": func(r *CreateWebhookRequest) { r.RetryCount = intp(-1) },
+		"too many retries": func(r *CreateWebhookRequest) { r.RetryCount = intp(MaxRetryCount + 1) },
+		"zero timeout":     func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(0) },
+		"long timeout":     func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(MaxTimeoutSecs + 1) },
+	}
+	for name, mutate := range bad {
+		t.Run("create/"+name, func(t *testing.T) {
+			req := valid()
+			mutate(&req)
+			wh, err := svc.Create(tenantID, &req)
+			if err == nil {
+				cleanupWebhook(t, db, wh.ID)
+				t.Fatal("expected a refusal")
+			}
+			if apierror.Message(err, "") == "" {
+				t.Fatalf("expected a refusal worded for the caller, got %v", err)
+			}
+		})
+	}
+
+	req := valid()
+	wh, err := svc.Create(tenantID, &req)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	cleanupWebhook(t, db, wh.ID)
+	newName := "renamed"
+	if _, err := svc.Update(wh.ID, &UpdateWebhookRequest{Name: &newName, RetryCount: intp(999)}); apierror.Message(err, "") == "" {
+		t.Fatalf("expected Update to refuse an out-of-range retry_count, got %v", err)
+	}
+	stored, _ := svc.GetByID(wh.ID)
+	if stored.Name != "valid" {
+		t.Errorf("a refused update must change nothing; name = %q", stored.Name)
+	}
+	if _, err := svc.Update(wh.ID, &UpdateWebhookRequest{Events: []string{"user.deleted", "*"}, Enabled: boolp(false)}); err != nil {
+		t.Fatalf("Update events: %v", err)
+	}
+	stored, _ = svc.GetByID(wh.ID)
+	if len(stored.Events) != 2 || stored.Enabled {
+		t.Errorf("after update events=%v enabled=%v", stored.Events, stored.Enabled)
 	}
 }
 
@@ -164,8 +230,11 @@ func TestGetByIDAndListByTenant_ExcludeSoftDeleted(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	if _, err := svc.GetByID(wh.ID); err == nil {
-		t.Fatal("expected GetByID to fail for a soft-deleted webhook")
+	if _, err := svc.GetByID(wh.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for a soft-deleted webhook, got %v", err)
+	}
+	if err := svc.Delete(wh.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected deleting it again to report ErrNotFound, got %v", err)
 	}
 
 	list, err := svc.ListByTenant(tenantID)
@@ -176,40 +245,6 @@ func TestGetByIDAndListByTenant_ExcludeSoftDeleted(t *testing.T) {
 		if w.ID == wh.ID {
 			t.Fatal("expected ListByTenant to exclude the soft-deleted webhook")
 		}
-	}
-}
-
-// TestUpdate_IgnoresOutOfRangeRetryAndTimeoutButKeepsOtherFields guards a
-// behavior that differs from Create: Update silently SKIPS an out-of-range
-// RetryCount/TimeoutSecs (leaving the existing stored value untouched)
-// rather than clamping to a default — worth pinning explicitly since a
-// caller could otherwise reasonably assume Update clamps the same way
-// Create does.
-func TestUpdate_IgnoresOutOfRangeRetryAndTimeoutButKeepsOtherFields(t *testing.T) {
-	db := setupPostgres(t)
-	svc := NewService(db, zap.NewNop())
-	tenantID := fixtureTenant(t, db)
-
-	wh, err := svc.Create(tenantID, &CreateWebhookRequest{Name: "original", URL: "https://example.com/hook", Events: []string{"test"}, RetryCount: 5, TimeoutSecs: 60})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	cleanupWebhook(t, db, wh.ID)
-
-	newName := "renamed"
-	outOfRangeRetry := 999
-	updated, err := svc.Update(wh.ID, &UpdateWebhookRequest{Name: &newName, RetryCount: &outOfRangeRetry})
-	if err != nil {
-		t.Fatalf("Update: %v", err)
-	}
-	if updated.Name != newName {
-		t.Errorf("Name = %q, want %q", updated.Name, newName)
-	}
-	if updated.RetryCount != 5 {
-		t.Errorf("expected RetryCount to remain 5 when the update value is out of range, got %d", updated.RetryCount)
-	}
-	if updated.TimeoutSecs != 60 {
-		t.Errorf("expected TimeoutSecs to remain untouched (not provided in this update), got %d", updated.TimeoutSecs)
 	}
 }
 
@@ -239,7 +274,7 @@ func TestTrigger_DeliversOnlyToSubscribedEnabledWebhooksAndSignsThePayload(t *te
 	defer ts.Close()
 
 	subscribed, err := svc.Create(tenantID, &CreateWebhookRequest{
-		Name: "subscribed", URL: ts.URL, Events: []string{string(EventUserCreated)}, RetryCount: 1, TimeoutSecs: 5,
+		Name: "subscribed", URL: ts.URL, Events: []string{string(EventUserCreated)}, RetryCount: intp(0), TimeoutSecs: intp(5),
 	})
 	if err != nil {
 		t.Fatalf("Create (subscribed): %v", err)
@@ -247,7 +282,7 @@ func TestTrigger_DeliversOnlyToSubscribedEnabledWebhooksAndSignsThePayload(t *te
 	cleanupWebhook(t, db, subscribed.ID)
 
 	notSubscribed, err := svc.Create(tenantID, &CreateWebhookRequest{
-		Name: "not-subscribed", URL: ts.URL, Events: []string{string(EventUserDeleted)}, RetryCount: 1, TimeoutSecs: 5,
+		Name: "not-subscribed", URL: ts.URL, Events: []string{string(EventUserDeleted)}, RetryCount: intp(0), TimeoutSecs: intp(5),
 	})
 	if err != nil {
 		t.Fatalf("Create (not-subscribed): %v", err)
@@ -305,7 +340,7 @@ func TestTrigger_RecordsFailedDeliveryOnServerError(t *testing.T) {
 	defer ts.Close()
 
 	wh, err := svc.Create(tenantID, &CreateWebhookRequest{
-		Name: "failing", URL: ts.URL, Events: []string{string(EventTypeTest)}, RetryCount: 1, TimeoutSecs: 5,
+		Name: "failing", URL: ts.URL, Events: []string{string(EventTypeTest)}, RetryCount: intp(0), TimeoutSecs: intp(5),
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -322,5 +357,59 @@ func TestTrigger_RecordsFailedDeliveryOnServerError(t *testing.T) {
 	}
 	if deliveries[0].StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected status_code=500 recorded, got %d", deliveries[0].StatusCode)
+	}
+}
+
+// TestTest_DeliversOnceToThatWebhookAndReportsTheOutcome guards the test
+// endpoint's contract: it reaches this webhook even when it is disabled and
+// not subscribed to the test event, makes exactly one attempt, and returns
+// the delivery whether the receiver accepted it or not.
+func TestTest_DeliversOnceToThatWebhookAndReportsTheOutcome(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db, zap.NewNop())
+	tenantID := fixtureTenant(t, db)
+
+	hits := 0
+	status := http.StatusNoContent
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(status)
+	}))
+	defer ts.Close()
+
+	wh, err := svc.Create(tenantID, &CreateWebhookRequest{
+		Name: "disabled", URL: ts.URL, Events: []string{string(EventUserCreated)}, Enabled: boolp(false), RetryCount: intp(3), TimeoutSecs: intp(5),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	cleanupWebhook(t, db, wh.ID)
+
+	d, err := svc.Test(wh.ID)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if !d.Success || d.StatusCode != http.StatusNoContent || hits != 1 {
+		t.Fatalf("success=%v status=%d hits=%d, want true 204 1", d.Success, d.StatusCode, hits)
+	}
+	if d.ID == uuid.Nil {
+		t.Fatal("expected the returned delivery to carry the id it was recorded under")
+	}
+	recorded, err := svc.GetDeliveries(wh.ID, 10)
+	if err != nil || len(recorded) != 1 || recorded[0].ID != d.ID {
+		t.Fatalf("expected the delivery to be recorded once under id %s, got %+v (err %v)", d.ID, recorded, err)
+	}
+
+	status = http.StatusBadGateway
+	d, err = svc.Test(wh.ID)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if d.Success || d.StatusCode != http.StatusBadGateway || hits != 2 {
+		t.Fatalf("success=%v status=%d hits=%d, want false 502 2 (one attempt, no retries)", d.Success, d.StatusCode, hits)
+	}
+
+	if _, err := svc.Test(uuid.New()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for an unknown webhook, got %v", err)
 	}
 }

@@ -123,8 +123,12 @@ const WebhooksPage: React.FC = () => {
   // Test mutation
   const testMutation = useMutation({
     mutationFn: (id: string) => webhooksApi.test(id),
-    onSuccess: () => {
-      toast.success('Test webhook triggered successfully')
+    onSuccess: ({ data: { delivery } }) => {
+      if (delivery.success) {
+        toast.success(`Test delivered (HTTP ${delivery.status_code})`)
+      } else {
+        toast.error(`Test not delivered: ${delivery.error_message || `HTTP ${delivery.status_code}`}`)
+      }
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to test webhook')

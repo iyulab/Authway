@@ -22,8 +22,8 @@ tags:
       Administration, authenticated with the deployment's admin key (or an
       admin session) as a bearer token. Tenant-scoped calls name the tenant
       in X-Tenant-ID. A missing or rejected credential answers 401 with
-      code unauthorized. This document covers tenants, clients, users and
-      invitations; webhooks, audit and impersonation follow.
+      code unauthorized. This document covers tenants, clients, users,
+      invitations and webhooks; audit and impersonation follow.
 
 security: []
 
@@ -778,6 +778,212 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /api/v1/webhooks:
+    get:
+      tags: [admin]
+      operationId: listWebhooks
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      responses:
+        '200':
+          description: The tenant's webhooks, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhooks]
+                properties:
+                  webhooks:
+                    type: array
+                    items: { $ref: '#/components/schemas/Webhook' }
+        '400':
+          description: No tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [admin]
+      operationId: createWebhook
+      description: |
+        Registers an endpoint for the tenant's events. A value outside its
+        range is refused (code invalid_request), never replaced; an omitted
+        optional value takes its default.
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url, events]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                url: { type: string, description: An absolute http or https URL. }
+                events:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/WebhookEvent' }
+                enabled: { type: boolean, default: true }
+                retry_count: { type: integer, minimum: 0, maximum: 10, default: 3 }
+                timeout_secs: { type: integer, minimum: 1, maximum: 60, default: 30 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhook]
+                properties:
+                  webhook: { $ref: '#/components/schemas/Webhook' }
+                  message: { type: string }
+        '400':
+          description: Invalid value (code invalid_request), or no tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/webhooks/events:
+    get:
+      tags: [admin]
+      operationId: listWebhookEvents
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: What a webhook can subscribe to
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required: [type, description]
+                      properties:
+                        type: { $ref: '#/components/schemas/WebhookEvent' }
+                        description: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/webhooks/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: getWebhook
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The webhook
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhook]
+                properties:
+                  webhook: { $ref: '#/components/schemas/Webhook' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [admin]
+      operationId: updateWebhook
+      description: Changes the fields the body names; the same ranges as creation apply.
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                url: { type: string }
+                events:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/WebhookEvent' }
+                enabled: { type: boolean }
+                retry_count: { type: integer, minimum: 0, maximum: 10 }
+                timeout_secs: { type: integer, minimum: 1, maximum: 60 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhook]
+                properties:
+                  webhook: { $ref: '#/components/schemas/Webhook' }
+                  message: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [admin]
+      operationId: deleteWebhook
+      security: [{ adminKey: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/webhooks/{id}/test:
+    post:
+      tags: [admin]
+      operationId: testWebhook
+      description: |
+        Sends one test event to this webhook — enabled or not, whatever it
+        subscribes to — and answers with the delivery. A receiver that refuses
+        or cannot be reached still answers 200; the delivery says how it went.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivery]
+                properties:
+                  delivery: { $ref: '#/components/schemas/WebhookDelivery' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      tags: [admin]
+      operationId: listWebhookDeliveries
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Delivery attempts, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliveries]
+                properties:
+                  deliveries:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookDelivery' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /api/v1/users:
     get:
       tags: [admin]
@@ -1071,6 +1277,44 @@ components:
         expires_at: { type: string }
         created_at: { type: string }
         updated_at: { type: string }
+
+    Webhook:
+      type: object
+      required: [id, tenant_id, name, url, events, enabled, retry_count, timeout_secs, created_at, updated_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        name: { type: string }
+        url: { type: string }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookEvent' }
+        enabled: { type: boolean }
+        retry_count: { type: integer, minimum: 0, maximum: 10, description: Attempts after the first. }
+        timeout_secs: { type: integer, minimum: 1, maximum: 60 }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    WebhookEvent:
+      type: string
+      enum: [user.created, user.updated, user.deleted, user.login, user.logout, user.password_changed,
+             user.mfa_enabled, user.mfa_disabled, session.created, session.revoked,
+             client.created, client.updated, client.deleted, test, '*']
+
+    WebhookDelivery:
+      type: object
+      required: [id, webhook_id, event_type, payload, status_code, attempt, delivered_at, success]
+      properties:
+        id: { type: string }
+        webhook_id: { type: string }
+        event_type: { type: string }
+        payload: { type: string, description: The JSON body that was sent. }
+        status_code: { type: integer, description: 0 when no answer arrived. }
+        response_body: { type: string }
+        attempt: { type: integer, minimum: 1 }
+        delivered_at: { type: string }
+        success: { type: boolean }
+        error_message: { type: string }
 
     Tenant:
       type: object

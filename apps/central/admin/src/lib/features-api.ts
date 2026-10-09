@@ -102,17 +102,20 @@ export const webhooksApi = {
   }) =>
     api.post<{ webhook: Webhook }>('/api/v1/webhooks', data),
 
+  // PATCH: the API changes only the fields the body names.
   update: (id: string, data: Partial<Webhook>) =>
-    api.put<{ webhook: Webhook }>(`/api/v1/webhooks/${id}`, data),
+    api.patch<{ webhook: Webhook }>(`/api/v1/webhooks/${id}`, data),
 
   delete: (id: string) =>
     api.delete<{ message: string }>(`/api/v1/webhooks/${id}`),
 
+  // Sends one test event; a receiver that refuses or cannot be reached still
+  // answers 200, and the delivery says how it went.
   test: (id: string) =>
-    api.post<{ success: boolean; status_code?: number; error?: string }>(`/api/v1/webhooks/${id}/test`),
+    api.post<{ delivery: WebhookDelivery }>(`/api/v1/webhooks/${id}/test`),
 
-  deliveries: (id: string, params?: { limit?: number; offset?: number }) =>
-    api.get<{ deliveries: WebhookDelivery[]; total: number }>(`/api/v1/webhooks/${id}/deliveries`, { params }),
+  deliveries: (id: string, params?: { limit?: number }) =>
+    api.get<{ deliveries: WebhookDelivery[] }>(`/api/v1/webhooks/${id}/deliveries`, { params }),
 }
 
 // Audit Logs API
