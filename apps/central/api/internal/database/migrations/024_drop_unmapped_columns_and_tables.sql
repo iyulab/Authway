@@ -1,14 +1,16 @@
 -- ============================================================
 -- Migration 024: Drop columns and tables no code reads or writes
 -- ============================================================
--- Each of these outlived the code that used it. Nothing maps them, nothing
--- queries them, and they were empty (system_config: only the rows 007 seeded)
--- on every deployment checked before this migration was written.
+-- Each of these outlived the code that used it. Nothing maps them and nothing
+-- queries them. All but one were empty (system_config: only the rows 007
+-- seeded) on every deployment checked before this migration was applied.
 --
 -- clients: the per-client logout policy (004). The authorization server checks
 -- post_logout_redirect_uri against the client's registered
 -- post_logout_redirect_uris and decides where a logout lands; Authway no
--- longer stores or applies a policy of its own.
+-- longer stores or applies a policy of its own, and has not since 0.5.0. These
+-- columns still held the values clients were configured with before then;
+-- export them first if a deployment needs a record of that configuration.
 --
 -- magic_link_tokens: the OAuth parameters a link used to carry (011), the Hydra
 -- login challenge and the boolean used flag (006). A link now binds to its login

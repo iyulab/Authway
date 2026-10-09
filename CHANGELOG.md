@@ -96,8 +96,10 @@
   policy on `clients`, the OAuth parameters, login challenge and `used` flag on
   `magic_link_tokens`, `audit_logs.description`/`metadata`, the summary columns
   on `webhooks` and `webhook_deliveries`, and the `sessions` and
-  `system_config` tables. If you wrote to any of them yourself, copy the data
-  out before upgrading. Tests now fail when the migrated schema has a column or
+  `system_config` tables. The `clients` columns still hold the logout settings
+  clients were configured with before 0.5.0 stopped applying them; export them
+  first if you want that record. If you wrote to any of the others yourself,
+  copy the data out before upgrading. Tests now fail when the migrated schema has a column or
   table no model maps.
 
 ### Security
