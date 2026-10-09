@@ -193,8 +193,9 @@ func main() {
 		emailService = email.NewService(smtpConfig, zapLogger)
 	}
 
-	// Requests that send mail answer without waiting for the mail service.
-	mailer := email.NewAsync(emailService, zapLogger, 8)
+	// Requests that send mail answer without waiting for the mail service:
+	// 8 senders, and up to 256 messages waiting for one.
+	mailer := email.NewAsync(emailService, zapLogger, 8, 256)
 
 	emailRepo := email.NewRepository(db)
 

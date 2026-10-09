@@ -41,14 +41,25 @@ func (s *slowSender) SendInvitationEmail(string, string, string, string, string)
 }
 func (s *slowSender) SendMagicLinkEmail(string, string, bool) error { return s.deliver() }
 
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 	inner := &slowSender{release: make(chan struct{})}
-	a := NewAsync(inner, zap.NewNop(), 2)
+	a := NewAsync(inner, zap.NewNop(), 2, 5)
 
 	start := time.Now()
 	for i := 0; i < 5; i++ {
 		if err := a.SendMagicLinkEmail("user@example.com", "https://example.com/link", false); err != nil {
-			t.Fatalf("send: %v", err)
+			t.Fatalf("send %d: %v", i, err)
 		}
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
@@ -59,6 +70,9 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 	defer cancel()
 	if err := a.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Close before delivery = %v, want the context's deadline", err)
+	}
+	if err := a.SendMagicLinkEmail("late@example.com", "https://example.com/link", false); !errors.Is(err, ErrMailerClosed) {
+		t.Fatalf("send after Close = %v, want ErrMailerClosed", err)
 	}
 
 	close(inner.release)
@@ -73,11 +87,31 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 	}
 }
 
+// TestAsync_RefusesWhenTheQueueIsFull guards the memory bound: a slow mail
+// service holds the workers, the queue fills, and further messages are
+// refused instead of piling up.
+func TestAsync_RefusesWhenTheQueueIsFull(t *testing.T) {
+	inner := &slowSender{release: make(chan struct{})}
+	a := NewAsync(inner, zap.NewNop(), 1, 1)
+	defer func() { close(inner.release); _ = a.Close(context.Background()) }()
+
+	if err := a.SendPasswordResetEmail("a@example.com", "t"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return inner.active.Load() == 1 }) // the worker holds the first
+	if err := a.SendPasswordResetEmail("b@example.com", "t"); err != nil {
+		t.Fatalf("second message should wait in the queue: %v", err)
+	}
+	if err := a.SendPasswordResetEmail("c@example.com", "t"); !errors.Is(err, ErrMailQueueFull) {
+		t.Fatalf("third message = %v, want ErrMailQueueFull", err)
+	}
+}
+
 func TestAsync_LogsAFailedSend(t *testing.T) {
 	core, logs := observer.New(zap.ErrorLevel)
 	inner := &slowSender{release: make(chan struct{}), err: errors.New("mail service unavailable")}
 	close(inner.release)
-	a := NewAsync(inner, zap.New(core), 1)
+	a := NewAsync(inner, zap.New(core), 1, 1)
 
 	if err := a.SendPasswordResetEmail("user@example.com", "token"); err != nil {
 		t.Fatalf("send: %v", err)
