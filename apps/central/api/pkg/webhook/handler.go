@@ -64,6 +64,27 @@ func webhookID(c *fiber.Ctx) (uuid.UUID, error) {
 	return id, nil
 }
 
+// admitted reads the webhook the path names, refusing one that does not exist
+// or that belongs to another tenant than the request names.
+func (h *Handler) admitted(c *fiber.Ctx) (*Webhook, error) {
+	id, err := webhookID(c)
+	if err != nil {
+		return nil, err
+	}
+	webhook, err := h.service.GetByID(id)
+	if errors.Is(err, ErrNotFound) {
+		return nil, apierror.Reject(fiber.StatusNotFound, "not_found", "webhook not found")
+	}
+	if err != nil {
+		h.logger.Error("failed to get webhook", zap.Error(err))
+		return nil, apierror.Reject(fiber.StatusInternalServerError, "internal_server_error", "failed to get webhook")
+	}
+	if err := tenantscope.Admit(c, webhook.TenantID, "webhook not found"); err != nil {
+		return nil, err
+	}
+	return webhook, nil
+}
+
 // CreateWebhook creates a new webhook
 // POST /api/v1/webhooks
 func (h *Handler) CreateWebhook(c *fiber.Ctx) error {
@@ -115,26 +136,22 @@ func (h *Handler) ListWebhooks(c *fiber.Ctx) error {
 // GetWebhook gets a webhook by ID
 // GET /api/v1/webhooks/:id
 func (h *Handler) GetWebhook(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
 
-	webhook, err := h.service.GetByID(id)
-	if err != nil {
-		return h.refuse(c, err, "failed to get webhook")
-	}
-
-	return c.JSON(fiber.Map{"webhook": webhook})
+	return c.JSON(fiber.Map{"webhook": target})
 }
 
 // UpdateWebhook changes the fields the request names.
 // PATCH /api/v1/webhooks/:id
 func (h *Handler) UpdateWebhook(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
+	id := target.ID
 
 	var req UpdateWebhookRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -159,17 +176,14 @@ func (h *Handler) UpdateWebhook(c *fiber.Ctx) error {
 // DeleteWebhook deletes a webhook
 // DELETE /api/v1/webhooks/:id
 func (h *Handler) DeleteWebhook(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
-
+	id := target.ID
 	// Snapshot before deletion so the audit entry can answer which tenant the
 	// webhook belonged to after the row is gone.
-	before, err := h.service.GetByID(id)
-	if err != nil {
-		return h.refuse(c, err, "failed to delete webhook")
-	}
+	before := target
 
 	if err := h.service.Delete(id); err != nil {
 		return h.refuse(c, err, "failed to delete webhook")
@@ -186,13 +200,11 @@ func (h *Handler) DeleteWebhook(c *fiber.Ctx) error {
 // GetWebhookDeliveries gets delivery history for a webhook, newest first
 // GET /api/v1/webhooks/:id/deliveries
 func (h *Handler) GetWebhookDeliveries(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
-	if _, err := h.service.GetByID(id); err != nil {
-		return h.refuse(c, err, "failed to get deliveries")
-	}
+	id := target.ID
 
 	limit := 50
 	if raw := c.Query("limit"); raw != "" {
@@ -216,10 +228,11 @@ func (h *Handler) GetWebhookDeliveries(c *fiber.Ctx) error {
 // whose delivery reports the failure.
 // POST /api/v1/webhooks/:id/test
 func (h *Handler) TestWebhook(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
+	id := target.ID
 
 	delivery, err := h.service.Test(id)
 	if err != nil {
@@ -233,14 +246,12 @@ func (h *Handler) TestWebhook(c *fiber.Ctx) error {
 // one; the old secret stops signing at once.
 // POST /api/v1/webhooks/:id/rotate-secret
 func (h *Handler) RotateWebhookSecret(c *fiber.Ctx) error {
-	id, err := webhookID(c)
+	target, err := h.admitted(c)
 	if err != nil {
 		return err
 	}
-	before, err := h.service.GetByID(id)
-	if err != nil {
-		return h.refuse(c, err, "failed to rotate secret")
-	}
+	id := target.ID
+	before := target
 	secret, err := h.service.RotateSecret(id)
 	if err != nil {
 		return h.refuse(c, err, "failed to rotate secret")

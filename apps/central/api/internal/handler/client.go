@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 
 	"authway/apps/central/api/internal/config"
@@ -202,12 +203,25 @@ func (h *ClientHandler) createScoped(c *fiber.Ctx) error {
 	})
 }
 
+// admit refuses, as not found, a client of another tenant than the request
+// names. A missing client is left to the caller's own answer.
+func (h *ClientHandler) admit(c *fiber.Ctx, id uuid.UUID) error {
+	found, err := h.services.ClientService.GetByID(id)
+	if err != nil {
+		return nil
+	}
+	return tenantscope.Admit(c, found.TenantID, "Client not found")
+}
+
 // Get handles getting a specific OAuth client by ID
 func (h *ClientHandler) Get(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	foundClient, err := h.services.ClientService.GetByID(id)
@@ -227,6 +241,9 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	var req client.UpdateClientRequest
@@ -302,6 +319,9 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
+	if err := h.admit(c, id); err != nil {
+		return err
+	}
 
 	// Snapshot for audit before the row disappears — without this the log
 	// entry can't answer "what tenant did the deleted client belong to?"
@@ -336,6 +356,9 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	// Fetch for tenant_id (required by audit entry) before rotation — the
@@ -404,6 +427,9 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
+	if err := h.admit(c, id); err != nil {
+		return err
+	}
 
 	type GoogleOAuthRequest struct {
 		GoogleClientID     string `json:"google_client_id" validate:"required"`
@@ -458,6 +484,9 @@ func (h *ClientHandler) DisableGoogleOAuth(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
 	}
+	if err := h.admit(c, id); err != nil {
+		return err
+	}
 
 	// Update client to disable Google OAuth
 	updateReq := &client.UpdateClientRequest{
@@ -493,6 +522,9 @@ func (h *ClientHandler) GetGoogleOAuthStatus(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid client ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	foundClient, err := h.services.ClientService.GetByID(id)

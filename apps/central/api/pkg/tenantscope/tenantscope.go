@@ -20,24 +20,52 @@ const LocalKey = "tenant_id"
 // cross-origin requests, so the CORS policy has to allow it.
 const Header = "X-Tenant-ID"
 
-// FromRequest returns the tenant the request names, or a refusal to return
-// as-is: 400 tenant_required when none is named, 400 invalid_request when the
-// value is not a tenant id.
-func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
+// named returns the tenant the request names and whether it names one.
+func named(c *fiber.Ctx) (uuid.UUID, bool, error) {
 	switch v := c.Locals(LocalKey).(type) {
 	case uuid.UUID:
 		if v != uuid.Nil {
-			return v, nil
+			return v, true, nil
 		}
 	case string:
 		if v != "" {
 			id, err := uuid.Parse(v)
 			if err != nil {
-				return uuid.Nil, apierror.Reject(fiber.StatusBadRequest, "invalid_request", "the tenant id is not a valid id")
+				return uuid.Nil, false, apierror.Reject(fiber.StatusBadRequest, "invalid_request", "the tenant id is not a valid id")
 			}
-			return id, nil
+			return id, true, nil
 		}
 	}
-	return uuid.Nil, apierror.Reject(fiber.StatusBadRequest, "tenant_required",
-		"name the tenant with the "+Header+" header or the tenant_id query parameter")
+	return uuid.Nil, false, nil
+}
+
+// FromRequest returns the tenant the request names, or a refusal to return
+// as-is: 400 tenant_required when none is named, 400 invalid_request when the
+// value is not a tenant id.
+func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
+	id, ok, err := named(c)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if !ok {
+		return uuid.Nil, apierror.Reject(fiber.StatusBadRequest, "tenant_required",
+			"name the tenant with the "+Header+" header or the tenant_id query parameter")
+	}
+	return id, nil
+}
+
+// Admit lets a request act on a resource owned by owner. A request that names
+// a different tenant is refused as 404 not_found with notFound as the
+// message — the same answer as for an id that does not exist, so it learns
+// nothing about other tenants. A request that names no tenant is admitted:
+// the admin key and the admin console session administer every tenant.
+func Admit(c *fiber.Ctx, owner uuid.UUID, notFound string) error {
+	id, ok, err := named(c)
+	if err != nil {
+		return err
+	}
+	if ok && id != owner {
+		return apierror.Reject(fiber.StatusNotFound, "not_found", notFound)
+	}
+	return nil
 }

@@ -47,6 +47,12 @@
   `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
   `{invitations, total, limit, offset}` — it ignored them and answered
   `{invitations, count}`.
+- **An admin call that names a tenant reaches only that tenant's resources.**
+  Reading, changing or deleting a client, user, invitation, webhook or audit
+  entry by id while naming another tenant (`X-Tenant-ID` or `tenant_id`)
+  answers `404 not_found`, as for an id that does not exist; it acted on the
+  resource whatever tenant was named. A call that names no tenant still
+  reaches every tenant's resources with the admin key.
 - **Audit log reads refuse malformed filters.** An unknown `action` or
   `severity`, a `success` other than `true`/`false`, a malformed `actor_id` or
   time, or a `limit`, `offset`, `hours` or `retention_days` outside its range
@@ -151,6 +157,9 @@
 
 ### Security
 
+- **Removed `GET /api/v1/profile/{id}`.** Any signed-in user could read
+  another user's email and name with it, whatever their tenant. A user reads
+  their own profile with `GET /api/v1/profile/me`.
 - **Webhooks cannot reach the server's own network.** A delivery to a
   loopback, private, link-local or shared address is refused when it connects
   — whatever the URL's hostname resolves to — and a URL naming one, or

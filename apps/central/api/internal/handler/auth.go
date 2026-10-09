@@ -691,38 +691,6 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 // removed — onboarding is invitation-only. Users are created via the invitation
 // accept flow (pkg/invitation) or by an admin. See decision D-a/B.
 
-// User profile endpoint
-func (h *AuthHandler) Profile(c *fiber.Ctx) error {
-	userID := c.Params("id")
-	if userID == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "User ID is required",
-		})
-	}
-
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid user ID format",
-		})
-	}
-	user, err := h.userService.GetByID(userUUID)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"id":             user.ID,
-		"email":          user.Email,
-		"name":           user.Name,
-		"email_verified": user.EmailVerified,
-		"created_at":     user.CreatedAt,
-		"updated_at":     user.UpdatedAt,
-	})
-}
-
 // ProfileMe - Get current authenticated user's profile
 // Requires JWT middleware to be applied
 func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {

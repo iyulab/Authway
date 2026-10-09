@@ -124,6 +124,16 @@ func (h *Handler) ListInvitations(c *fiber.Ctx) error {
 	})
 }
 
+// admit refuses, as not found, an invitation of another tenant than the
+// request names. A missing invitation is left to the caller's own answer.
+func (h *Handler) admit(c *fiber.Ctx, id uuid.UUID) error {
+	invitation, err := h.service.GetByID(id)
+	if err != nil {
+		return nil
+	}
+	return tenantscope.Admit(c, invitation.TenantID, "invitation not found")
+}
+
 // GetInvitation gets an invitation by ID
 // GET /api/v1/invitations/:id
 func (h *Handler) GetInvitation(c *fiber.Ctx) error {
@@ -131,6 +141,9 @@ func (h *Handler) GetInvitation(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	invitation, err := h.service.GetByID(id)
@@ -259,6 +272,9 @@ func (h *Handler) RevokeInvitation(c *fiber.Ctx) error {
 	if err != nil {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
 	}
+	if err := h.admit(c, id); err != nil {
+		return err
+	}
 
 	if err := h.service.Revoke(id); err != nil {
 		h.logger.Warn("Failed to revoke invitation", zap.Error(err), zap.String("invitation_id", idStr))
@@ -275,6 +291,9 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid invitation ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	if err := h.service.Resend(id); err != nil {

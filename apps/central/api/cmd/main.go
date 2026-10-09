@@ -346,11 +346,9 @@ func main() {
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)
 
-	// User profile routes
-	// IMPORTANT: /profile/me must come BEFORE /profile/:id to match correctly
+	// The signed-in user's own profile. There is no lookup by id: any signed-in
+	// user could read another's email and name with it, whatever their tenant.
 	v1.Get("/profile/me", jwtAuth, authHandler.ProfileMe)
-	// /profile/:id leaks email/name by UUID — require JWT to prevent PII enumeration.
-	v1.Get("/profile/:id", jwtAuth, authHandler.Profile)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the

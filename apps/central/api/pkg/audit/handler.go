@@ -144,6 +144,9 @@ func (h *Handler) GetAuditLog(c *fiber.Ctx) error {
 	if err != nil {
 		return h.failed(c, err, "failed to get audit log")
 	}
+	if err := tenantscope.Admit(c, log.TenantID, "audit log not found"); err != nil {
+		return err
+	}
 
 	return c.JSON(fiber.Map{"log": log})
 }

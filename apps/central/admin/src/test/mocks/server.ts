@@ -67,15 +67,6 @@ export const handlers = [
     })
   }),
 
-  http.get('http://localhost:8080/profile/:id', ({ params }) => {
-    const { id } = params
-    const user = mockUsers.find(u => u.id === id)
-    if (user) {
-      return HttpResponse.json(user)
-    }
-    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
-  }),
-
   // Users API
   http.get('http://localhost:8080/api/users', ({ request }) => {
     const url = new URL(request.url)

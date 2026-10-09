@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 
 	"authway/apps/central/api/internal/service"
@@ -97,12 +98,25 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	})
 }
 
+// admit refuses, as not found, a user of another tenant than the request
+// names. A missing user is left to the caller's own answer.
+func (h *UserHandler) admit(c *fiber.Ctx, id uuid.UUID) error {
+	found, err := h.services.UserService.GetByID(id)
+	if err != nil {
+		return nil
+	}
+	return tenantscope.Admit(c, found.TenantID, "User not found")
+}
+
 // Get handles getting a specific user by ID
 func (h *UserHandler) Get(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid user ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	foundUser, err := h.services.UserService.GetByID(id)
@@ -122,6 +136,9 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid user ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	var req user.UpdateUserRequest
@@ -172,6 +189,9 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid user ID")
+	}
+	if err := h.admit(c, id); err != nil {
+		return err
 	}
 
 	// Snapshot before deletion — the row disappears, so without this the audit
