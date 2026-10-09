@@ -1,6 +1,7 @@
 package passwordless
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -24,11 +25,12 @@ import (
 // with. The outbound link is the only place the plaintext still appears.
 type stubEmailSender struct {
 	lastLinkURL string
+	refuse      error
 }
 
 func (s *stubEmailSender) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
 	s.lastLinkURL = linkURL
-	return nil
+	return s.refuse
 }
 
 // tokenFromLinkURL extracts the token query parameter a magic-link email
@@ -232,6 +234,35 @@ func TestSendMagicLink_ExistingUser_IsUnaffected(t *testing.T) {
 	f.db.Raw(`SELECT token_type FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&tokenType)
 	if tokenType != string(TokenTypeLogin) {
 		t.Errorf("token_type = %q, want %q", tokenType, TokenTypeLogin)
+	}
+}
+
+// TestSendMagicLink_RefusedMail_AnswersLikeUninvited: a link the sender
+// refuses (its queue is full) gets the same answer as an address that may not
+// sign in — an error here would tell a caller which addresses may.
+func TestSendMagicLink_RefusedMail_AnswersLikeUninvited(t *testing.T) {
+	f := newFixture(t)
+	userService := user.NewService(f.db, zap.NewNop())
+	member := fmt.Sprintf("member-%s@example.com", uuid.New().String()[:8])
+	u, err := userService.Create(f.tenant.ID, &user.CreateUserRequest{Email: member, Password: "correct-horse-battery", Name: "Member"})
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	defer f.db.Exec(`DELETE FROM users WHERE id = ?`, u.ID)
+
+	stranger := fmt.Sprintf("stranger-%s@example.com", uuid.New().String()[:8])
+	f.sender.refuse = errors.New("mail queue is full")
+
+	got, err := f.svc.SendMagicLink(f.tenant.ID, member, "flow-1", "127.0.0.1", "test")
+	if err != nil {
+		t.Fatalf("send to member with refused mail: %v — must answer as if sent", err)
+	}
+	want, err := f.svc.SendMagicLink(f.tenant.ID, stranger, "flow-1", "127.0.0.1", "test")
+	if err != nil {
+		t.Fatalf("send to stranger: %v", err)
+	}
+	if got.Message != want.Message {
+		t.Errorf("member answered %q, stranger %q — they must match", got.Message, want.Message)
 	}
 }
 

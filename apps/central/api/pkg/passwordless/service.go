@@ -133,9 +133,10 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 	linkURL := maillink.MagicLink(s.frontendURL, token)
 	if s.emailSender != nil {
 		isNewUser := tokenType == TokenTypeRegister
+		// A link that could not be handed to the sender gets the same answer
+		// as one that was: the answer must not depend on the address.
 		if err := s.emailSender.SendMagicLinkEmail(email, linkURL, isNewUser); err != nil {
 			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", email))
-			return nil, fmt.Errorf("failed to send magic link email: %w", err)
 		}
 	}
 	s.logger.Info("Magic link sent", zap.String("email", email), zap.String("token_type", string(tokenType)), zap.String("tenant_id", tenantID.String()))

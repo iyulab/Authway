@@ -51,10 +51,11 @@
   Inviting someone, requesting a sign-in link, a password reset or a new
   verification mail answer as soon as the request is recorded; the mail is sent
   in the background and a failure is logged. These requests waited for the mail
-  service, up to 30 seconds — 28 when it was starting from idle. A password
-  reset or verification request whose mail fails no longer answers `500`. On
-  shutdown the server finishes requests in progress and the mail they handed
-  over before it exits.
+  service, up to 30 seconds — 28 when it was starting from idle. Mail goes out
+  from a fixed set of senders with a bounded queue; a message that finds the
+  queue full is dropped and logged, and the request answers as it otherwise
+  would. On shutdown the server finishes requests in progress and the mail
+  they handed over before it exits.
 - **An admin call that names a tenant reaches only that tenant's resources.**
   Reading, changing or deleting a client, user, invitation, webhook or audit
   entry by id while naming another tenant (`X-Tenant-ID` or `tenant_id`)
@@ -165,6 +166,12 @@
 
 ### Security
 
+- **Verification, password reset and sign-in link requests answer alike for
+  every address.** A verification request for an address that was already
+  verified answered differently from one with no account, and a reset
+  request for an account answered differently from one without — enough to
+  tell which addresses are registered. A mail that cannot be sent no longer
+  changes the answer either (it answered `500`, or `502` for a sign-in link).
 - **Removed `GET /api/v1/profile/{id}`.** Any signed-in user could read
   another user's email and name with it, whatever their tenant. A user reads
   their own profile with `GET /api/v1/profile/me`.

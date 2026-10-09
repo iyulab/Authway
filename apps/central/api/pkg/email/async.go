@@ -24,8 +24,9 @@ var ErrMailerClosed = errors.New("mail sender is shutting down")
 //
 // A fixed set of workers sends from a bounded queue, so a slow mail service
 // costs a fixed amount of memory however many requests arrive: when the
-// queue is full the message is refused with ErrMailQueueFull and the request
-// fails as it would have if the mail service had refused it.
+// queue is full the message is refused with ErrMailQueueFull. Callers log the
+// refusal and answer as they would have otherwise — no request that sends
+// mail may reveal whether a message went out.
 type Async struct {
 	inner  EmailService
 	logger *zap.Logger

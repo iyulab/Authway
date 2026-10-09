@@ -14,6 +14,15 @@ import (
 )
 
 // EmailHandler handles email verification and password reset requests
+// The answers to a verification or reset request do not depend on whether
+// the address has an account, whether it is already verified, or whether the
+// mail could be handed to the sender — any difference would tell a caller
+// which addresses are registered.
+const (
+	verificationRequested  = "If the address has an unverified account, a verification link has been sent"
+	passwordResetRequested = "If the address has an account, a password reset link has been sent"
+)
+
 type EmailHandler struct {
 	emailRepo    *email.Repository
 	emailSvc     email.EmailService
@@ -112,18 +121,8 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	}
 
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
-	if err != nil {
-		// Don't reveal if email exists or not (security)
-		return c.JSON(fiber.Map{
-			"message": "If the email exists, a verification link has been sent",
-		})
-	}
-
-	// Check if already verified
-	if usr.EmailVerified {
-		return c.JSON(fiber.Map{
-			"message": "Email already verified",
-		})
+	if err != nil || usr.EmailVerified {
+		return c.JSON(fiber.Map{"message": verificationRequested})
 	}
 
 	// Delete old verifications for this user
@@ -143,14 +142,9 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	// Send verification email
 	if err := h.emailSvc.SendVerificationEmail(usr.Email, verification.Token); err != nil {
 		h.logger.Error("Failed to send verification email", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send verification email",
-		})
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Verification email sent successfully",
-	})
+	return c.JSON(fiber.Map{"message": verificationRequested})
 }
 
 // VerifyEmail godoc
@@ -246,10 +240,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
 	if err != nil {
-		// Don't reveal if email exists or not (security)
-		return c.JSON(fiber.Map{
-			"message": "If the email exists, a password reset link has been sent",
-		})
+		return c.JSON(fiber.Map{"message": passwordResetRequested})
 	}
 
 	// Create password reset token
@@ -264,14 +255,9 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	// Send reset email
 	if err := h.emailSvc.SendPasswordResetEmail(usr.Email, reset.Token); err != nil {
 		h.logger.Error("Failed to send reset email", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send reset email",
-		})
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password reset link sent successfully",
-	})
+	return c.JSON(fiber.Map{"message": passwordResetRequested})
 }
 
 // VerifyResetToken godoc

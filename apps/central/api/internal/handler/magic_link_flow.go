@@ -61,10 +61,10 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 	}
 
 	if _, err := h.links.SendMagicLink(cl.TenantID, strings.TrimSpace(req.Email), flow, c.IP(), c.Get("User-Agent")); err != nil {
-		h.auth.logger.Error("Failed to send magic link", zap.Error(err))
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"error": "The sign-in email could not be sent. Try again shortly.",
-			"code":  "email_unavailable",
+		h.auth.logger.Error("Failed to issue magic link", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "The sign-in link could not be issued. Try again shortly.",
+			"code":  "internal_error",
 		})
 	}
 	return c.JSON(fiber.Map{"next": nextEmailSent})

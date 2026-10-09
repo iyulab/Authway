@@ -34,7 +34,9 @@ export default function ResendVerificationPage() {
 
       if (response.ok) {
         setStatus('success');
-        setMessage(data.message || t('auth:resendVerification.success.message'));
+        // The API answers alike whether or not the address has an account; show
+        // the localized wording rather than its English message.
+        setMessage(t('auth:resendVerification.success.message'));
       } else {
         setStatus('error');
         setMessage(data.error || t('auth:resendVerification.error.failed'));
