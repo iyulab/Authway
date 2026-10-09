@@ -83,7 +83,9 @@ deleting data — a two-step change:
 1. Ship application code that no longer reads or writes the column, and deploy it.
 2. In a **later** deployment that contains no other application change, ship the
    migration that drops it, and run `check-migration-status` against the target
-   before and after.
+   before and after. Immediately before that deployment, query what the drop
+   would delete on the target itself — a column the code stopped reading can
+   still hold values written before then — and export anything worth keeping.
 
 Doing both at once leaves no version of the application to roll back to: the
 previous image still expects the column. Keep the deployment that drops it free of
