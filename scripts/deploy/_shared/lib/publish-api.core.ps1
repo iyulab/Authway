@@ -274,6 +274,34 @@ try {
     }
 
     # ------------------------------------------------------------
+    # Admin-console preflight smoke: can the console's browser reach the API?
+    # ------------------------------------------------------------
+    # 위 검사는 전부 서버발 요청이라 CORS preflight 를 거치지 않는다. 콘솔은 다른 출처에서
+    # Authorization·X-Tenant-ID 를 붙여 호출하므로, 그 헤더를 CORS 가 허용하지 않으면
+    # 브라우저가 요청을 보내기 전에 막고 API 로그에는 아무것도 남지 않는다.
+    $AdminOrigin = $envVars['ADMIN_URL']
+    Write-Host "🌐 admin-console preflight smoke..." -ForegroundColor Yellow
+    if (-not $AdminOrigin) {
+        Write-Host "  ⚠️  ADMIN_URL 미설정 — preflight 검사 생략" -ForegroundColor Yellow
+    } else {
+        $AdminOrigin = $AdminOrigin.TrimEnd('/')
+        $preflight = Invoke-WebRequest -Uri "$ApiUrl/api/v1/webhooks" -Method Options -TimeoutSec 10 -SkipHttpErrorCheck -Headers @{
+            Origin = $AdminOrigin
+            'Access-Control-Request-Method' = 'GET'
+            'Access-Control-Request-Headers' = 'authorization,x-tenant-id'
+        }
+        $allowOrigin = "$($preflight.Headers['Access-Control-Allow-Origin'])"
+        $allowHeaders = "$($preflight.Headers['Access-Control-Allow-Headers'])".ToLower() -split '\s*,\s*'
+        $missing = @('authorization', 'x-tenant-id') | Where-Object { $allowHeaders -notcontains $_ }
+        if ($allowOrigin -ne $AdminOrigin -or $missing) {
+            Write-Host "  ❌ preflight → $([int]$preflight.StatusCode), allow-origin='$allowOrigin', 허용 안 됨: $($missing -join ',')" -ForegroundColor Red
+            Write-Host "   콘솔이 API 를 호출할 수 없습니다 — CORS_ALLOWED_ORIGINS 또는 API 의 허용 헤더를 확인." -ForegroundColor Yellow
+            throw "admin-console preflight 검증 실패"
+        }
+        Write-Host "  ✓ OPTIONS /api/v1/webhooks from $AdminOrigin → authorization, x-tenant-id 허용" -ForegroundColor Green
+    }
+
+    # ------------------------------------------------------------
     # Mail-link smoke: can a human actually reach what we email them?
     # ------------------------------------------------------------
     # 메일 링크가 가리키는 auth UI 주소가 틀린 채 배포되는 회귀를 막는 게이트.

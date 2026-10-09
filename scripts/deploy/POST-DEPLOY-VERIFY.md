@@ -31,6 +31,13 @@ API 는 기동 시 마이그레이션을 적용한다. 새 API 이미지 배포 
 (검사 자체를 못 하면 경고만). 비교 기준은 배포한 작업 트리의 마이그레이션 파일이다. 컬럼·테이블을
 지우는 마이그레이션이면 배포 **전에도** 한 번 실행해 기준을 남긴다 — [docs/DATABASE.md](../../docs/DATABASE.md#changes-that-cannot-be-undone).
 
+### 1-3. 관리 콘솔 출처의 preflight
+
+`publish-api.ps1` 이 배포 후 검증에서 `ADMIN_URL` 출처로 `OPTIONS /api/v1/webhooks` 를 보내 `Authorization`·`X-Tenant-ID`
+가 허용되는지 확인하고, 아니면 배포를 실패로 끝낸다. 나머지 자동 검증은 서버발 요청이라 CORS 를 거치지 않는다 —
+허용 헤더가 빠지면 브라우저만 요청을 막고 API 로그에는 아무것도 남지 않는다. 콘솔이 새 요청 헤더를 보내게 되면
+API 의 허용 목록(`internal/middleware/cors.go`)과 이 검사를 함께 고친다.
+
 ### 1-3. 로그인 → 동의 → 토큰 회귀 스모크
 
 ```powershell
