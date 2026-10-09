@@ -142,10 +142,10 @@ export const auditLogsApi = {
     api.get<{ log: AuditLog }>(`/api/v1/audit/logs/${id}`),
 
   userActivity: (userId: string, params?: { tenant_id?: string; limit?: number }) =>
-    api.get<{ logs: AuditLog[]; count: number; user_id: string }>(`/api/v1/audit/users/${userId}/activity`, { params }),
+    api.get<{ logs: AuditLog[] }>(`/api/v1/audit/users/${userId}/activity`, { params }),
 
   security: (params?: { tenant_id?: string; hours?: number }) =>
-    api.get<{ logs: AuditLog[]; count: number; hours: number }>('/api/v1/audit/security', { params }),
+    api.get<{ logs: AuditLog[]; hours: number }>('/api/v1/audit/security', { params }),
 
   summary: (params?: { tenant_id?: string }) =>
     api.get<{ summary: { total_24h: number; total_7d: number; total_30d: number; security_events: number; failed_operations: number } }>('/api/v1/audit/summary', { params }),

@@ -14,7 +14,6 @@ import {
   Loading,
   EmptyState,
   Badge,
-  Input,
   Pagination,
 } from '@/components/ui'
 import { useTenantStore } from '@/stores/tenant'
@@ -54,6 +53,13 @@ const AuditLogsPage: React.FC = () => {
     queryFn: () => auditLogsApi.summary({ tenant_id: selectedTenantId }),
     enabled: !!selectedTenantId,
   })
+
+  const { data: actionsData } = useQuery({
+    queryKey: ['audit-actions'],
+    queryFn: () => auditLogsApi.actions(),
+    staleTime: Infinity,
+  })
+  const actions = actionsData?.data.actions || []
 
   const logs = data?.data.logs || []
   const totalLogs = data?.data.total || 0
@@ -153,11 +159,22 @@ const AuditLogsPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Action</label>
-              <Input
+              {/* The API refuses an action it does not know, so offer only the ones it lists. */}
+              <select
                 value={filters.action}
-                onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-                placeholder="e.g., user.login"
-              />
+                onChange={(e) => {
+                  setFilters({ ...filters, action: e.target.value })
+                  setCurrentPage(1)
+                }}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">All</option>
+                {actions.map((a) => (
+                  <option key={a.action} value={a.action}>
+                    {a.action}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Severity</label>

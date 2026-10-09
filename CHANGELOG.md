@@ -3,12 +3,13 @@
 ### Added
 
 - **The contract covers managing tenants, clients, users, invitations and
-  webhooks.** Creating, reading, updating and deleting tenants; listing, reading and
+  webhooks, and reading the audit log.** Creating, reading, updating and deleting tenants; listing, reading and
   updating clients and regenerating a secret; listing, reading and updating
   users; listing, reading, resending and revoking invitations; creating,
   listing, reading, changing, testing and deleting webhooks, their event list
-  and their deliveries. Every admin operation lists its `401`, and the
-  conformance suite exercises each of them.
+  and their deliveries; querying, reading, summarizing and purging the audit
+  log. Every admin operation lists its `401`, and the conformance suite
+  exercises each of them.
 
 - **Webhook receivers can verify deliveries.** Creating a webhook answers its
   signing secret once (`secret`), and `POST /api/v1/webhooks/{id}/rotate-secret`
@@ -46,6 +47,16 @@
   `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
   `{invitations, total, limit, offset}` — it ignored them and answered
   `{invitations, count}`.
+- **Audit log reads refuse malformed filters.** An unknown `action` or
+  `severity`, a `success` other than `true`/`false`, a malformed `actor_id` or
+  time, or a `limit`, `offset`, `hours` or `retention_days` outside its range
+  answers `400 invalid_request`; these were ignored or replaced, so a typo
+  returned unfiltered results and a purge asking for 7 days of retention kept
+  90. An unknown entry answers `404 not_found`. `GET /api/v1/audit/actions`
+  lists every action an entry can carry (it missed tenant, webhook, consent
+  and admin actions). User activity answers `{logs}` and security events
+  `{logs, hours}`, without `count`; a summary that cannot be computed answers
+  `500` instead of zeros.
 - **Webhook signatures cover the time they were made.** `X-Webhook-Signature`
   is `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`, signed afresh
   for each attempt, so a receiver can refuse a replayed delivery;

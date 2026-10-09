@@ -1,9 +1,13 @@
 package audit
 
 import (
-	"authway/apps/central/api/pkg/tenantscope"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
+
+	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/tenantscope"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -24,7 +28,42 @@ func NewHandler(service Service, logger *zap.Logger) *Handler {
 	}
 }
 
-// QueryAuditLogs queries audit logs with filters
+func invalid(message string) error {
+	return apierror.Reject(fiber.StatusBadRequest, "invalid_request", message)
+}
+
+// intQuery reads an optional integer query parameter within [min, max]. A
+// value outside the range is refused, never replaced.
+func intQuery(c *fiber.Ctx, name string, def, min, max int) (int, error) {
+	raw := c.Query(name)
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < min || n > max {
+		return 0, invalid(fmt.Sprintf("%s must be an integer between %d and %d", name, min, max))
+	}
+	return n, nil
+}
+
+func timeQuery(c *fiber.Ctx, name string) (*time.Time, error) {
+	raw := c.Query(name)
+	if raw == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, invalid(name + " must be an RFC 3339 time")
+	}
+	return &t, nil
+}
+
+func (h *Handler) failed(c *fiber.Ctx, err error, message string) error {
+	h.logger.Error(message, zap.Error(err))
+	return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", message)
+}
+
+// QueryAuditLogs returns one page of the tenant's audit log, newest first.
 // GET /api/v1/audit/logs
 func (h *Handler) QueryAuditLogs(c *fiber.Ctx) error {
 	tenantID, err := tenantscope.FromRequest(c)
@@ -33,68 +72,53 @@ func (h *Handler) QueryAuditLogs(c *fiber.Ctx) error {
 	}
 
 	query := &AuditLogQuery{
-		TenantID: tenantID,
+		TenantID:     tenantID,
+		ResourceType: c.Query("resource_type"),
+		ResourceID:   c.Query("resource_id"),
 	}
-
-	// Parse optional filters
-	if actorIDStr := c.Query("actor_id"); actorIDStr != "" {
-		if actorID, err := uuid.Parse(actorIDStr); err == nil {
-			query.ActorID = &actorID
+	if raw := c.Query("actor_id"); raw != "" {
+		actorID, err := uuid.Parse(raw)
+		if err != nil {
+			return invalid("actor_id must be a user id")
 		}
+		query.ActorID = &actorID
 	}
-
-	if action := c.Query("action"); action != "" {
-		query.Action = AuditAction(action)
+	if raw := c.Query("action"); raw != "" {
+		if !knownAction(raw) {
+			return invalid(fmt.Sprintf("unknown action %q; GET /api/v1/audit/actions lists them", raw))
+		}
+		query.Action = AuditAction(raw)
 	}
-
-	if resourceType := c.Query("resource_type"); resourceType != "" {
-		query.ResourceType = resourceType
+	if raw := c.Query("severity"); raw != "" {
+		if !knownSeverity(raw) {
+			return invalid("severity must be one of info, warning, error, critical")
+		}
+		query.Severity = AuditSeverity(raw)
 	}
-
-	if resourceID := c.Query("resource_id"); resourceID != "" {
-		query.ResourceID = resourceID
-	}
-
-	if severity := c.Query("severity"); severity != "" {
-		query.Severity = AuditSeverity(severity)
-	}
-
-	if successStr := c.Query("success"); successStr != "" {
-		success := successStr == "true"
+	switch raw := c.Query("success"); raw {
+	case "":
+	case "true", "false":
+		success := raw == "true"
 		query.Success = &success
+	default:
+		return invalid("success must be true or false")
 	}
-
-	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
-		if startTime, err := time.Parse(time.RFC3339, startTimeStr); err == nil {
-			query.StartTime = &startTime
-		}
+	if query.StartTime, err = timeQuery(c, "start_time"); err != nil {
+		return err
 	}
-
-	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
-		if endTime, err := time.Parse(time.RFC3339, endTimeStr); err == nil {
-			query.EndTime = &endTime
-		}
+	if query.EndTime, err = timeQuery(c, "end_time"); err != nil {
+		return err
 	}
-
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 1000 {
-			query.Limit = limit
-		}
+	if query.Limit, err = intQuery(c, "limit", 100, 1, 1000); err != nil {
+		return err
 	}
-	if query.Limit == 0 {
-		query.Limit = 100
-	}
-
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
-			query.Offset = offset
-		}
+	if query.Offset, err = intQuery(c, "offset", 0, 0, 1<<31-1); err != nil {
+		return err
 	}
 
 	logs, total, err := h.service.Query(query)
 	if err != nil {
-		h.logger.Error("Failed to query audit logs", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query audit logs"})
+		return h.failed(c, err, "failed to query audit logs")
 	}
 
 	return c.JSON(fiber.Map{
@@ -105,86 +129,71 @@ func (h *Handler) QueryAuditLogs(c *fiber.Ctx) error {
 	})
 }
 
-// GetAuditLog gets a single audit log by ID
+// GetAuditLog gets one audit log entry
 // GET /api/v1/audit/logs/:id
 func (h *Handler) GetAuditLog(c *fiber.Ctx) error {
-	idStr := c.Params("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid log ID"})
+		return invalid("invalid audit log ID")
 	}
 
 	log, err := h.service.GetByID(id)
+	if errors.Is(err, ErrNotFound) {
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "audit log not found")
+	}
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "audit log not found"})
+		return h.failed(c, err, "failed to get audit log")
 	}
 
 	return c.JSON(fiber.Map{"log": log})
 }
 
-// GetUserActivity gets recent activity for a specific user
+// GetUserActivity returns a user's most recent entries in the tenant.
 // GET /api/v1/audit/users/:userId/activity
 func (h *Handler) GetUserActivity(c *fiber.Ctx) error {
 	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
 		return err
 	}
-
-	userIDStr := c.Params("userId")
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := uuid.Parse(c.Params("userId"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
+		return invalid("invalid user ID")
 	}
-
-	limit := 50
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 500 {
-			limit = l
-		}
+	limit, err := intQuery(c, "limit", 50, 1, 500)
+	if err != nil {
+		return err
 	}
 
 	logs, err := h.service.GetUserActivity(tenantID, userID, limit)
 	if err != nil {
-		h.logger.Error("Failed to get user activity", zap.Error(err), zap.String("user_id", userIDStr))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to get activity"})
+		return h.failed(c, err, "failed to get activity")
 	}
 
-	return c.JSON(fiber.Map{
-		"logs":    logs,
-		"count":   len(logs),
-		"user_id": userID.String(),
-	})
+	return c.JSON(fiber.Map{"logs": logs})
 }
 
-// GetSecurityEvents gets recent security-related events
+// GetSecurityEvents returns the tenant's warning-and-above entries from the
+// last hours.
 // GET /api/v1/audit/security
 func (h *Handler) GetSecurityEvents(c *fiber.Ctx) error {
 	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
 		return err
 	}
-
-	hours := 24
-	if hoursStr := c.Query("hours"); hoursStr != "" {
-		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 && h <= 168 {
-			hours = h
-		}
+	hours, err := intQuery(c, "hours", 24, 1, 168)
+	if err != nil {
+		return err
 	}
 
 	logs, err := h.service.GetRecentSecurityEvents(tenantID, hours)
 	if err != nil {
-		h.logger.Error("Failed to get security events", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to get security events"})
+		return h.failed(c, err, "failed to get security events")
 	}
 
-	return c.JSON(fiber.Map{
-		"logs":  logs,
-		"count": len(logs),
-		"hours": hours,
-	})
+	return c.JSON(fiber.Map{"logs": logs, "hours": hours})
 }
 
-// GetAuditSummary gets a summary of audit activity
+// GetAuditSummary counts the tenant's entries over recent windows.
 // GET /api/v1/audit/summary
 func (h *Handler) GetAuditSummary(c *fiber.Ctx) error {
 	tenantID, err := tenantscope.FromRequest(c)
@@ -192,102 +201,65 @@ func (h *Handler) GetAuditSummary(c *fiber.Ctx) error {
 		return err
 	}
 
-	// Get counts for different time periods
 	now := time.Now()
-	last24h := now.Add(-24 * time.Hour)
-	last7d := now.Add(-7 * 24 * time.Hour)
-	last30d := now.Add(-30 * 24 * time.Hour)
-
-	// Get security events count
-	securityEvents, err := h.service.GetRecentSecurityEvents(tenantID, 24)
-	if err != nil {
-		securityEvents = []AuditLog{}
+	since := func(d time.Duration) *time.Time { t := now.Add(-d); return &t }
+	count := func(q *AuditLogQuery) (int64, error) {
+		q.TenantID, q.Limit = tenantID, 1
+		_, total, err := h.service.Query(q)
+		return total, err
 	}
-
-	// Query for total counts
-	query24h := &AuditLogQuery{TenantID: tenantID, StartTime: &last24h, Limit: 1}
-	_, total24h, _ := h.service.Query(query24h)
-
-	query7d := &AuditLogQuery{TenantID: tenantID, StartTime: &last7d, Limit: 1}
-	_, total7d, _ := h.service.Query(query7d)
-
-	query30d := &AuditLogQuery{TenantID: tenantID, StartTime: &last30d, Limit: 1}
-	_, total30d, _ := h.service.Query(query30d)
-
-	// Count failed operations in last 24h
 	failed := false
-	queryFailed := &AuditLogQuery{TenantID: tenantID, StartTime: &last24h, Success: &failed, Limit: 1}
-	_, totalFailed, _ := h.service.Query(queryFailed)
+	day := 24 * time.Hour
+
+	total24h, err1 := count(&AuditLogQuery{StartTime: since(day)})
+	total7d, err2 := count(&AuditLogQuery{StartTime: since(7 * day)})
+	total30d, err3 := count(&AuditLogQuery{StartTime: since(30 * day)})
+	failed24h, err4 := count(&AuditLogQuery{StartTime: since(day), Success: &failed})
+	security, err5 := h.service.GetRecentSecurityEvents(tenantID, 24)
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
+		return h.failed(c, err, "failed to summarize audit logs")
+	}
 
 	return c.JSON(fiber.Map{
 		"summary": fiber.Map{
 			"total_24h":         total24h,
 			"total_7d":          total7d,
 			"total_30d":         total30d,
-			"security_events":   len(securityEvents),
-			"failed_operations": totalFailed,
+			"security_events":   len(security),
+			"failed_operations": failed24h,
 		},
 	})
 }
 
-// GetAvailableActions returns the list of available audit actions
+// GetAvailableActions lists the actions and severities an entry can carry.
 // GET /api/v1/audit/actions
 func (h *Handler) GetAvailableActions(c *fiber.Ctx) error {
-	actions := []fiber.Map{
-		{"action": "user.created", "description": "User account created"},
-		{"action": "user.updated", "description": "User account updated"},
-		{"action": "user.deleted", "description": "User account deleted"},
-		{"action": "user.login", "description": "User logged in"},
-		{"action": "user.login_failed", "description": "Failed login attempt"},
-		{"action": "user.logout", "description": "User logged out"},
-		{"action": "user.password_changed", "description": "Password changed"},
-		{"action": "user.password_reset", "description": "Password reset requested"},
-		{"action": "user.locked", "description": "User account locked"},
-		{"action": "user.unlocked", "description": "User account unlocked"},
-		{"action": "user.mfa_enabled", "description": "MFA enabled"},
-		{"action": "user.mfa_disabled", "description": "MFA disabled"},
-		{"action": "session.created", "description": "Session created"},
-		{"action": "session.revoked", "description": "Session revoked"},
-		{"action": "token.issued", "description": "Token issued"},
-		{"action": "token.revoked", "description": "Token revoked"},
-		{"action": "client.created", "description": "OAuth client created"},
-		{"action": "client.updated", "description": "OAuth client updated"},
-		{"action": "client.deleted", "description": "OAuth client deleted"},
-		{"action": "admin.action", "description": "Administrative action"},
+	actions := make([]fiber.Map, 0, len(Actions))
+	for _, a := range Actions {
+		actions = append(actions, fiber.Map{"action": a.Action, "description": a.Description})
 	}
-
-	severities := []fiber.Map{
-		{"severity": "info", "description": "Informational events"},
-		{"severity": "warning", "description": "Warning events"},
-		{"severity": "error", "description": "Error events"},
-		{"severity": "critical", "description": "Critical security events"},
+	severities := make([]fiber.Map, 0, len(Severities))
+	for _, s := range Severities {
+		severities = append(severities, fiber.Map{"severity": s.Severity, "description": s.Description})
 	}
-
-	return c.JSON(fiber.Map{
-		"actions":    actions,
-		"severities": severities,
-	})
+	return c.JSON(fiber.Map{"actions": actions, "severities": severities})
 }
 
-// PurgeOldLogs purges old audit logs (admin only)
+// PurgeOldLogs deletes the tenant's entries older than retention_days.
 // DELETE /api/v1/audit/logs/purge
 func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
 	tenantID, err := tenantscope.FromRequest(c)
 	if err != nil {
 		return err
 	}
-
-	retentionDays := 90 // default
-	if daysStr := c.Query("retention_days"); daysStr != "" {
-		if days, err := strconv.Atoi(daysStr); err == nil && days >= 30 {
-			retentionDays = days
-		}
+	retentionDays, err := intQuery(c, "retention_days", 90, MinRetentionDays, 36500)
+	if err != nil {
+		return err
 	}
 
 	deleted, err := h.service.PurgeOldLogs(tenantID, retentionDays)
 	if err != nil {
-		h.logger.Error("Failed to purge audit logs", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to purge logs"})
+		return h.failed(c, err, "failed to purge logs")
 	}
 
 	h.logger.Info("Audit logs purged",
@@ -306,7 +278,6 @@ func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
 // RegisterRoutes registers audit log routes
 // Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
 func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
-	// Admin Console routes - use adminMiddleware only (validates admin session + tenant context)
 	audit := app.Group("/audit", adminMiddleware)
 	audit.Get("/logs", h.QueryAuditLogs)
 	audit.Get("/logs/:id", h.GetAuditLog)

@@ -23,7 +23,7 @@ tags:
       admin session) as a bearer token. Tenant-scoped calls name the tenant
       in X-Tenant-ID. A missing or rejected credential answers 401 with
       code unauthorized. This document covers tenants, clients, users,
-      invitations and webhooks; audit and impersonation follow.
+      invitations, webhooks and the audit log.
 
 security: []
 
@@ -1013,6 +1013,204 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /api/v1/audit/logs:
+    get:
+      tags: [admin]
+      operationId: listAuditLogs
+      description: |
+        One page of the tenant's audit log, newest first. A filter that is not
+        well formed is refused (code invalid_request), never ignored.
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: actor_id, in: query, required: false, schema: { type: string } }
+        - { name: action, in: query, required: false, schema: { type: string }, description: One of GET /api/v1/audit/actions. }
+        - { name: resource_type, in: query, required: false, schema: { type: string } }
+        - { name: resource_id, in: query, required: false, schema: { type: string } }
+        - { name: severity, in: query, required: false, schema: { $ref: '#/components/schemas/AuditSeverity' } }
+        - { name: success, in: query, required: false, schema: { type: boolean } }
+        - { name: start_time, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: end_time, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs, total, limit, offset]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+                  total: { type: integer, minimum: 0 }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400':
+          description: A malformed filter (code invalid_request), or no tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/logs/{id}:
+    get:
+      tags: [admin]
+      operationId: getAuditLog
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The entry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [log]
+                properties:
+                  log: { $ref: '#/components/schemas/AuditLog' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/logs/purge:
+    delete:
+      tags: [admin]
+      operationId: purgeAuditLogs
+      description: Deletes the tenant's entries older than retention_days.
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: retention_days, in: query, required: false, schema: { type: integer, minimum: 30, maximum: 36500, default: 90 } }
+      responses:
+        '200':
+          description: Purged
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted, retention_days]
+                properties:
+                  deleted: { type: integer, minimum: 0 }
+                  retention_days: { type: integer }
+                  message: { type: string }
+        '400':
+          description: retention_days out of range (code invalid_request), or no tenant named (code tenant_required)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/users/{userId}/activity:
+    get:
+      tags: [admin]
+      operationId: getUserAuditActivity
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: userId, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+      responses:
+        '200':
+          description: The user's most recent entries in the tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/security:
+    get:
+      tags: [admin]
+      operationId: getSecurityAuditEvents
+      security: [{ adminKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: hours, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 168, default: 24 } }
+      responses:
+        '200':
+          description: Warning-and-above entries from the last hours
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs, hours]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+                  hours: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/summary:
+    get:
+      tags: [admin]
+      operationId: getAuditSummary
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      responses:
+        '200':
+          description: Entry counts over recent windows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary]
+                properties:
+                  summary:
+                    type: object
+                    required: [total_24h, total_7d, total_30d, security_events, failed_operations]
+                    properties:
+                      total_24h: { type: integer, minimum: 0 }
+                      total_7d: { type: integer, minimum: 0 }
+                      total_30d: { type: integer, minimum: 0 }
+                      security_events: { type: integer, minimum: 0 }
+                      failed_operations: { type: integer, minimum: 0, description: Entries in the last 24 hours recorded as failures. }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/audit/actions:
+    get:
+      tags: [admin]
+      operationId: listAuditActions
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The actions and severities an entry can carry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actions, severities]
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      required: [action, description]
+                      properties:
+                        action: { type: string }
+                        description: { type: string }
+                  severities:
+                    type: array
+                    items:
+                      type: object
+                      required: [severity, description]
+                      properties:
+                        severity: { $ref: '#/components/schemas/AuditSeverity' }
+                        description: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+
   /api/v1/users:
     get:
       tags: [admin]
@@ -1344,6 +1542,30 @@ components:
         delivered_at: { type: string }
         success: { type: boolean }
         error_message: { type: string }
+
+    AuditLog:
+      type: object
+      required: [id, tenant_id, actor_id, actor_type, action, severity, success, created_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        actor_id: { type: ['null', string] }
+        actor_email: { type: string }
+        actor_type: { type: string }
+        action: { type: string }
+        severity: { $ref: '#/components/schemas/AuditSeverity' }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        ip_address: { type: string }
+        user_agent: { type: string }
+        details: { type: string, description: JSON text recorded with the event. }
+        success: { type: boolean }
+        error_msg: { type: string, description: Why the action failed; empty on success. }
+        created_at: { type: string }
+
+    AuditSeverity:
+      type: string
+      enum: [info, warning, error, critical]
 
     Tenant:
       type: object

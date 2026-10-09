@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -135,10 +136,17 @@ func (s *service) Query(query *AuditLogQuery) ([]AuditLog, int64, error) {
 	return logs, total, nil
 }
 
+// ErrNotFound reports that no audit log entry has the requested id.
+var ErrNotFound = errors.New("audit log not found")
+
 func (s *service) GetByID(id uuid.UUID) (*AuditLog, error) {
 	var log AuditLog
-	if err := s.db.Where("id = ?", id).First(&log).Error; err != nil {
-		return nil, fmt.Errorf("audit log not found: %w", err)
+	err := s.db.Where("id = ?", id).First(&log).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get audit log: %w", err)
 	}
 	return &log, nil
 }
@@ -175,8 +183,8 @@ func (s *service) GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]Audi
 }
 
 func (s *service) PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (int64, error) {
-	if retentionDays < 30 {
-		retentionDays = 30
+	if retentionDays < MinRetentionDays {
+		retentionDays = MinRetentionDays
 	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 	result := s.db.Where("tenant_id = ? AND created_at < ?", tenantID, cutoff).Delete(&AuditLog{})
