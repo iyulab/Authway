@@ -47,6 +47,14 @@
   `GET /api/v1/invitations` applies `status`, `limit` and `offset` and answers
   `{invitations, total, limit, offset}` — it ignored them and answered
   `{invitations, count}`.
+- **Requests that send mail no longer wait for it to be delivered.**
+  Inviting someone, requesting a sign-in link, a password reset or a new
+  verification mail answer as soon as the request is recorded; the mail is sent
+  in the background and a failure is logged. These requests waited for the mail
+  service, up to 30 seconds — 28 when it was starting from idle. A password
+  reset or verification request whose mail fails no longer answers `500`. On
+  shutdown the server finishes requests in progress and the mail they handed
+  over before it exits.
 - **An admin call that names a tenant reaches only that tenant's resources.**
   Reading, changing or deleting a client, user, invitation, webhook or audit
   entry by id while naming another tenant (`X-Tenant-ID` or `tenant_id`)

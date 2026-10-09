@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"authway/apps/central/api/internal/config"
@@ -190,6 +193,9 @@ func main() {
 		emailService = email.NewService(smtpConfig, zapLogger)
 	}
 
+	// Requests that send mail answer without waiting for the mail service.
+	mailer := email.NewAsync(emailService, zapLogger, 8)
+
 	emailRepo := email.NewRepository(db)
 
 	// Create services struct for handlers
@@ -258,7 +264,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, emailService, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
 
 	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
 	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)
@@ -275,7 +281,7 @@ func main() {
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
-	emailHandler := handler.NewEmailHandler(emailRepo, emailService, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
+	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, zapLogger)
 	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
@@ -462,7 +468,24 @@ func main() {
 		zap.String("environment", cfg.App.Environment),
 	)
 
-	if err := app.Listen(":" + port); err != nil {
-		zapLogger.Fatal("Failed to start server", zap.Error(err))
+	go func() {
+		if err := app.Listen(":" + port); err != nil {
+			zapLogger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// On SIGTERM (a new revision taking over) stop taking requests, let the
+	// ones in progress finish, and send the mail they handed over.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	zapLogger.Info("Shutting down")
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := app.ShutdownWithContext(ctx); err != nil {
+		zapLogger.Warn("HTTP shutdown did not finish", zap.Error(err))
+	}
+	if err := mailer.Close(ctx); err != nil {
+		zapLogger.Warn("Mail still being sent at shutdown was dropped", zap.Error(err))
 	}
 }
