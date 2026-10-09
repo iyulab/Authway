@@ -194,3 +194,36 @@ func TestAsync_CloseCutsARetryWaitShort(t *testing.T) {
 		t.Fatalf("logged %d errors, want 1 for the message given up", logs.Len())
 	}
 }
+
+// recordingSender fails every password reset with a transient error and
+// counts magic links, which succeed.
+type recordingSender struct {
+	slowSender
+	links atomic.Int32
+}
+
+func (r *recordingSender) SendPasswordResetEmail(string, string) error {
+	return fmt.Errorf("%w: timed out", ErrTransient)
+}
+func (r *recordingSender) SendMagicLinkEmail(string, string, bool) error {
+	r.links.Add(1)
+	return nil
+}
+
+// A message waiting to be tried again must not hold a sender: otherwise a
+// mail service that keeps failing lets a burst of requests occupy every
+// sender for minutes and starve all other mail.
+func TestAsync_AWaitingRetryLeavesTheSenderFree(t *testing.T) {
+	inner := &recordingSender{}
+	a := NewAsync(inner, zap.NewNop(), 1, 4)
+	a.retries = []time.Duration{time.Hour}
+	defer func() { _ = a.Close(context.Background()) }()
+
+	if err := a.SendPasswordResetEmail("user@example.com", "t"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SendMagicLinkEmail("other@example.com", "https://example.com/link", false); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return inner.links.Load() == 1 })
+}

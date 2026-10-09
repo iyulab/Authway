@@ -41,24 +41,28 @@ var ErrMailerClosed = errors.New("mail sender is shutting down")
 // refusal and answer as they would have otherwise — no request that sends
 // mail may reveal whether a message went out.
 //
-// A send that fails with ErrTransient is tried again after each of
-// retryAfter; the worker holds the message meanwhile. Once Close is called,
-// no further attempts are made.
+// A send that fails with ErrTransient is put back in the queue after each of
+// retryAfter. The worker is free while the message waits, so a mail service
+// that keeps failing costs each message one send's time per attempt, as
+// before, rather than holding a sender through every wait. Waiting messages
+// are bounded by the queue's size; one that finds no room, or is still
+// waiting when Close is called, is dropped and logged.
 type Async struct {
 	inner   EmailService
 	logger  *zap.Logger
 	queue   chan message
 	wg      sync.WaitGroup
 	retries []time.Duration
-	closing chan struct{}
 
-	mu     sync.RWMutex
-	closed bool
+	mu      sync.RWMutex
+	closed  bool
+	waiting map[*time.Timer]message
 }
 
 type message struct {
 	kind, to string
 	deliver  func() error
+	attempt  int // attempts already made
 }
 
 // NewAsync wraps inner with workers senders and room for queued messages
@@ -70,7 +74,7 @@ func NewAsync(inner EmailService, logger *zap.Logger, workers, queued int) *Asyn
 	if queued < 0 {
 		queued = 0
 	}
-	a := &Async{inner: inner, logger: logger, queue: make(chan message, queued), retries: retryAfter, closing: make(chan struct{})}
+	a := &Async{inner: inner, logger: logger, queue: make(chan message, queued), retries: retryAfter, waiting: map[*time.Timer]message{}}
 	for i := 0; i < workers; i++ {
 		a.wg.Add(1)
 		go a.work()
@@ -86,24 +90,52 @@ func (a *Async) work() {
 }
 
 func (a *Async) deliver(m message) {
-	for attempt := 0; ; attempt++ {
-		err := m.deliver()
-		if err == nil {
-			return
-		}
-		if !errors.Is(err, ErrTransient) || attempt >= len(a.retries) {
-			a.logger.Error("Failed to send email", zap.String("kind", m.kind), zap.String("to", m.to), zap.Int("attempts", attempt+1), zap.Error(err))
-			return
-		}
-		a.logger.Warn("Sending email failed; trying again", zap.String("kind", m.kind), zap.String("to", m.to),
-			zap.Int("attempt", attempt+1), zap.Duration("after", a.retries[attempt]), zap.Error(err))
-		select {
-		case <-time.After(a.retries[attempt]):
-		case <-a.closing:
-			a.logger.Error("Failed to send email; shutting down before trying again", zap.String("kind", m.kind), zap.String("to", m.to), zap.Error(err))
-			return
-		}
+	err := m.deliver()
+	if err == nil {
+		return
 	}
+	m.attempt++
+	if !errors.Is(err, ErrTransient) || m.attempt > len(a.retries) {
+		a.logger.Error("Failed to send email", zap.String("kind", m.kind), zap.String("to", m.to), zap.Int("attempts", m.attempt), zap.Error(err))
+		return
+	}
+	a.retryLater(m, err)
+}
+
+// retryLater puts m back in the queue once its wait is over.
+func (a *Async) retryLater(m message, cause error) {
+	wait := a.retries[m.attempt-1]
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		a.drop(m, "shutting down before trying again", cause)
+		return
+	}
+	if len(a.waiting) >= cap(a.queue) {
+		a.drop(m, "too many messages waiting to be tried again", cause)
+		return
+	}
+	a.logger.Warn("Sending email failed; trying again", zap.String("kind", m.kind), zap.String("to", m.to),
+		zap.Int("attempt", m.attempt), zap.Duration("after", wait), zap.Error(cause))
+	var t *time.Timer
+	t = time.AfterFunc(wait, func() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if _, ok := a.waiting[t]; !ok {
+			return // Close dropped it
+		}
+		delete(a.waiting, t)
+		select {
+		case a.queue <- m:
+		default:
+			a.drop(m, "queue full when trying again", cause)
+		}
+	})
+	a.waiting[t] = m
+}
+
+func (a *Async) drop(m message, why string, cause error) {
+	a.logger.Error("Failed to send email; "+why, zap.String("kind", m.kind), zap.String("to", m.to), zap.Int("attempts", m.attempt), zap.Error(cause))
 }
 
 func (a *Async) send(kind, to string, deliver func() error) error {
@@ -128,7 +160,11 @@ func (a *Async) Close(ctx context.Context) error {
 	if !a.closed {
 		a.closed = true
 		close(a.queue)
-		close(a.closing)
+		for t, m := range a.waiting {
+			t.Stop()
+			a.drop(m, "shutting down before trying again", nil)
+		}
+		clear(a.waiting)
 	}
 	a.mu.Unlock()
 
