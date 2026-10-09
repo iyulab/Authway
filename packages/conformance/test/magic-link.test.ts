@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { Provider, type TestClient, type TestUser } from '../src/provider.js'
 import { conform } from '../src/contract.js'
+import { randomToken } from '../src/pkce.js'
 
 const provider = new Provider(loadConfig())
 
@@ -33,6 +34,28 @@ describe('sign-in with an emailed link', () => {
     const outcome = await provider.continueWithMagicLink(attempt, user.email)
     expect(outcome.kind, JSON.stringify(outcome)).toBe('code')
     if (outcome.kind === 'code') subjects.add(outcome.sub)
+  })
+
+  // A request that may send mail must not tell a caller whether the address
+  // belongs to anyone: a registered address and an unknown one get the same
+  // status and the same body.
+  it('answers a registered address exactly like an unknown one', async () => {
+    const nobody = `nobody-${randomToken(4)}@example.test`
+    const post = (url: string, email: string) =>
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+    const answer = async (res: Response) => ({ status: res.status, body: await res.text() })
+
+    for (const path of ['/api/email/send-verification', '/api/email/forgot-password']) {
+      const known = await post(`${provider.config.api}${path}`, user.email)
+      await conform('POST', path, known.clone())
+      const unknown = await post(`${provider.config.api}${path}`, nobody)
+      expect(await answer(known), path).toEqual(await answer(unknown))
+    }
+
+    const known = await post(provider.loginFlowUrl((await provider.startLogin(client)).flow, '/magic-link'), user.email)
+    await conform('POST', '/api/v1/login-flows/{flow}/magic-link', known.clone())
+    const unknown = await post(provider.loginFlowUrl((await provider.startLogin(client)).flow, '/magic-link'), nobody)
+    expect(await answer(known), 'magic-link').toEqual(await answer(unknown))
   })
 
   it('refuses the link step for a client that does not enable it', async () => {

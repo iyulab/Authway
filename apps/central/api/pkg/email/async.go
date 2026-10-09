@@ -4,9 +4,22 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 )
+
+// ErrTransient marks a send that failed in a way worth trying again — the
+// mail service timed out, could not be reached, or answered 429 or 5xx.
+// A sender wraps it into the errors it returns for such failures.
+var ErrTransient = errors.New("transient mail failure")
+
+// retryAfter is how long a worker waits before each further attempt at a
+// transient failure. The first wait outlasts the mail service's own handling
+// of the attempt that timed out, so the retry finds that attempt finished —
+// its idempotency key then answers with the earlier result instead of
+// sending twice.
+var retryAfter = []time.Duration{45 * time.Second, 2 * time.Minute}
 
 // ErrMailQueueFull refuses a message while the background sender is as far
 // behind as it is allowed to fall.
@@ -27,11 +40,17 @@ var ErrMailerClosed = errors.New("mail sender is shutting down")
 // queue is full the message is refused with ErrMailQueueFull. Callers log the
 // refusal and answer as they would have otherwise — no request that sends
 // mail may reveal whether a message went out.
+//
+// A send that fails with ErrTransient is tried again after each of
+// retryAfter; the worker holds the message meanwhile. Once Close is called,
+// no further attempts are made.
 type Async struct {
-	inner  EmailService
-	logger *zap.Logger
-	queue  chan message
-	wg     sync.WaitGroup
+	inner   EmailService
+	logger  *zap.Logger
+	queue   chan message
+	wg      sync.WaitGroup
+	retries []time.Duration
+	closing chan struct{}
 
 	mu     sync.RWMutex
 	closed bool
@@ -51,7 +70,7 @@ func NewAsync(inner EmailService, logger *zap.Logger, workers, queued int) *Asyn
 	if queued < 0 {
 		queued = 0
 	}
-	a := &Async{inner: inner, logger: logger, queue: make(chan message, queued)}
+	a := &Async{inner: inner, logger: logger, queue: make(chan message, queued), retries: retryAfter, closing: make(chan struct{})}
 	for i := 0; i < workers; i++ {
 		a.wg.Add(1)
 		go a.work()
@@ -62,8 +81,27 @@ func NewAsync(inner EmailService, logger *zap.Logger, workers, queued int) *Asyn
 func (a *Async) work() {
 	defer a.wg.Done()
 	for m := range a.queue {
-		if err := m.deliver(); err != nil {
-			a.logger.Error("Failed to send email", zap.String("kind", m.kind), zap.String("to", m.to), zap.Error(err))
+		a.deliver(m)
+	}
+}
+
+func (a *Async) deliver(m message) {
+	for attempt := 0; ; attempt++ {
+		err := m.deliver()
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, ErrTransient) || attempt >= len(a.retries) {
+			a.logger.Error("Failed to send email", zap.String("kind", m.kind), zap.String("to", m.to), zap.Int("attempts", attempt+1), zap.Error(err))
+			return
+		}
+		a.logger.Warn("Sending email failed; trying again", zap.String("kind", m.kind), zap.String("to", m.to),
+			zap.Int("attempt", attempt+1), zap.Duration("after", a.retries[attempt]), zap.Error(err))
+		select {
+		case <-time.After(a.retries[attempt]):
+		case <-a.closing:
+			a.logger.Error("Failed to send email; shutting down before trying again", zap.String("kind", m.kind), zap.String("to", m.to), zap.Error(err))
+			return
 		}
 	}
 }
@@ -90,6 +128,7 @@ func (a *Async) Close(ctx context.Context) error {
 	if !a.closed {
 		a.closed = true
 		close(a.queue)
+		close(a.closing)
 	}
 	a.mu.Unlock()
 

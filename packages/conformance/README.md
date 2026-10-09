@@ -44,3 +44,8 @@ must point at its login UI (`/invitation/accept?token=…`). With the repository
 
 The suite refuses to run when the variables are missing rather than skipping —
 a skipped conformance run would report success without having checked anything.
+
+One run asks for four sign-in links from the same IP address. A provider that
+limits those requests (Authway allows five per IP address in 15 minutes) answers
+`429` to a second run started within that window — wait it out, or clear the
+limiter's state, before running again.

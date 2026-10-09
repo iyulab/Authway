@@ -56,6 +56,12 @@
   queue full is dropped and logged, and the request answers as it otherwise
   would. On shutdown the server finishes requests in progress and the mail
   they handed over before it exits.
+- **Mail that fails for a passing reason is sent again.** When the mail
+  service times out, cannot be reached, or answers `429` or `5xx`, the message
+  is tried again after 45 seconds and after a further 2 minutes. Each message
+  carries an idempotency key derived from its content, so a retry of a send
+  the mail service did complete is not delivered twice. Retries stop when the
+  server shuts down.
 - **An admin call that names a tenant reaches only that tenant's resources.**
   Reading, changing or deleting a client, user, invitation, webhook or audit
   entry by id while naming another tenant (`X-Tenant-ID` or `tenant_id`)

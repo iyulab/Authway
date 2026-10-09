@@ -1,6 +1,7 @@
 package email
 
 import (
+	"errors"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -170,5 +171,62 @@ func TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType(t *testing.T) {
 				t.Fatalf("%s: expected a non-empty HTML alternative, got %q", tc.name, captured.HtmlBody)
 			}
 		})
+	}
+}
+
+// A retry of the same message must carry the same Idempotency-Key, and two
+// different messages different keys — otherwise retrying either sends twice
+// or collapses distinct mail into one.
+func TestSendwayEmailService_IdempotencyKeyFollowsTheMessage(t *testing.T) {
+	var keys []string
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		json.NewEncoder(w).Encode(sendwaySuccessResponse{ID: "msg"})
+	}))
+	defer ts.Close()
+	svc := newTestSendwayService(t, ts)
+
+	for _, token := range []string{"tok-a", "tok-a", "tok-b"} {
+		if err := svc.SendPasswordResetEmail("user@example.com", token); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if keys[0] == "" || keys[0] != keys[1] {
+		t.Errorf("same message sent twice carried keys %q and %q, want one non-empty key", keys[0], keys[1])
+	}
+	if keys[2] == keys[0] {
+		t.Errorf("a different message reused key %q", keys[2])
+	}
+}
+
+// Only failures worth retrying are marked transient: no answer, 429 and 5xx.
+// A 4xx means the request itself is wrong and will fail again.
+func TestSendwayEmailService_MarksTransientFailures(t *testing.T) {
+	for status, transient := range map[int]bool{
+		http.StatusBadGateway:         true,
+		http.StatusServiceUnavailable: true,
+		http.StatusTooManyRequests:    true,
+		http.StatusBadRequest:         false,
+		http.StatusUnauthorized:       false,
+	} {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+			json.NewEncoder(w).Encode(sendwayErrorResponse{Error: "nope"})
+		}))
+		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "tok")
+		ts.Close()
+		if err == nil {
+			t.Fatalf("status %d: want an error", status)
+		}
+		if got := errors.Is(err, ErrTransient); got != transient {
+			t.Errorf("status %d: transient = %v, want %v (%v)", status, got, transient, err)
+		}
+	}
+
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	svc := newTestSendwayService(t, ts)
+	ts.Close() // nothing answers
+	if err := svc.SendVerificationEmail("user@example.com", "tok"); !errors.Is(err, ErrTransient) {
+		t.Errorf("unreachable mail service: %v, want ErrTransient", err)
 	}
 }

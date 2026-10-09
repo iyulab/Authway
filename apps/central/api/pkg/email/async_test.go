@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -122,5 +123,74 @@ func TestAsync_LogsAFailedSend(t *testing.T) {
 	entries := logs.FilterMessage("Failed to send email").All()
 	if len(entries) != 1 || entries[0].ContextMap()["kind"] != "password_reset" {
 		t.Fatalf("logged %v, want one password_reset failure", entries)
+	}
+}
+
+// flakySender fails with failure for its first fails sends, then succeeds.
+type flakySender struct {
+	slowSender
+	fails   int32
+	failure error
+	calls   atomic.Int32
+}
+
+func (f *flakySender) SendPasswordResetEmail(string, string) error {
+	if f.calls.Add(1) <= f.fails {
+		return f.failure
+	}
+	return nil
+}
+
+func TestAsync_RetriesATransientFailure(t *testing.T) {
+	core, logs := observer.New(zap.ErrorLevel)
+	inner := &flakySender{fails: 2, failure: fmt.Errorf("%w: timed out", ErrTransient)}
+	a := NewAsync(inner, zap.New(core), 1, 1)
+	a.retries = []time.Duration{time.Millisecond, time.Millisecond}
+
+	if err := a.SendPasswordResetEmail("user@example.com", "t"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return inner.calls.Load() >= 3 })
+	if err := a.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := inner.calls.Load(); got != 3 {
+		t.Fatalf("attempts = %d, want 3 (two failures, then success)", got)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("a send that succeeded on retry logged %d errors", logs.Len())
+	}
+}
+
+func TestAsync_DoesNotRetryAPermanentFailure(t *testing.T) {
+	inner := &flakySender{fails: 5, failure: errors.New("sendway returned status 400")}
+	a := NewAsync(inner, zap.NewNop(), 1, 1)
+	a.retries = []time.Duration{time.Millisecond, time.Millisecond}
+
+	_ = a.SendPasswordResetEmail("user@example.com", "t")
+	_ = a.Close(context.Background())
+	if got := inner.calls.Load(); got != 1 {
+		t.Fatalf("attempts = %d, want 1", got)
+	}
+}
+
+// Shutting down must not wait out a retry delay: the message is given up and
+// logged so the server can exit within its grace period.
+func TestAsync_CloseCutsARetryWaitShort(t *testing.T) {
+	core, logs := observer.New(zap.ErrorLevel)
+	inner := &flakySender{fails: 5, failure: fmt.Errorf("%w: timed out", ErrTransient)}
+	a := NewAsync(inner, zap.New(core), 1, 1)
+	a.retries = []time.Duration{time.Hour}
+
+	_ = a.SendPasswordResetEmail("user@example.com", "t")
+	waitFor(t, func() bool { return inner.calls.Load() == 1 })
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := a.Close(ctx); err != nil {
+		t.Fatalf("Close waited out the retry delay: %v", err)
+	}
+	if logs.Len() != 1 {
+		t.Fatalf("logged %d errors, want 1 for the message given up", logs.Len())
 	}
 }

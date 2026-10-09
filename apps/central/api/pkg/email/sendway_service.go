@@ -2,13 +2,14 @@ package email
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/pkg/maillink"
@@ -144,9 +145,10 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Api-Key", s.apiKey)
-	// Lets a transient failure (502) be retried with the same key instead of
-	// risking a duplicate send.
-	httpReq.Header.Set("Idempotency-Key", uuid.New().String())
+	// Every message carries a token of its own, so its content identifies it:
+	// a retry of the same message sends the same key and Sendway answers with
+	// the earlier result instead of sending it twice.
+	httpReq.Header.Set("Idempotency-Key", idempotencyKey(reqBody))
 
 	s.logger.Info("Sending email via Sendway",
 		zap.String("to", to),
@@ -157,7 +159,7 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		s.logger.Error("Failed to send email via Sendway",
 			zap.Error(err),
 			zap.String("to", to))
-		return fmt.Errorf("failed to send email via Sendway: %w", err)
+		return fmt.Errorf("%w: failed to send email via Sendway: %w", ErrTransient, err)
 	}
 	defer resp.Body.Close()
 
@@ -178,7 +180,11 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 			zap.Int("status", resp.StatusCode),
 			zap.String("reason", reason),
 			zap.String("messageId", errResp.MessageID))
-		return fmt.Errorf("sendway returned status %d: %s (messageId=%s)", resp.StatusCode, reason, errResp.MessageID)
+		err := fmt.Errorf("sendway returned status %d: %s (messageId=%s)", resp.StatusCode, reason, errResp.MessageID)
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return fmt.Errorf("%w: %w", ErrTransient, err)
+		}
+		return err
 	}
 
 	var okResp sendwaySuccessResponse
@@ -194,4 +200,10 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		zap.String("messageId", okResp.ID))
 
 	return nil
+}
+
+// idempotencyKey names a message by its content.
+func idempotencyKey(body []byte) string {
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
 }
