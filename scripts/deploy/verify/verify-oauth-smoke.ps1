@@ -118,6 +118,8 @@ try {
         allowed_origins = @("http://localhost:9999")
         grant_types     = @("authorization_code")
         scopes          = @("openid")
+        # JWT 액세스 토큰 — 아래에서 클레임 형태(계약의 TokenClaims)를 읽는다.
+        access_token_strategy = "jwt"
     } | ConvertTo-Json -Compress
 
     $tmpBody = [System.IO.Path]::GetTempFileName()
@@ -235,6 +237,23 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         exit 1
     }
     Write-Host "   ✅ access_token 발급 확인 — 로그인→consent→콜백 전 구간 정상" -ForegroundColor Green
+
+    # --- 8-1. 액세스 토큰의 클레임 형태 ---
+    # Authway 자체 클레임은 최상위에 있어야 한다(계약 TokenClaims). 인가 서버 설정
+    # (OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS)이 빠진 채 배포되면 ext 안에만 남는다.
+    $jwtParts = $tokenJson.access_token.Split('.')
+    if ($jwtParts.Count -ne 3) {
+        Write-Host "❌ 액세스 토큰이 JWT 가 아님 — client 의 access_token_strategy=jwt 가 반영되지 않음" -ForegroundColor Red
+        exit 1
+    }
+    $b64 = $jwtParts[1].Replace('-', '+').Replace('_', '/')
+    $b64 += '=' * ((4 - $b64.Length % 4) % 4)
+    $claims = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64)) | ConvertFrom-Json
+    if ($claims.tenant_id -ne $Tenant -or -not $claims.email -or -not $claims.auth_time) {
+        Write-Host "❌ 액세스 토큰 최상위에 tenant_id/email/auth_time 이 없음 (tenant_id='$($claims.tenant_id)', auth_time='$($claims.auth_time)') — 인가 서버의 top-level 클레임 설정 확인" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ 액세스 토큰 최상위 클레임 확인 (tenant_id, email, auth_time)" -ForegroundColor Green
 
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
     # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
