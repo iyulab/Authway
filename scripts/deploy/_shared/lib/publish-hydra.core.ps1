@@ -19,6 +19,7 @@ $LibDir = $PSScriptRoot
 $SharedDir = Split-Path -Parent $LibDir
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "az-retry.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
 
 try {
@@ -104,13 +105,14 @@ try {
 
         # ACR 레지스트리 자격증명 등록 (idempotent — 이미 있어도 덮어쓰기)
         Write-Host "🔑 ACR 레지스트리 인증 설정 중..." -ForegroundColor Yellow
-        az containerapp registry set `
-            --name $CONTAINER_APP_HYDRA `
-            --resource-group $RESOURCE_GROUP `
-            --server "iyulabimages.azurecr.io" `
-            --username $envVars['ACR_USERNAME'] `
-            --password $envVars['ACR_PASSWORD'] | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "ACR 레지스트리 설정 실패" }
+        Invoke-AzRetry -What "ACR 레지스트리 설정" -Command {
+            az containerapp registry set `
+                --name $CONTAINER_APP_HYDRA `
+                --resource-group $RESOURCE_GROUP `
+                --server "iyulabimages.azurecr.io" `
+                --username $envVars['ACR_USERNAME'] `
+                --password $envVars['ACR_PASSWORD'] | Out-Null
+        }
         Write-Host "   ✓ ACR 레지스트리 인증 완료" -ForegroundColor Green
         Write-Host ""
 
@@ -147,13 +149,14 @@ try {
             Write-Host "🔄 Hydra Admin Container App 업데이트 중..." -ForegroundColor Yellow
             Write-Host "   Container App: $CONTAINER_APP_HYDRA_ADMIN" -ForegroundColor Gray
 
-            az containerapp registry set `
-                --name $CONTAINER_APP_HYDRA_ADMIN `
-                --resource-group $RESOURCE_GROUP `
-                --server "iyulabimages.azurecr.io" `
-                --username $envVars['ACR_USERNAME'] `
-                --password $envVars['ACR_PASSWORD'] | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Hydra admin ACR 설정 실패" }
+            Invoke-AzRetry -What "Hydra admin ACR 설정" -Command {
+                az containerapp registry set `
+                    --name $CONTAINER_APP_HYDRA_ADMIN `
+                    --resource-group $RESOURCE_GROUP `
+                    --server "iyulabimages.azurecr.io" `
+                    --username $envVars['ACR_USERNAME'] `
+                    --password $envVars['ACR_PASSWORD'] | Out-Null
+            }
 
             az containerapp update `
                 --name $CONTAINER_APP_HYDRA_ADMIN `

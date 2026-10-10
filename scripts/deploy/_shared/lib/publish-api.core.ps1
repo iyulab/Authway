@@ -28,6 +28,7 @@ $ScriptsDir = Split-Path -Parent $DeployDir
 $ProjectRoot = Split-Path -Parent $ScriptsDir
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "az-retry.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
@@ -102,15 +103,13 @@ try {
     Write-Host ""
 
     Write-Host "🔐 레지스트리 인증 구성 중..." -ForegroundColor Yellow
-    az containerapp registry set `
-        --name $CONTAINER_APP_API `
-        --resource-group $RESOURCE_GROUP `
-        --server ghcr.io `
-        --username $GITHUB_USER `
-        --password $envVars['GITHUB_TOKEN']
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "레지스트리 인증 설정 실패"
+    Invoke-AzRetry -What "레지스트리 인증 설정" -Command {
+        az containerapp registry set `
+            --name $CONTAINER_APP_API `
+            --resource-group $RESOURCE_GROUP `
+            --server ghcr.io `
+            --username $GITHUB_USER `
+            --password $envVars['GITHUB_TOKEN'] | Out-Null
     }
     Write-Host "✓ 레지스트리 인증 설정 완료" -ForegroundColor Green
     Write-Host ""
@@ -118,12 +117,11 @@ try {
     # Google client secret 은 평문 env 가 아니라 Container App secret 으로 둔다
     # (sendway-api-key 와 같은 방식). update 가 secretref 로 참조하므로 먼저 써야 한다.
     Write-Host "🔐 Google client secret 반영 중..." -ForegroundColor Yellow
-    az containerapp secret set `
-        --name $CONTAINER_APP_API `
-        --resource-group $RESOURCE_GROUP `
-        --secrets "google-client-secret=$($envVars['GOOGLE_CLIENT_SECRET'])" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Google client secret 설정 실패"
+    Invoke-AzRetry -What "Google client secret 설정" -Command {
+        az containerapp secret set `
+            --name $CONTAINER_APP_API `
+            --resource-group $RESOURCE_GROUP `
+            --secrets "google-client-secret=$($envVars['GOOGLE_CLIENT_SECRET'])" | Out-Null
     }
     Write-Host "✓ Google client secret 반영 완료" -ForegroundColor Green
     Write-Host ""
