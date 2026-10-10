@@ -356,8 +356,8 @@ GET http://localhost:8080/.well-known/authway-config
 ```json
 {
   "issuer": "http://localhost:4444",
-  "oauth_url": "http://localhost:4444",
   "api_url": "http://localhost:8080",
+  "auth_ui": "http://localhost:3001",
   "version": "0.5.0"
 }
 ```

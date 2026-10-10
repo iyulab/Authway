@@ -314,7 +314,7 @@ try {
     # 초대·매직링크·인증·재설정 링크는 전부 auth UI 호스트로 만들어진다. 그 호스트가
     # 틀리거나(구성) 딥링크를 서빙하지 않으면(CDN SPA fallback) 발송은 성공하는데
     # 수신자만 404 를 본다 — 어떤 API 응답으로도 드러나지 않는 침묵형 고장이다.
-    #   1. /api/v1/config.auth_ui == AUTH_UI_URL  → 배포된 바이너리가 받은 값이 맞나
+    #   1. /.well-known/authway-config 의 auth_ui == AUTH_UI_URL  → 배포된 바이너리가 받은 값이 맞나
     #   2. 링크 4종 cold GET == 200               → 그 호스트가 딥링크를 서빙하나
     # 메일을 실제로 보내지 않으므로 테스트 계정·bounce 를 남기지 않는다.
 
@@ -327,9 +327,9 @@ try {
     }
 
     try {
-        $discovery = Invoke-RestMethod -Uri "$ApiUrl/api/v1/config" -Method Get -TimeoutSec 10 -ErrorAction Stop
+        $discovery = Invoke-RestMethod -Uri "$ApiUrl/.well-known/authway-config" -Method Get -TimeoutSec 10 -ErrorAction Stop
     } catch {
-        throw "mail-link smoke 검증 실패: /api/v1/config 조회 불가 ($_)"
+        throw "mail-link smoke 검증 실패: /.well-known/authway-config 조회 불가 ($_)"
     }
 
     if ($discovery.auth_ui -ne $AuthUiUrl) {

@@ -345,7 +345,7 @@ builder.Services.AddAuthentication(options =>
 .AddOpenIdConnect(options =>
 {
     // Authority는 Server URL에서 자동으로 발견됨
-    // Server -> /api/v1/config -> issuer (Hydra URL)
+    // Server -> /.well-known/authway-config -> issuer (Hydra URL)
     options.Authority = authorityUrl;
     options.ClientId = builder.Configuration["Authway:ClientId"];
     options.ClientSecret = builder.Configuration["Authway:ClientSecret"];
@@ -366,7 +366,7 @@ builder.Services.AddAuthentication(options =>
 ```
 
 **2단계 자동 발견:**
-1. **Step 1**: Server URL → `/api/v1/config` → Hydra URL (issuer)
+1. **Step 1**: Server URL → `/.well-known/authway-config` → Hydra URL (issuer)
 2. **Step 2**: Hydra URL → `/.well-known/openid-configuration` → 모든 OAuth 엔드포인트
 3. **결과**: 완전 자동화된 설정!
 

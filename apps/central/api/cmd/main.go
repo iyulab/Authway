@@ -251,27 +251,23 @@ func main() {
 
 	// Public configuration endpoint for OIDC discovery
 	// Clients can use this to discover the Hydra (OIDC Authority) URL
-	// Bootstrap document for the Authway SDK: where the OAuth server is and
-	// which backend serves the login screens and Authway's own APIs.
+	// Bootstrap document for an application or the SDK: the OIDC issuer, the
+	// backend that serves Authway's own API, and the login UI. Everything else
+	// an application needs comes from the issuer's OpenID Connect discovery
+	// document. It is the one such document — the contract describes it.
 	app.Get("/.well-known/authway-config", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"oauth_url": cfg.Hydra.PublicURL,
-			"issuer":    cfg.Hydra.PublicURL,
-			"api_url":   cfg.App.BaseURL,
-			"version":   cfg.App.Version,
-		})
-	})
-
-	app.Get("/api/v1/config", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"issuer":      cfg.Hydra.PublicURL,
-			"auth_server": cfg.Hydra.PublicURL,
-			"api_server":  cfg.App.BaseURL,
-			// The auth UI's public address. Advertised so consumers can link to
-			// it, and so the deploy gate can read back the value this instance
-			// actually got — a wrong one here means every emailed link 404s.
+			"issuer":  cfg.Hydra.PublicURL,
+			"api_url": cfg.App.BaseURL,
+			// The login UI's public address. Advertised so applications can
+			// link to it, and so the deploy gate can read back the value this
+			// instance actually got — a wrong one means every emailed link 404s.
 			"auth_ui": cfg.App.FrontendURL,
 			"version": cfg.App.Version,
+			// Not in the contract: what SDK releases before 0.3.0 read instead
+			// of issuer.
+			// TODO: remove once no application runs an SDK older than 0.3.0.
+			"oauth_url": cfg.Hydra.PublicURL,
 		})
 	})
 
@@ -331,13 +327,11 @@ func main() {
 	app.Get("/auth/apple/callback", socialHandler.AppleCallback)
 
 	// API routes
-	api := app.Group("/api")
-
-	// Email verification and password reset routes
-	emailHandler.RegisterRoutes(api)
-
 	// API v1 routes
 	v1 := app.Group("/api/v1")
+
+	// Email verification and password reset routes
+	emailHandler.RegisterRoutes(v1)
 
 	// What this deployment offers, so screens show only what works.
 	v1.Get("/capabilities", handler.NewCapabilitiesHandler(socialHandler).Get)

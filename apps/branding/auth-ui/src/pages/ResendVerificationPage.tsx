@@ -20,7 +20,7 @@ export default function ResendVerificationPage() {
 
     try {
       const response = await fetch(
-        `${getConfig().apiUrl}/api/email/send-verification`,
+        `${getConfig().apiUrl}/api/v1/email/send-verification`,
         {
           method: 'POST',
           headers: {

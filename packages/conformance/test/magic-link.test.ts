@@ -45,7 +45,7 @@ describe('sign-in with an emailed link', () => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
     const answer = async (res: Response) => ({ status: res.status, body: await res.text() })
 
-    for (const path of ['/api/email/send-verification', '/api/email/forgot-password']) {
+    for (const path of ['/api/v1/email/send-verification', '/api/v1/email/forgot-password']) {
       const known = await post(`${provider.config.api}${path}`, user.email)
       await conform('POST', path, known.clone())
       const unknown = await post(`${provider.config.api}${path}`, nobody)

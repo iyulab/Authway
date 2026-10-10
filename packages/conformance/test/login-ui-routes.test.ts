@@ -49,6 +49,19 @@ describe('login UI backend routes', () => {
     expect(Array.isArray(body.client?.sign_in_methods)).toBe(true)
   })
 
+  // An application is configured with one address and finds the rest from
+  // here; whichever provider it talks to, the issuer named must be the one
+  // whose discovery document it then reads.
+  it('publishes a bootstrap document naming the issuer, the API and the login UI', async () => {
+    const res = await fetch(`${provider.config.api}/.well-known/authway-config`)
+    await conform('GET', '/.well-known/authway-config', res)
+    expect(res.status).toBe(200)
+    const doc = (await res.json()) as { issuer: string; api_url: string; auth_ui: string }
+    expect(doc.issuer.replace(/\/$/, '')).toBe((await provider.discovery()).issuer.replace(/\/$/, ''))
+    expect(doc.api_url).toBeTruthy()
+    expect(() => new URL(doc.auth_ui)).not.toThrow()
+  })
+
   it('publishes what the deployment offers, and offers sign-in only through it', async () => {
     const capsRes = await fetch(`${provider.config.api}/api/v1/capabilities`)
     await conform('GET', '/api/v1/capabilities', capsRes)
@@ -141,23 +154,23 @@ describe('login UI backend routes', () => {
   const nobody = () => `nobody-${randomToken(4)}@example.test`
 
   it('answers a verification request for an unknown address like any other', async () => {
-    const res = await fetch(`${provider.config.api}/api/email/send-verification`, json({ email: nobody() }))
-    await conform('POST', '/api/email/send-verification', res)
+    const res = await fetch(`${provider.config.api}/api/v1/email/send-verification`, json({ email: nobody() }))
+    await conform('POST', '/api/v1/email/send-verification', res)
     expect(res.status).toBe(200)
   })
 
   it('answers a password reset request for an unknown address like any other', async () => {
-    const res = await fetch(`${provider.config.api}/api/email/forgot-password`, json({ email: nobody() }))
-    await conform('POST', '/api/email/forgot-password', res)
+    const res = await fetch(`${provider.config.api}/api/v1/email/forgot-password`, json({ email: nobody() }))
+    await conform('POST', '/api/v1/email/forgot-password', res)
     expect(res.status).toBe(200)
   })
 
   it('refuses tokens it did not issue', async () => {
     const bogus = randomToken(8)
     const checks: [string, string, Response][] = [
-      ['GET', '/api/email/verify', await fetch(`${provider.config.api}/api/email/verify?token=${bogus}`)],
-      ['GET', '/api/email/verify-reset-token', await fetch(`${provider.config.api}/api/email/verify-reset-token?token=${bogus}`)],
-      ['POST', '/api/email/reset-password', await fetch(`${provider.config.api}/api/email/reset-password`, json({ token: bogus, new_password: 'long-enough-1' }))],
+      ['GET', '/api/v1/email/verify', await fetch(`${provider.config.api}/api/v1/email/verify?token=${bogus}`)],
+      ['GET', '/api/v1/email/verify-reset-token', await fetch(`${provider.config.api}/api/v1/email/verify-reset-token?token=${bogus}`)],
+      ['POST', '/api/v1/email/reset-password', await fetch(`${provider.config.api}/api/v1/email/reset-password`, json({ token: bogus, new_password: 'long-enough-1' }))],
       ['GET', '/api/v1/invitations/token/{token}', await fetch(`${provider.config.api}/api/v1/invitations/token/${bogus}`)],
       ['POST', '/api/v1/invitations/accept', await fetch(`${provider.config.api}/api/v1/invitations/accept`, json({ token: bogus, password: 'long-enough-1', name: 'x' }))],
     ]

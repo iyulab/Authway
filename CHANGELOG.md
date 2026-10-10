@@ -38,6 +38,16 @@
 
 ### Changed
 
+- **The email verification and password reset routes moved under `/api/v1`.**
+  `/api/email/send-verification`, `/verify`, `/forgot-password`,
+  `/verify-reset-token` and `/reset-password` are now
+  `/api/v1/email/…`, like every other route of the API; the old paths answer
+  `404`. The bundled login UI calls the new paths — deploy it together with
+  the API. A custom login UI must change the five paths.
+- **`/.well-known/authway-config` is the one bootstrap document**, and part of
+  the contract: `issuer`, `api_url`, `auth_ui` (new — the login UI's address)
+  and `version`. `oauth_url` is still answered for SDK releases before 0.3.0
+  and will be removed; read `issuer`.
 - **Webhook deliveries are queued.** Each event started its own background
   task per receiver, which then slept through its retry waits. Deliveries now
   run on a fixed set of senders with a bounded queue, and one that fails goes
@@ -190,6 +200,9 @@
 
 ### Removed
 
+- **`GET /api/v1/config`.** It repeated `/.well-known/authway-config` under
+  different field names (`auth_server`, `api_server`). Read the bootstrap
+  document instead.
 - **Webhook events `session.created` and `session.revoked`.** Nothing sent
   them. A webhook that already lists either keeps working for its other
   events; remove them the next time you change its `events`, which is refused

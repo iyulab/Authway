@@ -21,7 +21,7 @@ export default function VerifyEmailPage() {
 
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/api/email/verify?token=${token}`
+          `${getConfig().apiUrl}/api/v1/email/verify?token=${token}`
         );
 
         const data = await response.json();

@@ -103,7 +103,7 @@ func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.Aud
 // @Success 200 {object} map[string]any
 // @Failure 400 {object} map[string]any
 // @Failure 500 {object} map[string]any
-// @Router /api/email/send-verification [post]
+// @Router /api/v1/email/send-verification [post]
 func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	var req email.SendVerificationRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -157,7 +157,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 // @Success 200 {object} map[string]any
 // @Failure 400 {object} map[string]any
 // @Failure 404 {object} map[string]any
-// @Router /api/email/verify [get]
+// @Router /api/v1/email/verify [get]
 func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 	token := c.Query("token")
 	if token == "" {
@@ -221,7 +221,7 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 // @Param request body email.ForgotPasswordRequest true "Forgot password request"
 // @Success 200 {object} map[string]any
 // @Failure 400 {object} map[string]any
-// @Router /api/email/forgot-password [post]
+// @Router /api/v1/email/forgot-password [post]
 func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	var req email.ForgotPasswordRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -269,7 +269,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 // @Param token query string true "Reset token"
 // @Success 200 {object} map[string]any
 // @Failure 400 {object} map[string]any
-// @Router /api/email/verify-reset-token [get]
+// @Router /api/v1/email/verify-reset-token [get]
 func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	token := c.Query("token")
 	if token == "" {
@@ -313,7 +313,7 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 // @Param request body email.ResetPasswordRequest true "Reset password request"
 // @Success 200 {object} map[string]any
 // @Failure 400 {object} map[string]any
-// @Router /api/email/reset-password [post]
+// @Router /api/v1/email/reset-password [post]
 func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	var req email.ResetPasswordRequest
 	if err := c.BodyParser(&req); err != nil {

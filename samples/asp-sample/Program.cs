@@ -73,7 +73,7 @@ builder.Services.AddAuthentication(options =>
 .AddOpenIdConnect(options =>
 {
     // OIDC Authority - automatically discovered from Authway Server
-    // Server -> /api/v1/config -> issuer URL -> /.well-known/openid-configuration
+    // Server -> /.well-known/authway-config -> issuer URL -> /.well-known/openid-configuration
     options.Authority = authorityUrl;
     options.ClientId = builder.Configuration["Authway:ClientId"];
     options.ClientSecret = builder.Configuration["Authway:ClientSecret"];

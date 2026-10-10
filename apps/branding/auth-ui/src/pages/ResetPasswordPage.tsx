@@ -31,7 +31,7 @@ export default function ResetPasswordPage() {
 
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/api/email/verify-reset-token?token=${token}`
+          `${getConfig().apiUrl}/api/v1/email/verify-reset-token?token=${token}`
         );
 
         const data = await response.json();
@@ -70,7 +70,7 @@ export default function ResetPasswordPage() {
 
     try {
       const response = await fetch(
-        `${getConfig().apiUrl}/api/email/reset-password`,
+        `${getConfig().apiUrl}/api/v1/email/reset-password`,
         {
           method: 'POST',
           headers: {

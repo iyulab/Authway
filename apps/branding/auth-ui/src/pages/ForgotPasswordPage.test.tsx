@@ -37,7 +37,7 @@ describe('ForgotPasswordPage', () => {
   it('includes client_id in the request when present in the URL', async () => {
     let requestBody: any
     server.use(
-      http.post('http://localhost:8080/api/email/forgot-password', async ({ request }) => {
+      http.post('http://localhost:8080/api/v1/email/forgot-password', async ({ request }) => {
         requestBody = await request.json()
         return HttpResponse.json({ message: 'ok' })
       })
@@ -56,7 +56,7 @@ describe('ForgotPasswordPage', () => {
   it('omits client_id when the page was reached without one', async () => {
     let requestBody: any
     server.use(
-      http.post('http://localhost:8080/api/email/forgot-password', async ({ request }) => {
+      http.post('http://localhost:8080/api/v1/email/forgot-password', async ({ request }) => {
         requestBody = await request.json()
         return HttpResponse.json({ message: 'ok' })
       })

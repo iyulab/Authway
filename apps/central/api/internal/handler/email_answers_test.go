@@ -31,7 +31,7 @@ func (refusingMailer) SendPasswordResetEmail(string, string) error { return emai
 
 func emailApp(h *EmailHandler) *fiber.App {
 	app := fiber.New()
-	h.RegisterRoutes(app.Group("/api"))
+	h.RegisterRoutes(app.Group("/api/v1"))
 	return app
 }
 
@@ -68,8 +68,8 @@ func TestSendVerification_VerifiedAndUnknownAnswerAlike(t *testing.T) {
 	h := &EmailHandler{userSvc: newFakeUserService(verified), clientSvc: newFakeClientService(), validator: validator.New(), logger: zap.NewNop()}
 	app := emailApp(h)
 
-	knownStatus, knownBody := postEmail(t, app, "/api/email/send-verification", verified.Email)
-	unknownStatus, unknownBody := postEmail(t, app, "/api/email/send-verification", "nobody@example.com")
+	knownStatus, knownBody := postEmail(t, app, "/api/v1/email/send-verification", verified.Email)
+	unknownStatus, unknownBody := postEmail(t, app, "/api/v1/email/send-verification", "nobody@example.com")
 
 	if knownStatus != 200 || unknownStatus != 200 {
 		t.Fatalf("status verified=%d unknown=%d, want 200 for both", knownStatus, unknownStatus)
@@ -118,7 +118,7 @@ func TestEmailRequests_RefusedMailAnswersLikeNoAccount(t *testing.T) {
 	}
 	app := emailApp(h)
 
-	for _, path := range []string{"/api/email/send-verification", "/api/email/forgot-password"} {
+	for _, path := range []string{"/api/v1/email/send-verification", "/api/v1/email/forgot-password"} {
 		memberStatus, memberBody := postEmail(t, app, path, u.Email)
 		nobodyStatus, nobodyBody := postEmail(t, app, path, "nobody-"+suffix+"@example.com")
 		if memberStatus != 200 || nobodyStatus != 200 {

@@ -30,6 +30,28 @@ tags:
 security: []
 
 paths:
+  /.well-known/authway-config:
+    get:
+      operationId: getBootstrapConfig
+      summary: Where an application finds this deployment's parts
+      description: |
+        The one document an application or SDK needs before anything else.
+        `issuer` is the OIDC issuer; every OAuth endpoint then comes from its
+        OpenID Connect discovery document, never from a URL pattern.
+      responses:
+        '200':
+          description: The bootstrap document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issuer, api_url, auth_ui, version]
+                properties:
+                  issuer: { type: string, description: The OIDC issuer. }
+                  api_url: { type: string, description: The backend that serves this API. }
+                  auth_ui: { type: string, description: The login UI's public address; emailed links point at it. }
+                  version: { type: string }
+
   /api/v1/capabilities:
     get:
       operationId: getCapabilities
@@ -228,7 +250,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
-  /api/email/send-verification:
+  /api/v1/email/send-verification:
     post:
       operationId: sendVerificationEmail
       description: Same answer whether or not the address has an account.
@@ -237,7 +259,7 @@ paths:
         '200': { $ref: '#/components/responses/Message' }
         '400': { $ref: '#/components/responses/Error' }
 
-  /api/email/verify:
+  /api/v1/email/verify:
     get:
       operationId: verifyEmail
       parameters: [{ $ref: '#/components/parameters/Token' }]
@@ -246,7 +268,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
-  /api/email/forgot-password:
+  /api/v1/email/forgot-password:
     post:
       operationId: forgotPassword
       description: Same answer whether or not the address has an account.
@@ -255,7 +277,7 @@ paths:
         '200': { $ref: '#/components/responses/Message' }
         '400': { $ref: '#/components/responses/Error' }
 
-  /api/email/verify-reset-token:
+  /api/v1/email/verify-reset-token:
     get:
       operationId: verifyResetToken
       parameters: [{ $ref: '#/components/parameters/Token' }]
@@ -272,7 +294,7 @@ paths:
                   message: { type: string }
         '400': { $ref: '#/components/responses/Error' }
 
-  /api/email/reset-password:
+  /api/v1/email/reset-password:
     post:
       operationId: resetPassword
       requestBody:

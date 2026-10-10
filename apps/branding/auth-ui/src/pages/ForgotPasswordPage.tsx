@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const response = await fetch(
-        `${getConfig().apiUrl}/api/email/forgot-password`,
+        `${getConfig().apiUrl}/api/v1/email/forgot-password`,
         {
           method: 'POST',
           headers: {

@@ -35,7 +35,7 @@ describe('ResendVerificationPage', () => {
   it('includes client_id in the request when present in the URL', async () => {
     let requestBody: any
     server.use(
-      http.post('http://localhost:8080/api/email/send-verification', async ({ request }) => {
+      http.post('http://localhost:8080/api/v1/email/send-verification', async ({ request }) => {
         requestBody = await request.json()
         return HttpResponse.json({ message: 'ok' })
       })
@@ -54,7 +54,7 @@ describe('ResendVerificationPage', () => {
   it('omits client_id when the page was reached without one', async () => {
     let requestBody: any
     server.use(
-      http.post('http://localhost:8080/api/email/send-verification', async ({ request }) => {
+      http.post('http://localhost:8080/api/v1/email/send-verification', async ({ request }) => {
         requestBody = await request.json()
         return HttpResponse.json({ message: 'ok' })
       })
