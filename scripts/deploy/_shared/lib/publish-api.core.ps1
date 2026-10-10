@@ -236,23 +236,31 @@ try {
     )
     $smokeFailures = @()
     foreach ($ep in $endpoints) {
-        try {
-            $params = @{
-                Uri = "$ApiUrl$($ep.Path)"
-                Method = $ep.Method
-                TimeoutSec = 10
-                SkipHttpErrorCheck = $true
-                ErrorAction = 'Stop'
+        # 응답 코드 0 = 응답을 받지 못함(타임아웃·연결 실패). 그건 adminAuth 가
+        # 깨졌다는 증거가 아니므로 몇 번 다시 묻는다 — 한 번의 무응답으로 정상
+        # 배포를 「실패 + 롤백 권고」 로 보고한 적이 있다(2026-10-10). 받은 응답이
+        # 401/503 이 아니면 그 자리에서 실패다.
+        $code = 0
+        for ($try = 1; $try -le 3 -and $code -eq 0; $try++) {
+            if ($try -gt 1) { Start-Sleep -Seconds 5 }
+            try {
+                $params = @{
+                    Uri = "$ApiUrl$($ep.Path)"
+                    Method = $ep.Method
+                    TimeoutSec = 10
+                    SkipHttpErrorCheck = $true
+                    ErrorAction = 'Stop'
+                }
+                if ($ep.Body) {
+                    $params.Body = $ep.Body
+                    $params.ContentType = 'application/json'
+                }
+                $resp = Invoke-WebRequest @params
+                $code = [int]$resp.StatusCode
+            } catch {
+                $code = 0
+                if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
             }
-            if ($ep.Body) {
-                $params.Body = $ep.Body
-                $params.ContentType = 'application/json'
-            }
-            $resp = Invoke-WebRequest @params
-            $code = [int]$resp.StatusCode
-        } catch {
-            $code = 0
-            if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
         }
         $label = "$($ep.Method.PadRight(4)) $($ep.Path)"
         if ($code -eq 401 -or $code -eq 503) {
