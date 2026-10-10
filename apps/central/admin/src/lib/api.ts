@@ -15,7 +15,7 @@ export const api = axios.create({
 // Reads the stores rather than mirrored localStorage keys, so there is exactly
 // one answer to "are we authenticated" — see stores/auth.ts.
 //
-// Tenant-scoped admin calls (invitations, webhooks, audit, impersonation) act on
+// Tenant-scoped admin calls (invitations, webhooks, audit) act on
 // the tenant named by X-Tenant-ID. Sending it on every request means no single
 // call can forget it; a list call's tenant_id query parameter still decides its
 // filter.

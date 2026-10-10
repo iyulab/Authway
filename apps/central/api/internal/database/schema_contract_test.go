@@ -15,7 +15,6 @@ import (
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
-	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
 	"authway/apps/central/api/pkg/serviceclient"
@@ -107,12 +106,6 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			TenantID: tenantID, Email: "c@example.com", Role: "member",
 			TokenHash: tokenhash.Hash(uuid.New().String()), Status: invitation.StatusPending, ExpiresAt: future,
 		}, "invitations"},
-		{"impersonation_session", &impersonation.ImpersonationSession{
-			TenantID: tenantID, AdminEmail: impersonation.SystemActorEmail,
-			TargetUserID: userID, TargetUserEmail: "c@example.com",
-			Reason: "schema contract check", Token: uuid.New().String(),
-			Active: true, StartedAt: time.Now(), ExpiresAt: future,
-		}, "impersonation_sessions"},
 		{"magic_link", &passwordless.MagicLink{
 			TenantID: tenantID, Email: "c@example.com", TokenHash: tokenhash.Hash(uuid.New().String()),
 			TokenType: passwordless.TokenTypeLogin, LoginFlow: "flow", ExpiresAt: future,
@@ -186,7 +179,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 	db := setup(t)
 
 	tables := []string{
-		"invitations", "impersonation_sessions", "magic_link_tokens",
+		"invitations", "magic_link_tokens",
 		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
 		"password_resets", "email_verifications", "service_clients",
 		// Retired: linked_accounts. Do not re-add without a migration.
@@ -208,7 +201,7 @@ func mappedModels() []any {
 	return []any{
 		&admin.AdminSession{}, &audit.AuditLog{}, &client.Client{},
 		&email.EmailVerification{}, &email.PasswordReset{},
-		&impersonation.ImpersonationSession{}, &invitation.Invitation{},
+		&invitation.Invitation{},
 		&passwordless.MagicLink{}, &serviceclient.ServiceClient{},
 		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
@@ -275,10 +268,19 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 		t.Fatalf("list tables: %v", err)
 	}
 	for _, table := range tables {
-		if !owned[table] {
+		if !owned[table] && !awaitingDrop[table] {
 			t.Errorf("%s exists in the migrated schema but no model maps it", table)
 		}
 	}
+}
+
+// awaitingDrop names tables whose code has been removed and whose drop is the
+// next migration. The code goes first and the drop follows in a deployment of
+// its own, because a dropped table cannot be rolled back with the binary. An
+// entry here is a debt with a due date: it leaves with that migration.
+var awaitingDrop = map[string]bool{
+	// Impersonation issued tokens nothing accepted; it was removed whole.
+	"impersonation_sessions": true,
 }
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a

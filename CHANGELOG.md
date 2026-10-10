@@ -200,6 +200,12 @@
 
 ### Removed
 
+- **Admin impersonation.** `POST /api/v1/admin/impersonate` issued a token
+  that nothing accepted — no API, login screen or SDK read it — and the
+  console opened itself with that token in the address. The endpoints under
+  `/api/v1/admin/impersonate` and the console page are removed. Acting for a
+  user will return as delegated tokens that name both the user and the
+  actor.
 - **`GET /api/v1/config`.** It repeated `/.well-known/authway-config` under
   different field names (`auth_server`, `api_server`). Read the bootstrap
   document instead.

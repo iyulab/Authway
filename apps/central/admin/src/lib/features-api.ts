@@ -68,21 +68,6 @@ export interface Invitation {
   updated_at: string
 }
 
-// Impersonation types
-export interface ImpersonationSession {
-  id: string
-  // null when the session was started by the system actor (admin API key);
-  // admin_email then reads 'system'.
-  admin_id: string | null
-  admin_email: string
-  target_user_id: string
-  target_user_email: string
-  reason: string
-  started_at: string
-  ended_at?: string
-  active: boolean
-}
-
 // Webhooks API
 export const webhooksApi = {
   list: (params?: { tenant_id?: string }) =>
@@ -176,23 +161,4 @@ export const invitationsApi = {
 
   resend: (id: string) =>
     api.post<{ message: string }>(`/api/v1/invitations/${id}/resend`),
-}
-
-// Impersonation API
-// Backend routes are under /api/v1/admin/impersonate
-export const impersonationApi = {
-  start: (data: { target_user_id: string; reason: string }) =>
-    api.post<{ message: string; token: string; expires_at: string; target_user: { id: string; email: string; name: string } }>('/api/v1/admin/impersonate', data),
-
-  end: (sessionId: string) =>
-    api.post<{ message: string }>(`/api/v1/admin/impersonate/${sessionId}/end`),
-
-  validate: (token: string) =>
-    api.post<{ valid: boolean; session_id: string; admin: { id: string; email: string }; target_user: { id: string; email: string }; expires_at: string }>('/api/v1/admin/impersonate/validate', { token }),
-
-  activeSessions: (params?: { tenant_id?: string; limit?: number }) =>
-    api.get<{ sessions: ImpersonationSession[]; count: number }>('/api/v1/admin/impersonate/sessions', { params }),
-
-  history: (params?: { tenant_id?: string; limit?: number }) =>
-    api.get<{ sessions: ImpersonationSession[]; count: number }>('/api/v1/admin/impersonate/history', { params }),
 }

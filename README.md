@@ -20,12 +20,13 @@ track their actual published versions.
 ## Features
 
 - **OAuth 2.0 / OIDC** - Standards-compliant authentication with PKCE support
-- **Invitation-only onboarding** - No public sign-up; every account starts from an admin- or peer-issued invitation
-- **Magic-link and social sign-in** - Passwordless email links and Google/GitHub/Microsoft/Apple, gated by the same invitation policy
+- **Invitation-only onboarding by default** - Every account starts from an invitation unless a tenant opens sign-up
+- **Magic-link and social sign-in** - Passwordless email links and Google/GitHub/Microsoft/Apple, gated by the same sign-up policy
+- **Native apps** - Desktop and command-line clients sign in through the system browser on a loopback port or their own URI scheme
 - **MFA (TOTP)** - Time-based one-time passcodes with encrypted secrets and backup codes
-- **Admin impersonation** - Support staff can act as a user, fully audited
+- **Account self-service** - A signed-in user can delete their own account; sessions and tokens end with it
 - **Audit logging** - Auth, admin and webhook actions recorded per tenant
-- **Webhooks** - Subscribe to account and session lifecycle events
+- **Webhooks** - Signed deliveries of account, sign-in and client events
 - **Auto-Discovery** - Apps only need the Authway API URL, the rest is auto-discovered
 - **Dynamic Claims** - Runtime user claims management
 - **Multi-Tenancy** - Fully isolated tenant support

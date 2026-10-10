@@ -5,7 +5,6 @@ import (
 
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/email"
-	"authway/apps/central/api/pkg/impersonation"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
 	"authway/apps/central/api/pkg/tenant"
@@ -18,15 +17,13 @@ import (
 
 // NewFeatureServices holds all new feature services
 type NewFeatureServices struct {
-	AuditService         audit.Service
-	AuditHandler         *audit.Handler
-	WebhookService       webhook.Service
-	WebhookHandler       *webhook.Handler
-	InvitationService    invitation.Service
-	InvitationHandler    *invitation.Handler
-	PasswordlessService  passwordless.Service
-	ImpersonationService impersonation.Service
-	ImpersonationHandler *impersonation.Handler
+	AuditService        audit.Service
+	AuditHandler        *audit.Handler
+	WebhookService      webhook.Service
+	WebhookHandler      *webhook.Handler
+	InvitationService   invitation.Service
+	InvitationHandler   *invitation.Handler
+	PasswordlessService passwordless.Service
 }
 
 // InitNewFeatureServices initializes all new feature services
@@ -63,20 +60,14 @@ func InitNewFeatureServices(
 	// provisioning is allowed only for an invited address (invitation-only).
 	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL)
 
-	// Impersonation Service
-	impersonationService := impersonation.NewService(db, userService, auditService, logger)
-	impersonationHandler := impersonation.NewHandler(impersonationService, logger)
-
 	return &NewFeatureServices{
-		AuditService:         auditService,
-		AuditHandler:         auditHandler,
-		WebhookService:       webhookService,
-		WebhookHandler:       webhookHandler,
-		InvitationService:    invitationService,
-		InvitationHandler:    invitationHandler,
-		PasswordlessService:  passwordlessService,
-		ImpersonationService: impersonationService,
-		ImpersonationHandler: impersonationHandler,
+		AuditService:        auditService,
+		AuditHandler:        auditHandler,
+		WebhookService:      webhookService,
+		WebhookHandler:      webhookHandler,
+		InvitationService:   invitationService,
+		InvitationHandler:   invitationHandler,
+		PasswordlessService: passwordlessService,
 	}
 }
 
@@ -91,9 +82,6 @@ func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth 
 
 	// Audit log routes (admin only)
 	s.AuditHandler.RegisterRoutes(v1, jwtAuth, adminAuth)
-
-	// Impersonation routes (admin only)
-	s.ImpersonationHandler.RegisterRoutes(v1, jwtAuth, adminAuth)
 }
 
 // StartBackgroundCleanupTasks starts background cleanup goroutines

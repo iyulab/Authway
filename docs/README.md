@@ -7,14 +7,12 @@ See [CHANGELOG.md](../CHANGELOG.md) for the current release and full history.
 Since the feature set below was last written up, these have shipped —
 covered in the CHANGELOG rather than a dedicated guide for now:
 
-- **Invitation-only onboarding** - no public sign-up; every account starts
-  from an invitation
+- **Invitation-only onboarding by default** - every account starts from an
+  invitation unless a tenant opens sign-up
 - **Magic-link sign-in** - passwordless email links, gated by the same
-  invitation policy as password and social accounts
+  sign-up policy as password and social accounts
 - **MFA (TOTP)** - encrypted secrets, backup codes
-- **Admin impersonation** - audited "sign in as this user" for support
 - **Audit logging** - auth, admin and webhook actions per tenant
-- **Webhooks** - subscribe to account and session lifecycle events
 
 ---
 

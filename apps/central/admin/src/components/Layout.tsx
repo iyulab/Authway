@@ -15,7 +15,6 @@ import {
   BellAlertIcon,
   ClipboardDocumentListIcon,
   EnvelopeIcon,
-  UserGroupIcon,
 } from '@heroicons/react/24/outline'
 
 interface LayoutProps {
@@ -29,7 +28,6 @@ const navigation = [
   { name: '초대 관리', href: '/invitations', icon: EnvelopeIcon },
   { name: '웹훅', href: '/webhooks', icon: BellAlertIcon },
   { name: '감사 로그', href: '/audit-logs', icon: ClipboardDocumentListIcon },
-  { name: '사용자 위장', href: '/impersonation', icon: UserGroupIcon },
   { name: '설정', href: '/settings', icon: CogIcon },
 ]
 
