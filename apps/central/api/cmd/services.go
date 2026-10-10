@@ -36,16 +36,17 @@ func InitNewFeatureServices(
 	userService user.Service,
 	tenantService *tenant.Service,
 	emailService email.EmailService,
+	auditService audit.Service,
 	frontendURL string,
 	webhookAllowPrivateTargets bool,
 ) *NewFeatureServices {
-	// Audit Service
-	auditService := audit.NewService(db, logger)
 	auditHandler := audit.NewHandler(auditService, logger)
 
-	// Webhook Service
+	// Webhook Service. Every event a webhook can subscribe to is something
+	// the audit log records, so webhooks listen to what is recorded there.
 	webhookService := webhook.NewService(db, logger, webhook.AllowPrivateTargets(webhookAllowPrivateTargets))
 	webhookHandler := webhook.NewHandler(webhookService, logger, auditService)
+	auditService.Subscribe(webhook.FromAudit(webhookService, logger))
 
 	// Invitation Service
 	invitationEmailAdapter := &invitationEmailAdapterImpl{

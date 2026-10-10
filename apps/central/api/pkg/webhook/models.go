@@ -25,8 +25,6 @@ const (
 	EventUserPasswordChanged EventType = "user.password_changed"
 	EventUserMFAEnabled      EventType = "user.mfa_enabled"
 	EventUserMFADisabled     EventType = "user.mfa_disabled"
-	EventSessionCreated      EventType = "session.created"
-	EventSessionRevoked      EventType = "session.revoked"
 	EventClientCreated       EventType = "client.created"
 	EventClientUpdated       EventType = "client.updated"
 	EventClientDeleted       EventType = "client.deleted"
@@ -37,23 +35,22 @@ const (
 )
 
 // Events lists what a webhook can subscribe to, with what triggers each.
+// Every event listed here is sent: one that nothing sends is not offered.
 var Events = []struct {
 	Type        EventType
 	Description string
 }{
-	{EventUserCreated, "Triggered when a new user is created"},
-	{EventUserUpdated, "Triggered when a user is updated"},
-	{EventUserDeleted, "Triggered when a user is deleted"},
-	{EventUserLogin, "Triggered when a user logs in"},
-	{EventUserLogout, "Triggered when a user logs out"},
-	{EventUserPasswordChanged, "Triggered when a user changes their password"},
-	{EventUserMFAEnabled, "Triggered when MFA is enabled"},
-	{EventUserMFADisabled, "Triggered when MFA is disabled"},
-	{EventSessionCreated, "Triggered when a new session is created"},
-	{EventSessionRevoked, "Triggered when a session is revoked"},
-	{EventClientCreated, "Triggered when a new OAuth client is created"},
-	{EventClientUpdated, "Triggered when an OAuth client is updated"},
-	{EventClientDeleted, "Triggered when an OAuth client is deleted"},
+	{EventUserCreated, "A user account was created"},
+	{EventUserUpdated, "A user account was changed by an administrator"},
+	{EventUserDeleted, "A user account was deleted"},
+	{EventUserLogin, "A user signed in"},
+	{EventUserLogout, "A user signed out"},
+	{EventUserPasswordChanged, "A user set a new password"},
+	{EventUserMFAEnabled, "A user turned on a second factor"},
+	{EventUserMFADisabled, "A user turned off a second factor"},
+	{EventClientCreated, "An OAuth client was registered"},
+	{EventClientUpdated, "An OAuth client was changed"},
+	{EventClientDeleted, "An OAuth client was deleted"},
 	{EventTypeTest, "Sent by the test endpoint"},
 	{EventAll, "Every event"},
 }

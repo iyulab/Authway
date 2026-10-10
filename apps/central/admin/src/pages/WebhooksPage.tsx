@@ -33,8 +33,6 @@ const WEBHOOK_EVENTS = [
   { value: 'user.password_changed', label: 'Password Changed' },
   { value: 'user.mfa_enabled', label: 'MFA Enabled' },
   { value: 'user.mfa_disabled', label: 'MFA Disabled' },
-  { value: 'session.created', label: 'Session Created' },
-  { value: 'session.revoked', label: 'Session Revoked' },
   { value: 'client.created', label: 'Client Created' },
   { value: 'client.updated', label: 'Client Updated' },
   { value: 'client.deleted', label: 'Client Deleted' },

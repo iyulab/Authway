@@ -83,6 +83,44 @@ X-Webhook-Signature: t=1791518472,v1=5d41402abc4b2a76b9719d911017c592…
 `id` is unique per event. Retries of the same event carry the same `id`, so
 use it to ignore a delivery you have already processed.
 
+### Events
+
+`GET /api/v1/webhooks/events` lists what a webhook can subscribe to. Every
+event on the list is sent; an event recorded as failed in the audit log (a
+refused sign-in, for one) sends nothing.
+
+| Event | Sent when |
+|-------|-----------|
+| `user.created` | An account is created — an invitation accepted, or a first sign-in by link or social provider |
+| `user.updated` | An administrator changes an account |
+| `user.deleted` | An account is deleted |
+| `user.login` | A user signs in |
+| `user.logout` | A user signs out |
+| `user.password_changed` | A user sets a new password |
+| `user.mfa_enabled`, `user.mfa_disabled` | A user turns a second factor on or off |
+| `client.created`, `client.updated`, `client.deleted` | An OAuth client is registered, changed or deleted |
+| `test` | `POST /api/v1/webhooks/{id}/test` |
+
+`data` names what the event is about and who caused it:
+
+```json
+{
+  "resource": { "type": "user", "id": "0b6f…" },
+  "actor": { "type": "admin", "id": "5c1e…" }
+}
+```
+
+`resource.id` is the id the admin API uses (`GET /api/v1/users/{id}`,
+`GET /api/v1/clients/{id}`) — for a user it is also the `sub` of their tokens.
+`actor.type` is `user`, `admin`, `service` or `system`; `actor.id` is absent
+when the actor has none. No profile data is included: ask the admin API for
+what you need, and remember that a deleted resource can no longer be read.
+
+Deliveries are queued, and a deployment under more events than it can deliver
+drops the excess rather than falling behind without limit — treat webhooks as
+a prompt to synchronize, not as the only record. The audit log
+(`GET /api/v1/audit/logs`) keeps every event.
+
 ---
 
 ## 3. Verifying the signature

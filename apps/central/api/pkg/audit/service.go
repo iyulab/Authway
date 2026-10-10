@@ -21,12 +21,23 @@ type Service interface {
 	GetUserActivity(tenantID, userID uuid.UUID, limit int) ([]AuditLog, error)
 	GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]AuditLog, error)
 	PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (int64, error)
+	// Subscribe registers fn to be called with each entry once it has been
+	// recorded — the audit log is the one place every lifecycle event passes
+	// through, so whatever else must hear of them (webhooks) listens here.
+	// Call it while wiring the server, before any entry is logged; fn must
+	// not block.
+	Subscribe(fn func(AuditLog))
 }
 
 type service struct {
-	db     *gorm.DB
-	logger *zap.Logger
-	async  chan *AuditEntry
+	db          *gorm.DB
+	logger      *zap.Logger
+	async       chan *AuditEntry
+	subscribers []func(AuditLog)
+}
+
+func (s *service) Subscribe(fn func(AuditLog)) {
+	s.subscribers = append(s.subscribers, fn)
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) Service {
@@ -83,6 +94,9 @@ func (s *service) Log(ctx context.Context, entry *AuditEntry) error {
 	}
 	if err := s.db.WithContext(ctx).Create(auditLog).Error; err != nil {
 		return fmt.Errorf("failed to create audit log: %w", err)
+	}
+	for _, fn := range s.subscribers {
+		fn(*auditLog)
 	}
 	return nil
 }

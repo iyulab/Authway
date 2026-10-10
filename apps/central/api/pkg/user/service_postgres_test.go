@@ -350,3 +350,30 @@ func TestBookkeepingWritesAndLookupByID(t *testing.T) {
 		t.Errorf("GetByID(unknown) = %v, want user not found", err)
 	}
 }
+
+// TestOnCreated_HearsOfEveryAccountAndOnlyOnceItExists: accounts are created
+// on several paths that all end in Create, so a listener here hears of each;
+// a creation that is refused must not be announced.
+func TestOnCreated_HearsOfEveryAccountAndOnlyOnceItExists(t *testing.T) {
+	db := setupPostgres(t)
+	tn := freshTenant(t, db, tenant.NewService(db))
+	var heard []uuid.UUID
+	svc := NewService(db, zap.NewNop(), OnCreated(func(u *User) { heard = append(heard, u.ID) }))
+
+	email := fmt.Sprintf("created-%s@example.com", uuid.New().String()[:8])
+	u, err := svc.Create(tn.ID, &CreateUserRequest{Email: email, Name: "Created"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+	if len(heard) != 1 || heard[0] != u.ID {
+		t.Fatalf("heard %v, want exactly the created account %s", heard, u.ID)
+	}
+
+	if _, err := svc.Create(tn.ID, &CreateUserRequest{Email: email, Name: "Again"}); err == nil {
+		t.Fatal("creating the same address twice in one tenant should be refused")
+	}
+	if len(heard) != 1 {
+		t.Fatalf("a refused creation was announced: %v", heard)
+	}
+}

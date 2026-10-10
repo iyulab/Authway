@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"authway/apps/central/api/internal/database"
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/tenant"
 )
 
@@ -459,5 +461,73 @@ func TestRotateSecret_SignsWithTheNewSecretOnly(t *testing.T) {
 	}
 	if _, err := svc.RotateSecret(uuid.New()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for an unknown webhook, got %v", err)
+	}
+}
+
+// TestFromAudit_AnAuditEntryReachesTheSubscribedReceiver guards the whole
+// chain the admin sees as "webhooks": recording a lifecycle event in the
+// audit log delivers it, signed, to a webhook subscribed to that event. Until
+// this was wired, every event but `test` was offered and none was ever sent.
+func TestFromAudit_AnAuditEntryReachesTheSubscribedReceiver(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db, zap.NewNop(), AllowPrivateTargets(true))
+	tenantID := fixtureTenant(t, db)
+	audits := audit.NewService(db, zap.NewNop())
+	audits.Subscribe(FromAudit(svc, zap.NewNop()))
+
+	bodies := make(chan []byte, 4)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies <- body
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	wh, err := svc.Create(tenantID, &CreateWebhookRequest{
+		Name: "deletions", URL: ts.URL, Events: []string{string(EventUserDeleted)}, RetryCount: intp(0), TimeoutSecs: intp(5),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	cleanupWebhook(t, db, wh.ID)
+	t.Cleanup(func() { db.Exec(`DELETE FROM audit_logs WHERE tenant_id = ?`, tenantID) })
+
+	userID, adminID := uuid.New(), uuid.New()
+	record := func(action audit.AuditAction, success bool) {
+		t.Helper()
+		if err := audits.Log(context.Background(), &audit.AuditEntry{
+			TenantID: tenantID, Action: action, Success: success,
+			ResourceType: "user", ResourceID: userID.String(), ActorType: "admin", ActorID: &adminID,
+		}); err != nil {
+			t.Fatalf("Log %s: %v", action, err)
+		}
+	}
+	record(audit.ActionUserLogin, true)    // not subscribed to
+	record(audit.ActionUserDeleted, false) // a failed operation is not an event
+	record(audit.ActionUserDeleted, true)
+
+	var body []byte
+	select {
+	case body = <-bodies:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the receiver got nothing for a recorded user.deleted")
+	}
+	var payload struct {
+		Type     EventType `json:"type"`
+		TenantID string    `json:"tenant_id"`
+		Data     EventData `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	want := EventData{Resource: EventRef{Type: "user", ID: userID.String()}, Actor: EventRef{Type: "admin", ID: adminID.String()}}
+	if payload.Type != EventUserDeleted || payload.TenantID != tenantID.String() || payload.Data != want {
+		t.Errorf("received %s, want user.deleted for tenant %s with data %+v", body, tenantID, want)
+	}
+
+	select {
+	case extra := <-bodies:
+		t.Errorf("the receiver also got %s; only the successful user.deleted is an event it subscribed to", extra)
+	case <-time.After(300 * time.Millisecond):
 	}
 }

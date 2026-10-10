@@ -18,6 +18,7 @@ import (
 	"authway/apps/central/api/internal/service/social"
 	"authway/apps/central/api/internal/telemetry"
 	"authway/apps/central/api/pkg/admin"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/crypto"
@@ -146,7 +147,20 @@ func main() {
 	validate := validator.New()
 
 	// Initialize services
-	userService := user.NewService(db, zapLogger)
+	// The audit log records each account as it is created, whichever path
+	// created it.
+	auditService := audit.NewService(db, zapLogger)
+	userService := user.NewService(db, zapLogger, user.OnCreated(func(u *user.User) {
+		auditService.LogAsync(&audit.AuditEntry{
+			TenantID:     u.TenantID,
+			Action:       audit.ActionUserCreated,
+			Severity:     audit.SeverityInfo,
+			ActorType:    "system",
+			ResourceType: "user",
+			ResourceID:   u.ID.String(),
+			Success:      true,
+		})
+	}))
 	clientService := client.NewService(db, zapLogger, hydraClient)
 	// Social sign-in may only create an account for an invited address
 	// (invitation-only onboarding). The gate is a read-only view of the
@@ -265,7 +279,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, auditService, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
 
 	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
 	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)
@@ -488,5 +502,8 @@ func main() {
 	}
 	if err := mailer.Close(ctx); err != nil {
 		zapLogger.Warn("Mail still being sent at shutdown was dropped", zap.Error(err))
+	}
+	if err := newFeatureServices.WebhookService.Close(ctx); err != nil {
+		zapLogger.Warn("Webhook deliveries still being made at shutdown were dropped", zap.Error(err))
 	}
 }

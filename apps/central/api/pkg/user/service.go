@@ -37,15 +37,31 @@ type Service interface {
 }
 
 type service struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db        *gorm.DB
+	logger    *zap.Logger
+	onCreated []func(*User)
 }
 
-func NewService(db *gorm.DB, logger *zap.Logger) Service {
-	return &service{
+// Option configures a user service.
+type Option func(*service)
+
+// OnCreated has fn called with every account the service creates. Accounts
+// come into being on several paths — an accepted invitation, a first sign-in
+// link, a first social sign-in — and all of them create the account here, so
+// this is the one place that sees each of them.
+func OnCreated(fn func(*User)) Option {
+	return func(s *service) { s.onCreated = append(s.onCreated, fn) }
+}
+
+func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
+	s := &service{
 		db:     db,
 		logger: logger,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error) {
@@ -79,6 +95,9 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, err
 	}
 
 	s.logger.Info("User created successfully", zap.String("id", user.ID.String()), zap.String("email", user.Email), zap.String("tenant_id", tenantID.String()))
+	for _, fn := range s.onCreated {
+		fn(user)
+	}
 	return user, nil
 }
 

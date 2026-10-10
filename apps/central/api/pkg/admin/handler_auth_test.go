@@ -32,6 +32,7 @@ func (s *stubAuditService) Log(ctx context.Context, entry *audit.AuditEntry) err
 	return nil
 }
 func (s *stubAuditService) LogAsync(entry *audit.AuditEntry) { _ = s.Log(context.Background(), entry) }
+func (s *stubAuditService) Subscribe(func(audit.AuditLog))  {}
 func (s *stubAuditService) Query(q *audit.AuditLogQuery) ([]audit.AuditLog, int64, error) {
 	return nil, 0, nil
 }

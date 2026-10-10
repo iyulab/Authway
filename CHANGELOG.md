@@ -27,6 +27,12 @@
 
 ### Changed
 
+- **Webhook deliveries are queued.** Each event started its own background
+  task per receiver, which then slept through its retry waits. Deliveries now
+  run on a fixed set of senders with a bounded queue, and one that fails goes
+  back into the queue when its wait is over; an event that finds the queue
+  full is dropped and logged. Treat a webhook as a prompt to synchronize — the
+  audit log keeps every event.
 - **Admin authentication refusals carry a `code`.** `unauthorized` for a
   missing or rejected credential, `insufficient_scope` for a service
   credential without the needed scope, `admin_api_not_configured` when no
@@ -113,6 +119,15 @@
 
 ### Fixed
 
+- **Webhooks send the events they list.** Only the `test` event was ever
+  sent: nothing raised `user.created`, `user.deleted`, `client.updated` or any
+  other event a webhook could subscribe to. Each is now sent when the audit
+  log records it — see `docs/api/webhooks.md` for when, and for the `data`
+  every event carries (`resource` and `actor`, each a `type` and an `id`; no
+  profile data).
+- **Account creation is recorded in the audit log** as `user.created`,
+  whichever way the account came to be — an accepted invitation, a first
+  sign-in by link, a first social sign-in. It was not recorded at all.
 - **A desktop or command-line app can be registered as it is.** A public
   client using `authorization_code` was refused without `allowed_origins`
   whatever its redirect URIs, so a native app — which has no browser origin —
@@ -164,6 +179,11 @@
 
 ### Removed
 
+- **Webhook events `session.created` and `session.revoked`.** Nothing sent
+  them. A webhook that already lists either keeps working for its other
+  events; remove them the next time you change its `events`, which is refused
+  while they are listed. `user.login` and `user.logout` are the events for a
+  sign-in and a sign-out.
 - **The PowerShell migration runner** (`run-migration*.ps1`, the
   `-SkipMigration`/`-ForceMigration` switches of `deploy-all.ps1`, and
   `scripts/test/`). The API applies migrations at startup; these had no effect

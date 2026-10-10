@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/workqueue"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -42,7 +43,12 @@ type Service interface {
 	ListByTenant(tenantID uuid.UUID) ([]Webhook, error)
 	Update(id uuid.UUID, req *UpdateWebhookRequest) (*Webhook, error)
 	Delete(id uuid.UUID) error
+	// Trigger queues a delivery of the event to each of the tenant's enabled
+	// webhooks subscribed to it, and returns without waiting for any of them.
 	Trigger(tenantID uuid.UUID, eventType EventType, data any) error
+	// Close stops taking events and waits until the queued deliveries have
+	// had their attempt, or until ctx ends.
+	Close(ctx context.Context) error
 	// Test sends one test event to the webhook, whatever it subscribes to and
 	// whether or not it is enabled, and returns the recorded delivery.
 	Test(id uuid.UUID) (*WebhookDelivery, error)
@@ -56,7 +62,17 @@ type service struct {
 	logger              *zap.Logger
 	httpClient          *http.Client
 	allowPrivateTargets bool
+	// Deliveries run on a bounded queue: an event as frequent as a sign-in
+	// must not start a goroutine per receiver, and a receiver that keeps
+	// failing must not hold one through its retry waits.
+	queue *workqueue.Queue
 }
+
+// Senders and queued deliveries a service starts with.
+const (
+	deliveryWorkers = 8
+	deliveryQueue   = 1024
+)
 
 // Option configures a webhook service.
 type Option func(*options)
@@ -79,7 +95,12 @@ func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
 		logger:              logger,
 		httpClient:          deliveryClient(o.allowPrivateTargets),
 		allowPrivateTargets: o.allowPrivateTargets,
+		queue:               workqueue.New(deliveryWorkers, deliveryQueue),
 	}
+}
+
+func (s *service) Close(ctx context.Context) error {
+	return s.queue.Close(ctx)
 }
 
 // CreateWebhookRequest omits nothing silently: a value outside its range is
@@ -294,16 +315,25 @@ func (s *service) Delete(id uuid.UUID) error {
 	return nil
 }
 
+// Trigger does no work itself: finding the tenant's webhooks is queued along
+// with the deliveries, so whoever raises an event — the audit log, as it
+// records one — is never held up by the database or by a receiver.
 func (s *service) Trigger(tenantID uuid.UUID, eventType EventType, data any) error {
-	var webhooks []Webhook
-	if err := s.db.Where("tenant_id = ? AND enabled = true AND deleted_at IS NULL", tenantID).Find(&webhooks).Error; err != nil {
-		return fmt.Errorf("failed to fetch webhooks: %w", err)
-	}
-	for _, webhook := range webhooks {
-		if !containsEvent(webhook.Events, string(eventType)) {
-			continue
+	err := s.queue.Submit(func(int) time.Duration {
+		var webhooks []Webhook
+		if err := s.db.Where("tenant_id = ? AND enabled = true AND deleted_at IS NULL", tenantID).Find(&webhooks).Error; err != nil {
+			s.logger.Error("Failed to fetch webhooks for an event", zap.String("event", string(eventType)), zap.Error(err))
+			return workqueue.Done
 		}
-		go s.deliverWebhook(webhook, eventType, data)
+		for _, webhook := range webhooks {
+			if containsEvent(webhook.Events, string(eventType)) {
+				s.deliver(webhook, eventType, data)
+			}
+		}
+		return workqueue.Done
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("failed to queue webhook event %s: %w", eventType, err)
 	}
 	return nil
 }
@@ -349,25 +379,33 @@ func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, error
 	return payload, nil
 }
 
-// deliverWebhook makes the first attempt and then up to RetryCount more,
-// stopping at the first 2xx answer.
-func (s *service) deliverWebhook(webhook Webhook, eventType EventType, data any) {
+// deliver queues the first attempt at webhook; up to RetryCount more follow,
+// each 1, 4, 9, … seconds after the one before, stopping at the first 2xx
+// answer.
+func (s *service) deliver(webhook Webhook, eventType EventType, data any) {
 	payload, err := buildPayload(webhook, eventType, data)
 	if err != nil {
 		s.logger.Error("Failed to build webhook payload", zap.Error(err))
 		return
 	}
+	fields := []zap.Field{zap.String("webhook_id", webhook.ID.String()), zap.String("event", string(eventType))}
 	attempts := 1 + webhook.RetryCount
-	for attempt := 1; attempt <= attempts; attempt++ {
+	err = s.queue.Submit(func(attempt int) time.Duration {
 		if s.attempt(webhook, eventType, payload, attempt).Success {
-			s.logger.Info("Webhook delivered", zap.String("webhook_id", webhook.ID.String()), zap.String("event", string(eventType)), zap.Int("attempt", attempt))
-			return
+			s.logger.Info("Webhook delivered", append(fields, zap.Int("attempt", attempt))...)
+			return workqueue.Done
 		}
-		if attempt < attempts {
-			time.Sleep(time.Duration(attempt*attempt) * time.Second)
+		if attempt >= attempts {
+			s.logger.Warn("Webhook delivery failed after all retries", fields...)
+			return workqueue.Done
 		}
+		return time.Duration(attempt*attempt) * time.Second
+	}, func(reason string) {
+		s.logger.Warn("Webhook delivery given up; "+reason, fields...)
+	})
+	if err != nil {
+		s.logger.Warn("Webhook delivery not queued", append(fields, zap.Error(err))...)
 	}
-	s.logger.Warn("Webhook delivery failed after all retries", zap.String("webhook_id", webhook.ID.String()), zap.String("event", string(eventType)))
 }
 
 // attempt posts the payload once and records the outcome. It returns the

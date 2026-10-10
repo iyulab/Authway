@@ -1523,10 +1523,43 @@ components:
         updated_at: { type: string }
 
     WebhookEvent:
+      description: |
+        What a webhook can subscribe to. Every event listed is sent; a provider
+        lists only the events it sends.
       type: string
       enum: [user.created, user.updated, user.deleted, user.login, user.logout, user.password_changed,
-             user.mfa_enabled, user.mfa_disabled, session.created, session.revoked,
+             user.mfa_enabled, user.mfa_disabled,
              client.created, client.updated, client.deleted, test, '*']
+
+    WebhookEventPayload:
+      description: |
+        The JSON body of a delivery. `id` is unique per event and the same on
+        every retry of it. `data` names what the event is about and who caused
+        it, and nothing more — a receiver that needs the details asks the
+        admin API for them. A `test` event's `data` is unspecified.
+      type: object
+      required: [id, type, timestamp, tenant_id, data]
+      properties:
+        id: { type: string }
+        type: { $ref: '#/components/schemas/WebhookEvent' }
+        timestamp: { type: string, format: date-time }
+        tenant_id: { type: string }
+        data:
+          type: object
+          properties:
+            resource: { $ref: '#/components/schemas/WebhookEventRef' }
+            actor: { $ref: '#/components/schemas/WebhookEventRef' }
+
+    WebhookEventRef:
+      description: |
+        A resource or an actor. `id` is the id the admin API uses for it; it is
+        absent for an actor without one (the system, or an administrator
+        signed in with the deployment's key).
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, description: 'user, client, admin, service or system.' }
+        id: { type: string }
 
     WebhookDelivery:
       type: object
