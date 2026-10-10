@@ -4,8 +4,9 @@
 # Build stage
 FROM golang:1.26-alpine AS builder
 
-# Install dependencies for building with CGO
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+# The API is pure Go: no C toolchain is installed, so a base image update
+# costs this layer seconds rather than a compiler download.
+RUN apk add --no-cache git ca-certificates tzdata
 
 # Set working directory
 WORKDIR /app
@@ -26,7 +27,7 @@ COPY apps/central/ ./apps/central/
 # Defaults to a timestamp when unset (local builds); release pipelines
 # should pass the git tag (e.g. `--build-arg APP_VERSION=0.3.1`).
 ARG APP_VERSION
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s -X main.version=${APP_VERSION:-$(date +%Y%m%d-%H%M%S)}" \
     -o authway-api authway/apps/central/api/cmd
 
