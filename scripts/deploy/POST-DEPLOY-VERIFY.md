@@ -56,9 +56,10 @@ scripts/deploy/verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 
 
 ## 3. 참고 — 커스텀 클레임 배치
 
-Hydra 는 Authway 가 넣는 커스텀 클레임(`email`, `tenant_id` 등)을 access token 의 `ext` 객체 아래에 둔다.
-배포 env `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS=<이름들>` 을 설정하면 그 이름들이 top-level 에도 복사된다(`ext` 사본은 남는다).
-미설정이면 Hydra 컨테이너에 `OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS` env 자체가 없어야 한다:
+Hydra 는 Authway 가 넣는 클레임을 JWT access token 의 `ext` 객체 아래에 둔다. 계약이 정한 네 클레임
+(`tenant_id`, `email`, `name`, `auth_time`)은 배포 스크립트가 항상 top-level 에도 복사하도록 설정한다(`ext` 사본은 남는다).
+배포 env `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS=<이름들>` 은 그 넷에 **더할** 이름이다.
+Hydra 컨테이너의 `OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS` 에는 네 이름이 항상 들어 있어야 한다(1-3 의 스모크가 토큰에서 확인한다):
 
 ```bash
 az containerapp show -n <hydra-app> -g <rg> \
