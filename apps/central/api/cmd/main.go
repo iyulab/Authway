@@ -299,7 +299,7 @@ func main() {
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, zapLogger)
-	userHandler := handler.NewUserHandler(services, zapLogger, newFeatureServices.AuditService)
+	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
 
 	// The authorization server sends the browser here to start a login; it is
@@ -370,6 +370,7 @@ func main() {
 	// The signed-in user's own profile. There is no lookup by id: any signed-in
 	// user could read another's email and name with it, whatever their tenant.
 	v1.Get("/profile/me", jwtAuth, authHandler.ProfileMe)
+	v1.Delete("/profile/me", jwtAuth, authHandler.DeleteMe)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the

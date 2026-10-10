@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"strings"
+	"time"
 
 	"authway/apps/central/api/internal/hydra"
 
@@ -51,7 +52,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// branch that decoded JWTs locally without checking the signature
 		// accepted ANY base64-encoded payload as authentication, allowing
 		// trivial token forgery for `sub` and `tenant_id` claims.
-		userID, tenantID, err := introspectToken(token, hydraClient, logger)
+		userID, tenantID, authTime, err := introspectToken(token, hydraClient, logger)
 		if err != nil {
 			logger.Error("Token introspection failed",
 				zap.Error(err),
@@ -78,6 +79,11 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		c.Locals("user_id", userID)
 		c.Locals("tenant_id", tenantID)
 		c.Locals("access_token", token)
+		// When the user of the session this token came from last proved who
+		// they are; absent when that is not known.
+		if !authTime.IsZero() {
+			c.Locals("auth_time", authTime)
+		}
 
 		logger.Info("Token authenticated",
 			zap.String("user_id", userID.String()),
@@ -93,20 +99,20 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 // Hydra's introspection performs full signature/expiration/active checks for
 // both token formats, so this is the only safe validation path — local JWT
 // decode-without-verify is NEVER acceptable in this codebase.
-func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, error) {
+func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, time.Time, error) {
 	introspectResp, err := hydraClient.IntrospectToken(token)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, time.Time{}, err
 	}
 
 	if !introspectResp.Active {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
+		return uuid.Nil, uuid.Nil, time.Time{}, fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
 	}
 
 	// Extract user_id from subject
 	userID, err := uuid.Parse(introspectResp.Subject)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
+		return uuid.Nil, uuid.Nil, time.Time{}, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
 	}
 
 	// Extract tenant_id from ext claims
@@ -121,7 +127,13 @@ func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger
 		}
 	}
 
-	return userID, tenantID, nil
+	// JSON numbers arrive as float64.
+	var authTime time.Time
+	if unix, ok := introspectResp.Ext["auth_time"].(float64); ok && unix > 0 {
+		authTime = time.Unix(int64(unix), 0)
+	}
+
+	return userID, tenantID, authTime, nil
 }
 
 // (Removed: extractClaimsFromToken — it decoded JWTs without verifying their

@@ -17,6 +17,8 @@ info:
 tags:
   - name: login
     description: Called by the login screens, unauthenticated.
+  - name: account
+    description: Called by an application on behalf of its signed-in user, with the user's access token.
   - name: admin
     description: |
       Administration, authenticated with the deployment's admin key (or an
@@ -339,6 +341,56 @@ paths:
                       id: { type: string }
                       email: { type: string }
         '400': { $ref: '#/components/responses/Error' }
+
+  /api/v1/profile/me:
+    get:
+      tags: [account]
+      operationId: getOwnProfile
+      summary: The signed-in user's own profile
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OwnProfile' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [account]
+      operationId: deleteOwnAccount
+      summary: Delete the signed-in user's own account
+      description: |
+        Ends the user's sessions, consents and tokens at the authorization
+        server, deletes the account and sends `user.deleted`. Offered when
+        capabilities.account_deletion is true.
+
+        The access token must come from a session whose user signed in
+        recently. Otherwise the answer is the step-up challenge of RFC 9470:
+        `401` with code `insufficient_user_authentication`, `max_age` in the
+        body and in `WWW-Authenticate`. The application then sends the user
+        through authorization again with that `max_age` and retries with the
+        new token.
+      security: [{ userToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '401':
+          description: Not signed in, or not signed in recently enough
+          headers:
+            WWW-Authenticate:
+              description: Present for insufficient_user_authentication, naming the max_age to request.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error: { type: string }
+                  code: { type: string, description: 'unauthorized or insufficient_user_authentication.' }
+                  max_age: { type: integer, description: Seconds; present for insufficient_user_authentication. }
+        '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants:
     post:
@@ -1306,6 +1358,13 @@ components:
       type: http
       scheme: bearer
       description: The deployment's admin API key, or an admin console session token.
+    userToken:
+      type: http
+      scheme: bearer
+      description: |
+        An access token issued to the user by the authorization server. Its
+        auth_time claim says when the user of the session it came from last
+        signed in; a token refreshed later keeps that time.
 
   parameters:
     StrictSync:
@@ -1505,6 +1564,17 @@ components:
         created_at: { type: string }
         updated_at: { type: string }
 
+    OwnProfile:
+      type: object
+      required: [id, email, email_verified]
+      properties:
+        id: { type: string, description: The user's id — the sub of their tokens. }
+        email: { type: string }
+        name: { type: ['null', string] }
+        email_verified: { type: boolean }
+        created_at: { type: string }
+        updated_at: { type: string }
+
     Webhook:
       type: object
       required: [id, tenant_id, name, url, events, enabled, retry_count, timeout_secs, created_at, updated_at]
@@ -1682,7 +1752,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -1692,6 +1762,9 @@ components:
         magic_link: { type: boolean }
         mfa: { type: array, items: { type: string } }
         signup_modes: { type: array, items: { type: string } }
+        account_deletion:
+          description: A signed-in user can delete their own account (DELETE /api/v1/profile/me).
+          type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }
 

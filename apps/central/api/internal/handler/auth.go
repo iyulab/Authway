@@ -31,6 +31,7 @@ type AuthHandler struct {
 	logger        *zap.Logger
 	auditService  audit.Service
 	mfaStore      *MFAChallengeStore
+	authTimes     *AuthTimeStore
 	signIn        SignInMethodSource
 }
 
@@ -51,6 +52,7 @@ func NewAuthHandler(userService user.Service, clientService client.Service, clai
 		logger:        logger,
 		auditService:  auditService,
 		mfaStore:      NewMFAChallengeStore(redisClient),
+		authTimes:     NewAuthTimeStore(redisClient),
 	}
 }
 
@@ -225,7 +227,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 		zap.String("user_id", u.ID.String()),
 		zap.Int("claims_count", len(userClaims)))
 
-	resp, err := h.hydraClient.AcceptLoginRequest(challenge, acceptBody)
+	resp, err := acceptAuthenticatedLogin(h.hydraClient, h.authTimes, challenge, acceptBody)
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
@@ -415,7 +417,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 			Remember:                 true,
 			RememberFor:              3600,
 			Session: &hydra.ConsentSession{
-				AccessToken: userClaims,
+				AccessToken: withAuthTime(userClaims, h.authTimes, consentReq.LoginSessionID),
 				IDToken:     userClaims,
 			},
 		}
@@ -536,7 +538,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		Remember:                 req.Remember,
 		RememberFor:              req.RememberFor,
 		Session: &hydra.ConsentSession{
-			AccessToken: accessTokenClaims,
+			AccessToken: withAuthTime(accessTokenClaims, h.authTimes, consentReq.LoginSessionID),
 			IDToken:     idTokenClaims,
 		},
 	}

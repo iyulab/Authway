@@ -2,6 +2,17 @@
 
 ### Added
 
+- **A user can delete their own account**: `DELETE /api/v1/profile/me` with
+  the user's access token ends their sessions, consents and tokens, deletes
+  the account and sends `user.deleted`. The user must have signed in within
+  the last 10 minutes; otherwise the answer is the step-up challenge of
+  RFC 9470 (`401 insufficient_user_authentication` with `max_age`). See
+  `docs/api/account.md`. `GET /api/v1/capabilities` reports it as
+  `account_deletion`.
+- **Access tokens carry `auth_time`** — when the user of the session the token
+  came from last signed in. Refreshing a token, or reusing an open session,
+  does not change it.
+- `GET /api/v1/profile/me` is part of the contract.
 - **The contract covers managing tenants, clients, users, invitations and
   webhooks, and reading the audit log.** Creating, reading, updating and deleting tenants; listing, reading and
   updating clients and regenerating a secret; listing, reading and updating
@@ -201,6 +212,12 @@
 
 ### Security
 
+- **Deleting a user ends their sessions and tokens.** An administrator's
+  `DELETE /api/v1/users/{id}` removed the account but left the user's sign-in
+  sessions, consents and refresh tokens at the authorization server, where
+  they stayed usable. They are now revoked before the account is deleted; if
+  that fails the answer is `502 authorization_server_unavailable` and nothing
+  is deleted.
 - **Verification, password reset and sign-in link requests answer alike for
   every address.** A verification request for an address that was already
   verified answered differently from one with no account, and a reset

@@ -27,16 +27,19 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //     the sign-in) complete a login flow
 //   - mfa: second factors a user can enrol
 //   - signup_modes: the values a tenant's signup_mode accepts
+//   - account_deletion: a signed-in user can delete their own account
+//     (DELETE /api/v1/profile/me)
 //   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
 //     approval (OpenID CIBA) — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
-		"multi_tenant":   true,
-		"providers":      h.social.ConfiguredProviders(),
-		"magic_link":     true,
-		"mfa":            []string{"totp"},
-		"signup_modes":   []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
-		"token_exchange": false,
-		"ciba":           false,
+		"multi_tenant":     true,
+		"providers":        h.social.ConfiguredProviders(),
+		"magic_link":       true,
+		"mfa":              []string{"totp"},
+		"signup_modes":     []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
+		"account_deletion": true,
+		"token_exchange":   false,
+		"ciba":             false,
 	})
 }

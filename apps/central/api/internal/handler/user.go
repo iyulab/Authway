@@ -4,6 +4,7 @@ import (
 	"authway/apps/central/api/pkg/tenantscope"
 	"strconv"
 
+	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service"
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
@@ -16,14 +17,16 @@ import (
 
 type UserHandler struct {
 	services     *service.Services
+	hydraClient  *hydra.Client
 	logger       *zap.Logger
 	validator    *validator.Validate
 	auditService audit.Service
 }
 
-func NewUserHandler(services *service.Services, logger *zap.Logger, auditService audit.Service) *UserHandler {
+func NewUserHandler(services *service.Services, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service) *UserHandler {
 	return &UserHandler{
 		services:     services,
+		hydraClient:  hydraClient,
 		logger:       logger,
 		validator:    validator.New(),
 		auditService: auditService,
@@ -196,11 +199,15 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 
 	// Snapshot before deletion — the row disappears, so without this the audit
 	// entry cannot answer "which tenant did the deleted user belong to?"
-	beforeUser, _ := h.services.UserService.GetByID(id)
-
-	if err := h.services.UserService.Delete(id); err != nil {
-		h.logger.Error("Failed to delete user", zap.Error(err), zap.String("id", idStr))
+	beforeUser, err := h.services.UserService.GetByID(id)
+	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "user not found"))
+	}
+
+	// The user's sessions and tokens end with the account.
+	if err := removeAccount(h.hydraClient, h.services.UserService, id); err != nil {
+		h.logger.Error("Failed to delete user", zap.Error(err), zap.String("id", idStr))
+		return apierror.Refuse(c, fiber.StatusBadGateway, "authorization_server_unavailable", "The user could not be deleted. Try again shortly.")
 	}
 
 	h.logger.Info("User deleted successfully", zap.String("id", idStr))
