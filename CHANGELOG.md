@@ -205,7 +205,9 @@
   console opened itself with that token in the address. The endpoints under
   `/api/v1/admin/impersonate` and the console page are removed. Acting for a
   user will return as delegated tokens that name both the user and the
-  actor.
+  actor. Migration 026 drops the `impersonation_sessions` table; it
+  held no rows on the deployments checked, but look at yours before
+  applying it if that may differ.
 - **`GET /api/v1/config`.** It repeated `/.well-known/authway-config` under
   different field names (`auth_server`, `api_server`). Read the bootstrap
   document instead.

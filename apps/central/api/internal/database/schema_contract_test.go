@@ -278,10 +278,7 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 // next migration. The code goes first and the drop follows in a deployment of
 // its own, because a dropped table cannot be rolled back with the binary. An
 // entry here is a debt with a due date: it leaves with that migration.
-var awaitingDrop = map[string]bool{
-	// Impersonation issued tokens nothing accepted; it was removed whole.
-	"impersonation_sessions": true,
-}
+var awaitingDrop = map[string]bool{}
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
 // falsified audit trail: a field that declares a default is left out of the
