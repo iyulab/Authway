@@ -233,9 +233,10 @@ type CreateClientRequest struct {
 	Logo        string `json:"logo" validate:"omitempty,url"`
 	// RedirectURIs is required only for redirect-based grants (authorization_code,
 	// implicit) — see validateClientConfig. A struct tag cannot express that
-	// condition, so the presence rule lives in validation.go and this tag only
-	// checks the shape of whatever was supplied.
-	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,dive,url"`
+	// condition, so the presence rule lives in validation.go — as does the
+	// shape of each URI, which the `url` tag gets wrong for a native app's
+	// private-use scheme (`com.example.app:/callback`).
+	RedirectURIs []string `json:"redirect_uris"`
 	GrantTypes   []string `json:"grant_types" validate:"required,min=1"`
 	Scopes       []string `json:"scopes" validate:"required,min=1"`
 
@@ -301,7 +302,7 @@ type CreateClientRequest struct {
 type ScopedCreateClientRequest struct {
 	Name           string   `json:"name" validate:"required"`
 	Public         bool     `json:"public"`
-	RedirectURIs   []string `json:"redirect_uris" validate:"omitempty,dive,url"`
+	RedirectURIs   []string `json:"redirect_uris"`
 	GrantTypes     []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token"`
 	Scopes         []string `json:"scopes" validate:"required,min=1"`
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
@@ -329,7 +330,7 @@ type UpdateClientRequest struct {
 	Description  string   `json:"description"`
 	Website      string   `json:"website" validate:"omitempty,url"`
 	Logo         string   `json:"logo" validate:"omitempty,url"`
-	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,min=1,dive,url"`
+	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,min=1"`
 	GrantTypes   []string `json:"grant_types" validate:"omitempty,min=1"`
 	Scopes       []string `json:"scopes" validate:"omitempty,min=1"`
 	Public       *bool    `json:"public"` // Pointer to allow explicit false

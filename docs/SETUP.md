@@ -76,7 +76,7 @@ Authway supports two OAuth 2.0 client types as defined by [RFC 6749](https://dat
 
 | Type | Use Case | Security | Example |
 |------|----------|----------|---------|
-| **Public** | SPA, Mobile, Desktop | PKCE (no secret) | React, Vue, Mobile apps |
+| **Public** | SPA, Mobile, Desktop, CLI | PKCE (no secret) | React, Vue, mobile and desktop apps ([native app redirects](api/client-management.md#native-apps-desktop-command-line-mobile)) |
 | **Confidential** | Backend Services | Client Secret | Node.js API, ASP.NET |
 
 ### Public Clients (SPA, Mobile)

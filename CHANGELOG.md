@@ -113,6 +113,15 @@
 
 ### Fixed
 
+- **A desktop or command-line app can be registered as it is.** A public
+  client using `authorization_code` was refused without `allowed_origins`
+  whatever its redirect URIs, so a native app — which has no browser origin —
+  had to invent one; and a private-use scheme redirect such as
+  `com.example.app:/callback` was refused as "not a URL". Allowed origins are
+  now required only when a redirect URI is a web page, and a redirect URI is
+  checked as an absolute URI without a fragment (`invalid_redirect_uri`). A
+  loopback redirect registered without a port (`http://127.0.0.1/callback`)
+  is accepted on any port, per RFC 8252; see `docs/api/client-management.md`.
 - **The audit log records failures as failures.** Every event logged as a
   failure — failed sign-ins and MFA, refused admin calls — was stored with
   `success: true`, so filtering on `success=false` found nothing and the

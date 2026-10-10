@@ -2,6 +2,8 @@ package client
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 )
 
@@ -29,6 +31,10 @@ func (e *ConfigError) Error() string {
 // mismatch at registration is much cheaper than debugging the runtime symptom.
 func validateClientConfig(public bool, clientSecret string, grantTypes []string, redirectURIs []string, allowedOrigins []string) *ConfigError {
 	gt := normalizeGrantTypes(grantTypes)
+
+	if cerr := validateRedirectURIForm(redirectURIs); cerr != nil {
+		return cerr
+	}
 
 	if public {
 		// Public clients (SPA, native, mobile) must NOT carry a client_secret —
@@ -63,8 +69,9 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 			}
 		}
 
-		// authorization_code in a browser context needs CORS allow-list.
-		if containsAny(gt, "authorization_code") && len(redirectURIs) > 0 && len(allowedOrigins) == 0 {
+		// authorization_code in a browser context needs CORS allow-list. A
+		// native app has no origin to list.
+		if containsAny(gt, "authorization_code") && usesBrowserRedirect(redirectURIs) && len(allowedOrigins) == 0 {
 			return &ConfigError{
 				Code:    "public_client_missing_allowed_origins",
 				Field:   "allowed_origins",
@@ -137,6 +144,50 @@ func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []st
 		Message: "Clients using authorization_code or implicit must declare at least one redirect_uri",
 		Hint:    "Add the callback URL the authorization server redirects to (e.g. https://app.example.com/signin-oidc). Machine-to-machine clients using only client_credentials do not need one.",
 	}
+}
+
+// validateRedirectURIForm requires each redirect URI to be absolute and to
+// carry no fragment (RFC 6749 §3.1.2). Any scheme is allowed: a native app
+// may be called back on a private-use scheme such as
+// `com.example.app:/oauth2redirect` (RFC 8252 §7.1), which has no host.
+func validateRedirectURIForm(redirectURIs []string) *ConfigError {
+	for _, raw := range redirectURIs {
+		u, err := url.Parse(raw)
+		if err != nil || u.Scheme == "" || (u.Host == "" && u.Path == "" && u.Opaque == "") || u.Fragment != "" || strings.Contains(raw, "#") {
+			return &ConfigError{
+				Code:    "invalid_redirect_uri",
+				Field:   "redirect_uris",
+				Message: fmt.Sprintf("%q is not a usable redirect URI", raw),
+				Hint:    "Use an absolute URI without a fragment: https://app.example.com/callback for a web app, http://127.0.0.1/callback or com.example.app:/callback for a native app.",
+			}
+		}
+	}
+	return nil
+}
+
+// usesBrowserRedirect reports whether any redirect URI returns the user to a
+// web page — an https URL, or http to a named host. A native app is called
+// back on a loopback IP literal (RFC 8252 §7.3) or a private-use URI scheme
+// (§7.1); it makes no cross-origin browser request, so it has no origin to
+// allow. `localhost` counts as a web page: it is where a browser app runs
+// during development, and RFC 8252 §8.3 tells native apps to use the IP
+// literal instead.
+func usesBrowserRedirect(redirectURIs []string) bool {
+	for _, raw := range redirectURIs {
+		u, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			return true
+		}
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			return true
+		case "http":
+			if ip := net.ParseIP(u.Hostname()); ip == nil || !ip.IsLoopback() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func normalizeGrantTypes(grantTypes []string) []string {

@@ -102,6 +102,57 @@ func TestValidateClientConfig(t *testing.T) {
 			wantCode:       "",
 		},
 
+		{
+			name:         "native client on a loopback IP needs no allowed_origins",
+			public:       true,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"http://127.0.0.1/callback", "http://[::1]/callback"},
+			wantCode:     "",
+		},
+		{
+			name:         "native client on a private-use scheme needs no allowed_origins",
+			public:       true,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"com.example.app:/oauth2redirect"},
+			wantCode:     "",
+		},
+		{
+			name:         "localhost is a web page, not a native loopback",
+			public:       true,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"http://localhost:3000/callback"},
+			wantCode:     "public_client_missing_allowed_origins",
+		},
+		{
+			name:         "one web redirect among native ones still needs allowed_origins",
+			public:       true,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"http://127.0.0.1/callback", "https://app.example/callback"},
+			wantCode:     "public_client_missing_allowed_origins",
+		},
+
+		{
+			name:         "redirect URI without a scheme is refused",
+			public:       false,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"/callback"},
+			wantCode:     "invalid_redirect_uri",
+		},
+		{
+			name:         "redirect URI with a fragment is refused",
+			public:       false,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{"https://app.example/callback#section"},
+			wantCode:     "invalid_redirect_uri",
+		},
+		{
+			name:         "empty redirect URI is refused",
+			public:       false,
+			grantTypes:   []string{"authorization_code"},
+			redirectURIs: []string{""},
+			wantCode:     "invalid_redirect_uri",
+		},
+
 		// --- Confidential client (default ASP.NET-style) ----
 		{
 			name:         "confidential client with auth code (typical ASP.NET)",

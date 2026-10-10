@@ -142,7 +142,8 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `public_client_with_secret` | `public=true` and `client_secret` non-empty | Either remove the secret (use PKCE) or set `public=false` |
 | `public_client_with_client_credentials` | `public=true` and `grant_types` includes `client_credentials` | M2M clients must be confidential |
 | `public_client_with_password_grant` | `public=true` and `grant_types` includes `password` | Use authorization_code + PKCE |
-| `public_client_missing_allowed_origins` | SPA config without CORS allow-list | Set `allowed_origins` to the SPA origin(s) |
+| `public_client_missing_allowed_origins` | `public=true` with `authorization_code`, a web redirect URI (`https://…`, or `http://` to a named host such as `localhost`) and no `allowed_origins` | Set `allowed_origins` to the SPA origin(s). A native app needs none — see below |
+| `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
 
@@ -155,5 +156,35 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | Blazor Server              | `false`  | `["authorization_code", "refresh_token"]` | |
 | Blazor WebAssembly         | `true`   | `["authorization_code"]` + PKCE | Set `allowed_origins` |
 | React / Vue / Angular SPA  | `true`   | `["authorization_code"]` + PKCE | Set `allowed_origins` |
-| Native / mobile            | `true`   | `["authorization_code"]` + PKCE | Use system browser; `allowed_origins` not strictly needed |
+| Desktop / CLI / mobile     | `true`   | `["authorization_code"]` + PKCE | System browser; loopback or private-use scheme redirect, no `allowed_origins` — see below |
 | M2M / service-to-service   | `false`  | `["client_credentials"]`         | No user, no redirect_uri |
+
+### Native apps: desktop, command line, mobile
+
+A native app signs the user in with the system browser and receives the
+authorization code in one of two ways ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)):
+
+- **Loopback address** — the app listens on a port the operating system picks
+  when the sign-in starts. Register the redirect URI **without a port**, on the
+  IP literal: `http://127.0.0.1/callback` (and `http://[::1]/callback` for
+  IPv6). An authorization request whose `redirect_uri` differs from the
+  registered one only in its port is accepted, so
+  `http://127.0.0.1:51234/callback` works without registering any port. The
+  path must match exactly. `http://localhost/…` does not get this treatment —
+  use the IP literal.
+- **Private-use URI scheme** — `com.example.app:/oauth2redirect`, registered
+  with the operating system by the app.
+
+```json
+{
+  "name": "Example Desktop",
+  "public": true,
+  "redirect_uris": ["http://127.0.0.1/callback", "http://[::1]/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "scopes": ["openid", "profile", "email"]
+}
+```
+
+No `allowed_origins` is needed: the token request comes from the app, not from
+a page in a browser, so there is no origin to allow. Use PKCE (`S256`) on every
+request; a public client has no secret.

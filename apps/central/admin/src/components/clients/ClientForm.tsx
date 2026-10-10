@@ -6,6 +6,26 @@ import { Input, Textarea, Select, Checkbox, CheckboxGroup, Button } from '@/comp
 import { useQuery } from '@tanstack/react-query'
 import { Client, capabilitiesApi } from '@/lib/api'
 
+/**
+ * Whether any redirect URI returns the user to a web page — an https URL, or
+ * http to a named host. A native app is called back on a loopback IP literal
+ * or a private-use URI scheme and has no browser origin to allow. Mirrors the
+ * server rule; `localhost` counts as a web page there too.
+ */
+export function usesBrowserRedirect(redirectUris: string): boolean {
+  return redirectUris
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .some((uri) => {
+      const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(uri)?.[1].toLowerCase()
+      if (scheme === 'https') return true
+      if (scheme !== 'http') return scheme === undefined
+      const host = /^http:\/\/(\[[^\]]*\]|[^/:?#]*)/i.exec(uri)?.[1] ?? ''
+      return !(host === '[::1]' || /^127(\.\d{1,3}){3}$/.test(host))
+    })
+}
+
 // Client form validation schema
 export const clientFormSchema = z.object({
   name: z.string().min(1, 'Client name is required'),
@@ -50,9 +70,8 @@ export const clientFormSchema = z.object({
   // client using authorization_code needs at least one allowed origin, or the
   // reverse proxy has nothing to validate a browser's cross-origin token
   // request against.
-  const hasRedirectURIs = data.redirect_uris.trim() !== ''
   const needsAllowedOrigins =
-    data.public && data.grant_types.includes('authorization_code') && hasRedirectURIs
+    data.public && data.grant_types.includes('authorization_code') && usesBrowserRedirect(data.redirect_uris)
   if (needsAllowedOrigins && (data.allowed_origins ?? '').trim() === '') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -154,7 +173,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   const redirectsUserAgent = grantTypes.some(
     (g) => g === 'authorization_code' || g === 'implicit'
   )
-  const needsAllowedOrigins = isPublic && grantTypes.includes('authorization_code')
+  const needsAllowedOrigins =
+    isPublic && grantTypes.includes('authorization_code') && usesBrowserRedirect(watch('redirect_uris') || '')
 
   const handleGrantTypeChange = (values: string[]) => {
     setValue('grant_types', values, { shouldValidate: true })
@@ -258,7 +278,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         helperText={
           needsAllowedOrigins
             ? 'Enter each browser origin on a new line (scheme + host + port, no path). Required for a public client using Authorization Code, so the reverse proxy can validate cross-origin token requests.'
-            : 'Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code.'
+            : 'Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code — a native app called back on http://127.0.0.1/… or its own URI scheme needs none.'
         }
         error={errors.allowed_origins?.message}
       />

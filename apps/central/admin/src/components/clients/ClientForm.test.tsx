@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@/test/utils'
-import { ClientForm } from './ClientForm'
+import { ClientForm, usesBrowserRedirect } from './ClientForm'
 import { capabilitiesApi, type Client } from '@/lib/api'
 
 /**
@@ -106,6 +106,18 @@ describe('ClientForm — allowed_origins is conditional on public + authorizatio
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit.mock.calls[0][0].allowed_origins).toBe('https://app.example')
+  })
+
+  it('does not require an allowed origin for a native client on a loopback address', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+
+    await user.type(screen.getByLabelText('Client Name *'), 'Desktop App')
+    await user.type(screen.getByLabelText('Redirect URIs *'), 'http://127.0.0.1/callback')
+    await user.click(screen.getByLabelText('Public Client (No Client Secret)'))
+    await submit(user)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
   })
 
   it('does not require an allowed origin for a confidential client', async () => {
@@ -246,5 +258,22 @@ describe('ClientForm — social providers follow the server capabilities', () =>
 
     await waitFor(() => expect(screen.getByLabelText('Microsoft')).toBeDisabled())
     expect(screen.getByLabelText('GitHub')).toBeEnabled()
+  })
+})
+
+describe('usesBrowserRedirect', () => {
+  it.each([
+    ['https://app.example/cb', true],
+    ['http://localhost:3000/cb', true],
+    ['http://app.example/cb', true],
+    ['not a uri', true],
+    ['http://127.0.0.1/callback', false],
+    ['http://127.0.0.1:51234/callback', false],
+    ['http://[::1]/callback', false],
+    ['com.example.app:/oauth2redirect', false],
+    ['http://127.0.0.1/callback\nhttps://app.example/cb', true],
+    ['', false],
+  ])('%s -> %s', (uris, expected) => {
+    expect(usesBrowserRedirect(uris)).toBe(expected)
   })
 })
