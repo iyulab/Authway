@@ -236,6 +236,23 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     }
     Write-Host "   ✅ access_token 발급 확인 — 로그인→consent→콜백 전 구간 정상" -ForegroundColor Green
 
+    # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
+    # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
+    # 나온다 — 그 사슬 전체의 검증이다. 삭제는 인가 서버의 세션·토큰도 끝내므로
+    # 검증용 user 의 정리도 겸한다(아래 finally 의 DB 삭제는 실패 시의 안전망).
+    Write-Host "8️⃣  본인 계정 삭제 (DELETE /api/v1/profile/me)" -ForegroundColor Yellow
+    $delMe = & curl.exe -s -o NUL -w "%{http_code}" -X DELETE "$apiUrl/api/v1/profile/me" -H "Authorization: Bearer $($tokenJson.access_token)"
+    if ($delMe -ne '200') {
+        Write-Host "❌ 본인 계정 삭제 실패(HTTP $delMe) — 방금 로그인한 토큰인데 거부됨" -ForegroundColor Red
+        exit 1
+    }
+    $afterDelete = & curl.exe -s -o NUL -w "%{http_code}" "$apiUrl/api/v1/profile/me" -H "Authorization: Bearer $($tokenJson.access_token)"
+    if ($afterDelete -ne '401') {
+        Write-Host "❌ 삭제된 계정의 토큰이 아직 받아들여짐(HTTP $afterDelete)" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ 계정 삭제 200, 그 토큰은 이후 401" -ForegroundColor Green
+
 } catch {
     Write-Host "❌ 예외 발생: $_" -ForegroundColor Red
     $failed = $true
@@ -267,7 +284,7 @@ if ($failed) {
 
 if (-not $SkipAuditSmoke) {
     Write-Host ""
-    Write-Host "8️⃣  audit_logs smoke 이어서 실행" -ForegroundColor Yellow
+    Write-Host "9️⃣  audit_logs smoke 이어서 실행" -ForegroundColor Yellow
     & (Join-Path $SharedDir "smoke-audit.ps1") -Target $Target -WindowMinutes 5 -WarnOnly
 }
 
