@@ -16,9 +16,10 @@ type EventData struct {
 	Actor    EventRef `json:"actor"`
 }
 
-// EventRef points at a resource or an actor. Type is "user", "client",
-// "admin", "service" or "system"; ID is empty for an actor without one (the
-// system, or an administrator signed in with the deployment's key).
+// EventRef points at a resource or an actor. A resource's Type is "user" or
+// "client". An actor's Type is what the audit log records as actor_type —
+// "user", "api_key", "admin_session", "service_client" or "system" — and its
+// ID is empty when the actor has none (the system, or the deployment's key).
 type EventRef struct {
 	Type string `json:"type"`
 	ID   string `json:"id,omitempty"`

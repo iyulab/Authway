@@ -106,14 +106,15 @@ refused sign-in, for one) sends nothing.
 ```json
 {
   "resource": { "type": "user", "id": "0b6f…" },
-  "actor": { "type": "admin", "id": "5c1e…" }
+  "actor": { "type": "admin_session", "id": "5c1e…" }
 }
 ```
 
 `resource.id` is the id the admin API uses (`GET /api/v1/users/{id}`,
 `GET /api/v1/clients/{id}`) — for a user it is also the `sub` of their tokens.
-`actor.type` is `user`, `admin`, `service` or `system`; `actor.id` is absent
-when the actor has none. No profile data is included: ask the admin API for
+`actor.type` is what the audit log records as `actor_type` — `user`,
+`api_key` (the deployment's admin key), `admin_session`, `service_client` or
+`system` — and `actor.id` is absent when the actor has none. No profile data is included: ask the admin API for
 what you need, and remember that a deleted resource can no longer be read.
 
 Deliveries are queued, and a deployment under more events than it can deliver

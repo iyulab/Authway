@@ -1553,12 +1553,15 @@ components:
     WebhookEventRef:
       description: |
         A resource or an actor. `id` is the id the admin API uses for it; it is
-        absent for an actor without one (the system, or an administrator
-        signed in with the deployment's key).
+        absent for an actor without one (the system, or the deployment's key).
       type: object
       required: [type]
       properties:
-        type: { type: string, description: 'user, client, admin, service or system.' }
+        type:
+          type: string
+          description: |
+            For a resource, user or client. For an actor, the audit log's
+            actor_type: user, api_key, admin_session, service_client or system.
         id: { type: string }
 
     WebhookDelivery:
