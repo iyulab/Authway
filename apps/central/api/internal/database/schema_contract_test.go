@@ -141,7 +141,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		}, "email_verifications"},
 		{"audit_log", &audit.AuditLog{
 			TenantID: tenantID, ActorEmail: "c@example.com", ActorType: "system",
-			Action: audit.ActionAdminAction, Severity: audit.SeverityInfo,
+			Action: audit.ActionUserUpdated, Severity: audit.SeverityInfo,
 			ResourceType: "user", ResourceID: userID.String(), Success: true,
 			// Details maps to jsonb, so it must hold JSON — "" is not valid
 			// JSON. The service always marshals a map, hence at minimum "{}".

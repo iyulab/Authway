@@ -200,6 +200,14 @@
 
 ### Removed
 
+- **Audit actions nothing recorded.** `user.password_changed`, `user.locked`,
+  `user.unlocked`, `session.created`, `session.revoked`, `session.expired`,
+  `token.issued`, `token.refreshed`, `token.revoked` and `admin.action` were
+  offered as filters by `GET /api/v1/audit/actions` although no entry ever
+  carried them; filtering by one now answers `400`. The security view
+  (`GET /api/v1/audit/security`) asked for four of them and so showed little:
+  it now lists refused sign-ins and second factors, a second factor turned
+  off, a password reset, a deleted account and a revoked consent.
 - **Admin impersonation.** `POST /api/v1/admin/impersonate` issued a token
   that nothing accepted — no API, login screen or SDK read it — and the
   console opened itself with that token in the address. The endpoints under

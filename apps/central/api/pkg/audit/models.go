@@ -16,27 +16,18 @@ const (
 	ActionUserLogin            AuditAction = "user.login"
 	ActionUserLoginFailed      AuditAction = "user.login_failed"
 	ActionUserLogout           AuditAction = "user.logout"
-	ActionUserPasswordChanged  AuditAction = "user.password_changed"
 	ActionUserPasswordReset    AuditAction = "user.password_reset"
 	ActionUserMFAEnabled       AuditAction = "user.mfa_enabled"
 	ActionUserMFADisabled      AuditAction = "user.mfa_disabled"
 	ActionUserMFAVerified      AuditAction = "user.mfa_verified"
 	ActionUserMFAFailed        AuditAction = "user.mfa_failed"
 	ActionUserEmailVerified    AuditAction = "user.email_verified"
-	ActionUserLocked           AuditAction = "user.locked"
-	ActionUserUnlocked         AuditAction = "user.unlocked"
-	ActionSessionCreated       AuditAction = "session.created"
-	ActionSessionRevoked       AuditAction = "session.revoked"
-	ActionSessionExpired       AuditAction = "session.expired"
 	ActionClientCreated        AuditAction = "client.created"
 	ActionClientUpdated        AuditAction = "client.updated"
 	ActionClientDeleted        AuditAction = "client.deleted"
 	ActionTenantCreated        AuditAction = "tenant.created"
 	ActionTenantUpdated        AuditAction = "tenant.updated"
 	ActionTenantDeleted        AuditAction = "tenant.deleted"
-	ActionTokenIssued          AuditAction = "token.issued"
-	ActionTokenRefreshed       AuditAction = "token.refreshed"
-	ActionTokenRevoked         AuditAction = "token.revoked"
 	ActionConsentGranted       AuditAction = "consent.granted"
 	ActionConsentRevoked       AuditAction = "consent.revoked"
 	ActionWebhookCreated       AuditAction = "webhook.created"
@@ -44,7 +35,6 @@ const (
 	ActionWebhookDeleted       AuditAction = "webhook.deleted"
 	ActionServiceClientCreated AuditAction = "service_client.created"
 	ActionServiceClientRevoked AuditAction = "service_client.revoked"
-	ActionAdminAction          AuditAction = "admin.action"
 	ActionAdminLoginSuccess    AuditAction = "admin.login_success"
 	ActionAdminLogout          AuditAction = "admin.logout"
 )
@@ -60,6 +50,8 @@ const (
 )
 
 // Actions lists every action an entry can carry, with what it records.
+// Every action listed is one the API records: an action nothing records is
+// not offered as a filter.
 var Actions = []struct {
 	Action      AuditAction
 	Description string
@@ -70,27 +62,18 @@ var Actions = []struct {
 	{ActionUserLogin, "User signed in"},
 	{ActionUserLoginFailed, "Sign-in refused"},
 	{ActionUserLogout, "User signed out"},
-	{ActionUserPasswordChanged, "Password changed"},
-	{ActionUserPasswordReset, "Password reset requested"},
+	{ActionUserPasswordReset, "Password reset with an emailed link"},
 	{ActionUserMFAEnabled, "MFA enabled"},
 	{ActionUserMFADisabled, "MFA disabled"},
 	{ActionUserMFAVerified, "MFA code accepted"},
 	{ActionUserMFAFailed, "MFA code refused"},
 	{ActionUserEmailVerified, "Email address verified"},
-	{ActionUserLocked, "User account locked"},
-	{ActionUserUnlocked, "User account unlocked"},
-	{ActionSessionCreated, "Session created"},
-	{ActionSessionRevoked, "Session revoked"},
-	{ActionSessionExpired, "Session expired"},
 	{ActionClientCreated, "OAuth client created"},
 	{ActionClientUpdated, "OAuth client updated"},
 	{ActionClientDeleted, "OAuth client deleted"},
 	{ActionTenantCreated, "Tenant created"},
 	{ActionTenantUpdated, "Tenant updated"},
 	{ActionTenantDeleted, "Tenant deleted"},
-	{ActionTokenIssued, "Token issued"},
-	{ActionTokenRefreshed, "Token refreshed"},
-	{ActionTokenRevoked, "Token revoked"},
 	{ActionConsentGranted, "Consent granted"},
 	{ActionConsentRevoked, "Consent revoked"},
 	{ActionWebhookCreated, "Webhook created"},
@@ -98,7 +81,6 @@ var Actions = []struct {
 	{ActionWebhookDeleted, "Webhook deleted"},
 	{ActionServiceClientCreated, "Service client created"},
 	{ActionServiceClientRevoked, "Service client revoked"},
-	{ActionAdminAction, "Administrative action"},
 	{ActionAdminLoginSuccess, "Admin console sign-in"},
 	{ActionAdminLogout, "Admin console sign-out"},
 }
