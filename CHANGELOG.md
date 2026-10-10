@@ -9,6 +9,12 @@
   RFC 9470 (`401 insufficient_user_authentication` with `max_age`). See
   `docs/api/account.md`. `GET /api/v1/capabilities` reports it as
   `account_deletion`.
+- **A JWT access token carries Authway's claims at the top level**:
+  `tenant_id`, `email`, `name` and `auth_time` sit beside `sub`, where any JWT
+  library reads them, and the contract describes them (`TokenClaims`). They
+  were only inside the `ext` object, a shape specific to the authorization
+  server; `ext` is still there, so existing code keeps working. Takes effect
+  when the authorization server is redeployed with the bundled settings.
 - **Access tokens carry `auth_time`** — when the user of the session the token
   came from last signed in. Refreshing a token, or reusing an open session,
   does not change it.

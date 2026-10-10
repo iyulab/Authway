@@ -46,8 +46,13 @@ $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 # OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS: for JWT access tokens Hydra nests session
 # claims under `ext` (mirroring the introspection response). Claims named here
 # are additionally mirrored to the top level, which resource servers that read
-# claims by their bare name require. The *names* are deployment configuration —
-# they are consumer domain concepts and must not be hard-coded here.
+# claims by their bare name require.
+#   - Authway's own claims (tenant_id, email, name, auth_time) are always
+#     mirrored: the contract puts them at the top level, so a resource server
+#     reads them the same way whichever provider issued the token.
+#   - A deployment's custom claim names are added from
+#     HYDRA_ALLOWED_TOP_LEVEL_CLAIMS. Those are consumer domain concepts and
+#     must not be hard-coded here.
 # Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1).
 try {
     $FlowUrlEnv = @((Get-HydraFlowUrls -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
@@ -56,12 +61,14 @@ try {
     exit 1
 }
 
+$TopLevelClaims = @('tenant_id', 'email', 'name', 'auth_time')
+if ($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS']) {
+    $TopLevelClaims += $envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS'].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+}
 $TokenEnv = @(
     "STRATEGIES_ACCESS_TOKEN=opaque"
+    "OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=$(($TopLevelClaims | Select-Object -Unique) -join ',')"
 )
-if ($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS']) {
-    $TokenEnv += "OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=$($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS'])"
-}
 
 Write-Host "✓ 환경 변수 로드 완료" -ForegroundColor Green
 Write-Host ""

@@ -76,31 +76,46 @@ Verify which format you got:
 echo "$ACCESS_TOKEN" | awk -F. '{print NF" segments"}'
 ```
 
-### Where your custom claims land
+### Where the claims are
 
-Registered claims (`sub`, `iss`, `aud`, `exp`, `iat`, `scp`, `client_id`) are always
-top-level. **Custom claims are not** — Hydra nests session claims under `ext`, so
-the same shape is returned by both the JWT and the introspection endpoint:
+Registered claims (`sub`, `iss`, `aud`, `exp`, `iat`, `scp`, `client_id`) are
+top-level, and so are **Authway's own claims**:
+
+| Claim | Meaning |
+|-------|---------|
+| `tenant_id` | The tenant the user belongs to |
+| `email`, `name` | The user's address and display name |
+| `auth_time` | Unix time the user last signed in — unchanged by refreshing the token or reusing an open session |
 
 ```json
 {
   "sub": "b1e2…",
   "client_id": "my_app",
   "exp": 1770000000,
-  "ext": { "email": "u@example.com", "tenant_id": "662667c1…" }
+  "tenant_id": "662667c1…",
+  "email": "u@example.com",
+  "name": "U",
+  "auth_time": 1769996400
 }
 ```
 
-This matters because most JWT middlewares surface `ext` as a single claim holding
-a JSON object — they do **not** flatten it into individual claims. If your
-resource server expects to read a custom claim by its bare name, list those names
-in the deployment's `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS` (comma separated); Hydra then
-mirrors them to the top level while still keeping them under `ext`. Claim names
-are your service's domain vocabulary, so they live in deployment configuration,
-never in Authway's code.
+Read them at the top level. That is what the contract
+([`TokenClaims`](../packages/contract/openapi.yaml)) describes, and it is the
+same from every Authway provider.
 
-Whichever route you take, decode a real token and look before writing the mapping
-code — the claim shape is the contract.
+The token also carries an `ext` object repeating its session claims — that is
+how this provider's authorization server (Ory Hydra) shapes tokens, and how the
+introspection endpoint answers. Do not write code against `ext` for the claims
+above.
+
+**Your own custom claims** (set through the claims API) are a different
+matter: they appear under `ext` only, unless the deployment lists their names
+in `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS` (comma separated), which mirrors them to
+the top level as well. Claim names are your service's domain vocabulary, so
+they live in deployment configuration, never in Authway's code.
+
+Whichever claims you read, decode a real token and look before writing the
+mapping code.
 
 ---
 

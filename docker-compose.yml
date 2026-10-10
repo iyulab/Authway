@@ -117,6 +117,10 @@ services:
       SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "*"
       SERVE_ADMIN_CORS_ENABLED: "true"
       SERVE_ADMIN_CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:8080"
+      # A JWT access token carries Authway's own claims at the top level, where
+      # any JWT library reads them. Hydra otherwise nests every session claim
+      # under `ext`, a shape of its own that another provider would not share.
+      OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS: tenant_id,email,name,auth_time
       TTL_ACCESS_TOKEN: 1h
       TTL_REFRESH_TOKEN: 720h
       TTL_ID_TOKEN: 1h

@@ -1386,7 +1386,7 @@ components:
       description: |
         An access token issued to the user by the authorization server. Its
         auth_time claim says when the user of the session it came from last
-        signed in; a token refreshed later keeps that time.
+        signed in; a token refreshed later keeps that time. See TokenClaims.
 
   parameters:
     StrictSync:
@@ -1585,6 +1585,28 @@ components:
         expires_at: { type: string }
         created_at: { type: string }
         updated_at: { type: string }
+
+    TokenClaims:
+      description: |
+        The claims a provider adds to the tokens it issues, beyond those OAuth
+        and OpenID Connect define. A JWT access token and the ID token carry
+        them at the top level, so a resource server reads them with any JWT
+        library and the same code works against every provider. (A provider
+        may repeat them elsewhere in the token; only the top level is part of
+        this contract.)
+      type: object
+      required: [sub, tenant_id, email, auth_time]
+      properties:
+        sub: { type: string, description: The user's id. }
+        tenant_id: { type: string, description: The tenant the user belongs to. }
+        email: { type: string }
+        name: { type: ['null', string] }
+        auth_time:
+          type: integer
+          description: |
+            Unix time at which the user of the session the token came from
+            last signed in. Refreshing the token, or reusing the session
+            without signing in again, does not change it.
 
     OwnProfile:
       type: object
