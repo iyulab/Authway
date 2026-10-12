@@ -202,7 +202,6 @@ Control where users are redirected after logout.
 Authway supports:
 - ✅ **Single Logout**: Logout from all sessions
 - ✅ **Registered Redirects**: post-logout addresses are whitelisted per client
-- ✅ **Front-Channel Logout**: Notify all apps
 - ✅ **Session Cleanup**: Clear all tokens and sessions
 - ✅ **Smart Defaults**: Auto-populate logout URIs from redirect URIs
 
@@ -296,27 +295,14 @@ await client.logout({ returnTo: 'https://app.example.com/logged-out' })
 await client.logout()
 ```
 
-### Front-Channel Logout
+### Telling other applications about a logout
 
-Notify all applications when user logs out:
-
-**Configuration**:
-```json
-{
-  "frontchannel_logout_uri": "https://app.example.com/logout",
-  "frontchannel_logout_session_required": true
-}
-```
-
-**Implementation**:
-```html
-<!-- Logout endpoint that clears local state -->
-<script>
-  // Clear local storage, cookies, etc.
-  localStorage.clear()
-  sessionStorage.clear()
-</script>
-```
+A logout ends the user's session at Authway, for every application. An
+application that keeps its **own** server-side session is not told: it stays
+signed in until its session expires or it next sends the user through
+authorization. Client registration has no logout notification address yet
+(neither front-channel nor back-channel), so keep such sessions short or
+re-check them periodically.
 
 ### Security Best Practices
 
