@@ -20,7 +20,7 @@ describe('turning the second factor on ends the sessions opened before it', () =
   let elsewhere: SignedIn
 
   const signIn = async (): Promise<SignedIn> => {
-    const outcome = await provider.login(app, user, { remember: true })
+    const outcome = await provider.login(app, user)
     if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
     return outcome
   }

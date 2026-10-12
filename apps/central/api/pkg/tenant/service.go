@@ -3,6 +3,7 @@ package tenant
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -91,6 +92,17 @@ func (s *Service) GetTenantByID(id uuid.UUID) (*Tenant, error) {
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
 	return &tenant, nil
+}
+
+// SessionTimeout is how long a sign-in session of the tenant's users lasts
+// (its session_timeout setting), or zero when the tenant has none or cannot
+// be read — the caller then applies its default.
+func (s *Service) SessionTimeout(id uuid.UUID) time.Duration {
+	tenant, err := s.GetTenantByID(id)
+	if err != nil {
+		return 0
+	}
+	return time.Duration(tenant.Settings.SessionTimeout) * time.Minute
 }
 
 // ListTenants lists all active tenants

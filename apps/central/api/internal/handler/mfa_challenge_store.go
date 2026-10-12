@@ -22,8 +22,7 @@ type pendingMFALogin struct {
 	UserID         uuid.UUID
 	First          string // audit name of the first factor (signInMethod.audit)
 	Provider       string // identity provider, when the first factor was one
-	Remember       bool
-	RememberFor    int
+	KeepSignedIn   bool   // the user's choice at the first factor (SessionPolicy)
 	Attempts       int
 	CreatedAt      time.Time
 }
@@ -82,8 +81,7 @@ func (s *MFAChallengeStore) Set(challenge string, data *pendingMFALogin) {
 		"user_id":         data.UserID.String(),
 		"first":           data.First,
 		"provider":        data.Provider,
-		"remember":        data.Remember,
-		"remember_for":    data.RememberFor,
+		"keep_signed_in":  data.KeepSignedIn,
 		"attempts":        data.Attempts,
 	})
 	pipe.Expire(ctx, key, mfaChallengeTTL)
@@ -101,7 +99,6 @@ func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
 	if err != nil {
 		return nil, false
 	}
-	rememberFor, _ := strconv.Atoi(vals["remember_for"])
 	attempts, _ := strconv.Atoi(vals["attempts"])
 
 	return &pendingMFALogin{
@@ -109,8 +106,7 @@ func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
 		UserID:         userID,
 		First:          vals["first"],
 		Provider:       vals["provider"],
-		Remember:       vals["remember"] == "1",
-		RememberFor:    rememberFor,
+		KeepSignedIn:   vals["keep_signed_in"] == "1",
 		Attempts:       attempts,
 	}, true
 }

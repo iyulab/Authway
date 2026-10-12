@@ -40,9 +40,17 @@ export interface LoginAttempt {
   browser: Browser
   pkce: Pkce
   flow: string
-  /** Ask the provider to keep the user signed in (a persistent login session). */
+  /** The user ticks "keep me signed in": the session is to outlast the provider's usual one. */
   remember?: boolean
+  /** The user ticks "remember this choice" on the consent screen. */
+  rememberConsent?: boolean
 }
+
+/** The provider's answer to an authorization request that must not show the user anything (`prompt=none`). */
+export type SilentOutcome =
+  | { kind: 'code'; tokens: Tokens; sub: string }
+  /** The OAuth error the application was handed: `login_required`, `consent_required`, … */
+  | { kind: 'error'; error: string }
 
 /** What a login attempt produced at the step where it stopped. */
 export type LoginOutcome =
@@ -116,12 +124,17 @@ export class Provider {
     return this.tenant
   }
 
-  /** Registers a public client; `signInMethods` overrides the provider's default sign-in methods. */
-  async createPublicClient(options: { signInMethods?: string[] } = {}): Promise<TestClient> {
+  /**
+   * Registers a public client. `signInMethods` overrides the provider's
+   * default sign-in methods; `skipConsent` registers it as an application
+   * whose users are not asked for consent.
+   */
+  async createPublicClient(options: { signInMethods?: string[]; skipConsent?: boolean } = {}): Promise<TestClient> {
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
         ...(options.signInMethods ? { enabled_auth_providers: options.signInMethods } : {}),
+        ...(options.skipConsent ? { skip_consent: true } : {}),
         tenant_id: await this.tenantId(),
         name: `conformance-${randomToken(4)}`,
         public: true,
@@ -215,6 +228,15 @@ export class Provider {
   }
 
   /**
+   * Follows the authorization server's redirects after an accepted login to
+   * where they stop: the consent screen (the address carries a flow id), or
+   * the application, when no question is put to the user.
+   */
+  async afterLogin(browser: Browser, redirectTo: string): Promise<URL> {
+    return this.followUntil(browser, redirectTo, (u) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error'))
+  }
+
+  /**
    * Follows redirects from `url` until `done` holds for the address reached —
    * a screen of the login UI (it carries a flow id) or the client's redirect.
    */
@@ -251,11 +273,11 @@ export class Provider {
     return res
   }
 
-  async acceptConsent(browser: Browser, flow: string, scopes: string[]): Promise<Response> {
+  async acceptConsent(browser: Browser, flow: string, scopes: string[], remember = false): Promise<Response> {
     const res = await browser.fetch(this.flowUrl('consent-flows', flow, '/accept'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_scope: scopes }),
+      body: JSON.stringify({ grant_scope: scopes, ...(remember ? { remember: true } : {}) }),
     })
     await conform('POST', '/api/v1/consent-flows/{flow}/accept', res)
     return res
@@ -311,8 +333,14 @@ export class Provider {
    * Pass the browser of an earlier login to start in its session.
    */
   async startLogin(client: TestClient, scopes = ['openid', 'profile', 'email'], browser = new Browser()): Promise<LoginAttempt> {
-    const d = await this.discovery()
     const pkce = createPkce()
+    const loginScreen = await this.openLoginScreen(browser, await this.authorizeUrl(client, scopes, pkce))
+    return { client, scopes, browser, pkce, flow: this.loginFlowFrom(loginScreen) }
+  }
+
+  /** The address of an authorization-code + PKCE request; `extra` adds request parameters. */
+  private async authorizeUrl(client: TestClient, scopes: string[], pkce: Pkce, extra: Record<string, string> = {}): Promise<string> {
+    const d = await this.discovery()
     const authorize = new URL(d.authorization_endpoint)
     authorize.search = new URLSearchParams({
       client_id: client.clientId,
@@ -323,9 +351,9 @@ export class Provider {
       nonce: randomToken(),
       code_challenge: pkce.challenge,
       code_challenge_method: 'S256',
+      ...extra,
     }).toString()
-    const loginScreen = await this.openLoginScreen(browser, authorize.toString())
-    return { client, scopes, browser, pkce, flow: this.loginFlowFrom(loginScreen) }
+    return authorize.toString()
   }
 
   /** Submits a password on an open login screen and, if accepted, finishes the flow. */
@@ -466,7 +494,7 @@ export class Provider {
         afterConsent = step.redirect_to
       } else {
         consent = 'asked'
-        const consentRes = await this.acceptConsent(browser, flow, scopes)
+        const consentRes = await this.acceptConsent(browser, flow, scopes, attempt.rememberConsent)
         const consentBody = await consentRes.text()
         if (!consentRes.ok) throw new Error(`Consent failed: ${consentRes.status} ${consentBody}`)
         afterConsent = (JSON.parse(consentBody) as { redirect_to: string }).redirect_to
@@ -476,20 +504,7 @@ export class Provider {
     const code = next.searchParams.get('code')
     if (!code) throw new Error(`Authorization did not return a code: ${next}`)
 
-    const d = await this.discovery()
-    const tokenRes = await fetch(d.token_endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        client_id: client.clientId,
-        code_verifier: pkce.verifier,
-      }),
-    })
-    if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`)
-    const tokens = (await tokenRes.json()) as Tokens
+    const tokens = await this.exchangeCode(client, pkce, code)
     const info = await this.userinfo(tokens.access_token)
     if (info.status !== 200) throw new Error(`userinfo rejected a fresh token: ${info.status}`)
     return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub, browser, consent }
@@ -513,10 +528,64 @@ export class Provider {
     return outcome.tokens
   }
 
+  /**
+   * An authorization request that must not show the user anything
+   * (`prompt=none`), in a browser that may or may not hold a session. The
+   * provider answers the application either way: with a code, or with an
+   * OAuth error. If it opens the login screen on the way, the screen asks what
+   * to show — as it does for every flow — and must be told to go on; a form
+   * here is a failure.
+   */
+  async silentAuthorize(browser: Browser, client: TestClient, scopes = ['openid', 'profile', 'email']): Promise<SilentOutcome> {
+    const pkce = createPkce()
+    const settled = (u: URL) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error')
+    let next = await this.followUntil(browser, await this.authorizeUrl(client, scopes, pkce, { prompt: 'none' }), settled)
+    for (let screens = 0; screens < 2 && next.searchParams.has('flow'); screens++) {
+      // The login screen, or the consent screen after it.
+      const kind = next.pathname.endsWith('/consent') ? 'consent-flows' : 'login-flows'
+      const res = await browser.fetch(this.flowUrl(kind, next.searchParams.get('flow')!))
+      await conform('GET', `/api/v1/${kind}/{flow}`, res.clone())
+      const step = (await res.json()) as { next?: string; redirect_to?: string }
+      if (step.next !== 'redirect' || !step.redirect_to) {
+        throw new Error(`A request with prompt=none was shown a ${kind === 'login-flows' ? 'sign-in' : 'consent'} form: ${JSON.stringify(step)}`)
+      }
+      next = await this.followUntil(browser, step.redirect_to, settled)
+    }
+    const error = next.searchParams.get('error')
+    if (error) return { kind: 'error', error }
+    const code = next.searchParams.get('code')
+    if (!code) throw new Error(`A request with prompt=none ended at neither a code nor an error: ${next}`)
+    const tokens = await this.exchangeCode(client, pkce, code)
+    const info = await this.userinfo(tokens.access_token)
+    if (info.status !== 200) throw new Error(`userinfo rejected a fresh token: ${info.status}`)
+    return { kind: 'code', tokens, sub: (info.body as { sub: string }).sub }
+  }
+
+  private async exchangeCode(client: TestClient, pkce: Pkce, code: string): Promise<Tokens> {
+    const d = await this.discovery()
+    const tokenRes = await fetch(d.token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: client.clientId,
+        code_verifier: pkce.verifier,
+      }),
+    })
+    if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`)
+    return (await tokenRes.json()) as Tokens
+  }
+
   /** Full authorization-code + PKCE login with password and consent. */
-  async login(client: TestClient, user: TestUser, options: { scopes?: string[]; remember?: boolean } = {}): Promise<LoginOutcome> {
+  async login(
+    client: TestClient,
+    user: TestUser,
+    options: { scopes?: string[]; remember?: boolean; rememberConsent?: boolean } = {},
+  ): Promise<LoginOutcome> {
     const attempt = await this.startLogin(client, options.scopes)
-    return this.continueLogin({ ...attempt, remember: options.remember }, user)
+    return this.continueLogin({ ...attempt, remember: options.remember, rememberConsent: options.rememberConsent }, user)
   }
 
   async userinfo(accessToken: string): Promise<{ status: number; body: unknown }> {

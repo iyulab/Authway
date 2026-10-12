@@ -101,7 +101,7 @@ func newAuthTestApp(t *testing.T, password string, totpEnabled bool, totpCode, r
 	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 
-	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{})
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
 
 	app := fiber.New()
 	app.Post("/login-flows/:flow/password", h.SubmitPassword)
@@ -288,7 +288,7 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	users := newFakeUserService(rightUser, wrongTenantUser)
 	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
-	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{})
+	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
 	app := fiber.New()
 	app.Post("/login-flows/:flow/password", h.SubmitPassword)
 
@@ -344,7 +344,7 @@ func TestSubmitPassword_RefusedWhenClientDisablesPasswordSignIn(t *testing.T) {
 	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID,
 		EnabledAuthProviders: []string{"google"}, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
-	h := NewAuthHandler(newFakeUserService(u), clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{})
+	h := NewAuthHandler(newFakeUserService(u), clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
 	app := fiber.New()
 	app.Post("/login-flows/:flow/password", h.SubmitPassword)
 

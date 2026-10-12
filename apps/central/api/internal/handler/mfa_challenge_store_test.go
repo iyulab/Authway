@@ -29,8 +29,7 @@ func TestMFAChallengeStore_SetGetDelete(t *testing.T) {
 	data := &pendingMFALogin{
 		HydraChallenge: "hydra-1",
 		UserID:         userID,
-		Remember:       true,
-		RememberFor:    3600,
+		KeepSignedIn:   true,
 	}
 
 	store.Set("chal-1", data)
@@ -39,7 +38,7 @@ func TestMFAChallengeStore_SetGetDelete(t *testing.T) {
 	if !ok {
 		t.Fatal("Get() after Set() = not found, want found")
 	}
-	if got.HydraChallenge != "hydra-1" || got.UserID != userID || !got.Remember || got.RememberFor != 3600 {
+	if got.HydraChallenge != "hydra-1" || got.UserID != userID || !got.KeepSignedIn {
 		t.Errorf("Get() = %+v, want fields to round-trip", got)
 	}
 

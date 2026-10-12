@@ -34,12 +34,12 @@ func newSecondFactorTestApp(t *testing.T, totpEnabled bool) (*fiber.App, *int, *
 	hydraClient, acceptCount := newTestHydraServer(t)
 	redisClient := newTestRedisClient(t)
 
-	auth := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: secondFactorCode, validRecoveryCode: "recovery-1"}, hydraClient, zap.NewNop(), nil, redisClient, allowedSignInMethods{})
+	auth := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: secondFactorCode, validRecoveryCode: "recovery-1"}, hydraClient, zap.NewNop(), nil, redisClient, allowedSignInMethods{}, SessionPolicy{})
 	links := NewMagicLinkFlowHandler(auth, &fakeLinks{
 		link: &passwordless.MagicLink{Email: u.Email, TenantID: u.TenantID, LoginFlow: "flow-1", ExpiresAt: time.Now().Add(time.Minute)},
 		user: u,
 	})
-	social := NewSocialHandlerWithAllProviders(nil, nil, nil, nil, users, clients, hydraClient, zap.NewNop(), nil, NewOAuthStateStore(redisClient), testFrontendURL)
+	social := NewSocialHandlerWithAllProviders(nil, nil, nil, nil, users, clients, hydraClient, zap.NewNop(), nil, NewOAuthStateStore(redisClient), testFrontendURL, SessionPolicy{})
 
 	app := fiber.New()
 	app.Post("/magic-links/redeem", links.Redeem)

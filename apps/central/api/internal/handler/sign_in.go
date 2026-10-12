@@ -23,13 +23,15 @@ type signIn struct {
 	logger          *zap.Logger
 	authentications *AuthenticationStore
 	pending         *MFAChallengeStore
+	sessions        SessionPolicy
 }
 
-func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient *redis.Client) *signIn {
+func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient *redis.Client, sessions SessionPolicy) *signIn {
 	return &signIn{
 		hydra:           hc,
 		users:           users,
 		logger:          logger,
+		sessions:        sessions,
 		authentications: NewAuthenticationStore(redisClient),
 		pending:         NewMFAChallengeStore(redisClient),
 	}
@@ -51,10 +53,11 @@ var errSecondFactorNotStarted = errors.New("could not start the second factor st
 
 // afterFirstFactor continues flow for a user who has just proved who they are
 // by first. A user with a second factor is parked until they give it; anyone
-// else is signed in.
-func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod, remember bool, rememberFor int) (signInStep, error) {
+// else is signed in. keepSignedIn is the user's choice to stay signed in on
+// this browser (see SessionPolicy).
+func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod, keepSignedIn bool) (signInStep, error) {
 	if !u.TOTPEnabled {
-		redirectTo, err := s.accept(flow, u, first, remember, rememberFor)
+		redirectTo, err := s.accept(flow, u, first, keepSignedIn)
 		return signInStep{RedirectTo: redirectTo}, err
 	}
 	challenge, err := tokenhash.Generate()
@@ -66,19 +69,24 @@ func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod,
 		UserID:         u.ID,
 		First:          first.audit,
 		Provider:       first.provider,
-		Remember:       remember,
-		RememberFor:    rememberFor,
+		KeepSignedIn:   keepSignedIn,
 		CreatedAt:      time.Now(),
 	})
 	return signInStep{MFAChallenge: challenge}, nil
 }
 
 // accept signs u in to flow by method and returns where the browser goes next.
-func (s *signIn) accept(flow string, u *user.User, method signInMethod, remember bool, rememberFor int) (string, error) {
+//
+// Every sign-in opens a session at the authorization server. Without one the
+// user's next application asks them to sign in again, a logout has nothing to
+// end, and applications are not told when the user is signed out elsewhere —
+// none of which a user asked for by leaving "keep me signed in" unticked.
+// That choice decides only how long the session lasts.
+func (s *signIn) accept(flow string, u *user.User, method signInMethod, keepSignedIn bool) (string, error) {
 	resp, err := acceptAuthenticatedLogin(s.hydra, s.authentications, flow, &hydra.AcceptLoginRequest{
 		Subject:     u.ID.String(),
-		Remember:    remember,
-		RememberFor: rememberFor,
+		Remember:    true,
+		RememberFor: int(s.sessions.lifetime(u.TenantID, keepSignedIn).Seconds()),
 		AMR:         method.amr,
 		Context: map[string]any{
 			"email":     u.Email,

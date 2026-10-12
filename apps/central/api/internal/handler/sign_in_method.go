@@ -44,10 +44,10 @@ func (m signInMethod) followedBy(second string, amr ...string) signInMethod {
 
 // details is what the audit log records about a completed sign-in by m: the
 // same fields whichever handler finished it.
-func (m signInMethod) details(flow string, remember bool) map[string]any {
+func (m signInMethod) details(flow string, keepSignedIn bool) map[string]any {
 	d := map[string]any{
 		"challenge": flow,
-		"remember":  remember,
+		"remember":  keepSignedIn,
 		"method":    m.audit,
 	}
 	if m.provider != "" {

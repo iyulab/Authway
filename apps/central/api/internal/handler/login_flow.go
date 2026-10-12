@@ -47,6 +47,16 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		} else if handled {
 			return c.JSON(redirect)
 		}
+		if asksForNoPrompt(loginReq.RequestURL) {
+			// The application asked for an answer without the user being
+			// shown anything, and the browser's session is not one this
+			// client can use. The answer is "sign-in required", not a form.
+			resp, err := h.hydraClient.RejectLoginRequest(flow, "login_required", "The browser has no session for this application.")
+			if err != nil {
+				return respondFlowLookupError(c, err)
+			}
+			return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo})
+		}
 	}
 
 	return c.JSON(fiber.Map{
@@ -107,16 +117,16 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 		amr = earlier.Methods
 	}
 
+	// Reusing a session does not lengthen it: how long it lasts was decided
+	// when the user signed in (the authorization server ignores a lifetime
+	// given here).
 	resp, err := h.hydraClient.AcceptLoginRequest(flow, &hydra.AcceptLoginRequest{
-		Subject:     loginReq.Subject,
-		Remember:    true,
-		RememberFor: 3600,
-		AMR:         amr,
+		Subject: loginReq.Subject,
+		AMR:     amr,
 		Context: map[string]any{
 			"email":     sessionUser.Email,
 			"name":      sessionUser.Name,
 			"tenant_id": sessionUser.TenantID.String(),
-			"sso":       true, // consent uses this to recognise an SSO login
 		},
 	})
 	if err != nil {

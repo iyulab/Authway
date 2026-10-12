@@ -13,6 +13,12 @@ so the same scenarios run against every implementation.
   user completes authorization code + PKCE through password login and consent;
   `userinfo` identifies them. A wrong password and an unknown flow id are client
   errors. Logging out invalidates the access token.
+- **Sessions** — a sign-in opens a session whether or not the user asked to
+  stay signed in: the next authorization in the browser reuses it, and a
+  request with `prompt=none` is answered at the application — with a code, or
+  with `login_required` / `consent_required`. A client registered to skip
+  consent does not ask its users; any other client does, signed in already or
+  not.
 - **Login UI routes** — every backend path the bundled login screens call is
   routed.
 

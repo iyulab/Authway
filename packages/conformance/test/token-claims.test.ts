@@ -97,7 +97,7 @@ describe('token claims', () => {
     // A second authorization in the same browser reuses the session: no
     // password is asked for, and the tokens still say the session was opened
     // with one — at the time it was.
-    const first = await provider.login(client, user, { remember: true })
+    const first = await provider.login(client, user)
     if (first.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(first)}`)
     const again = await provider.reauthorize(first.browser, client)
     const before = claimsOf(first.tokens.id_token ?? '')

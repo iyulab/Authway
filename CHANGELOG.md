@@ -1,5 +1,41 @@
 ## [Unreleased]
 
+### Changed
+
+- **Every sign-in opens a session.** A password sign-in without "keep me
+  signed in", and every sign-in by emailed link, used to leave no session at
+  the authorization server at all. Until the user ticked a box, their next
+  application asked them to sign in again, a logout had nothing to end, and
+  applications that registered a `backchannel_logout_uri` were not told when
+  the user signed out or was signed out. Now a sign-in opens a session
+  whatever the user chose, and the choice sets only how long it lasts: the
+  tenant's `session_timeout` (60 minutes unless set — the setting was stored
+  but had no effect until now), or 30 days with "keep me signed in" (it was
+  one hour). Reusing a session does not lengthen it.
+  **What an application sees:** users who sign in to one application of a
+  tenant are signed in to its others for the length of the session.
+- **A user who arrives on an existing session is asked for consent like anyone
+  else.** Arriving signed in used to skip the consent screen for any client.
+  The question is skipped only when the user's earlier answer is remembered
+  or the client is registered with `skip_consent`.
+- **Consent the user asks to be remembered is kept until it is revoked**, not
+  for an hour. `remember_for` is no longer part of
+  `POST /api/v1/consent-flows/{flow}/accept`; a login screen that still sends
+  it is not refused, the value is ignored.
+
+### Fixed
+
+- **A client registered with `skip_consent` no longer shows its users the
+  consent screen.** The registration was passed on to the authorization
+  server, but the server reports it in a field the consent step did not read,
+  so the screen was skipped only for a remembered answer.
+- **An authorization request with `prompt=none` is always answered at the
+  application.** With a session of another tenant in the browser, the user was
+  shown a sign-in form; the application now gets `login_required`. With a
+  session and a remembered consent it gets a code, for the application's own
+  clients (`skip_consent`) too — the consent given on the user's behalf is
+  remembered, which the authorization server requires of a silent request.
+
 ## [0.11.0] - 2026-10-13
 
 > Minor, with breaking changes to the two-factor calls of the account API:

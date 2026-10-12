@@ -64,12 +64,18 @@ Errors carry `error` (a message to show) and `code`. An unknown flow id is
 client enables and what this deployment can run — show exactly this list.
 
 When the browser already has a session in the client's tenant, the answer is
-`{"next": "redirect", "redirect_to": "…"}` and no form is needed.
+`{"next": "redirect", "redirect_to": "…"}` and no form is needed. A session
+of another tenant is not this client's to use: the form is shown — or, when
+the application asked for an answer without a prompt (`prompt=none`), the
+answer sends the browser back to it with `login_required`. See
+[Sessions](#sessions).
 
 ### `POST /api/v1/login-flows/{flow}/password`
 
 `{"email": "…", "password": "…", "remember": false}` → `next: redirect`, or
-`next: mfa` with `mfa_challenge` and `flow` for a user with a second factor. A wrong
+`next: mfa` with `mfa_challenge` and `flow` for a user with a second factor.
+`remember` is the user's "keep me signed in": it makes the session a longer
+one, nothing else ([Sessions](#sessions)). A wrong
 email or password is `401 invalid_credentials`; a client that does not allow
 password sign-in is `403 sign_in_method_not_allowed`.
 
@@ -118,10 +124,15 @@ authorization server ties the login to that browser.
 
 - `GET /api/v1/consent-flows/{flow}` → `next: form` with `client_name`,
   `requested_scope` and `user`, or `next: redirect` when there is nothing to
-  ask (the client skips consent, single sign-on).
+  ask: the user's earlier answer is remembered, or the client is registered
+  with `skip_consent` (the tenant's own application). Being signed in already
+  is not a reason — a user who arrives at another client on an existing
+  session is asked like anyone else.
 - `POST /api/v1/consent-flows/{flow}/accept` with
-  `{"grant_scope": [...], "remember": true, "remember_for": 3600}` →
-  `next: redirect`.
+  `{"grant_scope": [...], "remember": true}` → `next: redirect`. `remember`
+  is the user's "do not ask me again for this application"; the answer is
+  then kept until the user's consents are revoked (signing out everywhere
+  does that).
 - `POST /api/v1/consent-flows/{flow}/reject` → `next: redirect` (the
   application receives `access_denied`).
 
@@ -131,6 +142,46 @@ authorization server ties the login to that browser.
 and revokes the user's tokens. The destination is decided by the
 authorization server: the application's `post_logout_redirect_uri`, which must
 be one of the client's registered `post_logout_redirect_uris`.
+
+## Sessions
+
+Every sign-in — by password, an emailed link or another identity provider —
+opens a **session** at the authorization server: until it ends, that browser
+is known there. The session is what makes the rest work:
+
+- the user's next application in the same tenant does not ask them to sign in
+  again;
+- a logout has something to end, and the applications signed in on the session
+  are told ([back-channel logout](../FEATURES.md));
+- an application can ask whether the user is still signed in without showing
+  them anything.
+
+How long it lasts is decided when the user signs in, and reusing it does not
+make it longer:
+
+| | Session lasts |
+|---|---|
+| A sign-in | the tenant's `session_timeout` — 60 minutes unless the tenant sets another |
+| A sign-in with "keep me signed in" (`remember: true`) | 30 days |
+
+A `session_timeout` longer than 30 days is treated as 30 days. An application
+that needs the user to have signed in recently says so with `max_age` on its
+authorization request.
+
+### Asking without a prompt
+
+An authorization request with `prompt=none` is answered without showing the
+user anything — with a code, or with an error at the application's redirect
+URI:
+
+| The browser has | Answer |
+|---|---|
+| a session, and a remembered consent for this client (or the client is registered with `skip_consent`) | `code` |
+| a session, but the user would have to be asked for consent | `error=consent_required` |
+| no session, one older than the request's `max_age`, or one of another tenant | `error=login_required` |
+
+On either error the application sends the user through an ordinary
+authorization request.
 
 ## Capabilities
 

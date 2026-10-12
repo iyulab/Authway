@@ -43,10 +43,11 @@ func NewSocialHandlerWithAllProviders(
 	auditService audit.Service,
 	stateStore *OAuthStateStore,
 	frontendURL string,
+	sessions SessionPolicy,
 ) *SocialHandler {
 	var flows *signIn
 	if stateStore != nil {
-		flows = newSignIn(hydraClient, userService, logger, stateStore.redis)
+		flows = newSignIn(hydraClient, userService, logger, stateStore.redis, sessions)
 	}
 	return &SocialHandler{
 		stateStore:       stateStore,
@@ -74,7 +75,7 @@ func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, method signIn
 	entry.ActorID = &u.ID
 	entry.ActorEmail = u.Email
 	entry.ActorType = "user"
-	for k, v := range method.details(flow, true) {
+	for k, v := range method.details(flow, false) {
 		entry.Details[k] = v
 	}
 	entry.Details["client_id"] = clientID
@@ -395,7 +396,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 // asked of them.
 func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow string, u *user.User) error {
 	method := byProvider(provider)
-	step, err := s.flows.afterFirstFactor(flow, u, method, true, 3600)
+	step, err := s.flows.afterFirstFactor(flow, u, method, false)
 	if err != nil {
 		s.logger.Error("Failed to continue the login flow after a social sign-in",
 			zap.String("provider", provider), zap.Error(err))

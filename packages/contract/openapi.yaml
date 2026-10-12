@@ -144,7 +144,11 @@ paths:
               properties:
                 email: { type: string }
                 password: { type: string }
-                remember: { type: boolean }
+                remember:
+                  description: |
+                    The user asks to stay signed in on this browser. Every
+                    sign-in opens a session; this only makes it a longer one.
+                  type: boolean
       responses:
         '200':
           description: Signed in, or a second factor is needed
@@ -386,8 +390,12 @@ paths:
               type: object
               properties:
                 grant_scope: { type: array, items: { type: string } }
-                remember: { type: boolean }
-                remember_for: { type: integer, minimum: 0 }
+                remember:
+                  description: |
+                    The user asks not to be asked again by this client. The
+                    answer is then kept until the user's consents are
+                    revoked; how long is not the screen's to say.
+                  type: boolean
       responses:
         '200': { $ref: '#/components/responses/Redirect' }
         '400': { $ref: '#/components/responses/Error' }
@@ -859,7 +867,12 @@ paths:
                 grant_types: { type: array, items: { type: string } }
                 scopes: { type: array, items: { type: string } }
                 enabled_auth_providers: { type: array, items: { type: string } }
-                skip_consent: { type: boolean }
+                skip_consent:
+                  description: |
+                    The client is the tenant's own application: its users are
+                    not asked for consent. A user who arrives at any other
+                    client is asked, signed in already or not.
+                  type: boolean
                 skip_logout_consent: { type: boolean }
                 access_token_strategy:
                   description: |
@@ -2165,7 +2178,12 @@ components:
       properties:
         require_email_verification: { type: boolean }
         password_min_length: { type: integer }
-        session_timeout: { type: integer, description: Minutes. }
+        session_timeout:
+          description: |
+            Minutes a sign-in session of the tenant's users lasts, counted
+            from the sign-in. 60 when absent or zero. A user who asks to stay
+            signed in gets the deployment's longer session instead.
+          type: integer
         allowed_domains: { type: [array, 'null'], items: { type: string } }
         signup_mode:
           description: |

@@ -113,5 +113,5 @@ func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 			"code":  "invalid_link",
 		})
 	}
-	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false, 0)
+	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false)
 }

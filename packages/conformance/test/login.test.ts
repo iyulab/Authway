@@ -20,6 +20,17 @@ describe('password login through the authorization-code flow', () => {
     if (client) await provider.deleteClient(client)
   })
 
+  it('signs in a user who asks to stay signed in', async () => {
+    // How long the session then lasts is the provider's policy; that the
+    // choice is accepted, and the session is there, is the contract.
+    const outcome = await provider.login(client, user, { remember: true })
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('code')
+    if (outcome.kind !== 'code') return
+    subjects.add(outcome.sub)
+    const again = await provider.reauthorize(outcome.browser, client)
+    expect(again.access_token).toBeTruthy()
+  })
+
   it('issues tokens for an invited user and identifies them at userinfo', async () => {
     const outcome = await provider.login(client, user)
     expect(outcome.kind).toBe('code')
@@ -71,10 +82,8 @@ describe('password login through the authorization-code flow', () => {
     expect(after.status).toBe(401)
   })
 
-  it('signs a remembered user out through RP-initiated logout and invalidates their tokens', async () => {
-    // Only a remembered login leaves a session for the logout screen to end;
-    // without one the provider rightly skips straight to the redirect.
-    const outcome = await provider.login(client, user, { remember: true })
+  it('signs a user out through RP-initiated logout and invalidates their tokens', async () => {
+    const outcome = await provider.login(client, user)
     if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)
     subjects.add(outcome.sub)
     if (!outcome.tokens.id_token) throw new Error('no id_token to hint the logout with')

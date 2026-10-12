@@ -42,8 +42,8 @@ type SignInMethodSource interface {
 	SignInMethodsFor(cl *client.Client) []string
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signInMethods SignInMethodSource) *AuthHandler {
-	flows := newSignIn(hydraClient, userService, logger, redisClient)
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signInMethods SignInMethodSource, sessions SessionPolicy) *AuthHandler {
+	flows := newSignIn(hydraClient, userService, logger, redisClient, sessions)
 	return &AuthHandler{
 		flows:           flows,
 		signInMethods:   signInMethods,
@@ -107,6 +107,7 @@ func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action au
 }
 
 // PasswordLoginRequest is the body of POST /api/v1/login-flows/:flow/password.
+// Remember is the user's choice to stay signed in on this browser.
 type PasswordLoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -161,20 +162,15 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 		return respondInvalidCredentials(c)
 	}
 
-	rememberFor := 0
-	if req.Remember {
-		rememberFor = 3600 // 1 hour
-	}
-
-	return h.firstFactorPassed(c, flow, user, byPassword, req.Remember, rememberFor)
+	return h.firstFactorPassed(c, flow, user, byPassword, req.Remember)
 }
 
 // firstFactorPassed answers the sign-in screen for a user who has just proved
 // who they are by first: the second factor step when they have one, signed in
 // otherwise. The step names its flow, which a screen that came in by an
 // emailed link does not otherwise know.
-func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User, first signInMethod, remember bool, rememberFor int) error {
-	step, err := h.flows.afterFirstFactor(flow, u, first, remember, rememberFor)
+func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User, first signInMethod, keepSignedIn bool) error {
+	step, err := h.flows.afterFirstFactor(flow, u, first, keepSignedIn)
 	if errors.Is(err, errSecondFactorNotStarted) {
 		h.logger.Error("Failed to start the second factor step", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to start MFA challenge", "code": "internal_error"})
@@ -192,13 +188,13 @@ func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User,
 			"flow":          flow,
 		})
 	}
-	return h.signedIn(c, flow, u, first, remember, step.RedirectTo)
+	return h.signedIn(c, flow, u, first, keepSignedIn, step.RedirectTo)
 }
 
 // signedIn records a completed sign-in and sends the screen on.
-func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, remember bool, redirectTo string) error {
+func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, keepSignedIn bool, redirectTo string) error {
 	middleware.ResetRateLimitOnSuccess(c)
-	h.logUserAudit(c, u, audit.ActionUserLogin, method.details(flow, remember))
+	h.logUserAudit(c, u, audit.ActionUserLogin, method.details(flow, keepSignedIn))
 
 	return c.JSON(fiber.Map{
 		"next":        nextRedirect,
@@ -259,12 +255,12 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	if phase == "recovery_code" {
 		method = firstFactor(pending.First, pending.Provider).withRecoveryCode()
 	}
-	redirectTo, err := h.flows.accept(pending.HydraChallenge, u, method, pending.Remember, pending.RememberFor)
+	redirectTo, err := h.flows.accept(pending.HydraChallenge, u, method, pending.KeepSignedIn)
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
 	}
-	return h.signedIn(c, pending.HydraChallenge, u, method, pending.Remember, redirectTo)
+	return h.signedIn(c, pending.HydraChallenge, u, method, pending.KeepSignedIn, redirectTo)
 }
 
 func respondInvalidMFAChallenge(c *fiber.Ctx) error {
@@ -361,48 +357,28 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	userClaims := h.storedClaims(c, user)
 	issued := issuedFor(user)
 
-	// Check if this is a silent (prompt=none) authentication
-	// Hydra may not set Skip=true for prompt=none, but we should still auto-accept
-	isSilentAuth := false
-	if consentReq.Context != nil {
-		if prompt, exists := consentReq.Context["prompt"]; exists && prompt == "none" {
-			isSilentAuth = true
-		}
-	}
+	// The user is not asked when their earlier answer is remembered, or when
+	// the client is registered to skip the question (its own application of
+	// the tenant). Nothing else decides this: not what is stored about the
+	// user, and not that they arrived on an existing session — a session says
+	// who the user is, not what they allowed this client.
+	//
+	// The authorization server reports the client's registration only as
+	// client.skip_consent; `skip` is true for a remembered consent alone.
+	skipsQuestion := consentReq.Client != nil && consentReq.Client.SkipConsent
 
-	// Check if this consent request came from SSO auto-login
-	// SSO auto-login should not require user consent again
-	isSSOLogin := false
-	if consentReq.Context != nil {
-		if sso, exists := consentReq.Context["sso"]; exists {
-			if ssoVal, ok := sso.(bool); ok && ssoVal {
-				isSSOLogin = true
-			}
-		}
-	}
-
-	// Auto-accept consent if:
-	// 1. Client has skip_consent=true, or the user's earlier consent is
-	//    remembered (from Hydra)
-	// 2. Silent authentication (prompt=none)
-	// 3. SSO auto-login (user already authenticated, should not show consent again)
-	// What is stored about the user never decides this.
-	shouldAutoAccept := consentReq.Skip || isSilentAuth || isSSOLogin
-
-	if shouldAutoAccept {
-		h.logger.Info("Auto-accepting consent",
+	if consentReq.Skip || skipsQuestion {
+		h.logger.Info("Consent continues without a question",
 			zap.String("client_id", consentReq.Client.ClientID),
-			zap.Bool("skip_consent", consentReq.Skip),
-			zap.Bool("is_silent_auth", isSilentAuth),
-			zap.Bool("is_sso_login", isSSOLogin),
+			zap.Bool("remembered", consentReq.Skip),
+			zap.Bool("client_skips_consent", skipsQuestion),
 			zap.String("challenge", challenge[:min(50, len(challenge))]+"..."))
 
-		// Auto-accept consent
 		acceptRequest := &hydra.AcceptConsentRequest{
 			GrantScope:               consentReq.RequestedScope,
 			GrantAccessTokenAudience: grantedAudience(consentReq),
 			Remember:                 true,
-			RememberFor:              3600,
+			RememberFor:              int(autoConsentRememberedFor.Seconds()),
 			Session: &hydra.ConsentSession{
 				AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 				IDToken:     issued.IDToken(userClaims),
@@ -421,7 +397,6 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 		})
 	}
 
-	// Show consent page (only if client doesn't have skip_consent=true)
 	h.logger.Info("Showing consent page",
 		zap.String("client_id", consentReq.Client.ClientID),
 		zap.Bool("skip", consentReq.Skip))
@@ -439,10 +414,11 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 }
 
 // AcceptConsentRequest is the body of POST /api/v1/consent-flows/:flow/accept.
+// Remember is the user's choice not to be asked again by this client; the
+// answer is then kept until the user's consents are revoked.
 type AcceptConsentRequest struct {
-	GrantScope  []string `json:"grant_scope"`
-	Remember    bool     `json:"remember"`
-	RememberFor int      `json:"remember_for"`
+	GrantScope []string `json:"grant_scope"`
+	Remember   bool     `json:"remember"`
 }
 
 // AcceptConsent grants the scopes the user approved on the consent screen.
@@ -485,7 +461,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		GrantScope:               req.GrantScope,
 		GrantAccessTokenAudience: audience,
 		Remember:                 req.Remember,
-		RememberFor:              req.RememberFor,
+		RememberFor:              0, // until revoked
 		Session: &hydra.ConsentSession{
 			AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 			IDToken:     issued.IDToken(userClaims),
@@ -498,7 +474,6 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		zap.Strings("grant_scope", req.GrantScope),
 		zap.Strings("grant_access_token_audience", audience),
 		zap.Bool("remember", req.Remember),
-		zap.Int("remember_for", req.RememberFor),
 		zap.String("user_id", user.ID.String()),
 		zap.String("tenant_id", user.TenantID.String()))
 

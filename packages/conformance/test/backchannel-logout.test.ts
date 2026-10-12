@@ -40,8 +40,8 @@ describe('back-channel logout', () => {
   const signInToBoth = async (): Promise<{ browser: Browser; a: Tokens; b: Tokens; sid: string }> => {
     const browser = new Browser()
     const attempt = await provider.startLogin(apps.a, ['openid'], browser)
-    // Remembered, so the second application is signed in on the same session.
-    const outcome = await provider.continueLogin({ ...attempt, remember: true }, user)
+    // An ordinary sign-in: the second application is signed in on its session.
+    const outcome = await provider.continueLogin(attempt, user)
     if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
     sub = outcome.sub
     const b = await provider.reauthorize(browser, apps.b, ['openid'])
