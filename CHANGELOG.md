@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-12
+
+> Minor, with breaking changes for API consumers: email verification and
+> password reset moved under `/api/v1`, `GET /api/v1/config` and admin
+> impersonation are gone, webhook `session.*` events are gone, and the audit
+> action list only names what is recorded. New: self-service account deletion
+> with a recent-sign-in requirement, top-level claims in JWT access tokens,
+> webhook events that are actually sent, and an OpenAPI contract covering the
+> login UI API and administration. The SDK packages are versioned separately.
+
 ### Added
 
 - **A user can delete their own account**: `DELETE /api/v1/profile/me` with
