@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security
+
+- **A stored claim can no longer replace a claim the issuer asserts.** A user
+  writes claims with their own token (`PATCH /api/v1/claims`,
+  `PATCH /api/v1/claims/user`), and on some consent paths a stored
+  `tenant_id`, `email`, `name` or `email_verified` replaced the real one in the
+  tokens issued afterwards. Writes that name such a claim, a claim OAuth or
+  OpenID Connect defines (`sub`, `aud`, `auth_time`, …) or one starting with
+  `_` are now refused with `400 reserved_claim` and the offending `keys`;
+  stored ones are left out of tokens and of what the claims API returns. On
+  every consent path the issuer's claims are applied last.
+
+### Fixed
+
+- **The ID token carries `email_verified` on every consent path.** It was
+  missing when a client skips the consent screen or the user is signed in
+  silently.
+- **The claims API's refusals carry a `code`** (`invalid_request`,
+  `reserved_claim`), like the other endpoints.
+
 ## [0.6.0] - 2026-10-12
 
 > Minor, with breaking changes for API consumers: email verification and

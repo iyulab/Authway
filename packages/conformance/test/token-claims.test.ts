@@ -77,5 +77,7 @@ describe('token claims', () => {
     expect(claims.email).toBe(user.email)
     expect(claims.tenant_id).toBe(claimsOf(accessToken).tenant_id)
     expect(typeof claims.auth_time).toBe('number')
+    // Whether the provider verified the address: an invited user's was.
+    expect(typeof claims.email_verified).toBe('boolean')
   })
 })

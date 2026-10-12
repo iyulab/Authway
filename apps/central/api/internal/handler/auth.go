@@ -324,6 +324,17 @@ func (h *AuthHandler) logMFALoginFailure(c *fiber.Ctx, u *user.User, phase strin
 	}
 }
 
+// issuedFor is what Authway asserts about u in the tokens it issues; those
+// claims go on top of any stored ones, on every consent path.
+func issuedFor(u *user.User) claims.Issued {
+	return claims.Issued{
+		TenantID:      u.TenantID,
+		Email:         u.Email,
+		Name:          u.Name,
+		EmailVerified: u.EmailVerified,
+	}
+}
+
 // GetConsentFlow tells the consent screen what to do with a consent flow:
 // {"next":"redirect","redirect_to":…} when no question needs asking (the
 // client skips consent, a silent or single-sign-on login, a claims update),
@@ -349,28 +360,15 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	}
 
 	// Get claims for this consent flow
-	loginChallenge := consentReq.LoginChallenge
-	userName := ""
-	if user.Name != nil {
-		userName = *user.Name
-	}
-	userInfo := &claims.UserInfo{
-		Email:    user.Email,
-		Name:     userName,
-		TenantID: user.TenantID,
-	}
-	userClaims, err := h.claimsService.GetClaimsForConsent(c.Context(), loginChallenge, userID, user.TenantID, userInfo)
+	userClaims, claimsSource, err := h.claimsService.GetClaimsForConsent(c.Context(), consentReq.LoginChallenge, userID, user.TenantID)
 	if err != nil {
 		h.logger.Warn("Failed to get claims for consent", zap.Error(err))
 		userClaims = make(claims.ClaimMap)
 	}
+	issued := issuedFor(user)
 
-	// Check source of claims to determine if this is a claims update scenario
-	claimsSource, _ := userClaims["_source"].(string)
-	isClaimsUpdate := claimsSource == "pending" || claimsSource == "login_challenge"
-
-	// Remove internal _source field before sending to Hydra
-	delete(userClaims, "_source")
+	// A claims update (workspace switch, etc.) does not ask again.
+	isClaimsUpdate := claimsSource == claims.ClaimsSourcePending || claimsSource == claims.ClaimsSourceLoginChallenge
 
 	// Check if this is a silent (prompt=none) authentication
 	// Hydra may not set Skip=true for prompt=none, but we should still auto-accept
@@ -402,7 +400,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	if shouldAutoAccept {
 		h.logger.Info("Auto-accepting consent",
 			zap.String("client_id", consentReq.Client.ClientID),
-			zap.String("claims_source", claimsSource),
+			zap.String("claims_source", string(claimsSource)),
 			zap.Bool("skip_consent", consentReq.Skip),
 			zap.Bool("is_claims_update", isClaimsUpdate),
 			zap.Bool("is_silent_auth", isSilentAuth),
@@ -417,8 +415,8 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 			Remember:                 true,
 			RememberFor:              3600,
 			Session: &hydra.ConsentSession{
-				AccessToken: withAuthTime(userClaims, h.authTimes, consentReq.LoginSessionID),
-				IDToken:     userClaims,
+				AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authTimes, consentReq.LoginSessionID),
+				IDToken:     issued.IDToken(userClaims),
 			},
 		}
 
@@ -437,7 +435,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	// Show consent page (only if client doesn't have skip_consent=true)
 	h.logger.Info("Showing consent page",
 		zap.String("client_id", consentReq.Client.ClientID),
-		zap.String("claims_source", claimsSource),
+		zap.String("claims_source", string(claimsSource)),
 		zap.Bool("skip", consentReq.Skip))
 
 	return c.JSON(fiber.Map{
@@ -491,45 +489,16 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	}
 
 	// Get claims for this consent flow (with fallback to pending/db claims if login_challenge mismatch)
-	loginChallenge := consentReq.LoginChallenge
-	userName := ""
-	if user.Name != nil {
-		userName = *user.Name
-	}
-	userInfoForClaims := &claims.UserInfo{
-		Email:    user.Email,
-		Name:     userName,
-		TenantID: user.TenantID,
-	}
-	userClaims, err := h.claimsService.GetClaimsForConsent(c.Context(), loginChallenge, userID, user.TenantID, userInfoForClaims)
+	userClaims, _, err := h.claimsService.GetClaimsForConsent(c.Context(), consentReq.LoginChallenge, userID, user.TenantID)
 	if err != nil {
 		h.logger.Warn("Failed to get claims for consent",
-			zap.String("login_challenge", loginChallenge),
+			zap.String("login_challenge", consentReq.LoginChallenge),
 			zap.String("user_id", userID.String()),
 			zap.Error(err))
 		// Continue without additional claims
 		userClaims = make(claims.ClaimMap)
 	}
-
-	// Build session data with base claims + user claims
-	accessTokenClaims := map[string]any{
-		"email":     user.Email,
-		"name":      user.Name,
-		"tenant_id": user.TenantID.String(),
-	}
-
-	idTokenClaims := map[string]any{
-		"email":          user.Email,
-		"name":           user.Name,
-		"email_verified": user.EmailVerified,
-		"tenant_id":      user.TenantID.String(),
-	}
-
-	// Merge user claims into both access token and ID token
-	for key, value := range userClaims {
-		accessTokenClaims[key] = value
-		idTokenClaims[key] = value
-	}
+	issued := issuedFor(user)
 
 	// Accept consent request
 	acceptBody := &hydra.AcceptConsentRequest{
@@ -538,8 +507,8 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		Remember:                 req.Remember,
 		RememberFor:              req.RememberFor,
 		Session: &hydra.ConsentSession{
-			AccessToken: withAuthTime(accessTokenClaims, h.authTimes, consentReq.LoginSessionID),
-			IDToken:     idTokenClaims,
+			AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authTimes, consentReq.LoginSessionID),
+			IDToken:     issued.IDToken(userClaims),
 		},
 	}
 

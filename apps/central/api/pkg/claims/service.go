@@ -23,7 +23,10 @@ type Service interface {
 
 	// Internal operations for OAuth flow
 	GetClaimsForLogin(ctx context.Context, userID, tenantID uuid.UUID, loginChallenge string) (ClaimMap, error)
-	GetClaimsForConsent(ctx context.Context, loginChallenge string, userID, tenantID uuid.UUID, userInfo *UserInfo) (ClaimMap, error)
+	// GetClaimsForConsent returns the stored claims for the token being
+	// issued, without any reserved claim, and where they came from. The caller
+	// puts the issuer's claims on top (Issued).
+	GetClaimsForConsent(ctx context.Context, loginChallenge string, userID, tenantID uuid.UUID) (ClaimMap, ClaimsSource, error)
 }
 
 type service struct {
@@ -49,6 +52,9 @@ func (s *service) UpdateClaims(ctx context.Context, userID, tenantID uuid.UUID, 
 		zap.Int("claim_count", len(req.Claims)),
 		zap.Bool("permanent", req.Permanent),
 	)
+	if err := checkWritable(req.Claims); err != nil {
+		return nil, err
+	}
 
 	// 1. Store pending claims in Redis (will be applied on next authentication)
 	err := s.repo.SetPendingClaims(ctx, userID, req.Claims, 5*time.Minute)
@@ -125,24 +131,19 @@ func (s *service) GetClaims(ctx context.Context, userID, tenantID uuid.UUID) (*G
 	sessionKeys := []string{}
 
 	for _, claim := range dbClaims {
-		// Extract value from JSONB
-		if val, ok := claim.ClaimValue["value"]; ok {
-			allClaims[claim.ClaimKey] = val
-		} else {
-			allClaims[claim.ClaimKey] = claim.ClaimValue
+		if IsReserved(claim.ClaimKey) {
+			continue
 		}
-
+		allClaims[claim.ClaimKey] = claim.value()
 		if claim.IsPermanent {
 			permanentKeys = append(permanentKeys, claim.ClaimKey)
 		}
 	}
 
 	// Pending claims override database claims
-	if pendingClaims != nil {
-		for key, value := range pendingClaims {
-			allClaims[key] = value
-			sessionKeys = append(sessionKeys, key)
-		}
+	for key, value := range withoutReserved(pendingClaims) {
+		allClaims[key] = value
+		sessionKeys = append(sessionKeys, key)
 	}
 
 	return &GetClaimsResponse{
@@ -183,6 +184,9 @@ func (s *service) UpdateUserClaims(ctx context.Context, userID, tenantID uuid.UU
 		zap.String("tenant_id", tenantID.String()),
 		zap.Int("claim_count", len(req.Claims)),
 	)
+	if err := checkWritable(req.Claims); err != nil {
+		return nil, err
+	}
 
 	// Save user claims directly to database with claim_type='user'
 	for key, value := range req.Claims {
@@ -234,19 +238,10 @@ func (s *service) GetUserClaims(ctx context.Context, userID, tenantID uuid.UUID)
 	}
 
 	// Convert to ClaimMap
-	claims := make(ClaimMap)
-	for _, claim := range dbClaims {
-		if val, ok := claim.ClaimValue["value"]; ok {
-			claims[claim.ClaimKey] = val
-		} else {
-			claims[claim.ClaimKey] = claim.ClaimValue
-		}
-	}
-
 	return &GetUserClaimsResponse{
 		UserID:   userID,
 		TenantID: tenantID,
-		Claims:   claims,
+		Claims:   storedValues(dbClaims),
 	}, nil
 }
 
@@ -273,23 +268,9 @@ func (s *service) GetClaimsForLogin(ctx context.Context, userID, tenantID uuid.U
 	}
 
 	// 3. Merge claims (pending claims override database claims)
-	allClaims := make(ClaimMap)
-
-	if dbClaims != nil {
-		for _, claim := range dbClaims {
-			// Extract value from JSONB
-			if val, ok := claim.ClaimValue["value"]; ok {
-				allClaims[claim.ClaimKey] = val
-			} else {
-				allClaims[claim.ClaimKey] = claim.ClaimValue
-			}
-		}
-	}
-
-	if pendingClaims != nil {
-		for key, value := range pendingClaims {
-			allClaims[key] = value
-		}
+	allClaims := storedValues(dbClaims)
+	for key, value := range withoutReserved(pendingClaims) {
+		allClaims[key] = value
 	}
 
 	// 4. Store merged claims associated with login challenge
@@ -313,9 +294,7 @@ func (s *service) GetClaimsForLogin(ctx context.Context, userID, tenantID uuid.U
 	return allClaims, nil
 }
 
-// GetClaimsForConsent is called during consent flow to inject claims into the token
-// Falls back to pending claims by userID and then database claims if login_challenge lookup fails
-// ClaimsSource indicates where claims were retrieved from
+// ClaimsSource indicates where the claims for a consent came from.
 type ClaimsSource string
 
 const (
@@ -325,127 +304,63 @@ const (
 	ClaimsSourceNone           ClaimsSource = "none"
 )
 
-// UserInfo contains base user information to include in claims
-type UserInfo struct {
-	Email    string
-	Name     string
-	TenantID uuid.UUID
-}
-
-func (s *service) GetClaimsForConsent(ctx context.Context, loginChallenge string, userID, tenantID uuid.UUID, userInfo *UserInfo) (ClaimMap, error) {
+// GetClaimsForConsent is called during the consent flow. It prefers the claims
+// prepared for the login challenge, then falls back to the permanent claims
+// with any pending claims on top (a claims update whose login challenge is
+// gone). Reserved claims never come out of it.
+func (s *service) GetClaimsForConsent(ctx context.Context, loginChallenge string, userID, tenantID uuid.UUID) (ClaimMap, ClaimsSource, error) {
 	s.logger.Info("Getting claims for consent",
 		zap.String("login_challenge", loginChallenge),
 		zap.String("user_id", userID.String()),
 		zap.String("tenant_id", tenantID.String()),
 	)
 
-	// Strategy 1: Get claims associated with this login challenge
-	claims, err := s.repo.GetLoginClaims(ctx, loginChallenge)
+	// Strategy 1: claims associated with this login challenge.
+	loginClaims, err := s.repo.GetLoginClaims(ctx, loginChallenge)
 	if err != nil {
 		s.logger.Error("Failed to get login claims", zap.Error(err))
-		return nil, fmt.Errorf("failed to get login claims: %w", err)
+		return nil, ClaimsSourceNone, fmt.Errorf("failed to get login claims: %w", err)
+	}
+	if len(loginClaims) > 0 {
+		return withoutReserved(loginClaims), ClaimsSourceLoginChallenge, nil
 	}
 
-	if claims != nil && len(claims) > 0 {
-		// Add base user information
-		if userInfo != nil {
-			claims["email"] = userInfo.Email
-			claims["name"] = userInfo.Name
-			claims["tenant_id"] = userInfo.TenantID.String()
-		}
-		claims["_source"] = string(ClaimsSourceLoginChallenge)
-		s.logger.Info("Claims retrieved from login challenge with base user info",
-			zap.Int("claim_count", len(claims)),
-		)
-		return claims, nil
-	}
-
-	// Strategy 2: Fallback to pending claims by userID
-	s.logger.Info("No claims found for login challenge, trying pending claims fallback",
-		zap.String("login_challenge", loginChallenge),
-	)
-
+	// Strategies 2 and 3: permanent claims, with pending claims on top.
 	pendingClaims, err := s.repo.GetPendingClaims(ctx, userID)
 	if err != nil {
 		s.logger.Warn("Failed to get pending claims", zap.Error(err))
 	}
-
-	// Strategy 3: Get permanent database claims to merge with pending
-	s.logger.Info("Getting database claims for merging")
-
 	dbClaims, err := s.repo.GetUserClaims(ctx, userID, tenantID)
 	if err != nil {
 		s.logger.Warn("Failed to get database claims", zap.Error(err))
 	}
 
-	// Build permanent claims map from database
-	permanentClaims := make(ClaimMap)
-	if len(dbClaims) > 0 {
-		for _, claim := range dbClaims {
-			// Extract value from JSONB
-			if val, ok := claim.ClaimValue["value"]; ok {
-				permanentClaims[claim.ClaimKey] = val
-			} else {
-				permanentClaims[claim.ClaimKey] = claim.ClaimValue
-			}
+	claims := storedValues(dbClaims)
+	if len(pendingClaims) > 0 {
+		for key, value := range withoutReserved(pendingClaims) {
+			claims[key] = value
 		}
-	}
-
-	// Merge: Start with base user info, then permanent claims, then override with pending claims
-	finalClaims := make(ClaimMap)
-
-	// Always include base user information
-	if userInfo != nil {
-		finalClaims["email"] = userInfo.Email
-		finalClaims["name"] = userInfo.Name
-		finalClaims["tenant_id"] = userInfo.TenantID.String()
-	} else {
-		s.logger.Warn("userInfo is nil in GetClaimsForConsent - base claims may be missing")
-	}
-
-	// Add permanent claims from database
-	for key, value := range permanentClaims {
-		finalClaims[key] = value
-	}
-
-	// Override with pending claims (workspace/org/team updates)
-	if pendingClaims != nil && len(pendingClaims) > 0 {
-		for key, value := range pendingClaims {
-			finalClaims[key] = value
-		}
-
-		// Mark as pending source (claims update scenario)
-		finalClaims["_source"] = string(ClaimsSourcePending)
-
-		s.logger.Info("Claims merged: base user + database + pending",
-			zap.Int("permanent_count", len(permanentClaims)),
-			zap.Int("pending_count", len(pendingClaims)),
-			zap.Int("final_count", len(finalClaims)),
-			zap.String("source", "redis_pending_claims"),
-		)
-
-		// Delete pending claims since we're using them in consent now
+		// The pending claims are used now; a later consent must not apply them again.
 		if err := s.repo.DeletePendingClaims(ctx, userID); err != nil {
 			s.logger.Warn("Failed to delete pending claims after use", zap.Error(err))
 		}
-
-		return finalClaims, nil
+		return claims, ClaimsSourcePending, nil
 	}
-
-	// No pending claims - return base user + database claims (initial login)
-	if len(finalClaims) > 0 {
-		finalClaims["_source"] = string(ClaimsSourceDatabase)
-		s.logger.Info("Claims from base user + database (initial login)",
-			zap.Int("claim_count", len(finalClaims)),
-		)
-		return finalClaims, nil
+	if len(dbClaims) > 0 {
+		return claims, ClaimsSourceDatabase, nil
 	}
+	return claims, ClaimsSourceNone, nil
+}
 
-	// No claims at all (should not happen if userInfo provided)
-	s.logger.Info("No claims found from any source")
-	emptyMap := make(ClaimMap)
-	emptyMap["_source"] = string(ClaimsSourceNone)
-	return emptyMap, nil
+// storedValues maps stored claims to their values, leaving reserved keys out.
+func storedValues(stored []UserClaim) ClaimMap {
+	out := make(ClaimMap, len(stored))
+	for _, claim := range stored {
+		if !IsReserved(claim.ClaimKey) {
+			out[claim.ClaimKey] = claim.value()
+		}
+	}
+	return out
 }
 
 // getClaimKeys returns all keys from a ClaimMap for logging purposes

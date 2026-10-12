@@ -1594,6 +1594,10 @@ components:
         library and the same code works against every provider. (A provider
         may repeat them elsewhere in the token; only the top level is part of
         this contract.)
+
+        The provider asserts these claims itself. No other source — claims
+        an application or the user stored — replaces them, nor any claim
+        OAuth or OpenID Connect defines.
       type: object
       required: [sub, tenant_id, email, auth_time]
       properties:
@@ -1601,6 +1605,9 @@ components:
         tenant_id: { type: string, description: The tenant the user belongs to. }
         email: { type: string }
         name: { type: ['null', string] }
+        email_verified:
+          type: boolean
+          description: In the ID token, whether the provider verified the address.
         auth_time:
           type: integer
           description: |

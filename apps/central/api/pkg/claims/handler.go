@@ -1,6 +1,9 @@
 package claims
 
 import (
+	"errors"
+
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/tenantscope"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -37,22 +40,20 @@ func (h *Handler) HandleUpdateClaims(c *fiber.Ctx) error {
 	var req UpdateClaimsRequest
 	if err := c.BodyParser(&req); err != nil {
 		h.logger.Warn("Failed to parse update claims request", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	// Validate request
 	if err := h.validate.Struct(&req); err != nil {
 		h.logger.Warn("Invalid update claims request", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "Validation failed",
-			"details": err.Error(),
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Validation failed: "+err.Error())
 	}
 
 	// Update claims
 	resp, err := h.service.UpdateClaims(c.Context(), userID, tenantID, &req)
+	if body, ok := reservedRefusal(err); ok {
+		return c.Status(fiber.StatusBadRequest).JSON(body)
+	}
 	if err != nil {
 		h.logger.Error("Failed to update claims", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -96,9 +97,7 @@ func (h *Handler) HandleDeleteClaim(c *fiber.Ctx) error {
 	// Get claim key from URL parameter
 	claimKey := c.Params("claim_key")
 	if claimKey == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "claim_key parameter is required",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "claim_key parameter is required")
 	}
 
 	// Delete claim
@@ -129,22 +128,20 @@ func (h *Handler) HandleUpdateUserClaims(c *fiber.Ctx) error {
 	var req UpdateUserClaimsRequest
 	if err := c.BodyParser(&req); err != nil {
 		h.logger.Warn("Failed to parse update user claims request", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	// Validate request
 	if err := h.validate.Struct(&req); err != nil {
 		h.logger.Warn("Invalid update user claims request", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "Validation failed",
-			"details": err.Error(),
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Validation failed: "+err.Error())
 	}
 
 	// Update user claims (no re-auth required)
 	resp, err := h.service.UpdateUserClaims(c.Context(), userID, tenantID, &req)
+	if body, ok := reservedRefusal(err); ok {
+		return c.Status(fiber.StatusBadRequest).JSON(body)
+	}
 	if err != nil {
 		h.logger.Error("Failed to update user claims", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -174,4 +171,14 @@ func (h *Handler) HandleGetUserClaims(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
+// reservedRefusal is the 400 reserved_claim body, with the offending keys,
+// for a write that named reserved claims.
+func reservedRefusal(err error) (fiber.Map, bool) {
+	var reservedErr *ReservedClaimError
+	if !errors.As(err, &reservedErr) {
+		return nil, false
+	}
+	return fiber.Map{"error": reservedErr.Error(), "code": "reserved_claim", "keys": reservedErr.Keys}, true
 }

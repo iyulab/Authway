@@ -8,20 +8,28 @@ import (
 
 // UserClaim represents a custom claim for a user
 type UserClaim struct {
-	ID          uuid.UUID              `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID      uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
-	TenantID    uuid.UUID              `json:"tenant_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
-	ClaimKey    string                 `json:"claim_key" gorm:"type:varchar(255);not null;index:idx_user_claims_key;uniqueIndex:idx_user_claim_unique"`
+	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID      uuid.UUID      `json:"user_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
+	TenantID    uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index:idx_user_claims_user_tenant"`
+	ClaimKey    string         `json:"claim_key" gorm:"type:varchar(255);not null;index:idx_user_claims_key;uniqueIndex:idx_user_claim_unique"`
 	ClaimValue  map[string]any `json:"claim_value" gorm:"type:jsonb;not null;serializer:json"`
-	ClaimType   string                 `json:"claim_type" gorm:"type:varchar(50);not null;default:system;index:idx_user_claims_type"`
-	IsPermanent bool                   `json:"is_permanent" gorm:"default:false"`
-	CreatedAt   time.Time              `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time              `json:"updated_at" gorm:"autoUpdateTime"`
+	ClaimType   string         `json:"claim_type" gorm:"type:varchar(50);not null;default:system;index:idx_user_claims_type"`
+	IsPermanent bool           `json:"is_permanent" gorm:"default:false"`
+	CreatedAt   time.Time      `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt   time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // TableName overrides the table name
 func (UserClaim) TableName() string {
 	return "user_claims"
+}
+
+// value is the claim's value: stored claims wrap it as {"value": …}.
+func (c UserClaim) value() any {
+	if v, ok := c.ClaimValue["value"]; ok {
+		return v
+	}
+	return c.ClaimValue
 }
 
 // ClaimMap represents a map of claims (key-value pairs)

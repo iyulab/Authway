@@ -179,8 +179,8 @@ func (fakeClaimsService) GetUserClaims(context.Context, uuid.UUID, uuid.UUID) (*
 func (fakeClaimsService) GetClaimsForLogin(context.Context, uuid.UUID, uuid.UUID, string) (claims.ClaimMap, error) {
 	return claims.ClaimMap{}, nil
 }
-func (fakeClaimsService) GetClaimsForConsent(context.Context, string, uuid.UUID, uuid.UUID, *claims.UserInfo) (claims.ClaimMap, error) {
-	return claims.ClaimMap{}, nil
+func (fakeClaimsService) GetClaimsForConsent(context.Context, string, uuid.UUID, uuid.UUID) (claims.ClaimMap, claims.ClaimsSource, error) {
+	return claims.ClaimMap{}, claims.ClaimsSourceNone, nil
 }
 
 // allowedSignInMethods offers every method the client allows, as if the

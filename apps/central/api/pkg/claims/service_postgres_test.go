@@ -2,9 +2,12 @@ package claims
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -220,7 +223,6 @@ func TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenData
 	svc := NewService(repo, "http://localhost:4444", zap.NewNop())
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
-	userInfo := &UserInfo{Email: "consent-test@example.com", Name: "Consent Test", TenantID: tenantID}
 
 	// Strategy 3 (no login-challenge claims, no pending): base user info + an
 	// existing permanent claim, source=database. UpdateClaims always stages
@@ -238,15 +240,15 @@ func TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenData
 		t.Fatalf("DeletePendingClaims (simulate expiry): %v", err)
 	}
 
-	claims, err := svc.GetClaimsForConsent(ctx, "challenge-with-no-data", userID, tenantID, userInfo)
+	claims, source, err := svc.GetClaimsForConsent(ctx, "challenge-with-no-data", userID, tenantID)
 	if err != nil {
 		t.Fatalf("GetClaimsForConsent (database fallback): %v", err)
 	}
-	if claims["_source"] != string(ClaimsSourceDatabase) {
-		t.Fatalf("expected source=database, got %v", claims["_source"])
+	if source != ClaimsSourceDatabase {
+		t.Fatalf("expected source=database, got %v", source)
 	}
-	if claims["email"] != userInfo.Email || claims["plan"] != "pro" {
-		t.Fatalf("expected base user info + permanent claim, got %+v", claims)
+	if claims["plan"] != "pro" {
+		t.Fatalf("expected the permanent claim, got %+v", claims)
 	}
 
 	// Strategy 1: claims explicitly associated with a login challenge take
@@ -260,12 +262,12 @@ func TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenData
 		t.Fatalf("expected GetClaimsForLogin to carry the permanent claim forward, got %+v", loginClaims)
 	}
 
-	viaChallenge, err := svc.GetClaimsForConsent(ctx, loginChallenge, userID, tenantID, userInfo)
+	viaChallenge, source, err := svc.GetClaimsForConsent(ctx, loginChallenge, userID, tenantID)
 	if err != nil {
 		t.Fatalf("GetClaimsForConsent (login challenge): %v", err)
 	}
-	if viaChallenge["_source"] != string(ClaimsSourceLoginChallenge) {
-		t.Fatalf("expected source=login_challenge, got %v", viaChallenge["_source"])
+	if source != ClaimsSourceLoginChallenge {
+		t.Fatalf("expected source=login_challenge, got %v", source)
 	}
 	if viaChallenge["plan"] != "pro" {
 		t.Fatalf("expected the login-challenge claims to include the permanent claim, got %+v", viaChallenge)
@@ -273,10 +275,10 @@ func TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenData
 }
 
 // TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone guards the final
-// fallback rung: with no login-challenge data, no pending claims, no
-// permanent claims, and no userInfo, the result must still be a valid
-// (empty, source=none) map rather than an error or a nil claims payload a
-// caller would need to nil-check.
+// fallback rung: with no login-challenge data, no pending claims and no
+// permanent claims, the result must still be a valid (empty, source=none)
+// map rather than an error or a nil claims payload a caller would need to
+// nil-check.
 func TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
@@ -284,11 +286,108 @@ func TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone(t *testing.T) {
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
 
-	claims, err := svc.GetClaimsForConsent(ctx, "nonexistent-challenge", userID, tenantID, nil)
+	claims, source, err := svc.GetClaimsForConsent(ctx, "nonexistent-challenge", userID, tenantID)
 	if err != nil {
 		t.Fatalf("GetClaimsForConsent: %v", err)
 	}
-	if claims["_source"] != string(ClaimsSourceNone) {
-		t.Fatalf("expected source=none, got %+v", claims)
+	if source != ClaimsSourceNone || claims == nil || len(claims) != 0 {
+		t.Fatalf("expected an empty map with source=none, got %+v (%v)", claims, source)
 	}
+}
+
+// TestClaimWrites_RefuseReservedClaims: a user writes their own claims with
+// their own token, so neither write path may take a claim the issuer asserts
+// (tenant_id, email, …) or one OAuth defines — and a refused write stores
+// nothing, not even its other claims.
+func TestClaimWrites_RefuseReservedClaims(t *testing.T) {
+	ctx := context.Background()
+	db := setupPostgres(t)
+	svc := newTestService(t, db)
+	userID, tenantID := fixtureUser(t, db)
+	cleanupUserClaims(t, db, userID)
+
+	_, err := svc.UpdateUserClaims(ctx, userID, tenantID, &UpdateUserClaimsRequest{
+		Claims: ClaimMap{"tenant_id": uuid.New().String(), "theme": "dark"},
+	})
+	var reservedErr *ReservedClaimError
+	if !errors.As(err, &reservedErr) || len(reservedErr.Keys) != 1 || reservedErr.Keys[0] != "tenant_id" {
+		t.Fatalf("UpdateUserClaims: want ReservedClaimError{tenant_id}, got %v", err)
+	}
+
+	_, err = svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
+		Claims:    ClaimMap{"email_verified": true, "auth_time": 4102444800, "sub": "someone-else", "plan": "pro"},
+		Permanent: true, ClientID: "c", RedirectURI: "https://app.example.com/cb",
+	})
+	if !errors.As(err, &reservedErr) || strings.Join(reservedErr.Keys, ",") != "auth_time,email_verified,sub" {
+		t.Fatalf("UpdateClaims: want ReservedClaimError{auth_time,email_verified,sub}, got %v", err)
+	}
+
+	got, err := svc.GetClaims(ctx, userID, tenantID)
+	if err != nil {
+		t.Fatalf("GetClaims: %v", err)
+	}
+	if len(got.Claims) != 0 {
+		t.Fatalf("a refused write stored claims: %+v", got.Claims)
+	}
+}
+
+// TestStoredReservedClaimsNeverReachATokenPath: a reserved claim stored
+// before writes were checked (or put there by any other means) is left out of
+// every path that feeds a token, and out of what the claims API shows.
+func TestStoredReservedClaimsNeverReachATokenPath(t *testing.T) {
+	ctx := context.Background()
+	db := setupPostgres(t)
+	repo := NewRepository(db, newTestRedis(t))
+	svc := NewService(repo, "http://localhost:4444", zap.NewNop())
+	userID, tenantID := fixtureUser(t, db)
+	cleanupUserClaims(t, db, userID)
+
+	for key, value := range map[string]any{"tenant_id": uuid.New().String(), "email_verified": true, "_source": "pending", "plan": "pro"} {
+		if err := repo.SaveClaim(ctx, &UserClaim{
+			ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: key,
+			ClaimValue: map[string]any{"value": value}, ClaimType: "user", IsPermanent: true,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+	if err := repo.SetPendingClaims(ctx, userID, ClaimMap{"email": "attacker@example.com"}, time.Minute); err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+
+	onlyPlan := func(where string, claims ClaimMap) {
+		t.Helper()
+		if len(claims) != 1 || claims["plan"] != "pro" {
+			t.Fatalf("%s: want only plan=pro, got %+v", where, claims)
+		}
+	}
+
+	viaPending, source, err := svc.GetClaimsForConsent(ctx, "no-such-challenge", userID, tenantID)
+	if err != nil || source != ClaimsSourcePending {
+		t.Fatalf("GetClaimsForConsent (pending): source=%v err=%v", source, err)
+	}
+	onlyPlan("consent via pending", viaPending)
+
+	viaDatabase, _, err := svc.GetClaimsForConsent(ctx, "no-such-challenge", userID, tenantID)
+	if err != nil {
+		t.Fatalf("GetClaimsForConsent (database): %v", err)
+	}
+	onlyPlan("consent via database", viaDatabase)
+
+	challenge := "challenge-" + uuid.New().String()[:8]
+	forLogin, err := svc.GetClaimsForLogin(ctx, userID, tenantID, challenge)
+	if err != nil {
+		t.Fatalf("GetClaimsForLogin: %v", err)
+	}
+	onlyPlan("login", forLogin)
+	viaChallenge, _, err := svc.GetClaimsForConsent(ctx, challenge, userID, tenantID)
+	if err != nil {
+		t.Fatalf("GetClaimsForConsent (challenge): %v", err)
+	}
+	onlyPlan("consent via login challenge", viaChallenge)
+
+	shown, err := svc.GetUserClaims(ctx, userID, tenantID)
+	if err != nil {
+		t.Fatalf("GetUserClaims: %v", err)
+	}
+	onlyPlan("GET /claims/user", shown.Claims)
 }
