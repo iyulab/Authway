@@ -268,9 +268,12 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     # 「로그인 상태 유지」 없이 로그인했어도 세션이 있어야 한다: 같은 브라우저(쿠키)의
     # prompt=none 인가 요청이 화면 없이 code 로 끝난다. 세션이 없으면 login_required,
     # 화면이 폼을 요구하면 그것도 실패다(docs/api/login-flows.md 「Sessions」).
+    # 보여 줄 것이 없는 흐름은 로그인 UI 로 보내지지도 않아야 한다(같은 문서 「Flow ids」):
+    # 리다이렉트만으로 끝나지 않고 화면 주소(flow=)를 거치면 실패.
     Write-Host "7️⃣-2 세션 재사용 (prompt=none)" -ForegroundColor Yellow
     $silentUrl = "$authUrl&prompt=none"
     $silentOutcome = $null
+    $screensOpened = 0
     foreach ($hop in 1..10) {
         $rs = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($silentUrl)
         if (-not $rs.Location) { $silentOutcome = "리다이렉트 없음(status=$($rs.Status))"; break }
@@ -279,6 +282,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         if ($rs.Location -match '[?&]flow=([^&]+)') {
             # 화면이 하는 일: flow 가 무엇을 보여 달라는지 API 에 묻는다. 답은 redirect 여야 한다.
             $silentFlow = $matches[1]
+            $screensOpened++
             $kind = if ($rs.Location -match '/consent\?') { 'consent-flows' } else { 'login-flows' }
             $stepResp = & curl.exe -s -c $cookieJar -b $cookieJar "$apiUrl/api/v1/$kind/$silentFlow"
             $stepJson = $stepResp | ConvertFrom-Json
@@ -292,7 +296,11 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         Write-Host "❌ 세션이 재사용되지 않음 — prompt=none 의 답: $silentOutcome" -ForegroundColor Red
         exit 1
     }
-    Write-Host "   ✅ 화면 없이 code — 로그인이 세션을 열었고 재사용됨" -ForegroundColor Green
+    if ($screensOpened -gt 0) {
+        Write-Host "❌ 세션은 재사용됐으나 로그인 UI 를 $screensOpened 번 거침 — 화면이 필요 없는 흐름은 API 진입점에서 끝나야 한다" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ 화면 없이 code — 로그인이 세션을 열었고, 로그인 UI 를 거치지 않고 재사용됨" -ForegroundColor Green
 
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
     # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
