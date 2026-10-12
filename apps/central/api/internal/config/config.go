@@ -167,11 +167,13 @@ type SecurityConfig struct {
 	// TOTP shared secrets at rest. Required in production (fail-closed); when
 	// empty in development the secrets are stored as plaintext.
 	TOTPEncryptionKey string `mapstructure:"totp_encryption_key"`
-	// WebhookAllowPrivateTargets lets webhook deliveries reach loopback and
-	// private addresses (AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS). Off unless set:
-	// an unset environment name reads as development, so tying this to the
-	// environment would open it wherever the name was forgotten.
-	WebhookAllowPrivateTargets bool `mapstructure:"webhook_allow_private_targets"`
+	// AllowPrivateTargets lets the calls the deployment makes to addresses it
+	// was given — webhook deliveries, a client's back-channel logout address —
+	// reach this host and private networks, and lets those addresses be plain
+	// http (AUTHWAY_ALLOW_PRIVATE_TARGETS). Off unless set: an unset
+	// environment name reads as development, so tying this to the environment
+	// would open it wherever the name was forgotten.
+	AllowPrivateTargets bool `mapstructure:"allow_private_targets"`
 }
 
 type ApplicationInsightsConfig struct {
@@ -340,13 +342,17 @@ func Load() (*Config, error) {
 	if totpKey := os.Getenv("AUTHWAY_TOTP_ENCRYPTION_KEY"); totpKey != "" {
 		config.Security.TOTPEncryptionKey = totpKey
 	}
-	config.Security.WebhookAllowPrivateTargets = false
-	if v := os.Getenv("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS"); v != "" {
+	if os.Getenv("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS") != "" {
+		// Starting without it would silently close what the operator opened.
+		return nil, fmt.Errorf("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS is now AUTHWAY_ALLOW_PRIVATE_TARGETS (it also covers back-channel logout addresses): rename it")
+	}
+	config.Security.AllowPrivateTargets = false
+	if v := os.Getenv("AUTHWAY_ALLOW_PRIVATE_TARGETS"); v != "" {
 		allow, err := strconv.ParseBool(v)
 		if err != nil {
-			return nil, fmt.Errorf("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS must be true or false: %w", err)
+			return nil, fmt.Errorf("AUTHWAY_ALLOW_PRIVATE_TARGETS must be true or false: %w", err)
 		}
-		config.Security.WebhookAllowPrivateTargets = allow
+		config.Security.AllowPrivateTargets = allow
 	}
 
 	// Manual override for Application Insights config

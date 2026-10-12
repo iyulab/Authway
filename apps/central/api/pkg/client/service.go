@@ -3,11 +3,14 @@ package client
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/outbound"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -37,10 +40,32 @@ type service struct {
 	db          *gorm.DB
 	logger      *zap.Logger
 	hydraClient *hydra.Client
+	// outbound says which addresses the authorization server may be told to
+	// call (a client's back-channel logout address); names resolves them.
+	outbound outbound.Policy
+	names    outbound.Resolver
 }
 
-func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) Service {
+// Option adjusts a client service.
+type Option func(*service)
+
+// CallableAddresses sets which addresses a client may have the authorization
+// server call. Without it, only public https addresses.
+func CallableAddresses(policy outbound.Policy) Option {
+	return func(s *service) { s.outbound = policy }
+}
+
+func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client, opts ...Option) Service {
+	s := newService(db, logger, hydraClient)
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func newService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) *service {
 	return &service{
+		names:       net.DefaultResolver,
 		db:          db,
 		logger:      logger,
 		hydraClient: hydraClient,
@@ -59,7 +84,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, nil, cerr
 	}
-	if cerr := validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
+	if cerr := s.validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
 		return nil, nil, cerr
 	}
 
@@ -346,6 +371,11 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 				zap.Error(err),
 				zap.String("client_id", clientID),
 				zap.String("tenant_id", tenantID.String()))
+			// What the registration says was refused: the caller's to fix.
+			var refused *hydra.ClientRefusedError
+			if errors.As(err, &refused) {
+				return nil, nil, refusedByAuthorizationServer(refused)
+			}
 			return nil, nil, fmt.Errorf("failed to register client in Hydra: %w", err)
 		}
 	}
@@ -443,7 +473,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		return nil, SyncStatus{}, cerr
 	}
 	if req.BackChannelLogoutURI != nil {
-		if cerr := validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
+		if cerr := s.validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
 			return nil, SyncStatus{}, cerr
 		}
 	}

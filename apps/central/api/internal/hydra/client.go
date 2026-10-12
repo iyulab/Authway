@@ -14,6 +14,33 @@ import (
 
 // ErrFlowNotFound is returned when Hydra does not know a login or consent
 // challenge — the caller sent an id that was never issued or is malformed.
+// ClientRefusedError is Hydra declining a client's registration because of
+// what the registration says — as opposed to Hydra failing.
+type ClientRefusedError struct {
+	// Reason is Hydra's own account of what it would not accept.
+	Reason string
+}
+
+func (e *ClientRefusedError) Error() string {
+	return "the authorization server refused the client: " + e.Reason
+}
+
+func clientRefused(body []byte) *ClientRefusedError {
+	var answer struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	_ = json.Unmarshal(body, &answer)
+	reason := answer.Description
+	if reason == "" {
+		reason = answer.Error
+	}
+	if reason == "" {
+		reason = string(body)
+	}
+	return &ClientRefusedError{Reason: reason}
+}
+
 var ErrFlowNotFound = errors.New("login or consent flow not found")
 
 // ErrFlowExpired is returned when Hydra knows the challenge but it can no
@@ -109,6 +136,9 @@ func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error)
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusBadRequest {
+			return nil, clientRefused(body)
+		}
 		return nil, fmt.Errorf("failed to create client: %s", string(body))
 	}
 

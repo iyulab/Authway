@@ -2059,7 +2059,13 @@ components:
           type: array
           items: { type: string }
         backchannel_logout_uri:
-          description: Where the client's backend is told that a user's session has ended. Empty when it is not told.
+          description: |
+            Where the client's backend is told that a user's session has ended.
+            Empty when it is not told. The provider calls it from its own
+            network, so it accepts only an address it may call on a client's
+            say-so: a deployment decides how far that goes (a public https
+            address by default), and none accepts an address that is no one's
+            server, such as a link-local one (`invalid_backchannel_logout_uri`).
           type: string
         allowed_origins: { type: [array, 'null'], items: { type: string } }
         grant_types: { type: array, items: { type: string } }

@@ -39,7 +39,11 @@ loopback, private, link-local, shared or reserved address is refused, and a host
 that resolves to one fails when the delivery connects. Redirects are not
 followed — a `3xx` answer is a failed attempt. A deployment whose receivers
 run on its own network — or a developer testing against a local receiver —
-sets `AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS=true`.
+sets `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`. That opens this host and private
+networks; link-local addresses (cloud metadata endpoints among them),
+multicast and reserved ranges stay refused. The same setting governs the
+addresses clients register for
+[back-channel logout](client-management.md#applications-that-keep-their-own-session-backchannel_logout_uri).
 
 The `201` answer carries the webhook **and its signing secret**:
 

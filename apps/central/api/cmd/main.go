@@ -26,6 +26,7 @@ import (
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
 	ratelimitmw "authway/apps/central/api/pkg/middleware"
+	"authway/apps/central/api/pkg/outbound"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
@@ -164,7 +165,8 @@ func main() {
 			Success:      true,
 		})
 	}))
-	clientService := client.NewService(db, zapLogger, hydraClient)
+	clientService := client.NewService(db, zapLogger, hydraClient,
+		client.CallableAddresses(outbound.Policy{AllowPrivate: cfg.Security.AllowPrivateTargets}))
 	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
 		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
 	}
@@ -284,7 +286,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, auditService, cfg.App.FrontendURL, cfg.Security.WebhookAllowPrivateTargets)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, auditService, cfg.App.FrontendURL, cfg.Security.AllowPrivateTargets)
 
 	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
 	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)

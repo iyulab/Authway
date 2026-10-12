@@ -92,6 +92,44 @@ describe('back-channel logout', () => {
     await new Promise((resolve) => receiver?.close(resolve))
   })
 
+  // The provider calls the address from inside its own network. However far
+  // a deployment lets that reach — this one reaches the suite's receiver at a
+  // private address — an address that is no one's server is never one of
+  // them: a link-local address is where cloud platforms answer for the
+  // machine itself.
+  it('refuses to be pointed at an address that is no one\'s server', async () => {
+    for (const uri of ['http://169.254.169.254/latest/meta-data/', 'https://169.254.169.254/backchannel-logout']) {
+      const res = await provider.admin('/api/v1/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: await provider.tenantId(),
+          name: `conformance-bcl-refused-${randomToken(4)}`,
+          public: true,
+          redirect_uris: [REDIRECT_URI],
+          allowed_origins: ['http://localhost:9999'],
+          grant_types: ['authorization_code'],
+          scopes: ['openid'],
+          backchannel_logout_uri: uri,
+        }),
+      })
+      await conform('POST', '/api/v1/clients', res.clone())
+      const body = (await res.json()) as { code?: string; client?: { id: string; client_id: string } }
+      // Nothing may be left registered if the provider wrongly took it.
+      if (body.client) await provider.deleteClient({ id: body.client.id, clientId: body.client.client_id })
+      expect(res.status, `${uri}: ${JSON.stringify(body)}`).toBe(400)
+      expect(body.code).toBe('invalid_backchannel_logout_uri')
+    }
+
+    // The same on a change to a client that exists.
+    const res = await provider.admin(`/api/v1/clients/${apps.a.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ backchannel_logout_uri: 'http://169.254.169.254/latest/meta-data/' }),
+    })
+    await conform('PUT', '/api/v1/clients/{id}', res.clone())
+    expect(res.status, await res.clone().text()).toBe(400)
+    expect(((await res.json()) as { code?: string }).code).toBe('invalid_backchannel_logout_uri')
+  })
+
   it('says it tells applications about a logout', async () => {
     const res = await fetch(`${config.api}/api/v1/capabilities`)
     await conform('GET', '/api/v1/capabilities', res.clone())

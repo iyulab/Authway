@@ -9,13 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/outbound"
 	"authway/apps/central/api/pkg/workqueue"
 
 	"github.com/google/uuid"
@@ -58,10 +58,10 @@ type Service interface {
 }
 
 type service struct {
-	db                  *gorm.DB
-	logger              *zap.Logger
-	httpClient          *http.Client
-	allowPrivateTargets bool
+	db         *gorm.DB
+	logger     *zap.Logger
+	httpClient *http.Client
+	policy     outbound.Policy
 	// Deliveries run on a bounded queue: an event as frequent as a sign-in
 	// must not start a goroutine per receiver, and a receiver that keeps
 	// failing must not hold one through its retry waits.
@@ -77,12 +77,12 @@ const (
 // Option configures a webhook service.
 type Option func(*options)
 
-type options struct{ allowPrivateTargets bool }
+type options struct{ policy outbound.Policy }
 
 // AllowPrivateTargets lets deliveries reach this host and private networks —
 // for local development, where receivers run on the same machine.
 func AllowPrivateTargets(allow bool) Option {
-	return func(o *options) { o.allowPrivateTargets = allow }
+	return func(o *options) { o.policy.AllowPrivate = allow }
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
@@ -91,11 +91,11 @@ func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
 		opt(&o)
 	}
 	return &service{
-		db:                  db,
-		logger:              logger,
-		httpClient:          deliveryClient(o.allowPrivateTargets),
-		allowPrivateTargets: o.allowPrivateTargets,
-		queue:               workqueue.New(deliveryWorkers, deliveryQueue),
+		db:         db,
+		logger:     logger,
+		httpClient: deliveryClient(o.policy),
+		policy:     o.policy,
+		queue:      workqueue.New(deliveryWorkers, deliveryQueue),
 	}
 }
 
@@ -144,11 +144,8 @@ func (s *service) validateURL(raw string) error {
 	if len(raw) > 2048 {
 		return apierror.NewPublic("url must be at most 2048 characters")
 	}
-	if !s.allowPrivateTargets {
-		host := u.Hostname()
-		if ip := net.ParseIP(host); (ip != nil && blockedIP(ip)) || strings.EqualFold(host, "localhost") {
-			return apierror.NewPublic("url must not point at a local or private address")
-		}
+	if s.policy.RefusesHost(u.Hostname()) {
+		return apierror.NewPublic("url must not point at a local or private address")
 	}
 	return nil
 }

@@ -1,10 +1,13 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
+
+	"authway/apps/central/api/internal/hydra"
 )
 
 // ConfigError represents a structured client-configuration validation failure.
@@ -232,24 +235,56 @@ func validateAudience(audience []string) *ConfigError {
 	return nil
 }
 
+// refusedByAuthorizationServer turns the authorization server's refusal of a
+// registration into the answer the caller gets. It checks the addresses a
+// client names on its own side as well, when it connects to them — so it can
+// refuse one this service let through, such as a host name that resolved
+// differently for it.
+func refusedByAuthorizationServer(refused *hydra.ClientRefusedError) *ConfigError {
+	if strings.Contains(refused.Reason, "backchannel_logout_uri") {
+		return &ConfigError{
+			Code:    "invalid_backchannel_logout_uri",
+			Field:   "backchannel_logout_uri",
+			Message: "backchannel_logout_uri must not point at a local or private address",
+			Hint:    "The authorization server may not call this address. Give a public https address of the application's backend.",
+		}
+	}
+	return &ConfigError{
+		Code:    "invalid_client_metadata",
+		Message: "The authorization server did not accept this client: " + refused.Reason,
+		Hint:    "Correct the field the message names and try again.",
+	}
+}
+
 // maxBackChannelLogoutURILength bounds the logout address.
 const maxBackChannelLogoutURILength = 2048
 
 // validateBackChannelLogoutURI checks the address a client's backend is told
-// about a logout at. It is called by the authorization server, not by a
-// browser, so it is an absolute http(s) URL; a fragment would never be sent.
-// Empty is valid: the client is not told.
-func validateBackChannelLogoutURI(uri string) *ConfigError {
+// about a logout at. Empty is valid: the client is not told.
+//
+// The authorization server calls it, not a browser, and it does so from
+// inside the deployment's network — so the address must be one the
+// deployment may call on a client's say-so (outbound.Policy): a public https
+// address, unless private targets are allowed. A host name is looked up now
+// and refused if it leads inward; what it resolves to later is for the
+// authorization server to check when it connects.
+func (s *service) validateBackChannelLogoutURI(uri string) *ConfigError {
 	if uri == "" {
 		return nil
 	}
+	const hint = "Give the URL of an endpoint on the application's backend that accepts a POST with a logout_token, e.g. https://app.example.com/backchannel-logout."
+	refuse := func(message string) *ConfigError {
+		return &ConfigError{Code: "invalid_backchannel_logout_uri", Field: "backchannel_logout_uri", Message: message, Hint: hint}
+	}
 	u, err := url.Parse(uri)
 	if err != nil || len(uri) > maxBackChannelLogoutURILength || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
-		return &ConfigError{
-			Code:    "invalid_backchannel_logout_uri",
-			Message: "backchannel_logout_uri must be an absolute http(s) URL without a fragment",
-			Hint:    "Give the URL of an endpoint on the application's backend that accepts a POST with a logout_token, e.g. https://app.example.com/backchannel-logout.",
-		}
+		return refuse("backchannel_logout_uri must be an absolute https URL without a fragment")
+	}
+	if u.Scheme != "https" && !s.outbound.AllowPrivate {
+		return refuse("backchannel_logout_uri must use https: the logout token names the user and their session")
+	}
+	if s.outbound.RefusesName(context.Background(), s.names, u.Hostname()) {
+		return refuse("backchannel_logout_uri must not point at a local or private address")
 	}
 	return nil
 }

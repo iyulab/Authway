@@ -1,21 +1,52 @@
 package client
 
 import (
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/outbound"
 )
 
+// namesFor answers lookups from a table, so the tests say what each name
+// resolves to instead of asking the network.
+type namesFor map[string]string
+
+func (n namesFor) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
+	addr, ok := n[host]
+	if !ok {
+		return nil, errors.New("no such host")
+	}
+	return []net.IPAddr{{IP: net.ParseIP(addr)}}, nil
+}
+
+var testNames = namesFor{
+	"app.example.com":      "93.184.216.34",
+	"intranet.example.com": "10.0.0.5",
+	"metadata.example.com": "169.254.169.254",
+}
+
+func serviceCalling(policy outbound.Policy) *service {
+	return &service{outbound: policy, names: testNames}
+}
+
 func TestValidateBackChannelLogoutURI(t *testing.T) {
+	s := serviceCalling(outbound.Policy{})
 	for _, uri := range []string{
 		"",
 		"https://app.example.com/backchannel-logout",
-		"http://localhost:5000/logout/backchannel",
 		"https://app.example.com:8443/hooks/logout?tenant=a",
+		"https://not-registered-yet.example.com/logout", // does not resolve: nothing can be said
 	} {
-		if cerr := validateBackChannelLogoutURI(uri); cerr != nil {
+		if cerr := s.validateBackChannelLogoutURI(uri); cerr != nil {
 			t.Errorf("%q: %v, want it accepted", uri, cerr)
 		}
 	}
@@ -27,9 +58,48 @@ func TestValidateBackChannelLogoutURI(t *testing.T) {
 		"https://app.example.com/logout#fragment",
 		"https://app.example.com/" + strings.Repeat("a", maxBackChannelLogoutURILength),
 	} {
-		cerr := validateBackChannelLogoutURI(uri)
+		cerr := s.validateBackChannelLogoutURI(uri)
 		if cerr == nil || cerr.Code != "invalid_backchannel_logout_uri" {
 			t.Errorf("%.60q: %v, want invalid_backchannel_logout_uri", uri, cerr)
+		}
+	}
+}
+
+// The authorization server calls the address from inside the deployment's
+// network. An address in there — written as such, or behind a name — would
+// let whoever registers a client have it reach what they cannot.
+func TestValidateBackChannelLogoutURI_RefusesWhatTheDeploymentMustNotCall(t *testing.T) {
+	strict, lax := serviceCalling(outbound.Policy{}), serviceCalling(outbound.Policy{AllowPrivate: true})
+
+	inward := []string{
+		"https://localhost/logout",
+		"https://127.0.0.1:8443/logout",
+		"https://10.0.0.5/logout",
+		"https://[::1]/logout",
+		"https://intranet.example.com/logout", // a public-looking name that resolves inward
+		"http://app.example.com/logout",       // the logout token in the clear
+	}
+	for _, uri := range inward {
+		if cerr := strict.validateBackChannelLogoutURI(uri); cerr == nil || cerr.Code != "invalid_backchannel_logout_uri" {
+			t.Errorf("%q: %v, want it refused", uri, cerr)
+		}
+		// Where receivers run next to the deployment, the same addresses are how tests reach them.
+		if cerr := lax.validateBackChannelLogoutURI(uri); cerr != nil {
+			t.Errorf("%q with private targets allowed: %v", uri, cerr)
+		}
+	}
+
+	// No one's server — a cloud metadata endpoint above all: refused whatever the setting.
+	for _, uri := range []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"https://169.254.169.254/",
+		"https://metadata.example.com/",
+		"https://0.0.0.0/logout",
+	} {
+		for name, s := range map[string]*service{"by default": strict, "with private targets allowed": lax} {
+			if cerr := s.validateBackChannelLogoutURI(uri); cerr == nil || cerr.Code != "invalid_backchannel_logout_uri" {
+				t.Errorf("%q %s: %v, want it refused", uri, name, cerr)
+			}
 		}
 	}
 }
@@ -105,5 +175,38 @@ func TestBackChannelLogoutURI_IsStoredChangedAndCleared(t *testing.T) {
 		BackChannelLogoutURI: "myapp://logout",
 	}); err == nil {
 		t.Error("an invalid address was accepted on create")
+	}
+}
+
+// The authorization server checks the address on its own side too, and can
+// refuse one this service let through — a host name that resolved differently
+// for it. That is the caller's address to correct, not a server fault, and it
+// leaves no client behind.
+func TestCreate_AnAddressTheAuthorizationServerRefusesIsTheCallersError(t *testing.T) {
+	db := setupPostgres(t)
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_client_metadata","error_description":"Client IP address is not allowed: key backchannel_logout_uri validation is failing: ip 10.0.0.5 is in the 10.0.0.0/8 range"}`))
+	}))
+	t.Cleanup(refusing.Close)
+	svc := NewService(db, zap.NewNop(), hydra.NewClient(refusing.URL))
+
+	name := "bcl-refused-" + uuid.NewString()[:8]
+	_, _, err := svc.Create(&CreateClientRequest{
+		TenantID:             seedTenant(t, db),
+		Name:                 name,
+		RedirectURIs:         []string{"https://app.example.com/callback"},
+		GrantTypes:           []string{"authorization_code"},
+		Scopes:               []string{"openid"},
+		BackChannelLogoutURI: "https://app.example.com/backchannel-logout",
+	})
+	var cerr *ConfigError
+	if !errors.As(err, &cerr) || cerr.Code != "invalid_backchannel_logout_uri" {
+		t.Fatalf("got %v, want invalid_backchannel_logout_uri", err)
+	}
+	var left int64
+	if err := db.Model(&Client{}).Where("name = ?", name).Count(&left).Error; err != nil || left != 0 {
+		t.Errorf("%d client(s) left behind (%v), want none", left, err)
 	}
 }

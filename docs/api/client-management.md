@@ -146,7 +146,7 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
-| `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `http(s)` URL, or has a fragment | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
+| `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address (as written, or by what its host name resolves to) | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
 | `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
 
 ### Application-type matrix
@@ -202,7 +202,17 @@ that the user's session at the provider has ended:
 
 The provider POSTs a logout token there whenever a session of a user signed in
 to the application ends. On update, an empty string clears it; leaving the
-field out keeps it. What the application does with the token is in
+field out keeps it.
+
+The call is made from inside the deployment, so the address has to be one the
+deployment may call on a client's say-so: **`https`, at a public address**.
+`localhost`, loopback, private, shared and link-local addresses are refused —
+written as such or behind a host name, which is looked up when the client is
+saved — and so is plain `http`, which would carry the logout token in the
+clear. A deployment whose applications run on its own network, or a developer
+with a receiver on their machine, sets `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`;
+link-local addresses (cloud metadata endpoints among them) stay refused even
+then. What the application does with the token is in
 [FEATURES.md](../FEATURES.md#telling-other-applications-about-a-logout).
 
 ### Clients whose tokens go to an API: `audience`

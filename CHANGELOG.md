@@ -1,5 +1,41 @@
 ## [Unreleased]
 
+### Security
+
+- **A client's back-channel logout address can no longer point into the
+  deployment's own network.** The authorization server POSTs to that address
+  from inside the deployment, and any absolute `http(s)` URL was accepted —
+  `localhost`, a private address, a cloud metadata endpoint. Now it must be
+  `https` at a public address: loopback, private, shared and link-local
+  addresses are refused whether written as such or behind a host name (looked
+  up when the client is saved), and plain `http` is refused
+  (`400 invalid_backchannel_logout_uri`). The authorization server refuses the
+  same on its side (`CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=true` in the
+  shared settings): it refuses to register such a client, and it checks the
+  address again each time it connects, so a host name that changes what it
+  resolves to later does not get through either. **A client already
+  registered with a local or private address stops being told about logouts**
+  once the authorization server runs with that setting; a deployment whose
+  applications are on its own network sets it to `false` there and
+  `AUTHWAY_ALLOW_PRIVATE_TARGETS=true` on the API.
+
+### Fixed
+
+- **A client the authorization server refuses to register is answered `400`
+  with the reason**, not `500 failed to create client`. Nothing is left
+  registered.
+
+### Changed
+
+- **`AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS` is now
+  `AUTHWAY_ALLOW_PRIVATE_TARGETS`**, and also governs back-channel logout
+  addresses. The server refuses to start with the old name set. Where it is
+  set, link-local addresses (cloud metadata endpoints among them), multicast
+  and reserved ranges are now refused all the same — it opens this host and
+  private networks, nothing else. Local development and the conformance suite
+  need it (and `CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false` on the
+  authorization server) to reach a receiver on the same machine.
+
 ## [0.8.0] - 2026-10-13
 
 > Minor, with breaking changes. Two-factor authentication now holds: a user's

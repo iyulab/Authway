@@ -112,6 +112,9 @@ services:
       URLS_LOGOUT: http://localhost:8080/logout
       URLS_ERROR: http://localhost:3001/error
       SECRETS_SYSTEM: youReallyNeedToChangeThis
+      # Receivers of back-channel logout calls run on this machine here; every
+      # other deployment keeps the shared setting, which refuses them.
+      CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES: "false"
       # Multi-tenant clients come from arbitrary origins; OAuth2 security rests
       # on redirect_uri validation, not on the CORS allow-list. Same stance as
       # production.

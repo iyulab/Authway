@@ -41,6 +41,12 @@ pnpm --filter @authway/conformance test
 | `CONFORMANCE_IDP_STANDIN_AS` | Optional. The sign-in provider the stand-in is put in the place of. Defaults to `google` |
 | `CONFORMANCE_CALLBACK_HOST` | Optional. The name under which the provider reaches the machine running the suite, for the scenarios in which the provider calls the suite (back-channel logout). Defaults to `localhost`; with the authorization server in a container on Docker Desktop, `host.docker.internal` |
 
+The provider must be able to call the machine running the suite: the
+back-channel logout scenario registers a receiver there, at a private address
+and over plain http. A deployment that refuses such addresses by default has
+to allow them for the run (Authway: `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`, and
+`CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false` on the authorization server).
+
 The provider must send mail to the capture service, and the links in that mail
 must point at its login UI (`/invitation/accept?token=…`). With the repository's
 `docker-compose.yml`, MailHog listens on SMTP `1025` and HTTP `8025`.

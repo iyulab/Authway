@@ -185,6 +185,7 @@ jobs:
             -e URLS_LOGIN=http://localhost:8080/login \
             -e URLS_CONSENT=http://localhost:8080/consent \
             -e URLS_LOGOUT=http://localhost:8080/logout \
+            -e CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false \
             oryd/hydra:v26.2.0 serve all --dev
           for _ in $(seq 1 60); do
             curl -sf http://localhost:4445/health/ready >/dev/null && exit 0
@@ -206,6 +207,8 @@ jobs:
           AUTHWAY_EMAIL_SMTP_HOST: localhost
           AUTHWAY_EMAIL_SMTP_PORT: '1025'
           AUTHWAY_ADMIN_API_KEY: ${{ env.ADMIN_API_KEY }}
+          # The suite's back-channel logout receiver listens on this machine.
+          AUTHWAY_ALLOW_PRIVATE_TARGETS: 'true'
           # Sign-in through Google is pointed at the stand-in provider the
           # conformance suite serves (packages/conformance/README.md).
           AUTHWAY_GOOGLE_ENABLED: 'true'

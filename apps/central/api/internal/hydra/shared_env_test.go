@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -46,18 +47,39 @@ func TestSharedHydraSettingsAreWrittenOnce(t *testing.T) {
 		".github/workflows/ci.yml":                          "--env-file configs/hydra.shared.env",
 		"scripts/deploy/_shared/lib/publish-hydra.core.ps1": "Get-HydraSharedEnv",
 	}
+	// The one kind of exception: a protection that local development and CI
+	// have to switch off because what it protects against is how they work.
+	// Only those two may define the key, only with this value — a deployment
+	// never does.
+	developmentSetsTo := map[string]string{
+		// Their back-channel logout receivers run on the same machine.
+		"CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES": "false",
+	}
+	development := map[string]bool{"docker-compose.yml": true, ".github/workflows/ci.yml": true}
+
 	for file, reads := range starters {
 		text := read(file)
 		if !strings.Contains(text, reads) {
 			t.Errorf("%s no longer reads the shared settings (%q)", file, reads)
 		}
 		for _, key := range keys {
-			// A definition: the key followed by `=` or `:` (compose), not a
-			// mention in a comment.
-			defined := regexp.MustCompile(`(?m)^[^#\n]*\b` + regexp.QuoteMeta(key) + `\s*[=:]`)
-			if defined.MatchString(text) {
+			// A definition: the key followed by `=` or `:` (compose) and its
+			// value, not a mention in a comment.
+			defined := regexp.MustCompile(`(?m)^[^#\n]*\b` + regexp.QuoteMeta(key) + `\s*[=:]\s*"?([^"\s\\]*)`)
+			for _, m := range defined.FindAllStringSubmatch(text, -1) {
+				if want, ok := developmentSetsTo[key]; ok && development[file] {
+					if m[1] != want {
+						t.Errorf("%s sets %s to %q; development may only set it to %q", file, key, m[1], want)
+					}
+					continue
+				}
 				t.Errorf("%s defines %s itself; it belongs in configs/hydra.shared.env only", file, key)
 			}
+		}
+	}
+	for key := range developmentSetsTo {
+		if !slices.Contains(keys, key) {
+			t.Errorf("%s is listed as a development exception but configs/hydra.shared.env no longer sets it", key)
 		}
 	}
 
