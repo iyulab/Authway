@@ -78,8 +78,8 @@ cd apps/branding/auth-ui && npm run dev
 # Admin console (port 3000)
 cd apps/central/admin && npm run dev
 
-# Sample app (port 9004)
-cd samples/react-sdk-sample && pnpm dev
+# Sample browser application (port 5173) — register its client first, see its README
+pnpm --dir samples/react-sdk-sample dev
 ```
 
 Access: http://localhost:9004
@@ -146,9 +146,9 @@ const user = await client.getUser()
 SDK reference, feature guides, backend integration, deployment and database.
 
 - **[Samples](./samples/)** - Example applications
-  - [React SDK Sample](./samples/react-sdk-sample/) - Full-featured React demo
-  - [Next.js Sample](./samples/nextjs-sample/) - Next.js App Router integration
-  - [ASP.NET SPA Sample](./samples/asp-spa/) - Backend + Frontend (React & Vanilla JS)
+  - [ASP.NET sample](./samples/asp-sample/) - A server-side application that signs users in and keeps its own session
+  - [React sample](./samples/react-sdk-sample/) - A browser application that signs users in and calls an API
+  - [ASP.NET API sample](./samples/asp-api/) - An API that accepts Authway access tokens
 
 ## Architecture
 
@@ -189,9 +189,9 @@ authway/
 │   └── react/                # @authway/react
 │
 ├── samples/
-│   ├── react-sdk-sample/     # React demo
-│   ├── nextjs-sample/        # Next.js App Router demo
-│   └── asp-spa/              # ASP.NET + React/Vanilla JS
+│   ├── asp-sample/           # Server-side application (ASP.NET Core)
+│   ├── react-sdk-sample/     # Browser application (React)
+│   └── asp-api/              # API accepting access tokens (ASP.NET Core)
 │
 └── docs/                     # Documentation
 ```

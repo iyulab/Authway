@@ -38,9 +38,9 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 
 Example applications in `../samples/`:
 
-- **[React SDK Sample](../samples/react-sdk-sample/)** - Full-featured React demo
-- **[Next.js Sample](../samples/nextjs-sample/)** - Next.js App Router with `@authway/react`
-- **[ASP.NET SPA Sample](../samples/asp-spa/)** - Backend + Frontend (React & Vanilla JS)
+- **[ASP.NET sample](../samples/asp-sample/)** - A server-side application that signs users in and keeps its own session
+- **[React sample](../samples/react-sdk-sample/)** - A browser application that signs users in and calls an API
+- **[ASP.NET API sample](../samples/asp-api/)** - An API that accepts Authway access tokens
   - React with @authway/react SDK
   - Vanilla JS with oauth4webapi (learning OAuth2 internals)
 

@@ -612,8 +612,8 @@ const { loginWithPopup, logout } = useAuth()
 ## Examples
 
 See complete examples in:
-- **[React Sample](../samples/react-sdk-sample/)** - Full React integration
-- **[ASP.NET SPA](../samples/asp-spa/)** - React + Vanilla JS versions
+- **[React sample](../samples/react-sdk-sample/)** - A browser application: sign-in, session restore after a reload, calling an API
+- **[ASP.NET API sample](../samples/asp-api/)** - The API it calls
 
 ## Support
 

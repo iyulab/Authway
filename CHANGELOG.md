@@ -16,6 +16,20 @@
   survive a reload and end with the tab. The default is unchanged
   (`'localstorage'`).
 
+### Removed
+
+- **Samples that taught what is no longer there.** The Go services, the
+  Next.js sample and the two front ends of the ASP.NET SPA sample are gone:
+  they pointed at a component that was folded into the API, called endpoints
+  that have been removed, or hand-rolled the authorization flow without the
+  checks a real application needs. Three samples remain, one for each part an
+  application can play — a server-side application (`samples/asp-sample`), a
+  browser application (`samples/react-sdk-sample`, rewritten: one small file
+  that signs in, restores the session after a reload and calls an API) and an
+  API that accepts access tokens (`samples/asp-api`, the back end of the old
+  SPA sample, now validating the token's audience and scope). CI builds all
+  three.
+
 ### Security
 
 - **The credentials a client holds at another identity provider are encrypted

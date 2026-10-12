@@ -405,8 +405,8 @@ Register an application's origin when you create its client:
 - **[Database Migrations](./DATABASE.md)** - Schema changes and versioning
 
 ### Samples
-- **[React SDK Sample](../samples/react-sdk-sample/)** - Full-featured React demo
-- **[ASP.NET Sample](../samples/asp-spa/)** - Backend + Frontend integration
+- **[ASP.NET sample](../samples/asp-sample/)** - A server-side application
+- **[React sample](../samples/react-sdk-sample/)** and **[ASP.NET API sample](../samples/asp-api/)** - A browser application and the API it calls
 
 ---
 

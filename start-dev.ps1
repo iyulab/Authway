@@ -56,7 +56,7 @@ function Ensure-PortFree {
 
 # Clean up any existing processes on required ports
 Write-Host "🧹 Cleaning up ports for Authway services..." -ForegroundColor Yellow
-$ports = @(3000, 3001, 8080, 9001, 9002, 9003)
+$ports = @(3000, 3001, 8080)
 $killedProcesses = 0
 
 foreach ($port in $ports) {
@@ -289,27 +289,6 @@ if (-not $backendReady) {
     Write-Host ""
     Write-Host "⚠️  Backend did not start after $maxAttempts seconds" -ForegroundColor Yellow
     Write-Host "   Check the Backend API tab in Windows Terminal for errors" -ForegroundColor Gray
-    Write-Host "   Skipping client registration (you can run .\samples\setup-clients.ps1 manually)" -ForegroundColor Gray
-}
-Write-Host ""
-
-# Setup sample tenants and clients
-if ($backendReady) {
-    Write-Host "🔧 Setting up sample tenants and clients..." -ForegroundColor Yellow
-    Write-Host "   Running: .\samples\setup-clients.ps1" -ForegroundColor Gray
-    Write-Host ""
-
-    # Run the setup script
-    try {
-        & ".\samples\setup-clients.ps1"
-    } catch {
-        Write-Host ""
-        Write-Host "  ⚠️  Setup script failed: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "     You can manually run: .\samples\setup-clients.ps1" -ForegroundColor Gray
-    }
-} else {
-    Write-Host "⚠️  Backend not ready, skipping setup" -ForegroundColor Yellow
-    Write-Host "   You can manually run later: .\samples\setup-clients.ps1" -ForegroundColor Gray
 }
 Write-Host ""
 

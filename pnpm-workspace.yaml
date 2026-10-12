@@ -3,4 +3,4 @@
 packages:
   - 'packages/*'
   - 'samples/*'
-  - 'samples/*/asp-frontend'
+
