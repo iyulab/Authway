@@ -42,14 +42,8 @@ https://auth.example.com/login?lang=ko
 https://auth.example.com/login?lang=en
 ```
 
-**Via SDK (future)**:
-```typescript
-const client = new AuthwayClient({
-  domain: 'http://localhost:8080',
-  clientId: 'my-client-id',
-  locale: 'ko' // Force specific language
-})
-```
+The SDK has no language option: the sign-in screen picks the language by the
+order above, and the user can switch it there.
 
 ### Translation Files
 
@@ -143,14 +137,14 @@ await client.loginWithPopup()
 1. **Popup Window**: Opens OAuth provider (e.g., Google)
 2. **SessionStorage Persistence**: Saves OAuth state before navigation
 3. **COOP Handling**: Uses `window.opener.postMessage()` for cross-origin communication
-4. **Hidden Iframe Fallback**: If `window.opener` is null (COOP blocking), uses iframe pattern
+4. **Storage Fallback**: If `window.opener` cannot be reached (COOP blocking), the popup leaves its answer in `localStorage` and the opening page, which is polling for it, picks it up
 5. **Token Exchange**: Completes OAuth flow and retrieves tokens
 
 **Technical Flow**:
 ```
 App → Popup (Google OAuth) → Consent → Redirect → postMessage → App (authenticated)
                                               ↓ (if COOP blocks)
-                                        Hidden Iframe → postMessage
+                                        localStorage → App (polling)
 ```
 
 ### Configuration
@@ -178,7 +172,7 @@ Access-Control-Allow-Credentials: true
 - Don't call `loginWithPopup()` on page load
 
 **Issue: COOP blocking `window.opener`**
-- Solution: Automatically handled by hidden iframe pattern (v0.1.4+)
+- Solution: Handled automatically — the popup hands its answer over through `localStorage` instead
 
 **Issue: Popup closes immediately**
 - Check redirect URI matches exactly
@@ -252,6 +246,8 @@ Authway minimizes configuration by automatically setting logout URIs:
 **Minimal Client Creation** (logout works out of the box):
 ```bash
 curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
   -d '{
     "tenant_id": "...",
     "name": "My App",
@@ -462,9 +458,16 @@ localStorage.setItem('access_token', token)
 **Lifetime**: Long (days to months)
 **Storage**: Kept by the SDK with the other tokens (see above). A server-side application keeps it on the server; a mobile app in the platform's secure storage
 
+A refresh token is issued when the request asks for the scope
+`offline_access` and the client is registered for the `refresh_token` grant.
+It is used once: exchanging it returns a new one, and the old one is no longer
+accepted. Renewing is not signing in again — the new ID token carries the same
+`auth_time` and `amr`. Signing out everywhere ends it.
+
 ```typescript
-// ✅ Good - SDK handles refresh automatically
-const token = await client.getAccessToken() // Auto-refreshes if needed
+// ✅ Good - Ask for one, and let the SDK renew with it
+const client = new AuthwayClient({ ...config, useRefreshTokens: true })
+const token = await client.getAccessToken() // Renews first if the token has run out
 
 // ❌ Bad - Manual refresh handling
 const refreshToken = localStorage.getItem('refresh_token')
@@ -476,12 +479,19 @@ const refreshToken = localStorage.getItem('refresh_token')
 **Lifetime**: Short (same as access token)
 **Storage**: Kept by the SDK with the other tokens (see above)
 
-```typescript
-// ✅ Good - Validate on every use
-const user = await client.getUser() // Validates ID token
+The SDK reads the user from the ID token it received from the token endpoint,
+over TLS, in exchange for the authorization code — it decodes the token, it
+does not verify its signature again. That is what a browser application can
+rely on for *display*. A decision that matters is never taken from what the
+browser says: the API validates the access token (signature, issuer,
+audience) on every call.
 
-// ❌ Bad - Trust without validation
-const claims = JSON.parse(atob(idToken.split('.')[1])) // No signature verification
+```typescript
+// ✅ Good - Who is signed in, for the page to show
+const user = await client.getUser()
+
+// ❌ Bad - An ID token sent to your API as proof of who is calling
+fetch('/api/orders', { headers: { 'X-User': JSON.stringify(user) } })
 ```
 
 ### PKCE (Proof Key for Code Exchange)

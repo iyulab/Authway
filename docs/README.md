@@ -26,6 +26,8 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 - **[Features Guide](./FEATURES.md)** - Custom claims written by your backend ([claims API](./api/claims.md)), Popup Login, Logout Redirects, OAuth/JWT Best Practices
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
 - **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
+- **[Service Clients](./api/service-clients.md)** - Tenant-scoped machine credentials for provisioning clients and writing claims
+- **[Custom Claims](./api/claims.md)** - Claims your backend stores for a user, and where they appear
 - **[The User's Own Account](./api/account.md)** - Reading the profile and deleting the account with the user's access token; the recent sign-in requirement
 - **[Webhooks](./api/webhooks.md)** - Events, payloads, signatures, deliveries
 - **[Login, Consent and Logout Flows](./api/login-flows.md)** - The contract a login screen uses: flow ids, sign-in methods, magic links, capabilities

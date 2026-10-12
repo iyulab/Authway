@@ -12,9 +12,25 @@
   on load (`checkSessionOnLoad`, on by default) and puts the user back at the
   address they were at. No hidden frame is involved: a provider on another
   site does not get its session cookie there.
+- **Conformance: refresh tokens.** Four scenarios: one is issued for
+  `offline_access` and not otherwise, renews the access token without
+  changing `auth_time` or `amr`, is accepted once, and stops working when the
+  user signs out everywhere.
 - **SDK: `cacheLocation: 'sessionstorage'`** keeps tokens in the tab — they
   survive a reload and end with the tab. The default is unchanged
   (`'localstorage'`).
+
+### Fixed
+
+- **SDK: `useRefreshTokens` does something.** The option was read and never
+  used: no refresh token was ever asked for, and every signed-in page logged a
+  failed renewal an hour later. When it is on, the SDK adds `offline_access`
+  to the requested scope; the default is now `false`, which is what the SDK
+  did all along. A client has to be registered for the `refresh_token` grant
+  and the `offline_access` scope before an application turns it on.
+- **SDK: `LoginButton` and `LogoutButton` keep signing in and out when given
+  an `onClick`.** The application's handler replaced the button's own. It now
+  runs first, and can call `preventDefault()` to stop the button.
 
 ### Removed
 

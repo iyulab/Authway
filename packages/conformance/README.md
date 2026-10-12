@@ -19,6 +19,10 @@ so the same scenarios run against every implementation.
   with `login_required` / `consent_required`. A client registered to skip
   consent does not ask its users; any other client does, signed in already or
   not.
+- **Refresh tokens** — one is issued when the request asks for
+  `offline_access`, renews the access token without changing when and how
+  the user signed in, is accepted once, and stops working when the user signs
+  out everywhere.
 - **Login UI routes** — every backend path the bundled login screens call is
   routed.
 

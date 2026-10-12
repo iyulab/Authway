@@ -1,4 +1,4 @@
-import { ReactNode, ButtonHTMLAttributes } from 'react'
+import { ReactNode, ButtonHTMLAttributes, MouseEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { LogoutOptions } from '@authway/client'
 
@@ -30,20 +30,25 @@ export function LogoutButton({
   children = 'Log Out',
   logoutOptions,
   className = '',
+  onClick,
   ...buttonProps
 }: LogoutButtonProps) {
   const { logout, isLoading } = useAuth()
 
-  const handleClick = () => {
+  // The application's own onClick runs first, and may call preventDefault()
+  // to keep the button from signing the user out.
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event)
+    if (event.defaultPrevented) return
     void logout(logoutOptions)
   }
 
   return (
     <button
+      {...buttonProps}
       onClick={handleClick}
       disabled={isLoading || buttonProps.disabled}
       className={className}
-      {...buttonProps}
     >
       {children}
     </button>

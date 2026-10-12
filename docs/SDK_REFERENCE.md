@@ -70,8 +70,11 @@ interface AuthwayConfig {
   scope?: string              // OAuth scopes (default: 'openid profile email')
   audience?: string           // Token audience
   cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // Where tokens are kept (default: 'localstorage')
+  useRefreshTokens?: boolean  // Ask for a refresh token (default: false)
 }
 ```
+
+`useRefreshTokens` adds `offline_access` to the requested scope, so that an access token that runs out is renewed without sending the user through authorization again. The client must be registered for it — `grant_types` with `refresh_token`, `scopes` with `offline_access` — or the provider refuses the sign-in. Without a refresh token, `getAccessToken()` throws `LoginRequiredError` once the access token has run out; `checkSession()` gets a new one from the user's session.
 
 `cacheLocation` decides where the access, ID and refresh tokens are kept:
 
@@ -109,22 +112,23 @@ await client.waitForReady(): Promise<void>
 Authenticate using popup window (no page reload).
 
 ```typescript
-await client.loginWithPopup(options?: PopupOptions): Promise<void>
+await client.loginWithPopup(options?: PopupLoginOptions): Promise<AuthResult>  // tokens and user
 ```
 
 **Parameters**:
 
 ```typescript
-interface PopupOptions {
-  width?: number    // Popup width (default: 500)
-  height?: number   // Popup height (default: 700)
+interface PopupLoginOptions {
+  redirectUri?: string  // Redirect URI for this request (default: the configured one)
 }
 ```
+
+The popup is 500 × 700; its size is not an option.
 
 **Example**:
 
 ```typescript
-await client.loginWithPopup({ width: 600, height: 800 })
+const { user } = await client.loginWithPopup()
 ```
 
 ##### `loginWithRedirect()`
@@ -331,18 +335,22 @@ Access authentication state and methods.
 #### Return Value
 
 ```typescript
-interface AuthState {
+interface AuthContextValue {
   // State
   isAuthenticated: boolean
-  isLoading: boolean
+  isLoading: boolean        // also true while the browser is away asking for the session
   user: User | null
-  error: Error | null
+  error: Error | null       // a sign-in the provider refused; "nobody is signed in" is not one
 
   // Methods
-  loginWithPopup: (options?: PopupOptions) => Promise<void>
-  loginWithRedirect: () => Promise<void>
+  loginWithRedirect: (options?: RedirectLoginOptions) => Promise<void>
+  loginWithPopup: (options?: PopupLoginOptions) => Promise<void>
   logout: (options?: LogoutOptions) => Promise<void>
   getAccessToken: () => Promise<string>  // throws LoginRequiredError when not signed in
+  getAccessTokenWithPopup: (options?: PopupLoginOptions) => Promise<string>
+  getIdTokenClaims: () => Promise<any | null>
+
+  client: AuthwayClient     // the client itself, for anything not listed here
 }
 ```
 
@@ -516,12 +524,11 @@ interface User {
 }
 ```
 
-### PopupOptions
+### PopupLoginOptions
 
 ```typescript
-interface PopupOptions {
-  width?: number
-  height?: number
+interface PopupLoginOptions {
+  redirectUri?: string
 }
 ```
 
@@ -529,7 +536,9 @@ interface PopupOptions {
 
 ```typescript
 interface LogoutOptions {
-  returnTo?: string
+  returnTo?: string   // URL to redirect after logout
+  localOnly?: boolean // Clear local tokens only (no server logout)
+  federated?: boolean // Also logout from social providers
 }
 ```
 

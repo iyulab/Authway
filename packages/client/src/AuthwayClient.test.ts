@@ -269,3 +269,31 @@ describe('an error at the redirect URI', () => {
     expect((refused as AuthenticationError).code).toBe('access_denied')
   })
 })
+
+describe('useRefreshTokens', () => {
+  const requestedScope = async (overrides: Partial<AuthwayConfig>) => {
+    const browser = fakeBrowser()
+    const client = new AuthwayClient({ ...config('memory'), ...overrides })
+    await client.waitForReady()
+    await client.loginWithRedirect()
+    return browser.location.sentTo!.searchParams.get('scope')
+  }
+
+  it('asks for offline_access when it is on, and only then', async () => {
+    expect(await requestedScope({})).toBe('openid profile email')
+    expect(await requestedScope({ useRefreshTokens: false })).toBe('openid profile email')
+    expect(await requestedScope({ useRefreshTokens: true })).toBe('openid profile email offline_access')
+    expect(await requestedScope({ useRefreshTokens: true, scope: 'openid offline_access reports' })).toBe('openid offline_access reports')
+  })
+
+  it('does not set out to renew tokens it has no refresh token for', async () => {
+    const browser = fakeBrowser()
+    vi.useFakeTimers()
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await signedIn(browser, 'memory')
+    // Past the point where the access token (an hour, here) would have been renewed.
+    await vi.advanceTimersByTimeAsync(3600 * 1000)
+    expect(errors).not.toHaveBeenCalled()
+    expect(tokenRequests.filter((r) => r.get('grant_type') === 'refresh_token')).toEqual([])
+  })
+})

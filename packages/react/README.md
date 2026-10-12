@@ -22,7 +22,7 @@ yarn add @authway/react @authway/client
 - ✅ **React Hooks** - useAuth, useUser, useClaims, useAccessToken
 - ✅ **팝업 로그인** - 페이지 이동 없이 팝업으로 인증
 - ✅ **자동 콜백 처리** - OAuth 콜백 자동 감지 및 처리
-- ✅ **동적 클레임** - 실시간 사용자 클레임 관리
+- ✅ **클레임 읽기** - ID 토큰의 클레임(`useClaims()`)
 - ✅ **TypeScript** - 완전한 타입 정의 제공
 - ✅ **SSR 지원** - Next.js, Remix 등과 호환
 
@@ -444,10 +444,9 @@ const user: User = {
 ## 관련 문서
 
 - [Client SDK (@authway/client)](../client/README.md)
-- [SDK 전체 문서](../../docs/sdk/README.md)
-- [빠른 시작 가이드](../../docs/sdk/QUICK_START.md)
-- [팝업 로그인 가이드](../../docs/features/POPUP_LOGIN_GUIDE.md)
-- [동적 클레임 가이드](../../docs/features/DYNAMIC_CLAIMS.md)
+- [SDK 레퍼런스](../../docs/SDK_REFERENCE.md)
+- [기능 가이드 — 팝업 로그인·로그아웃·토큰 보관](../../docs/FEATURES.md)
+- [샘플 — 브라우저 앱](../../samples/react-sdk-sample)
 
 ## 라이선스
 

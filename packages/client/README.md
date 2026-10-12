@@ -18,8 +18,9 @@ yarn add @authway/client
 
 - ✅ **OIDC Discovery** - Authway API URL만 지정, 엔드포인트는 OpenID Connect Discovery 로 자동 해석
 - ✅ **OAuth 2.0 / OIDC** - Authorization Code Flow with PKCE
-- ✅ **자동 토큰 갱신** - Refresh token 기반 자동 갱신
-- ✅ **동적 클레임 관리** - 실시간 사용자 클레임 업데이트
+- ✅ **토큰 갱신** - `useRefreshTokens: true` 면 refresh token 으로 자동 갱신(클라이언트에 `refresh_token` grant·`offline_access` scope 등록 필요)
+- ✅ **세션 복원** - 토큰이 없는 페이지에서 `checkSession()` 으로 로그인 상태 복원
+- ✅ **클레임 읽기** - ID 토큰의 클레임(`getClaims()`)
 - ✅ **팝업 로그인** - 페이지 이동 없이 팝업으로 인증
 - ✅ **멀티 테넌시** - 완전히 격리된 테넌트 지원
 - ✅ **TypeScript** - 완전한 타입 정의 제공
@@ -235,9 +236,9 @@ if (answer.has('code') || answer.has('error')) {
 ## 관련 문서
 
 - [React SDK (@authway/react)](../react/README.md)
-- [SDK 전체 문서](../../docs/sdk/README.md)
-- [빠른 시작 가이드](../../docs/sdk/QUICK_START.md)
-- [API 소개](../../docs/API_INTRODUCTION.md)
+- [SDK 레퍼런스](../../docs/SDK_REFERENCE.md)
+- [기능 가이드 — 팝업 로그인·로그아웃·토큰 보관](../../docs/FEATURES.md)
+- [샘플 — 브라우저 앱](../../samples/react-sdk-sample)
 
 ## 라이선스
 

@@ -30,6 +30,8 @@ export interface TestUser {
 export interface Tokens {
   access_token: string
   id_token?: string
+  /** Present when the client may use the refresh_token grant and the request asked for offline_access. */
+  refresh_token?: string
   token_type: string
 }
 
@@ -129,7 +131,7 @@ export class Provider {
    * default sign-in methods; `skipConsent` registers it as an application
    * whose users are not asked for consent.
    */
-  async createPublicClient(options: { signInMethods?: string[]; skipConsent?: boolean } = {}): Promise<TestClient> {
+  async createPublicClient(options: { signInMethods?: string[]; skipConsent?: boolean; scopes?: string[] } = {}): Promise<TestClient> {
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
@@ -142,7 +144,7 @@ export class Provider {
         post_logout_redirect_uris: [POST_LOGOUT_REDIRECT_URI],
         allowed_origins: ['http://localhost:9999'],
         grant_types: ['authorization_code', 'refresh_token'],
-        scopes: ['openid', 'profile', 'email'],
+        scopes: options.scopes ?? ['openid', 'profile', 'email'],
       }),
     })
     await conform('POST', '/api/v1/clients', res)
@@ -150,6 +152,18 @@ export class Provider {
     if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
     const { client } = JSON.parse(text) as { client: { id: string; client_id: string } }
     return { id: client.id, clientId: client.client_id }
+  }
+
+  /** Exchanges a refresh token at the token endpoint (a public client: no secret). */
+  async refresh(client: TestClient, refreshToken: string): Promise<{ status: number; tokens?: Tokens; error?: string }> {
+    const d = await this.discovery()
+    const res = await fetch(d.token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: client.clientId }),
+    })
+    const body = (await res.json()) as Tokens & { error?: string }
+    return res.ok ? { status: res.status, tokens: body } : { status: res.status, error: body.error }
   }
 
   /** Registers a confidential machine-to-machine client, which holds a secret. */

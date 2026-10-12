@@ -9,7 +9,7 @@ export interface IStorage {
 }
 
 /**
- * Memory storage (default, most secure)
+ * Memory storage: the tokens live in the page and nowhere else
  */
 export class MemoryStorage implements IStorage {
   private store: Map<string, string> = new Map()

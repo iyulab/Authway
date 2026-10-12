@@ -42,6 +42,15 @@ import {
 
 const DEFAULT_SCOPE = 'openid profile email'
 
+const REFRESH_SCOPE = 'offline_access'
+
+/** The scope to request: with offline_access when a refresh token is wanted. */
+function withRefreshScope(scope: string, useRefreshTokens: boolean): string {
+  const scopes = scope.split(/\s+/).filter(Boolean)
+  if (useRefreshTokens && !scopes.includes(REFRESH_SCOPE)) scopes.push(REFRESH_SCOPE)
+  return scopes.join(' ')
+}
+
 // What a provider answers a request without a prompt when it cannot answer
 // with a code (OpenID Connect Core §3.1.2.6): nobody is signed in, or the
 // user would have to be asked something first.
@@ -219,8 +228,8 @@ export class AuthwayClient {
       clientId: config.clientId,
       redirectUri,
       audience: config.audience,
-      scope: config.scope || DEFAULT_SCOPE,
-      useRefreshTokens: config.useRefreshTokens ?? true,
+      scope: withRefreshScope(config.scope || DEFAULT_SCOPE, config.useRefreshTokens ?? false),
+      useRefreshTokens: config.useRefreshTokens ?? false,
       cacheLocation: config.cacheLocation || 'localstorage',
       tenantId: config.tenantId,
       leeway: config.leeway || 60,
@@ -919,6 +928,9 @@ export class AuthwayClient {
     if (this.tokenRefreshTimer) {
       clearTimeout(this.tokenRefreshTimer)
     }
+
+    // Without a refresh token there is nothing to renew with.
+    if (!this.cache.refreshToken) return
 
     // Refresh 1 minute before expiration
     const refreshIn = (expiresIn - 60) * 1000

@@ -43,8 +43,14 @@ export interface AuthwayConfig {
   scope?: string
 
   /**
-   * Enable refresh tokens
-   * @default true
+   * Ask for a refresh token, so that an access token that runs out is
+   * renewed without sending the user through authorization again: adds
+   * `offline_access` to the requested scope. The client must be registered
+   * for it — the `refresh_token` grant and the `offline_access` scope —
+   * or the provider refuses the sign-in.
+   *
+   * A refresh token is kept where the other tokens are (`cacheLocation`).
+   * @default false
    */
   useRefreshTokens?: boolean
 

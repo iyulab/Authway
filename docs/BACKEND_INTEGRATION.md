@@ -41,7 +41,9 @@ no claims and no signature a resource server can check, so the JWKS/OIDC-discove
 setup described below **will reject every token** until the calling client is
 switched to the JWT format.
 
-Opt the client in per client — there is no need to change the format for everyone:
+Opt the client in per client — there is no need to change the format for
+everyone. For an application that signs users in and calls your API with
+their token:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/clients \
@@ -49,21 +51,26 @@ curl -X POST http://localhost:8080/api/v1/clients \
   -H "Content-Type: application/json" \
   -d '{
     "tenant_id": "YOUR_TENANT_ID",
-    "name": "Backend Service",
-    "public": false,
-    "grant_types": ["client_credentials"],
-    "scopes": ["api"],
+    "name": "Web App",
+    "public": true,
+    "redirect_uris": ["https://app.example.com/"],
+    "allowed_origins": ["https://app.example.com"],
+    "grant_types": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"],
     "access_token_strategy": "jwt",
     "audience": ["api"]
   }'
 ```
 
+A service that calls your API on its own behalf is registered the same way,
+with `"public": false` and `"grant_types": ["client_credentials"]`.
+
 `audience` names the API the client's tokens are for — the identifier your API
 validates `aud` against (`"api"` in the examples below). A client registered
 for none gets tokens with an empty `aud`, which an API that checks its audience
 refuses. A client that signs users in gets its registered audience in every
-access token; a machine-to-machine client like this one also names it in its
-token request (`audience` parameter). See
+access token; a machine-to-machine client also names it in its token request
+(`audience` parameter). See
 [client management](api/client-management.md#clients-whose-tokens-go-to-an-api-audience).
 
 Existing clients can be switched with `PUT /api/v1/clients/{id}`

@@ -1,8 +1,5 @@
 # Authway Deployment Guide
 
-**Version**: 0.2.0
-**Last Updated**: 2025-11-17
-
 Complete guide for deploying Authway to production environments.
 
 ## Table of Contents
