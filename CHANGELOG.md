@@ -96,6 +96,14 @@
   space-separated string of RFC 9068 — as well as in `scp`. The local stack no
   longer advertises pairwise subject identifiers, which no deployment did.
 
+- **A message the mail service did not take is tried again sooner, and once
+  more.** After a timeout, an unreachable service, a 429 or a 5xx, the message
+  is sent again after 5 seconds, 30 seconds and 2 minutes (was 45 seconds and
+  2 minutes), and one attempt waits at most 15 seconds for an answer (was 30).
+  The longer first wait existed so a retry would not overlap the attempt that
+  timed out; the mail service now answers a repeated message with the one it
+  already holds.
+
 ### Fixed
 
 - **An audience the authorization request asked for is granted.** The consent
@@ -108,6 +116,11 @@
 - **The ID token carries `email_verified` on every consent path.** It was
   missing when a client skips the consent screen or the user is signed in
   silently.
+- **Mail handed to a mail service that answers `202 Accepted` is no longer
+  logged as failed.** A Sendway deployment that queues a message and delivers
+  it afterwards answers 202; only 200 counted as success, so every message was
+  recorded as a failure although it went out. Any 2xx now means the message
+  was taken.
 
 ## [0.6.0] - 2026-10-12
 

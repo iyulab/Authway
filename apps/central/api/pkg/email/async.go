@@ -23,11 +23,12 @@ var ErrMailerClosed = errors.New("mail sender is shutting down")
 var ErrTransient = errors.New("transient mail failure")
 
 // retryAfter is how long a message waits before each further attempt at a
-// transient failure. The first wait outlasts the mail service's own handling
-// of the attempt that timed out, so the retry finds that attempt finished —
-// its idempotency key then answers with the earlier result instead of
-// sending twice.
-var retryAfter = []time.Duration{45 * time.Second, 2 * time.Minute}
+// transient failure: long enough to outlast, in turn, a dropped connection,
+// a restart of the mail service, and a short outage. The waits need not
+// outlast the attempt that failed — a message carries an idempotency key, and
+// the mail service answers a repeat of it with the message it already holds,
+// even while it is still handling the first attempt.
+var retryAfter = []time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute}
 
 // Async hands each message to the wrapped service in the background and
 // returns at once. A request that sends mail — an invitation, a sign-in link,

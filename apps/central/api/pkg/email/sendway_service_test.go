@@ -1,8 +1,8 @@
 package email
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,9 +69,29 @@ func TestSendwayEmailService_SendVerificationEmail_SendsExpectedRequest(t *testi
 	}
 }
 
-// TestSendwayEmailService_SendEmail_ErrorsOnUpstreamFailure guards both documented
-// failure shapes: 400 (rejected recipient/missing field, "error"+"messageId") and
-// 502 (send failed upstream, "detail"+"messageId") must both surface as a Go error.
+// The mail service answers 202 Accepted once it has queued a message and
+// delivers it afterwards; an older deployment answered 200 after sending.
+// Either is the message handed over.
+func TestSendwayEmailService_TakesAnAcceptedMessageAsHandedOver(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusAccepted} {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Location", "/messages/msg-1")
+			w.WriteHeader(status)
+			w.Write([]byte(`{"id":"msg-1","status":"Queued"}`))
+		}))
+		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "tok")
+		ts.Close()
+		if err != nil {
+			t.Errorf("status %d: %v, want the message taken as handed over", status, err)
+		}
+	}
+}
+
+// TestSendwayEmailService_SendEmail_ErrorsOnUpstreamFailure guards both error
+// bodies the service reads: "error" (400 — rejected recipient or missing field)
+// and "detail" (a 5xx from the service or a gateway in front of it). Both must
+// surface as a Go error carrying the reason.
 func TestSendwayEmailService_SendEmail_ErrorsOnUpstreamFailure(t *testing.T) {
 	t.Run("400 invalid recipient", func(t *testing.T) {
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

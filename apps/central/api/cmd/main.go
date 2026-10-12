@@ -42,6 +42,9 @@ import (
 // wins — keeping local dev and explicit overrides functional.
 var version = "dev"
 
+// mailSenders is how many messages are handed to the mail service at once.
+const mailSenders = 8
+
 func main() {
 	// Initialize configuration
 	cfg, err := config.Load()
@@ -187,6 +190,7 @@ func main() {
 			BaseURL:     cfg.Email.SendwayBaseURL,
 			APIKey:      cfg.Email.SendwayAPIKey,
 			FrontendURL: cfg.App.FrontendURL,
+			Senders:     mailSenders,
 		}
 		emailService = email.NewSendwayEmailService(sendwayConfig, zapLogger)
 	} else {
@@ -207,8 +211,8 @@ func main() {
 	}
 
 	// Requests that send mail answer without waiting for the mail service:
-	// 8 senders, and up to 256 messages waiting for one.
-	mailer := email.NewAsync(emailService, zapLogger, 8, 256)
+	// mailSenders at once, and up to 256 messages waiting for one.
+	mailer := email.NewAsync(emailService, zapLogger, mailSenders, 256)
 
 	emailRepo := email.NewRepository(db)
 

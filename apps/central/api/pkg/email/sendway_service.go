@@ -33,6 +33,10 @@ type SendwayEmailConfig struct {
 	BaseURL     string
 	APIKey      string
 	FrontendURL string
+	// Senders is how many messages are handed over at once. That many
+	// connections are kept open between messages, so a burst does not pay
+	// for a new TLS handshake per message. Zero keeps the transport default.
+	Senders int
 }
 
 // sendwayEmailRequest mirrors POST /messages/email. HtmlBody is optional — Sendway
@@ -44,27 +48,41 @@ type sendwayEmailRequest struct {
 	HtmlBody string   `json:"htmlBody,omitempty"`
 }
 
-// sendwaySuccessResponse is the 200 shape.
+// sendwaySuccessResponse is what Sendway answers once it has taken a message:
+// 202 Accepted with the id it can be looked up by (GET /messages/{id}).
+// Delivery happens afterwards, and Sendway retries a failed delivery itself.
 type sendwaySuccessResponse struct {
 	ID string `json:"id"`
 }
 
-// sendwayErrorResponse covers both error shapes Sendway returns: 400 uses "error",
-// 502 uses "detail". Both carry messageId so a failed send can still be looked up.
+// sendwayErrorResponse covers both error bodies: a refused request uses
+// "error", a failure of the service itself (or a gateway in front of it) uses
+// "detail". messageId is present when the message was stored.
 type sendwayErrorResponse struct {
 	Error     string `json:"error"`
 	Detail    string `json:"detail"`
 	MessageID string `json:"messageId"`
 }
 
+// acceptTimeout bounds one attempt to hand a message over. Sendway answers as
+// soon as it has queued the message, so an attempt that takes longer than this
+// is not going to answer; the message is tried again under the same
+// idempotency key.
+const acceptTimeout = 15 * time.Second
+
 // NewSendwayEmailService creates a new Sendway-backed email service.
 func NewSendwayEmailService(config SendwayEmailConfig, logger *zap.Logger) *SendwayEmailService {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if config.Senders > transport.MaxIdleConnsPerHost {
+		transport.MaxIdleConnsPerHost = config.Senders
+	}
 	return &SendwayEmailService{
 		baseURL:     config.BaseURL,
 		apiKey:      config.APIKey,
 		frontendURL: config.FrontendURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   acceptTimeout,
+			Transport: transport,
 		},
 		logger: logger,
 	}
@@ -118,8 +136,9 @@ func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewU
 	return s.sendEmail(toEmail, subject, body, htmlBody)
 }
 
-// sendEmail sends an email via Sendway's POST /messages/email, with an HTML
-// alternative alongside the required plain-text body.
+// sendEmail hands an email to Sendway's POST /messages/email, with an HTML
+// alternative alongside the required plain-text body. A nil error means
+// Sendway took the message, not that it has been delivered.
 func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) error {
 	req := sendwayEmailRequest{
 		To:       []string{to},
@@ -147,7 +166,8 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 	httpReq.Header.Set("X-Api-Key", s.apiKey)
 	// Every message carries a token of its own, so its content identifies it:
 	// a retry of the same message sends the same key and Sendway answers with
-	// the earlier result instead of sending it twice.
+	// the message it already holds instead of sending it twice — also while
+	// the first attempt is still being handled.
 	httpReq.Header.Set("Idempotency-Key", idempotencyKey(reqBody))
 
 	s.logger.Info("Sending email via Sendway",
@@ -169,7 +189,7 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		return fmt.Errorf("failed to read Sendway response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var errResp sendwayErrorResponse
 		_ = json.Unmarshal(respBody, &errResp)
 		reason := errResp.Error
@@ -195,8 +215,9 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		return fmt.Errorf("failed to parse Sendway response: %w", err)
 	}
 
-	s.logger.Info("Email sent successfully via Sendway",
+	s.logger.Info("Email accepted by Sendway",
 		zap.String("to", to),
+		zap.Int("status", resp.StatusCode),
 		zap.String("messageId", okResp.ID))
 
 	return nil
