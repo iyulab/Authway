@@ -108,6 +108,14 @@ $userCreated = $false
 $failed = $false
 
 try {
+    # 배포 직후에는 첫 요청이 응답 없이 끊기는 일이 있다(리비전 전환). 검증용 자원을
+    # 만들기 전에 API 가 답하는지부터 본다 — 생성 요청 자체는 다시 보내지 않는다.
+    foreach ($attempt in 1..5) {
+        $healthCode = & curl.exe -s -o NUL -w "%{http_code}" --max-time 10 "$apiUrl/health"
+        if ($healthCode -eq '200') { break }
+        Start-Sleep -Seconds 3
+    }
+
     # --- 1. 검증용 client 생성 ---
     Write-Host "1️⃣  검증용 client 생성" -ForegroundColor Yellow
     $createClientBody = @{

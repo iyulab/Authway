@@ -349,13 +349,20 @@ try {
     )
     $linkFailures = @()
     foreach ($path in $linkPaths) {
-        try {
-            $resp = Invoke-WebRequest -Uri "$AuthUiUrl$path" -Method Get -TimeoutSec 15 `
-                -SkipHttpErrorCheck -ErrorAction Stop
-            $code = [int]$resp.StatusCode
-        } catch {
-            $code = 0
-            if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+        # 응답이 아예 없을 때(0)만 다시 시도한다 — 정적 호스팅의 첫 응답이 늦는 일이 있다.
+        # 404 같은 실제 답은 한 번으로 판정한다.
+        $code = 0
+        foreach ($attempt in 1..3) {
+            try {
+                $resp = Invoke-WebRequest -Uri "$AuthUiUrl$path" -Method Get -TimeoutSec 15 `
+                    -SkipHttpErrorCheck -ErrorAction Stop
+                $code = [int]$resp.StatusCode
+            } catch {
+                $code = 0
+                if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+            }
+            if ($code -ne 0) { break }
+            Start-Sleep -Seconds 3
         }
         if ($code -eq 200) {
             Write-Host "  ✓ $path → 200" -ForegroundColor Green
