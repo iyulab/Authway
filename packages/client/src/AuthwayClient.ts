@@ -2,6 +2,7 @@ import {
   AuthwayConfig,
   NormalizedConfig,
   RedirectLoginOptions,
+  CheckSessionOptions,
   PopupLoginOptions,
   LogoutOptions,
   AuthResult,
@@ -30,6 +31,8 @@ import {
   parseCallbackUrl,
   postForm,
   createSessionStorage,
+  createSessionHint,
+  SessionHint,
   getDPoPKeyPair,
   createDPoPProof,
   resolveProvider,
@@ -39,6 +42,11 @@ import {
 
 const DEFAULT_SCOPE = 'openid profile email'
 
+// What a provider answers a request without a prompt when it cannot answer
+// with a code (OpenID Connect Core §3.1.2.6): nobody is signed in, or the
+// user would have to be asked something first.
+const NOT_SIGNED_IN = new Set(['login_required', 'consent_required', 'interaction_required', 'account_selection_required'])
+
 /**
  * Main Authway authentication client
  */
@@ -46,6 +54,7 @@ export class AuthwayClient {
   private config: NormalizedConfig
   private storage: IStorage
   private sessionStorage: IStorage
+  private sessionHint: SessionHint
   private tokenRefreshTimer?: number
   private dpopKeyPair: CryptoKeyPair | null = null
 
@@ -141,6 +150,7 @@ export class AuthwayClient {
     this.config = this.normalizeConfig(config)
     this.storage = createStorage(this.config.cacheLocation)
     this.sessionStorage = createSessionStorage()
+    this.sessionHint = createSessionHint(this.config.clientId)
     this.loadFromStorage()
 
     // Initialize DPoP if enabled
@@ -244,6 +254,9 @@ export class AuthwayClient {
     this.sessionStorage.set('redirectUri', options.redirectUri || this.config.redirectUri)
     if (options.appState) {
       this.sessionStorage.set('appState', JSON.stringify(options.appState))
+    } else {
+      // What an earlier request left behind is not this one's.
+      this.sessionStorage.remove('appState')
     }
 
     const authUrl = await this.buildAuthorizationUrl(pkce, options)
@@ -260,6 +273,19 @@ export class AuthwayClient {
     const params = parseCallbackUrl(url)
 
     if (params.error) {
+      // "Not signed in" is an answer, not a failure — but only to a request
+      // this page made: an address anyone can link to must not be able to
+      // say it.
+      const storedPkce = this.sessionStorage.get('pkce')
+      const answersOurRequest = !!storedPkce && !!params.state &&
+        verifyState(params.state, (JSON.parse(storedPkce) as PKCEChallenge).state)
+      if (answersOurRequest && NOT_SIGNED_IN.has(params.error)) {
+        const appState = this.takeAppState()
+        this.sessionStorage.remove('pkce')
+        this.sessionStorage.remove('redirectUri')
+        this.sessionHint.clear()
+        throw new LoginRequiredError(params.error_description || params.error, appState)
+      }
       throw new AuthenticationError(
         params.error_description || params.error,
         params.error
@@ -287,14 +313,11 @@ export class AuthwayClient {
     // Exchange code for tokens
     const result = await this.exchangeCodeForTokens(params.code, pkce.codeVerifier, redirectUri)
 
-    // Get app state from sessionStorage
-    const appStateStr = this.sessionStorage.get('appState')
-    const appState = appStateStr ? JSON.parse(appStateStr) : undefined
+    const appState = this.takeAppState()
 
     // Clean up sessionStorage
     this.sessionStorage.remove('pkce')
     this.sessionStorage.remove('redirectUri')
-    this.sessionStorage.remove('appState')
 
     // Save tokens
     this.saveTokens(result)
@@ -460,6 +483,8 @@ export class AuthwayClient {
    * Logout
    */
   async logout(options: LogoutOptions = {}): Promise<void> {
+    this.sessionHint.clear()
+
     // Local only logout
     if (options.localOnly) {
       this.clearTokens()
@@ -644,11 +669,41 @@ export class AuthwayClient {
   }
 
   /**
-   * Check session (silent authentication)
+   * Looks for the user's session at the provider when this page has no
+   * tokens — after a reload with `cacheLocation: 'memory'`, in a new tab with
+   * 'sessionstorage', or once stored tokens can no longer be refreshed.
+   *
+   * It sends the browser to the provider and back, with `prompt=none`: the
+   * provider shows nothing and answers at once. Resolves `true` when the
+   * browser is on its way — the answer then arrives at the redirect URI,
+   * where `handleRedirectCallback()` either returns the tokens or throws
+   * `LoginRequiredError` (the user is not signed in; send them to an
+   * ordinary login when they ask for one).
+   *
+   * Resolves `false` without leaving the page when there is nothing to look
+   * for: tokens are at hand, or nobody has signed in on this browser. The
+   * attempt is made once — an answer of "not signed in" is not asked for
+   * again until the user signs in.
+   *
+   * A hidden frame is not used: a provider on another site does not get its
+   * session cookie there.
    */
-  async checkSession(): Promise<AuthResult | null> {
-    // TODO: Implement silent authentication with iframe
-    return null
+  async checkSession(options: CheckSessionOptions = {}): Promise<boolean> {
+    if (typeof window === 'undefined') return false
+    if (await this.isAuthenticated()) return false
+    if (!this.sessionHint.has()) return false
+
+    // Spent by the attempt: signing in sets it again, anything else leaves
+    // the browser where it is rather than sending it round once more.
+    this.sessionHint.clear()
+
+    const { location } = window
+    await this.loginWithRedirect({
+      appState: options.appState ?? { returnTo: `${location.pathname}${location.search}${location.hash}` },
+      redirectUri: options.redirectUri,
+      prompt: 'none'
+    })
+    return true
   }
 
   /**
@@ -667,6 +722,13 @@ export class AuthwayClient {
   // ==========================================
   // Private Methods
   // ==========================================
+
+  /** The application state of the request that just came back, read once. */
+  private takeAppState(): any {
+    const stored = this.sessionStorage.get('appState')
+    this.sessionStorage.remove('appState')
+    return stored ? JSON.parse(stored) : undefined
+  }
 
   private async buildAuthorizationUrl(pkce: PKCEChallenge, options: RedirectLoginOptions): Promise<string> {
     // Determine redirect URI with fallback
@@ -691,7 +753,9 @@ export class AuthwayClient {
       ...options
     }
 
+    // Options of the SDK, not parameters of the request.
     delete params.appState
+    delete params.redirectUri
 
     return buildUrl((await this.endpoints()).authorizationEndpoint, params)
   }
@@ -793,8 +857,10 @@ export class AuthwayClient {
       }
     }
 
-    // Persist to storage if using localStorage
-    if (this.config.cacheLocation === 'localstorage') {
+    this.sessionHint.set()
+
+    // Persist to storage unless the tokens are to stay in the page
+    if (this.config.cacheLocation !== 'memory') {
       this.storage.set('accessToken', result.accessToken)
       this.storage.set('idToken', result.idToken)
       this.storage.set('expiresAt', this.cache.expiresAt.toString())
@@ -818,7 +884,7 @@ export class AuthwayClient {
   }
 
   private loadFromStorage(): void {
-    if (this.config.cacheLocation === 'localstorage') {
+    if (this.config.cacheLocation !== 'memory') {
       const accessToken = this.storage.get('accessToken')
       const idToken = this.storage.get('idToken')
       const refreshToken = this.storage.get('refreshToken')
@@ -829,6 +895,8 @@ export class AuthwayClient {
         this.cache.idToken = idToken
         this.cache.refreshToken = refreshToken
         this.cache.user = extractUser(idToken)
+        // Tokens stored by an earlier version came without the hint.
+        this.sessionHint.set()
 
         // Load expiration time from storage (supports opaque tokens)
         if (expiresAt) {

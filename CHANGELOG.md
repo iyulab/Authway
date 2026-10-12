@@ -1,6 +1,29 @@
 ## [Unreleased]
 
+### Added
+
+- **SDK (`@authway/client`, `@authway/react`, not yet published):
+  `checkSession()` brings a signed-in user back to a page that has no
+  tokens.** It was a method that returned `null`. It now sends the browser to
+  the provider and back with `prompt=none` — nothing is shown — and the page
+  at the redirect URI gets tokens from `handleRedirectCallback()`, or a
+  `LoginRequiredError` when nobody is signed in. It leaves the page only on a
+  browser a user has signed in on, and asks once. The React provider does it
+  on load (`checkSessionOnLoad`, on by default) and puts the user back at the
+  address they were at. No hidden frame is involved: a provider on another
+  site does not get its session cookie there.
+- **SDK: `cacheLocation: 'sessionstorage'`** keeps tokens in the tab — they
+  survive a reload and end with the tab. The default is unchanged
+  (`'localstorage'`).
+
 ### Changed
+
+- **SDK: `checkSession()` resolves a boolean** — whether the browser is on its
+  way to the provider — instead of `AuthResult | null`, and
+  `handleRedirectCallback()` throws `LoginRequiredError` (it was
+  `AuthenticationError`, its base class) when the provider answers a request
+  of this page with `login_required`, `consent_required` or
+  `interaction_required`.
 
 - **Every sign-in opens a session.** A password sign-in without "keep me
   signed in", and every sign-in by emailed link, used to leave no session at

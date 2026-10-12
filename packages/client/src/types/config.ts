@@ -49,12 +49,20 @@ export interface AuthwayConfig {
   useRefreshTokens?: boolean
 
   /**
-   * Token cache location
-   * - 'memory': Most secure, tokens lost on page refresh
-   * - 'localstorage': Persistent, vulnerable to XSS
+   * Where the tokens are kept.
+   * - 'memory': only in the page. A reload or a new tab has none; call
+   *   `checkSession()` to get them again from the user's session at the
+   *   provider (a round trip there and back).
+   * - 'sessionstorage': in the tab. They survive a reload and end with the
+   *   tab; a new tab starts without them, as with 'memory'.
+   * - 'localstorage': in the browser, shared by every tab, until logout.
+   *
+   * No location keeps tokens from a script running in the page — one that
+   * cannot read them can still ask the provider for new ones. The choice is
+   * how long, and how widely, tokens lie around.
    * @default 'localstorage'
    */
-  cacheLocation?: 'memory' | 'localstorage'
+  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'
 
   /**
    * Tenant ID for multi-tenant mode

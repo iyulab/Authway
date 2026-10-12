@@ -36,6 +36,22 @@ export interface RedirectLoginOptions {
 }
 
 /**
+ * Options of `checkSession()`
+ */
+export interface CheckSessionOptions {
+  /**
+   * Application state to get back from `handleRedirectCallback`.
+   * @default { returnTo: <the address the page is at, without its origin> }
+   */
+  appState?: any
+
+  /**
+   * Custom redirect URI for this request
+   */
+  redirectUri?: string
+}
+
+/**
  * Popup login options
  */
 export interface PopupLoginOptions {

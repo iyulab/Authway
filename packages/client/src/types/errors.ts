@@ -80,10 +80,16 @@ export class MissingRefreshTokenError extends TokenError {
 }
 
 /**
- * Login required error
+ * The user is not signed in, or the provider would have to ask them something
+ * before answering: there are no tokens, and the way to get some is an
+ * ordinary login. Thrown when tokens are asked for and none can be had, and
+ * by `handleRedirectCallback` when the provider answers a request without a
+ * prompt (`checkSession`) with `login_required`, `consent_required` or
+ * `interaction_required` — in which case `appState` is what the request
+ * carried.
  */
 export class LoginRequiredError extends AuthenticationError {
-  constructor(message: string = 'Login required') {
+  constructor(message: string = 'Login required', public appState?: any) {
     super(message, 'login_required')
     this.name = 'LoginRequiredError'
     Object.setPrototypeOf(this, LoginRequiredError.prototype)

@@ -167,7 +167,7 @@ const client = new AuthwayClient({
   redirectUri: window.location.origin,
   scope: 'openid profile email',
   audience: 'https://api.example.com',
-  cacheLocation: 'localstorage',  // 'localstorage' (기본값) | 'memory'
+  cacheLocation: 'localstorage',  // 'localstorage' (기본값) | 'sessionstorage' | 'memory'
   useDPoP: false,  // DPoP (RFC 9449) 사용 여부
 
   // OIDC issuer 직접 지정 (authway-config 조회 생략, 엔드포인트는 여전히 discovery 로)
@@ -175,13 +175,46 @@ const client = new AuthwayClient({
 })
 ```
 
+### 토큰 보관 위치와 새로고침
+
+| `cacheLocation` | 새로고침 | 새 탭 |
+|---|---|---|
+| `'localstorage'` (기본값) | 로그인 유지 | 로그인 유지 |
+| `'sessionstorage'` | 로그인 유지 | 토큰 없음 |
+| `'memory'` | 토큰 없음 | 토큰 없음 |
+
+토큰이 없는 페이지는 `checkSession()` 으로 되살린다 — 사용자가 Authway 에 로그인해 둔 세션이 살아 있으면
+브라우저가 Authway 를 다녀오며 토큰을 다시 받는다(화면은 뜨지 않는다):
+
+```typescript
+import { AuthwayClient, LoginRequiredError } from '@authway/client'
+
+await client.waitForReady()
+const answer = new URLSearchParams(window.location.search)
+if (answer.has('code') || answer.has('error')) {
+  try {
+    const { appState } = await client.handleRedirectCallback()
+    // 로그인됨 — appState.returnTo 는 사용자가 있던 주소
+  } catch (error) {
+    if (!(error instanceof LoginRequiredError)) throw error
+    // 로그인되어 있지 않음(오류가 아니다) — 로그인 버튼을 보여 준다
+  }
+} else if (!(await client.isAuthenticated()) && (await client.checkSession())) {
+  return // Authway 로 가는 중 — 이 페이지는 곧 바뀐다
+}
+```
+
+어느 위치든 페이지에서 실행되는 스크립트로부터 토큰을 지켜 주지는 않는다. 고르는 것은 토큰이 얼마나 오래,
+얼마나 넓게 남아 있는가다.
+
 ## API 레퍼런스
 
 ### 인증
 
 - `loginWithRedirect(options?)` - 리다이렉트 방식 로그인
 - `loginWithPopup(options?)` - 팝업 방식 로그인
-- `handleRedirectCallback(url?)` - OAuth 콜백 처리
+- `handleRedirectCallback(url?)` - OAuth 콜백 처리 (로그인되어 있지 않다는 답이면 `LoginRequiredError`)
+- `checkSession(options?)` - 토큰이 없는 페이지에서 Authway 의 세션으로 로그인 상태 복원 (`prompt=none` 왕복, 화면 없음). 브라우저를 보내면 `true`
 - `logout(options?)` - 로그아웃
 
 ### 사용자

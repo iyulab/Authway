@@ -1,19 +1,45 @@
 import { useCallback, useEffect, useState, useRef, ReactNode } from 'react'
 import { AuthwayClient, AuthwayConfig, LogoutOptions } from '@authway/client'
 import { AuthwayContext, AuthState } from './AuthwayContext'
+import { initialize } from './initialize'
 
 export interface AuthwayProviderProps {
   config: AuthwayConfig
   children: ReactNode
+  /**
+   * Called when the browser has come back from the provider — after a login,
+   * or after the provider was asked for the session (`checkSessionOnLoad`) —
+   * with the `appState` of the request. After a session check that is
+   * `{ returnTo }`, the address the user was at.
+   *
+   * Without it the address bar is put back to `appState.returnTo`. An
+   * application with a router passes its own, navigating there.
+   */
   onRedirectCallback?: (appState?: any) => void
   skipRedirectCallback?: boolean
+  /**
+   * When a page loads without tokens on a browser a user has signed in on,
+   * ask the provider for their session (`client.checkSession()`): the browser
+   * goes there and back without the user being shown anything, and the page
+   * loads signed in if the session is still there. `isLoading` stays true in
+   * between.
+   * @default true
+   */
+  checkSessionOnLoad?: boolean
+}
+
+const defaultOnRedirectCallback = (appState?: any) => {
+  if (typeof appState?.returnTo === 'string') {
+    window.history.replaceState({}, document.title, appState.returnTo)
+  }
 }
 
 export function AuthwayProvider({
   config,
   children,
-  onRedirectCallback,
-  skipRedirectCallback = false
+  onRedirectCallback = defaultOnRedirectCallback,
+  skipRedirectCallback = false,
+  checkSessionOnLoad = true
 }: AuthwayProviderProps) {
   // Check if we're in a popup callback context BEFORE creating client
   // This handles the Auth0-style auto popup callback
@@ -29,72 +55,54 @@ export function AuthwayProvider({
     error: null
   })
 
-  // Prevent duplicate callback processing (React StrictMode, hot reload)
-  const isProcessingCallback = useRef(false)
+  // One initialization at a time (React StrictMode runs the effect twice, hot
+  // reload again): an answer in the address is handled once, and the session
+  // is looked for once.
+  const isInitializing = useRef(false)
 
   // Initialize
   useEffect(() => {
     const init = async () => {
+      if (isInitializing.current) {
+        return
+      }
+      isInitializing.current = true
       try {
-        // Wait for config to be loaded
-        await client.waitForReady()
-        // OAuth error redirects (e.g. access_denied) carry `error=` without `code=`,
-        // so both must route into handleRedirectCallback for it to surface in AuthState.error.
-        const callbackParams = new URLSearchParams(window.location.search)
-        if (!skipRedirectCallback && (callbackParams.has('code') || callbackParams.has('error'))) {
-          // Prevent duplicate processing
-          if (isProcessingCallback.current) {
-            return
-          }
-          isProcessingCallback.current = true
-
-          // Capture current URL before clearing
-          const currentUrl = window.location.href
-
-          // Clear URL immediately to prevent reprocessing on re-render
-          window.history.replaceState({}, document.title, window.location.pathname)
-
-          // Process callback with captured URL
-          const result = await client.handleRedirectCallback(currentUrl)
-
-          if (onRedirectCallback) {
-            onRedirectCallback(result.appState)
-          }
+        const outcome = await initialize(client, {
+          url: window.location.href,
+          skipRedirectCallback,
+          checkSessionOnLoad,
+          // Clear the answer from the address at once, so a re-render does not handle it again
+          onAnswer: () => window.history.replaceState({}, document.title, window.location.pathname)
+        })
+        // On its way to the provider: the page stays loading, and is not
+        // initialized again, until it is replaced.
+        if (outcome.kind === 'leaving') {
+          return
         }
-
-        // Check authentication
-        const isAuth = await client.isAuthenticated()
-        if (isAuth) {
-          const user = await client.getUser()
-          setState({
-            isAuthenticated: true,
-            isLoading: false,
-            user,
-            error: null
-          })
-        } else {
-          setState({
-            isAuthenticated: false,
-            isLoading: false,
-            user: null,
-            error: null
-          })
+        isInitializing.current = false
+        if (outcome.cameBack) {
+          onRedirectCallback(outcome.appState)
         }
+        setState({
+          isAuthenticated: outcome.kind === 'signed-in',
+          isLoading: false,
+          user: outcome.kind === 'signed-in' ? outcome.user : null,
+          error: null
+        })
       } catch (error) {
+        isInitializing.current = false
         setState({
           isAuthenticated: false,
           isLoading: false,
           user: null,
           error: error as Error
         })
-      } finally {
-        // Reset processing flag after completion or error
-        isProcessingCallback.current = false
       }
     }
 
     init()
-  }, [client, onRedirectCallback, skipRedirectCallback])
+  }, [client, onRedirectCallback, skipRedirectCallback, checkSessionOnLoad])
 
   const loginWithRedirect = useCallback(
     async (options?: any) => {

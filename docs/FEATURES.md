@@ -409,10 +409,20 @@ own session expires or it next sends the user through authorization.
 `@authway/client` keeps the access, ID and refresh tokens together, in the
 place its `cacheLocation` option names:
 
-| `cacheLocation` | Where | On a page reload |
-|-----------------|-------|------------------|
-| `'localstorage'` (default) | The browser's `localStorage`, under keys starting with `authway.` | The user stays signed in |
-| `'memory'` | The client instance only — nothing is persisted | The tokens are gone; the user has to sign in again |
+| `cacheLocation` | Where | On a page reload | In a new tab |
+|-----------------|-------|------------------|--------------|
+| `'localstorage'` (default) | The browser's `localStorage`, under keys starting with `authway.` | The user stays signed in | Signed in |
+| `'sessionstorage'` | The tab's `sessionStorage` | The user stays signed in | No tokens — see below |
+| `'memory'` | The client instance only — nothing is persisted | No tokens — see below | No tokens — see below |
+
+A page without tokens does not mean a user who has to sign in again. Signing
+in opens a session at Authway ([Sessions](api/login-flows.md#sessions)), and
+`client.checkSession()` asks for it: the browser goes to the provider and
+straight back (`prompt=none` — nothing is shown, no page of the login UI is
+loaded), and arrives with tokens if the session is still there. The React
+provider does this on load by itself. It costs a round trip on each such page
+load, and it holds only as long as the session does — 60 minutes by default,
+30 days when the user asked to stay signed in.
 
 ```typescript
 const client = new AuthwayClient({
@@ -422,11 +432,15 @@ const client = new AuthwayClient({
 })
 ```
 
-Whatever is in `localStorage` can be read by any script running on the page,
-so a cross-site scripting flaw exposes the tokens — the refresh token
-included. Prefer `'memory'` when the application can afford re-authentication
-on reload. With the default, keep untrusted scripts off the page and token
-lifetimes short.
+Whatever is in `localStorage` or `sessionStorage` can be read by any script
+running on the page, so a cross-site scripting flaw exposes the tokens — the
+refresh token included. Keeping them in memory narrows that to the running
+page, and `sessionStorage` to the tab; neither is a defence against such a
+flaw, because a script that cannot read a token can still ask the provider
+for a new one ([RFC 10017](https://www.rfc-editor.org/rfc/rfc10017) §5.1.3).
+What the choice decides is how long, and how widely, tokens lie around. Keep
+untrusted scripts off the page and token lifetimes short whatever you choose;
+an application that handles sensitive data keeps tokens on its server instead.
 
 #### Access Token
 
@@ -518,8 +532,10 @@ fetch(tokenEndpoint, {
 
 #### Storage
 
-- ✅ Browser app that can re-authenticate on reload: `cacheLocation: 'memory'`
-- ✅ Browser app that must stay signed in across reloads: the SDK default (`'localstorage'`), with a strict Content Security Policy and short token lifetimes
+- ✅ Tokens out of storage altogether: `cacheLocation: 'memory'`, with `checkSession()` (the React provider calls it) bringing the user back after a reload
+- ✅ Tokens that end with the tab: `cacheLocation: 'sessionstorage'`
+- ✅ Signed in across tabs and browser restarts without a round trip: the SDK default (`'localstorage'`)
+- ✅ Whichever it is: a strict Content Security Policy and short token lifetimes — no location protects tokens from a script running in the page
 - ✅ Server-side app: tokens stay on the server, behind an HttpOnly session cookie (`Secure`, `SameSite`)
 - ❌ Don't keep your own copies of tokens outside the SDK
 
@@ -534,11 +550,11 @@ fetch(tokenEndpoint, {
 
 #### XSS (Cross-Site Scripting)
 
-**Risk**: An injected script reads tokens kept in localStorage — where the SDK keeps them by default
+**Risk**: An injected script reads the tokens the page holds, or asks the provider for new ones
 
 **Prevention**:
 ```typescript
-// ✅ Good - Keep tokens out of localStorage when a reload may re-authenticate
+// ✅ Good - Leave no tokens behind in storage; checkSession() restores them after a reload
 const client = new AuthwayClient({ ...config, cacheLocation: 'memory' })
 
 // ❌ Bad - An extra copy of the token outside the SDK

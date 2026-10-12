@@ -396,21 +396,21 @@ function CustomAuth() {
     redirectUri: window.location.origin,
     scope: 'openid profile email',
     audience: 'https://api.example.com',
-    cacheLocation: 'localstorage',  // 기본값
+    cacheLocation: 'localstorage',  // 기본값 | 'sessionstorage' | 'memory'
     useDPoP: false,
   }}
 
-  // OAuth 콜백 자동 처리 비활성화
-  skipRedirectCallback={true}
+  // OAuth 콜백 자동 처리 비활성화 (기본값 false)
+  skipRedirectCallback={false}
 
-  // 커스텀 로딩 컴포넌트
-  loadingComponent={<CustomSpinner />}
+  // 토큰이 없는 페이지에서 Authway 의 세션으로 로그인 상태를 되살린다 (기본값 true).
+  // 사용자가 이 브라우저에서 로그인한 적이 있을 때만 Authway 를 다녀온다 — 화면은 뜨지 않고,
+  // 그동안 isLoading 이 true 다. 세션이 없으면 로그아웃 상태로 로드된다(error 가 아니다).
+  checkSessionOnLoad={true}
 
-  // 커스텀 에러 핸들러
-  onError={(error) => {
-    console.error('Auth error:', error)
-    // Sentry 등으로 리포팅
-  }}
+  // 로그인·세션 확인에서 돌아왔을 때 호출된다. 세션 확인 뒤의 appState 는 { returnTo } —
+  // 사용자가 있던 주소. 라우터를 쓰는 앱은 여기서 그 주소로 이동한다.
+  onRedirectCallback={(appState) => navigate(appState?.returnTo ?? '/')}
 >
   <App />
 </AuthwayProvider>

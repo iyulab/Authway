@@ -69,14 +69,17 @@ interface AuthwayConfig {
   redirectUri?: string        // Redirect URI (default: window.location.origin)
   scope?: string              // OAuth scopes (default: 'openid profile email')
   audience?: string           // Token audience
-  cacheLocation?: 'memory' | 'localstorage'  // Where tokens are kept (default: 'localstorage')
+  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // Where tokens are kept (default: 'localstorage')
 }
 ```
 
 `cacheLocation` decides where the access, ID and refresh tokens are kept:
 
-- `'localstorage'` (the default) — in the browser's `localStorage`, so the user stays signed in across page reloads. Any script running on the page can read them.
-- `'memory'` — in the client instance only. Nothing is persisted; the user signs in again after a page reload.
+- `'localstorage'` (the default) — in the browser's `localStorage`: the user stays signed in across page reloads, tabs and browser restarts.
+- `'sessionstorage'` — in the tab's `sessionStorage`: they survive a reload and end with the tab. A new tab starts without them.
+- `'memory'` — in the client instance only. Nothing is persisted; a reload or a new tab starts without them.
+
+A page that starts without tokens gets them back from the user's session at the provider with [`checkSession()`](#checksession). No location keeps tokens from a script running on the page; see [Where the SDK keeps tokens](FEATURES.md#where-the-sdk-keeps-tokens).
 
 **Example**:
 
@@ -136,21 +139,53 @@ Redirects browser to authorization endpoint, then back to `redirectUri`.
 
 ##### `handleRedirectCallback()`
 
-Process OAuth callback after redirect login.
+Handles the provider's answer at the redirect URI — after `loginWithRedirect()` or `checkSession()`.
 
 ```typescript
-await client.handleRedirectCallback(): Promise<void>
+await client.handleRedirectCallback(url?: string): Promise<RedirectLoginResult>  // tokens, user, appState
 ```
 
-Call this on your callback page:
+Call it when the address carries an answer — a `code`, or an `error`:
 
 ```typescript
-// callback.html or App.tsx
-if (window.location.search.includes('code=')) {
-  await client.handleRedirectCallback()
-  // User is now authenticated
+import { LoginRequiredError } from '@authway/client'
+
+const answer = new URLSearchParams(window.location.search)
+if (answer.has('code') || answer.has('error')) {
+  try {
+    const { appState } = await client.handleRedirectCallback()
+    // Signed in. appState is what the request carried.
+  } catch (error) {
+    if (error instanceof LoginRequiredError) {
+      // Nobody is signed in: the answer to checkSession(). Not a failure —
+      // error.appState says where the user was.
+    } else {
+      throw error  // the provider refused, e.g. access_denied
+    }
+  }
 }
 ```
+
+##### `checkSession()`
+
+Gets tokens back from the user's session at the provider, for a page that has none — after a reload with `cacheLocation: 'memory'`, in a new tab with `'sessionstorage'`, or once stored tokens can no longer be refreshed.
+
+```typescript
+await client.checkSession(options?: { appState?: any; redirectUri?: string }): Promise<boolean>
+```
+
+It sends the browser to the provider and back with `prompt=none`: nothing is shown to the user. It resolves `true` when the browser is on its way — the answer then arrives at the redirect URI, where `handleRedirectCallback()` returns the tokens or throws `LoginRequiredError`. `appState` defaults to `{ returnTo }`, the address the page was at.
+
+It resolves `false`, and the page stays, when there is nothing to look for: tokens are at hand, or nobody has signed in on this browser. "Not signed in" is asked for once — the SDK does not send the browser round again until the user signs in.
+
+```typescript
+await client.waitForReady()
+if (!(await client.isAuthenticated()) && (await client.checkSession())) {
+  return  // on the way to the provider; this page is about to be replaced
+}
+```
+
+`@authway/react` does this for you (`checkSessionOnLoad`).
 
 ##### `isAuthenticated()`
 
@@ -256,7 +291,18 @@ Context provider component.
 interface AuthwayProviderProps {
   config: AuthwayConfig
   children: ReactNode
+  onRedirectCallback?: (appState?: any) => void  // default: put the address back to appState.returnTo
+  skipRedirectCallback?: boolean                 // default: false
+  checkSessionOnLoad?: boolean                   // default: true
 }
+```
+
+`checkSessionOnLoad` — when a page loads without tokens on a browser a user has signed in on, the provider calls `client.checkSession()`: the browser goes to Authway and back without the user being shown anything, and the page loads signed in if their session is still there. `isLoading` stays `true` in between. If nobody is signed in, the page loads signed out — that is not an `error`.
+
+`onRedirectCallback` is called when the browser has come back, after a login or a session check, with the `appState` of the request; after a session check that is `{ returnTo }`, the address the user was at. An application with a router passes its own and navigates there:
+
+```tsx
+<AuthwayProvider config={config} onRedirectCallback={(appState) => navigate(appState?.returnTo ?? '/')}>
 ```
 
 #### Usage
@@ -453,7 +499,7 @@ interface AuthwayConfig {
   redirectUri?: string
   scope?: string
   audience?: string
-  cacheLocation?: 'memory' | 'localstorage'  // default: 'localstorage'
+  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // default: 'localstorage'
 }
 ```
 
@@ -507,9 +553,9 @@ Authentication failed or was cancelled.
 
 #### `LoginRequiredError`
 
-There is no valid token and no refresh token to renew it with. Thrown by `getAccessToken()` and `getIdToken()`.
+The user is not signed in. Thrown by `getAccessToken()` and `getIdToken()` when there is no valid token and no refresh token to renew it with, and by `handleRedirectCallback()` when the provider answers `checkSession()` with `login_required`, `consent_required` or `interaction_required` (`error.appState` then carries the request's `appState`).
 
-**Solution**: Re-authenticate user
+**Solution**: Send the user to an ordinary login when they ask for one
 
 ### Error Types
 

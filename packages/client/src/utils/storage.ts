@@ -80,10 +80,12 @@ export class LocalStorageCache implements IStorage {
 }
 
 /**
- * SessionStorage wrapper for OAuth state
+ * SessionStorage wrapper: the state of an authorization request in flight,
+ * and — under its own prefix — the token cache of `cacheLocation:
+ * 'sessionstorage'`.
  */
 export class SessionStorageCache implements IStorage {
-  private prefix = 'authway.'
+  constructor(private prefix = 'authway.') {}
 
   get(key: string): string | null {
     if (typeof window === 'undefined') return null
@@ -130,11 +132,62 @@ export class SessionStorageCache implements IStorage {
 /**
  * Create storage based on cache location
  */
-export function createStorage(cacheLocation: 'memory' | 'localstorage'): IStorage {
+export function createStorage(cacheLocation: 'memory' | 'sessionstorage' | 'localstorage'): IStorage {
   if (cacheLocation === 'localstorage') {
     return new LocalStorageCache()
   }
+  if (cacheLocation === 'sessionstorage') {
+    // A prefix of its own: clearing the tokens must not clear a request in flight.
+    return new SessionStorageCache('authway.cache.')
+  }
   return new MemoryStorage()
+}
+
+/**
+ * Remembers, on this browser, that a user has signed in to a client — and
+ * nothing else about them. A page that holds no tokens (a reload with tokens
+ * kept in memory, a new tab) uses it to decide whether asking the provider
+ * for the session is worth a round trip: without it every visitor, signed in
+ * or not, would be sent there on every page load.
+ */
+export interface SessionHint {
+  has(): boolean
+  set(): void
+  clear(): void
+}
+
+export function createSessionHint(clientId: string): SessionHint {
+  const key = `authway.signed-in.${clientId}`
+  const store = (): Storage | null => {
+    try {
+      return typeof window === 'undefined' ? null : window.localStorage
+    } catch {
+      return null
+    }
+  }
+  return {
+    has: () => {
+      try {
+        return store()?.getItem(key) === '1'
+      } catch {
+        return false
+      }
+    },
+    set: () => {
+      try {
+        store()?.setItem(key, '1')
+      } catch {
+        // Without it the session is simply not looked for.
+      }
+    },
+    clear: () => {
+      try {
+        store()?.removeItem(key)
+      } catch {
+        // Nothing to clear.
+      }
+    }
+  }
 }
 
 /**
