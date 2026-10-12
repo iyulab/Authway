@@ -1,17 +1,15 @@
 # ============================================================
 # Hydra Container Apps env 전달 검증 (POST-DEPLOY-VERIFY.md §1-1)
 # ============================================================
-# publish-hydra.core.ps1이 $TokenEnv 배열을 `az containerapp update
-# --set-env-vars`로 넘긴다. PowerShell 쪽 인자 구성은 로컬에서 실측 확인됐지만,
-# az 자체가 그 인자들(특히 값에 쉼표가 든 HYDRA_ALLOWED_TOP_LEVEL_CLAIMS)을
-# 실제로 받아들였는지는 배포된 리소스를 조회해야만 확인 가능 — 로컬로 닫을 수
-# 없는 배포-전용 검증이라 사람 손으로 매 배포마다 반복돼 왔다.
+# publish-hydra.core.ps1 이 공유 설정(configs/hydra.shared.env)과 흐름 URL 을
+# `az containerapp update --set-env-vars` 로 넘긴다. az 가 그 인자들(특히 값에
+# 쉼표가 든 것)을 실제로 받아들였는지는 배포된 리소스를 조회해야만 알 수 있다.
 #
-# 확인 대상: public·admin 두 Container App 모두, STRATEGIES_ACCESS_TOKEN이
-# 실제로 "opaque"로 반영됐는지(전역 전략 회귀 시 모든 소비자의 토큰 형식이
-# 바뀐다 — 가장 파급이 큰 값이라 이것만 자동 검증한다). 커스텀 클레임
-# 미러링(POST-DEPLOY-VERIFY.md §3)은 배포마다 값이 다를 수 있어 여기서는 다루지 않는다 — 필요하면
-# 이 스크립트가 출력하는 전체 env 목록에서 사람이 직접 확인.
+# 확인 대상:
+#   - public·admin 두 Container App 모두: 공유 설정의 모든 키가 파일의 값과 같다
+#     (OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS 는 배포의 HYDRA_ALLOWED_TOP_LEVEL_CLAIMS 가
+#     더해진 값).
+#   - public: 흐름 URL 4 종.
 #
 # 사용:
 #   verify/verify-hydra-env.ps1 -Target staging
@@ -30,6 +28,7 @@ $SharedDir = Join-Path (Split-Path -Parent $VerifyDir) "_shared"
 
 . (Join-Path $SharedDir "load-env.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
+. (Join-Path $SharedDir "hydra-shared-env.ps1")
 
 Write-Host ""
 Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
@@ -59,6 +58,13 @@ $apps = @(
 
 $failed = $false
 
+try {
+    $shared = Get-HydraSharedEnv -EnvVars $envVars
+} catch {
+    Write-Host "❌ 공유 설정 로드 실패: $_" -ForegroundColor Red
+    exit 1
+}
+
 foreach ($app in $apps) {
     if ([string]::IsNullOrWhiteSpace($app.Name)) {
         Write-Host "❌ $($app.Label): CONTAINER_APP_HYDRA$(if ($app.Label -eq 'admin') { '_ADMIN' }) 미설정" -ForegroundColor Red
@@ -66,9 +72,9 @@ foreach ($app in $apps) {
         continue
     }
 
-    Write-Host "🔍 $($app.Label) ($($app.Name)) — STRATEGIES_ACCESS_TOKEN" -ForegroundColor Gray
+    Write-Host "🔍 $($app.Label) ($($app.Name)) — 공유 설정 $($shared.Count) 개" -ForegroundColor Gray
     $raw = az containerapp show -n $app.Name -g $resourceGroup `
-        --query "properties.template.containers[0].env[?name=='STRATEGIES_ACCESS_TOKEN']" `
+        --query "properties.template.containers[0].env" `
         -o json --only-show-errors 2>&1
 
     if ($LASTEXITCODE -ne 0) {
@@ -77,21 +83,19 @@ foreach ($app in $apps) {
         continue
     }
 
-    $parsed = $raw | ConvertFrom-Json
-    if (-not $parsed -or $parsed.Count -eq 0) {
-        Write-Host "❌ $($app.Label): STRATEGIES_ACCESS_TOKEN env 자체가 없음 — 배열 전개 실패 가능성" -ForegroundColor Red
-        $failed = $true
-        continue
+    $actual = @{}
+    foreach ($e in ($raw | ConvertFrom-Json)) { $actual[$e.name] = $e.value }
+    foreach ($name in $shared.Keys) {
+        if (-not $actual.ContainsKey($name)) {
+            Write-Host "❌ $($app.Label): $name 이 없음 (기대: '$($shared[$name])')" -ForegroundColor Red
+            $failed = $true
+        } elseif ($actual[$name] -ne $shared[$name]) {
+            Write-Host "❌ $($app.Label): $name = '$($actual[$name])' (기대: '$($shared[$name])')" -ForegroundColor Red
+            $failed = $true
+        } else {
+            Write-Host "✅ $($app.Label): $name = $($shared[$name])" -ForegroundColor Green
+        }
     }
-
-    $value = $parsed[0].value
-    if ($value -ne "opaque") {
-        Write-Host "❌ $($app.Label): STRATEGIES_ACCESS_TOKEN = '$value' (기대: 'opaque')" -ForegroundColor Red
-        $failed = $true
-        continue
-    }
-
-    Write-Host "✅ $($app.Label): opaque 확인" -ForegroundColor Green
 }
 
 # Flow URLs on the public app: where Hydra sends the browser during sign-in.
@@ -121,9 +125,9 @@ if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
 
 Write-Host ""
 if ($failed) {
-    Write-Host "❌ Hydra env 검증 실패 — 위 항목 참조. publish-hydra.core.ps1의 배열 전개를 재확인할 것." -ForegroundColor Red
+    Write-Host "❌ Hydra env 검증 실패 — 위 항목 참조. 배포가 configs/hydra.shared.env 보다 앞서 나갔거나(재배포 필요) 인자 전개가 깨진 것." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 STRATEGIES_ACCESS_TOKEN=opaque, public 흐름 URL 4종)" -ForegroundColor Green
+Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 공유 설정 전부, public 흐름 URL 4종)" -ForegroundColor Green
 exit 0

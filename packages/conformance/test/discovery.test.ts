@@ -19,6 +19,18 @@ describe('OIDC discovery', () => {
     expect(d.code_challenge_methods_supported).toContain('S256')
   })
 
+  // Discovery is how a relying party learns what it can ask for and what it
+  // will be told, so it has to name the claims and scopes of the contract.
+  it('advertises the scopes and claims of the contract', async () => {
+    const d = await provider.discovery()
+    for (const scope of ['openid', 'profile', 'email', 'offline_access']) {
+      expect(d.scopes_supported, `scopes_supported: ${scope}`).toContain(scope)
+    }
+    for (const claim of ['sub', 'tenant_id', 'email', 'email_verified', 'name', 'auth_time', 'amr']) {
+      expect(d.claims_supported, `claims_supported: ${claim}`).toContain(claim)
+    }
+  })
+
   it('serves a JWKS with at least one signing key', async () => {
     const d = await provider.discovery()
     const res = await fetch(d.jwks_uri)

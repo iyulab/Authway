@@ -17,8 +17,11 @@ scripts/deploy/verify/verify-hydra-env.ps1 -Target staging
 ```
 
 `publish-hydra.core.ps1` 은 env 를 배열로 `az containerapp ... --set-env-vars` 에 넘긴다. 이 스크립트는 public·admin
-두 Container App 이 기대한 값(토큰 전략, 로그인·동의·로그아웃·오류 URL)을 실제로 받았는지 확인한다 — 값이 비어 있거나
-env 자체가 없으면 실패.
+두 Container App 이 **공유 설정**(`configs/hydra.shared.env` 의 모든 키 — 토큰 형태, discovery 광고, 수명)을 파일의 값 그대로
+받았는지, public 이 로그인·동의·로그아웃·오류 URL 을 받았는지 확인한다 — 값이 다르거나 env 자체가 없으면 실패.
+
+인가 서버 설정을 바꿀 때는 `configs/hydra.shared.env` 한 곳만 고친다. 로컬(compose)·CI·배포가 모두 그 파일을 읽는다.
+파일을 고친 뒤 인가 서버를 재배포하기 전까지 이 검사는 실패한다 — 그것이 「배포가 설정보다 뒤처졌다」 는 신호다.
 
 ### 1-2. 마이그레이션 적용
 
@@ -57,7 +60,7 @@ scripts/deploy/verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 
 ## 3. 참고 — 커스텀 클레임 배치
 
 Hydra 는 Authway 가 넣는 클레임을 JWT access token 의 `ext` 객체 아래에 둔다. 계약이 정한 네 클레임
-(`tenant_id`, `email`, `name`, `auth_time`)은 배포 스크립트가 항상 top-level 에도 복사하도록 설정한다(`ext` 사본은 남는다).
+(`tenant_id`, `email`, `name`, `auth_time`)은 공유 설정(`configs/hydra.shared.env`)이 항상 top-level 에도 복사하게 한다(`ext` 사본은 남는다).
 배포 env `HYDRA_ALLOWED_TOP_LEVEL_CLAIMS=<이름들>` 은 그 넷에 **더할** 이름이다.
 Hydra 컨테이너의 `OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS` 에는 네 이름이 항상 들어 있어야 한다(1-3 의 스모크가 토큰에서 확인한다):
 

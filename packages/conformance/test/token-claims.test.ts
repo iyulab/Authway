@@ -71,6 +71,14 @@ describe('token claims', () => {
     expect(Math.abs(Date.now() / 1000 - authTime)).toBeLessThan(120)
   })
 
+  // RFC 9068: the scopes of a JWT access token are one space-separated
+  // string, which is what standard validators read.
+  it('names the granted scopes in `scope`, as one string', () => {
+    const claims = claimsOf(accessToken)
+    expect(typeof claims.scope).toBe('string')
+    expect((claims.scope as string).split(' ')).toEqual(expect.arrayContaining(['openid', 'profile', 'email']))
+  })
+
   it('puts the same claims in the ID token', () => {
     const claims = claimsOf(idToken)
     expect(claims.sub).toBe(sub)

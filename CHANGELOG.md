@@ -68,6 +68,15 @@
   popup, silent re-authentication and claim-writing demos are gone.
   `docs/BACKEND_INTEGRATION.md` gains a section on server-side web apps.
 
+- **The authorization server's settings are written once**
+  (`configs/hydra.shared.env`) and read by local development, CI and the
+  deploy scripts, whose check now compares every one of them with what is
+  deployed. With that: discovery advertises the scopes and claims of the
+  contract (`profile`, `email`; `tenant_id`, `email`, `email_verified`, `name`,
+  `auth_time`, `amr`), and a JWT access token names its scopes in `scope` — the
+  space-separated string of RFC 9068 — as well as in `scp`. The local stack no
+  longer advertises pairwise subject identifiers, which no deployment did.
+
 ### Fixed
 
 - **The ID token carries `email_verified` on every consent path.** It was

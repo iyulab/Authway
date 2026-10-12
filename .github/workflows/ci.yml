@@ -61,6 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run -d --name hydra-ci --network host \
+            --env-file configs/hydra.shared.env \
             -e DSN=memory \
             -e SECRETS_SYSTEM="$(openssl rand -hex 16)" \
             -e URLS_SELF_ISSUER=http://localhost:4444 \
@@ -177,13 +178,13 @@ jobs:
         run: |
           set -euo pipefail
           docker run -d --name hydra-ci --network host \
+            --env-file configs/hydra.shared.env \
             -e DSN=memory \
             -e SECRETS_SYSTEM="$(openssl rand -hex 16)" \
             -e URLS_SELF_ISSUER=http://localhost:4444 \
             -e URLS_LOGIN=http://localhost:8080/login \
             -e URLS_CONSENT=http://localhost:8080/consent \
             -e URLS_LOGOUT=http://localhost:8080/logout \
-            -e OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=tenant_id,email,name,auth_time \
             oryd/hydra:v26.2.0 serve all --dev
           for _ in $(seq 1 60); do
             curl -sf http://localhost:4445/health/ready >/dev/null && exit 0

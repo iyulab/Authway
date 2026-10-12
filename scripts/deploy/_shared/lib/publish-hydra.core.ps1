@@ -21,6 +21,7 @@ $SharedDir = Split-Path -Parent $LibDir
 . (Join-Path $SharedDir "load-env.ps1")
 . (Join-Path $SharedDir "az-retry.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
+. (Join-Path $SharedDir "hydra-shared-env.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
@@ -35,40 +36,16 @@ $RESOURCE_GROUP = $envVars['RESOURCE_GROUP']
 $CONTAINER_APP_HYDRA = $envVars['CONTAINER_APP_HYDRA']
 $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 
-# Token-shape settings, kept in one place so both the full deploy and the
-# env-only update stay identical.
-#
-# STRATEGIES_ACCESS_TOKEN: pinned to Hydra's current default rather than left
-# implicit, so a future change to that default cannot silently switch every
-# client's token format. Per-client opt-in (clients.access_token_strategy)
-# overrides this, which is how a resource server gets verifiable JWTs.
-#
-# OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS: for JWT access tokens Hydra nests session
-# claims under `ext` (mirroring the introspection response). Claims named here
-# are additionally mirrored to the top level, which resource servers that read
-# claims by their bare name require.
-#   - Authway's own claims (tenant_id, email, name, auth_time) are always
-#     mirrored: the contract puts them at the top level, so a resource server
-#     reads them the same way whichever provider issued the token.
-#   - A deployment's custom claim names are added from
-#     HYDRA_ALLOWED_TOP_LEVEL_CLAIMS. Those are consumer domain concepts and
-#     must not be hard-coded here.
-# Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1).
+# Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1), and
+# the settings every deployment shares (configs/hydra.shared.env, see
+# hydra-shared-env.ps1) — token shape, what discovery advertises, lifetimes.
 try {
     $FlowUrlEnv = @((Get-HydraFlowUrls -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+    $SharedEnv = @((Get-HydraSharedEnv -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
     exit 1
 }
-
-$TopLevelClaims = @('tenant_id', 'email', 'name', 'auth_time')
-if ($envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS']) {
-    $TopLevelClaims += $envVars['HYDRA_ALLOWED_TOP_LEVEL_CLAIMS'].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-}
-$TokenEnv = @(
-    "STRATEGIES_ACCESS_TOKEN=opaque"
-    "OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS=$(($TopLevelClaims | Select-Object -Unique) -join ',')"
-)
 
 Write-Host "✓ 환경 변수 로드 완료" -ForegroundColor Green
 Write-Host ""
@@ -97,7 +74,7 @@ try {
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                 $FlowUrlEnv `
-                $TokenEnv
+                $SharedEnv
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host ""
@@ -148,7 +125,7 @@ try {
                 "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                 $FlowUrlEnv `
-                $TokenEnv
+                $SharedEnv
 
         if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }
 
@@ -176,7 +153,7 @@ try {
                     "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
                     "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                     "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
-                    $TokenEnv | Out-Null
+                    $SharedEnv | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Hydra admin 업데이트 실패" }
             Write-Host "   ✓ Hydra Admin 업데이트 완료" -ForegroundColor Green
             Write-Host ""
