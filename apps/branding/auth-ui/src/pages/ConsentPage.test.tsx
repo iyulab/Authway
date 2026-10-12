@@ -184,7 +184,7 @@ describe('ConsentPage', () => {
       render(<ConsentPage />)
 
       await waitFor(() => {
-        expect(screen.getByLabelText('이 선택을 기억하기 (1시간)')).toBeInTheDocument()
+        expect(screen.getByLabelText('이 선택을 기억하기')).toBeInTheDocument()
       })
     })
   })
@@ -225,7 +225,7 @@ describe('ConsentPage', () => {
     })
 
     it('can toggle remember consent option', async () => {
-      const rememberCheckbox = screen.getByLabelText('이 선택을 기억하기 (1시간)')
+      const rememberCheckbox = screen.getByLabelText('이 선택을 기억하기')
 
       // rememberConsent defaults to true (better-UX default in ConsentPage).
       expect(rememberCheckbox).toBeChecked()
@@ -319,8 +319,7 @@ describe('ConsentPage', () => {
       await waitFor(() => {
         expect(requestBody).toEqual({
           grant_scope: ['openid', 'email', 'offline_access'], // profile removed
-          remember: true,
-          remember_for: 3600
+          remember: true
         })
       })
     })
@@ -483,7 +482,7 @@ describe('ConsentPage', () => {
       expect(screen.getByLabelText('프로필 정보')).toBeInTheDocument()
       expect(screen.getByLabelText('이메일 주소')).toBeInTheDocument()
       expect(screen.getByLabelText('오프라인 접근')).toBeInTheDocument()
-      expect(screen.getByLabelText('이 선택을 기억하기 (1시간)')).toBeInTheDocument()
+      expect(screen.getByLabelText('이 선택을 기억하기')).toBeInTheDocument()
     })
 
     it('has proper button roles and names', () => {

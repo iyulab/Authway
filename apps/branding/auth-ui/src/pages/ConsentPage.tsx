@@ -72,7 +72,6 @@ const ConsentPage: React.FC = () => {
       submitFlowStep('consent-flows', flow ?? '', '/accept', {
         grant_scope: selectedScopes,
         remember: rememberConsent,
-        remember_for: rememberConsent ? 3600 : 0, // 1 hour
       }),
     onSuccess: handleAnswer,
     onError: (error) => {

@@ -4,7 +4,7 @@
   "subtitle": "<strong>{{clientName}}</strong> is requesting the following permissions.",
   "requestedPermissions": "Requested Permissions",
   "genericPermission": "Access to {{scope}} permission.",
-  "rememberChoice": "Remember this choice (1 hour)",
+  "rememberChoice": "Remember this choice",
   "approveButton": "Approve",
   "approveButtonWithCount": "Approve ({{count}} permissions)",
   "approving": "Approving...",

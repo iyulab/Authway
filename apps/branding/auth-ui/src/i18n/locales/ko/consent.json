@@ -4,7 +4,7 @@
   "subtitle": "<strong>{{clientName}}</strong>에서 다음 권한을 요청하고 있습니다.",
   "requestedPermissions": "요청된 권한",
   "genericPermission": "{{scope}} 권한에 접근합니다.",
-  "rememberChoice": "이 선택을 기억하기 (1시간)",
+  "rememberChoice": "이 선택을 기억하기",
   "approveButton": "승인",
   "approveButtonWithCount": "승인 ({{count}}개 권한)",
   "approving": "승인 중...",
