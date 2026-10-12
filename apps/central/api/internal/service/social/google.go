@@ -270,67 +270,12 @@ func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
-	// Check if user already exists in this tenant
-	existingUser, err := g.userService.GetByEmailAndTenant(clientTenantID, googleUser.Email)
-	if err == nil {
-		// User exists in this tenant, update Google-specific fields
-		existingUser.GoogleID = &googleUser.ID
-		existingUser.Picture = &googleUser.Picture
-		existingUser.EmailVerified = googleUser.VerifiedEmail
-
-		updateReq := &user.UpdateUserRequest{
-			AvatarURL: googleUser.Picture,
-		}
-		if _, err := g.userService.Update(existingUser.ID, updateReq); err != nil {
-			g.logger.Error("Failed to update existing user", zap.Error(err))
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-
-		g.logger.Info("Updated existing user with Google account",
-			zap.String("user_id", existingUser.ID.String()),
-			zap.String("email", existingUser.Email),
-			zap.String("tenant_id", clientTenantID.String()),
-			zap.String("client_id", clientID))
-
-		return existingUser, nil
-	}
-
-	// Onboarding is invitation-only: a first-time sign-in may create an account
-	// only for an address that was invited into this tenant.
-	if !mayProvision(g.invitations, g.logger, clientTenantID, googleUser.Email) {
-		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", googleUser.Email))
-		return nil, ErrNotInvited
-	}
-	// Create new user account in this tenant
-	fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)
-	createReq := &user.CreateUserRequest{
-		Email:    googleUser.Email,
-		Password: "", // Social login users don't need a password
-		Name:     fullName,
-	}
-
-	newUser, err := g.userService.Create(clientTenantID, createReq)
-	if err != nil {
-		g.logger.Error("Failed to create new user from Google", zap.Error(err))
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	// Update Google-specific fields
-	newUser.GoogleID = &googleUser.ID
-	newUser.Picture = &googleUser.Picture
-	newUser.EmailVerified = googleUser.VerifiedEmail
-	updateReq := &user.UpdateUserRequest{
-		AvatarURL: googleUser.Picture,
-	}
-	if _, err := g.userService.Update(newUser.ID, updateReq); err != nil {
-		g.logger.Warn("Failed to update new user with Google fields", zap.Error(err))
-	}
-
-	g.logger.Info("Created new user from Google account",
-		zap.String("user_id", newUser.ID.String()),
-		zap.String("email", newUser.Email),
-		zap.String("tenant_id", clientTenantID.String()),
-		zap.String("client_id", clientID))
-
-	return newUser, nil
+	return resolveAccount(g.userService, g.invitations, g.logger, clientTenantID, Identity{
+		Provider:      "google",
+		Subject:       googleUser.ID,
+		Email:         googleUser.Email,
+		EmailVerified: googleUser.VerifiedEmail,
+		Name:          strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName),
+		Picture:       googleUser.Picture,
+	})
 }

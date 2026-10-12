@@ -33,6 +33,8 @@ type AppleService struct {
 type AppleUserInfo struct {
 	Sub   string `json:"sub"`
 	Email string `json:"email"`
+	// EmailVerified is the ID token's email_verified claim.
+	EmailVerified bool `json:"email_verified"`
 }
 
 type AppleTokenResponse struct {
@@ -166,22 +168,15 @@ func (a *AppleService) ExchangeCodeForClient(ctx context.Context, code string, c
 }
 
 func (a *AppleService) parseIDToken(idToken string) (*AppleUserInfo, error) {
-	parts := strings.Split(idToken, ".")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid ID token format")
-	}
-	payload, err := jwt.NewParser().DecodeSegment(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode ID token payload: %w", err)
-	}
 	var claims struct {
-		Sub   string `json:"sub"`
-		Email string `json:"email"`
+		Sub           string `json:"sub"`
+		Email         string `json:"email"`
+		EmailVerified any    `json:"email_verified"`
 	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("failed to parse ID token claims: %w", err)
+	if err := idTokenClaims(idToken, &claims); err != nil {
+		return nil, err
 	}
-	return &AppleUserInfo{Sub: claims.Sub, Email: claims.Email}, nil
+	return &AppleUserInfo{Sub: claims.Sub, Email: claims.Email, EmailVerified: claimIsTrue(claims.EmailVerified)}, nil
 }
 
 func (a *AppleService) HandleCallback(ctx context.Context, code, state string) (*user.User, error) {
@@ -212,38 +207,10 @@ func (a *AppleService) HandleCallbackForClient(ctx context.Context, code, state 
 		a.logger.Error("Failed to parse ID token", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse ID token: %w", err)
 	}
-	if appleUser.Email == "" {
-		return nil, fmt.Errorf("email not available from Apple account")
-	}
-	existingUser, err := a.userService.GetByEmailAndTenant(clientTenantID, appleUser.Email)
-	if err == nil {
-		existingUser.AppleID = &appleUser.Sub
-		updateReq := &user.UpdateUserRequest{}
-		if _, err := a.userService.Update(existingUser.ID, updateReq); err != nil {
-			a.logger.Error("Failed to update existing user", zap.Error(err))
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-		a.logger.Info("Updated existing user with Apple account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
-		return existingUser, nil
-	}
-	// Onboarding is invitation-only: a first-time sign-in may create an account
-	// only for an address that was invited into this tenant.
-	if !mayProvision(a.invitations, a.logger, clientTenantID, appleUser.Email) {
-		a.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", appleUser.Email))
-		return nil, ErrNotInvited
-	}
-	createReq := &user.CreateUserRequest{Email: appleUser.Email, Password: "", Name: ""}
-	newUser, err := a.userService.Create(clientTenantID, createReq)
-	if err != nil {
-		a.logger.Error("Failed to create new user from Apple", zap.Error(err))
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-	newUser.AppleID = &appleUser.Sub
-	newUser.EmailVerified = true
-	updateReq := &user.UpdateUserRequest{}
-	if _, err := a.userService.Update(newUser.ID, updateReq); err != nil {
-		a.logger.Warn("Failed to update new user with Apple fields", zap.Error(err))
-	}
-	a.logger.Info("Created new user from Apple account", zap.String("user_id", newUser.ID.String()), zap.String("email", newUser.Email))
-	return newUser, nil
+	return resolveAccount(a.userService, a.invitations, a.logger, clientTenantID, Identity{
+		Provider:      "apple",
+		Subject:       appleUser.Sub,
+		Email:         appleUser.Email,
+		EmailVerified: appleUser.EmailVerified,
+	})
 }

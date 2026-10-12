@@ -10,7 +10,8 @@ Comprehensive guide to Authway's key features: i18n, Custom Claims, Popup Login,
 - [Internationalization (i18n)](#internationalization-i18n)
 - [Custom Claims](#custom-claims)
 - [Popup Login](#popup-login)
-- [Logout & Redirect Policies](#logout--redirect-policies)
+- [Signing in with a provider](#signing-in-with-a-provider)
+- [Logout & Redirect URIs](#logout--redirect-uris)
 - [OAuth & JWT Best Practices](#oauth--jwt-best-practices)
 
 ---
@@ -187,6 +188,44 @@ Access-Control-Allow-Credentials: true
 - Verify CORS configuration
 
 ---
+
+## Signing in with a provider
+
+A user can sign in with an account at Google, GitHub, Microsoft or Apple when
+the deployment (or the client) has that provider's credentials and the client
+lists the provider in `enabled_auth_providers`. The application does nothing
+different: it runs the same authorization code flow and receives the same
+tokens, with `amr: ["fed"]` in the ID token.
+
+### Which account a provider sign-in reaches
+
+1. **An account already linked to that provider account** is the one signed in
+   to. The link is the provider's own identifier for the account, so a later
+   change of address at the provider neither loses the Authway account nor
+   reaches a different one.
+2. **Otherwise the email address decides, once — and only an address the
+   provider has verified.** An existing account in the tenant with that address
+   is linked and its address is marked verified (`email_verified: true`).
+3. **With no such account**, one is created if the tenant admits the address
+   (it was invited, or the tenant has open signup), linked, and marked verified.
+
+A sign-in is refused, and the application receives `error=access_denied` on its
+redirect URI, when:
+
+| `error_description` | Why |
+|---|---|
+| `no account for this address; ask an administrator for an invitation` | The tenant is invitation-only and nobody invited the address. |
+| `the sign-in provider has not verified this email address` | The provider did not state that the person controls the address. Without that, whoever controls the provider-side account could sign in as the owner of the address. |
+| `this email address already signs in with a different account at this provider` | The account with that address is linked to another account at the same provider. |
+
+### What counts as verified
+
+| Provider | The address is verified when |
+|---|---|
+| Google | the user info says `verified_email: true` |
+| GitHub | it is one of the account's verified addresses (the primary one is used); the address shown on the profile is not used |
+| Apple | the ID token says `email_verified` |
+| Microsoft | the ID token carries the optional claim `xms_edov: true` — add it to the app registration's token configuration. The mailbox address and sign-in name of a directory account are set by that directory's administrator and are never taken as verified. |
 
 ## Logout & Redirect URIs
 

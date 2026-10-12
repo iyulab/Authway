@@ -164,14 +164,6 @@ func (g *GitHubService) GetUserInfo(ctx context.Context, accessToken string) (*G
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
 		return nil, fmt.Errorf("failed to decode user info: %w", err)
 	}
-	if userInfo.Email == "" {
-		email, err := g.getPrimaryEmail(ctx, accessToken)
-		if err != nil {
-			g.logger.Warn("Failed to get primary email", zap.Error(err))
-		} else {
-			userInfo.Email = email
-		}
-	}
 	return &userInfo, nil
 }
 
@@ -238,49 +230,25 @@ func (g *GitHubService) HandleCallbackForClient(ctx context.Context, code, state
 		g.logger.Error("Failed to get user info from GitHub", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
-	if githubUser.Email == "" {
-		return nil, fmt.Errorf("email not available from GitHub account")
+	// The address on the profile is whatever the person chose to show. The
+	// account's verified addresses come from a separate call, and only those
+	// may find an Authway account.
+	email, err := g.getPrimaryEmail(ctx, tokenResp.AccessToken)
+	verified := err == nil
+	if !verified {
+		g.logger.Warn("No verified email on the GitHub account", zap.Error(err))
+		email = githubUser.Email
 	}
-	githubIDStr := fmt.Sprintf("%d", githubUser.ID)
-	existingUser, err := g.userService.GetByEmailAndTenant(clientTenantID, githubUser.Email)
-	if err == nil {
-		existingUser.GithubID = &githubIDStr
-		if githubUser.AvatarURL != "" {
-			existingUser.Picture = &githubUser.AvatarURL
-		}
-		updateReq := &user.UpdateUserRequest{AvatarURL: githubUser.AvatarURL}
-		if _, err := g.userService.Update(existingUser.ID, updateReq); err != nil {
-			g.logger.Error("Failed to update existing user", zap.Error(err))
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-		g.logger.Info("Updated existing user with GitHub account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
-		return existingUser, nil
+	name := githubUser.Name
+	if name == "" {
+		name = githubUser.Login
 	}
-	// Onboarding is invitation-only: a first-time sign-in may create an account
-	// only for an address that was invited into this tenant.
-	if !mayProvision(g.invitations, g.logger, clientTenantID, githubUser.Email) {
-		g.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", githubUser.Email))
-		return nil, ErrNotInvited
-	}
-	fullName := githubUser.Name
-	if fullName == "" {
-		fullName = githubUser.Login
-	}
-	createReq := &user.CreateUserRequest{Email: githubUser.Email, Password: "", Name: fullName}
-	newUser, err := g.userService.Create(clientTenantID, createReq)
-	if err != nil {
-		g.logger.Error("Failed to create new user from GitHub", zap.Error(err))
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-	newUser.GithubID = &githubIDStr
-	if githubUser.AvatarURL != "" {
-		newUser.Picture = &githubUser.AvatarURL
-	}
-	newUser.EmailVerified = true
-	updateReq := &user.UpdateUserRequest{AvatarURL: githubUser.AvatarURL}
-	if _, err := g.userService.Update(newUser.ID, updateReq); err != nil {
-		g.logger.Warn("Failed to update new user with GitHub fields", zap.Error(err))
-	}
-	g.logger.Info("Created new user from GitHub account", zap.String("user_id", newUser.ID.String()), zap.String("email", newUser.Email))
-	return newUser, nil
+	return resolveAccount(g.userService, g.invitations, g.logger, clientTenantID, Identity{
+		Provider:      "github",
+		Subject:       fmt.Sprintf("%d", githubUser.ID),
+		Email:         email,
+		EmailVerified: verified,
+		Name:          name,
+		Picture:       githubUser.AvatarURL,
+	})
 }

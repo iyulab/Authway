@@ -25,6 +25,14 @@ type Service interface {
 	// GetByEmailAndTenant.
 	GetByEmailUnscoped(email string) (*User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
+	// GetByProviderSubject finds the account in a tenant that signs in with a
+	// provider's account (subject is the provider's own identifier for it).
+	// ErrUserNotFound when no account in the tenant is linked to it.
+	GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*User, error)
+	// LinkProvider records that the account signs in with a provider's
+	// account, and that its email address is verified — a link is only made
+	// on an address the provider has verified.
+	LinkProvider(userID uuid.UUID, provider, subject string) error
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
 	Update(id uuid.UUID, req *UpdateUserRequest) (*User, error)
 	Delete(id uuid.UUID) error
@@ -34,6 +42,19 @@ type Service interface {
 	UpdateLastLogin(userID uuid.UUID) error
 	UpdateEmailVerified(userID uuid.UUID, verified bool) error
 	UpdatePassword(userID uuid.UUID, newPassword string) error
+}
+
+// ErrUserNotFound reports that no account matches a lookup. Its text is safe
+// to show a caller.
+var ErrUserNotFound = apierror.NewPublic("user not found")
+
+// providerColumns names the column holding each sign-in provider's
+// identifier for the account a user signs in with.
+var providerColumns = map[string]string{
+	"google":    "google_id",
+	"github":    "github_id",
+	"microsoft": "microsoft_id",
+	"apple":     "apple_id",
 }
 
 type service struct {
@@ -259,11 +280,45 @@ func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, 
 	var user User
 	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, apierror.NewPublic("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	return &user, nil
+}
+
+func (s *service) GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*User, error) {
+	column, ok := providerColumns[provider]
+	if !ok {
+		return nil, fmt.Errorf("unknown sign-in provider %q", provider)
+	}
+	if subject == "" {
+		return nil, ErrUserNotFound
+	}
+	var user User
+	if err := s.db.Where("tenant_id = ? AND "+column+" = ?", tenantID, subject).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	return &user, nil
+}
+
+func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error {
+	column, ok := providerColumns[provider]
+	if !ok || subject == "" {
+		return fmt.Errorf("cannot link sign-in provider %q", provider)
+	}
+	res := s.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{column: subject, "email_verified": true})
+	if res.Error != nil {
+		return fmt.Errorf("failed to link sign-in provider: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	s.logger.Info("Sign-in provider linked", zap.String("user_id", userID.String()), zap.String("provider", provider))
+	return nil
 }
 
 // GetByTenant retrieves all users for a specific tenant with pagination

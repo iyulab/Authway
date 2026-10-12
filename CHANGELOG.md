@@ -12,6 +12,18 @@
   asserts: on every consent path Authway's claims are applied last, and stored
   claims with such names are left out of tokens.
 
+- **A provider sign-in reaches an account only through a verified address or
+  an existing link.** Signing in with Google, GitHub, Microsoft or Apple found
+  the account by the address the provider reported, without asking whether the
+  provider had verified it — and Microsoft reports an address that the
+  administrator of the provider-side directory can set freely. Whoever
+  controlled such a provider account could sign in as the owner of the address.
+  An account is now found by its link to the provider account; an address is
+  used only for the first sign-in, and only when the provider states it is
+  verified (see "Signing in with a provider" in `docs/FEATURES.md`). A sign-in
+  that does not qualify is refused with `access_denied`. Microsoft sign-in
+  requires the app registration to emit the `xms_edov` claim.
+
 ### Added
 
 - **`GET` and `PATCH /api/v1/users/{id}/claims`** — an application's backend
@@ -116,6 +128,15 @@
 - **The ID token carries `email_verified` on every consent path.** It was
   missing when a client skips the consent screen or the user is signed in
   silently.
+- **Signing in with a provider records the link and the verified address.**
+  The provider account's identifier and `email_verified` were set in memory
+  and never stored, so the ID token said `email_verified: false` after a
+  Google sign-in.
+- **A refused provider sign-in appears in the tenant's audit log.** It was
+  recorded outside any tenant with the reason `oauth_callback_failed`, so a
+  tenant's administrators could not see attempts against it. It is now recorded
+  against the client's tenant with the reason (`not_invited`,
+  `email_not_verified`, `linked_to_another`).
 - **Mail handed to a mail service that answers `202 Accepted` is no longer
   logged as failed.** A Sendway deployment that queues a message and delivers
   it afterwards answers 202; only 200 counted as success, so every message was

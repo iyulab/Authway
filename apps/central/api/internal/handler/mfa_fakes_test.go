@@ -80,6 +80,10 @@ func (f *fakeUserService) GetByEmailUnscoped(email string) (*user.User, error) {
 	}
 	return nil, fmt.Errorf("user not found")
 }
+func (f *fakeUserService) GetByProviderSubject(uuid.UUID, string, string) (*user.User, error) {
+	return nil, user.ErrUserNotFound
+}
+func (f *fakeUserService) LinkProvider(uuid.UUID, string, string) error { return nil }
 func (f *fakeUserService) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*user.User, error) {
 	for _, u := range f.users {
 		if u.Email == email && u.TenantID == tenantID {

@@ -80,10 +80,43 @@ func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider stri
 	s.auditService.LogAsync(entry)
 }
 
-// logSocialLoginFailure emits a sync failure audit for social callbacks. We
-// rarely know the user at failure time (OAuth handshake broke before user
-// resolution), so tenantID falls back to uuid.Nil when unknown.
-func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason string, extra map[string]any) {
+// failSocialSignIn ends a provider callback that did not sign anyone in: it
+// records the failure against the tenant the client belongs to and returns
+// the user to the application with the matching OAuth error. A refusal (the
+// address is not invited, not verified, or linked elsewhere) is a decision,
+// logged as a warning; anything else is a fault.
+func (s *SocialHandler) failSocialSignIn(c *fiber.Ctx, provider, clientID, loginChallenge string, err error) error {
+	errCode, description, reason := socialFailure(err)
+	fields := []zap.Field{zap.String("provider", provider), zap.String("client_id", clientID), zap.String("reason", reason), zap.Error(err)}
+	if errCode == "access_denied" {
+		s.logger.Warn("Social sign-in refused", fields...)
+	} else {
+		s.logger.Error("Social sign-in failed", fields...)
+	}
+	s.logSocialLoginFailure(c, s.tenantOfClient(clientID), provider, reason, map[string]any{
+		"client_id": clientID,
+		"error":     err.Error(),
+	})
+	return s.endSignIn(c, loginChallenge, errCode, description)
+}
+
+// tenantOfClient returns the tenant a client belongs to, or uuid.Nil when
+// the client cannot be resolved.
+func (s *SocialHandler) tenantOfClient(clientID string) uuid.UUID {
+	if clientID == "" || s.clientService == nil {
+		return uuid.Nil
+	}
+	registered, err := s.clientService.GetByClientID(clientID)
+	if err != nil || registered == nil {
+		return uuid.Nil
+	}
+	return registered.TenantID
+}
+
+// logSocialLoginFailure records a failed social sign-in in the audit log of
+// tenantID, so the tenant's administrators see attempts against it. tenantID
+// is uuid.Nil only when the failure happened before a client was known.
+func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, tenantID uuid.UUID, provider, reason string, extra map[string]any) {
 	if s.auditService == nil {
 		return
 	}
@@ -96,7 +129,7 @@ func (s *SocialHandler) logSocialLoginFailure(c *fiber.Ctx, provider, reason str
 		details[k] = v
 	}
 	entry := &audit.AuditEntry{
-		TenantID:     uuid.Nil,
+		TenantID:     tenantID,
 		ActorType:    "anonymous",
 		Action:       audit.ActionUserLoginFailed,
 		Severity:     audit.SeverityWarning,
@@ -168,15 +201,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 	// Process Google OAuth callback (client-specific or central)
 	authUser, err := s.googleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
-		s.logger.Error("Google OAuth callback failed",
-			zap.Error(err),
-			zap.String("client_id", retrievedClientID))
-		s.logSocialLoginFailure(c, "google", "oauth_callback_failed", map[string]any{
-			"client_id": retrievedClientID,
-			"error":     err.Error(),
-		})
-		errCode, description := socialFailure(err)
-		return s.endSignIn(c, loginChallenge, errCode, description)
+		return s.failSocialSignIn(c, "google", retrievedClientID, loginChallenge, err)
 	}
 
 	// Update last login time using the service
@@ -302,13 +327,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 
 	authUser, err := s.githubService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
-		s.logger.Error("GitHub OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "github", "oauth_callback_failed", map[string]any{
-			"client_id": retrievedClientID,
-			"error":     err.Error(),
-		})
-		errCode, description := socialFailure(err)
-		return s.endSignIn(c, loginChallenge, errCode, description)
+		return s.failSocialSignIn(c, "github", retrievedClientID, loginChallenge, err)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
@@ -394,13 +413,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 
 	authUser, err := s.microsoftService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
-		s.logger.Error("Microsoft OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "microsoft", "oauth_callback_failed", map[string]any{
-			"client_id": retrievedClientID,
-			"error":     err.Error(),
-		})
-		errCode, description := socialFailure(err)
-		return s.endSignIn(c, loginChallenge, errCode, description)
+		return s.failSocialSignIn(c, "microsoft", retrievedClientID, loginChallenge, err)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
@@ -498,13 +511,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 
 	authUser, err := s.appleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
-		s.logger.Error("Apple OAuth callback failed", zap.Error(err))
-		s.logSocialLoginFailure(c, "apple", "oauth_callback_failed", map[string]any{
-			"client_id": retrievedClientID,
-			"error":     err.Error(),
-		})
-		errCode, description := socialFailure(err)
-		return s.endSignIn(c, loginChallenge, errCode, description)
+		return s.failSocialSignIn(c, "apple", retrievedClientID, loginChallenge, err)
 	}
 
 	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {

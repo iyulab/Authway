@@ -193,46 +193,43 @@ func (m *MicrosoftService) HandleCallbackForClient(ctx context.Context, code, st
 		m.logger.Error("Failed to get user info from Microsoft", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
-	email := msUser.Mail
-	if email == "" {
-		email = msUser.UserPrincipalName
+	name := msUser.DisplayName
+	if name == "" {
+		name = strings.TrimSpace(msUser.GivenName + " " + msUser.Surname)
 	}
-	if email == "" {
-		return nil, fmt.Errorf("email not available from Microsoft account")
-	}
-	existingUser, err := m.userService.GetByEmailAndTenant(clientTenantID, email)
-	if err == nil {
-		existingUser.MicrosoftID = &msUser.ID
-		updateReq := &user.UpdateUserRequest{}
-		if _, err := m.userService.Update(existingUser.ID, updateReq); err != nil {
-			m.logger.Error("Failed to update existing user", zap.Error(err))
-			return nil, fmt.Errorf("failed to update user: %w", err)
+	email, verified := microsoftVerifiedEmail(tokenResp.IDToken)
+	if !verified {
+		// The mailbox address and sign-in name of a directory account are set
+		// by that directory's administrator; neither proves who owns the
+		// address.
+		email = msUser.Mail
+		if email == "" {
+			email = msUser.UserPrincipalName
 		}
-		m.logger.Info("Updated existing user with Microsoft account", zap.String("user_id", existingUser.ID.String()), zap.String("email", existingUser.Email))
-		return existingUser, nil
 	}
-	// Onboarding is invitation-only: a first-time sign-in may create an account
-	// only for an address that was invited into this tenant.
-	if !mayProvision(m.invitations, m.logger, clientTenantID, email) {
-		m.logger.Warn("Social sign-in denied for uninvited address", zap.String("email", email))
-		return nil, ErrNotInvited
+	return resolveAccount(m.userService, m.invitations, m.logger, clientTenantID, Identity{
+		Provider:      "microsoft",
+		Subject:       msUser.ID,
+		Email:         email,
+		EmailVerified: verified,
+		Name:          name,
+	})
+}
+
+// microsoftVerifiedEmail returns the address in a Microsoft ID token when the
+// token states that the address's domain owner has verified it (the optional
+// claim xms_edov, which the app registration must be configured to emit).
+// Without that statement no address from Microsoft counts as verified.
+func microsoftVerifiedEmail(idToken string) (string, bool) {
+	var claims struct {
+		Email   string `json:"email"`
+		XmsEdov any    `json:"xms_edov"`
 	}
-	fullName := msUser.DisplayName
-	if fullName == "" {
-		fullName = strings.TrimSpace(msUser.GivenName + " " + msUser.Surname)
+	if err := idTokenClaims(idToken, &claims); err != nil {
+		return "", false
 	}
-	createReq := &user.CreateUserRequest{Email: email, Password: "", Name: fullName}
-	newUser, err := m.userService.Create(clientTenantID, createReq)
-	if err != nil {
-		m.logger.Error("Failed to create new user from Microsoft", zap.Error(err))
-		return nil, fmt.Errorf("failed to create user: %w", err)
+	if claims.Email == "" || !claimIsTrue(claims.XmsEdov) {
+		return "", false
 	}
-	newUser.MicrosoftID = &msUser.ID
-	newUser.EmailVerified = true
-	updateReq := &user.UpdateUserRequest{}
-	if _, err := m.userService.Update(newUser.ID, updateReq); err != nil {
-		m.logger.Warn("Failed to update new user with Microsoft fields", zap.Error(err))
-	}
-	m.logger.Info("Created new user from Microsoft account", zap.String("user_id", newUser.ID.String()), zap.String("email", newUser.Email))
-	return newUser, nil
+	return claims.Email, true
 }

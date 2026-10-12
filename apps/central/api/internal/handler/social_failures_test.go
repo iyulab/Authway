@@ -93,12 +93,25 @@ func TestGoogleCallback_InvalidLinkShowsTheErrorScreen(t *testing.T) {
 	}
 }
 
-func TestSocialFailure_UninvitedAddressIsARefusal(t *testing.T) {
-	if code, _ := socialFailure(social.ErrNotInvited); code != "access_denied" {
-		t.Errorf("not invited -> %q, want access_denied", code)
+// A refusal reaches the application as access_denied with a reason it can
+// show, and the audit log names which refusal it was; a fault never leaks
+// internal detail.
+func TestSocialFailure_RefusalsAreNotFaults(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		reason string
+	}{
+		{social.ErrNotInvited, "not_invited"},
+		{social.ErrEmailNotVerified, "email_not_verified"},
+		{social.ErrLinkedToAnother, "linked_to_another"},
+	} {
+		code, description, reason := socialFailure(tc.err)
+		if code != "access_denied" || description != tc.err.Error() || reason != tc.reason {
+			t.Errorf("%v -> %q %q %q, want access_denied with its own text and reason %q", tc.err, code, description, reason, tc.reason)
+		}
 	}
-	code, description := socialFailure(errors.New("token exchange: dial tcp 10.0.0.1:443: i/o timeout"))
-	if code != "server_error" || strings.Contains(description, "10.0.0.1") {
-		t.Errorf("other failure -> %q %q, want server_error without internal detail", code, description)
+	code, description, reason := socialFailure(errors.New("token exchange: dial tcp 10.0.0.1:443: i/o timeout"))
+	if code != "server_error" || strings.Contains(description, "10.0.0.1") || reason != "oauth_callback_failed" {
+		t.Errorf("other failure -> %q %q %q, want server_error without internal detail", code, description, reason)
 	}
 }

@@ -53,10 +53,17 @@ func (s *SocialHandler) recoverChallenge(c *fiber.Ctx, state string) string {
 }
 
 // socialFailure maps a provider-callback error to the OAuth error the
-// application receives. An uninvited address is a refusal, not a fault.
-func socialFailure(err error) (string, string) {
-	if errors.Is(err, social.ErrNotInvited) {
-		return "access_denied", social.ErrNotInvited.Error()
+// application receives, and to the reason recorded in the audit log. A
+// refusal — the address is not invited, not verified by the provider, or
+// already linked to another provider account — is a decision, not a fault.
+func socialFailure(err error) (code, description, reason string) {
+	switch {
+	case errors.Is(err, social.ErrNotInvited):
+		return "access_denied", social.ErrNotInvited.Error(), "not_invited"
+	case errors.Is(err, social.ErrEmailNotVerified):
+		return "access_denied", social.ErrEmailNotVerified.Error(), "email_not_verified"
+	case errors.Is(err, social.ErrLinkedToAnother):
+		return "access_denied", social.ErrLinkedToAnother.Error(), "linked_to_another"
 	}
-	return "server_error", msgSignInFailed
+	return "server_error", msgSignInFailed, "oauth_callback_failed"
 }
