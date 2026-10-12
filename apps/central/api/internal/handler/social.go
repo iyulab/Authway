@@ -64,9 +64,9 @@ func NewSocialHandlerWithAllProviders(
 	}
 }
 
-// logSocialLogin emits a success-path login audit entry with the resolved user
-// as actor, tagging the OAuth provider in Details.
-func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider string, extra map[string]any) {
+// logSocialLogin records a sign-in completed on the provider's word alone,
+// with the fields every completed sign-in records (signInMethod.details).
+func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, method signInMethod, flow, clientID string) {
 	if s.auditService == nil || u == nil {
 		return
 	}
@@ -74,11 +74,10 @@ func (s *SocialHandler) logSocialLogin(c *fiber.Ctx, u *user.User, provider stri
 	entry.ActorID = &u.ID
 	entry.ActorEmail = u.Email
 	entry.ActorType = "user"
-	entry.Details["provider"] = provider
-	entry.Details["method"] = "social"
-	for k, v := range extra {
+	for k, v := range method.details(flow, true) {
 		entry.Details[k] = v
 	}
+	entry.Details["client_id"] = clientID
 	s.auditService.LogAsync(entry)
 }
 
@@ -395,7 +394,8 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 // their own is sent to the sign-in screen to give it, whatever the provider
 // asked of them.
 func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow string, u *user.User) error {
-	step, err := s.flows.afterFirstFactor(flow, u, byProvider(provider), true, 3600)
+	method := byProvider(provider)
+	step, err := s.flows.afterFirstFactor(flow, u, method, true, 3600)
 	if err != nil {
 		s.logger.Error("Failed to continue the login flow after a social sign-in",
 			zap.String("provider", provider), zap.Error(err))
@@ -410,7 +410,7 @@ func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow stri
 
 	s.logger.Info("Social sign-in successful",
 		zap.String("user_id", u.ID.String()), zap.String("provider", provider))
-	s.logSocialLogin(c, u, provider, map[string]any{"client_id": clientID})
+	s.logSocialLogin(c, u, method, flow, clientID)
 	return s.renderRedirectPage(c, step.RedirectTo)
 }
 

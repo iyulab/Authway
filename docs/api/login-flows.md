@@ -77,7 +77,8 @@ password sign-in is `403 sign_in_method_not_allowed`.
 
 `{"mfa_challenge": "…", "code": "123456"}` (a recovery code for `/recovery`)
 → `next: redirect`. The `mfa_challenge` only completes the flow it was issued
-for.
+for. An authenticator code is accepted once: the one just used, or an earlier
+one, is `401 invalid_code` — the user waits for the next.
 
 A user who has a second factor owes it **however they proved who they are
 first** — a password, an emailed link, or another identity provider. Each of

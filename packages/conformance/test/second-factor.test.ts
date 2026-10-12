@@ -1,23 +1,10 @@
-import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
 import { Provider, type TestClient, type TestUser } from '../src/provider.js'
 
 const config = loadConfig()
 const provider = new Provider(config)
-
-/** The current code of an authenticator holding `secret` (RFC 6238: SHA-1, 30 s, 6 digits). */
-function authenticatorCode(secret: string, at = Date.now()): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  let bits = ''
-  for (const ch of secret.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(ch).toString(2).padStart(5, '0')
-  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)))
-  const counter = Buffer.alloc(8)
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)))
-  const mac = createHmac('sha1', key).update(counter).digest()
-  const offset = mac[mac.length - 1] & 0xf
-  return ((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
-}
 
 // A user's access token says who they are. Once they have a second factor,
 // that token alone must not be able to replace the factor or switch it off —
@@ -27,7 +14,7 @@ describe('the second factor is not changed by a token alone', () => {
   let user: TestUser
   let sub: string
   let accessToken: string
-  let secret: string
+  let authenticator: Authenticator
 
   const mfa = (method: string, path: string, body?: unknown): Promise<Response> =>
     fetch(`${config.api}/api/v1/users/mfa${path}`, {
@@ -47,8 +34,8 @@ describe('the second factor is not changed by a token alone', () => {
 
     const setup = await mfa('POST', '/setup')
     expect(setup.status, await setup.clone().text()).toBe(200)
-    secret = ((await setup.json()) as { secret: string }).secret
-    const enabled = await mfa('POST', '/verify', { code: authenticatorCode(secret) })
+    authenticator = new Authenticator(((await setup.json()) as { secret: string }).secret)
+    const enabled = await mfa('POST', '/verify', { code: await authenticator.next() })
     expect(enabled.status, await enabled.clone().text()).toBe(200)
   })
 
@@ -81,7 +68,7 @@ describe('the second factor is not changed by a token alone', () => {
   })
 
   it("switches it off with a code from the user's authenticator", async () => {
-    const res = await mfa('DELETE', '', { code: authenticatorCode(secret) })
+    const res = await mfa('DELETE', '', { code: await authenticator.next() })
     expect(res.status, await res.clone().text()).toBe(200)
     expect(await isOn()).toBe(false)
   })

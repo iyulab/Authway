@@ -34,7 +34,6 @@ func TestMFAHandlers_AcceptUUIDLocals(t *testing.T) {
 	app.Post("/verify", h.VerifyMFA)
 	app.Delete("/disable", h.DisableMFA)
 	app.Get("/status", h.GetMFAStatus)
-	app.Post("/recovery", h.VerifyRecoveryCode)
 	app.Post("/recovery/regenerate", h.RegenerateRecoveryCodes)
 
 	cases := []struct {
@@ -48,7 +47,6 @@ func TestMFAHandlers_AcceptUUIDLocals(t *testing.T) {
 		{"VerifyMFA", "POST", "/verify", `{"code":"000000"}`, fiber.StatusOK},
 		{"DisableMFA", "DELETE", "/disable", "", fiber.StatusOK},
 		{"GetMFAStatus", "GET", "/status", "", fiber.StatusOK},
-		{"VerifyRecoveryCode", "POST", "/recovery", `{"code":"AAAA-BBBB-CCCC"}`, fiber.StatusOK},
 		{"RegenerateRecoveryCodes", "POST", "/recovery/regenerate", "", fiber.StatusOK},
 	}
 

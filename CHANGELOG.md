@@ -1,5 +1,33 @@
 ## [Unreleased]
 
+### Security
+
+- **An authenticator code is accepted once.** A code stays current for its
+  30-second step and the one either side of it, and nothing recorded that it
+  had been used: a code seen being typed, or caught on its way, could be
+  presented again within that time — to sign in, to switch the second factor
+  off, or to issue new recovery codes. The step of the last code accepted is
+  now kept per user (migration 032, additive), and a code of that step or an
+  earlier one is refused, also when two requests carry it at once
+  (RFC 6238, section 5.2). A user who signs in twice within the same
+  half-minute waits for their authenticator's next code.
+
+### Removed
+
+- **`POST /api/v1/users/mfa/recovery` is removed.** It checked a recovery
+  code and used it up, for nothing: signing in with a recovery code is
+  `POST /api/v1/login-flows/{flow}/mfa/recovery`, and proving the second
+  factor to change it takes the code in the request that changes it. What it
+  did offer was a way to guess recovery codes with a user's token, outside the
+  limits on failed sign-ins. The audit action `user.mfa_verified`, which only
+  it recorded, is gone with it.
+
+### Changed
+
+- **A sign-in through another identity provider is recorded in the audit log
+  with the same fields as any other**: `method`, `provider`, `challenge` and
+  `remember` (and `client_id`, as before).
+
 ## [0.9.0] - 2026-10-13
 
 > Minor, with breaking changes for operators. The address a client registers

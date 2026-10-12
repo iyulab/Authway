@@ -3,6 +3,7 @@ package mfa
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -86,13 +87,33 @@ func newTestService(t *testing.T, db *gorm.DB) (Service, user.Service, *tenant.S
 	t.Helper()
 	us := user.NewService(db, zap.NewNop())
 	ts := tenant.NewService(db)
-	svc := NewService(db, us, zap.NewNop(), "Authway Test", testCipher(t))
+	testNow = time.Now()
+	svc := onTestClock(NewService(db, us, zap.NewNop(), "Authway Test", testCipher(t)))
 	return svc, us, ts
 }
 
+// onTestClock makes svc read the test's clock, which currentCode moves on.
+func onTestClock(svc Service) Service {
+	svc.(*service).now = func() time.Time { return testNow }
+	return svc
+}
+
+// testNow is the time the service under test believes it is.
+var testNow time.Time
+
+// currentCode is the code the user's authenticator shows now — a little
+// later than the last time it was asked: a code is accepted once, so a test
+// that proves the factor twice has to wait for the next code like a user
+// would. The clock moves on instead of the test sleeping.
 func currentCode(t *testing.T, secret string) string {
 	t.Helper()
-	code, err := totp.GenerateCode(secret, time.Now())
+	testNow = testNow.Add(totpPeriod * time.Second)
+	return codeAt(t, secret, testNow)
+}
+
+func codeAt(t *testing.T, secret string, at time.Time) string {
+	t.Helper()
+	code, err := totp.GenerateCode(secret, at)
 	if err != nil {
 		t.Fatalf("generate code: %v", err)
 	}
@@ -255,5 +276,81 @@ func TestMFARecoveryCodes_ConsumedOnceAndRegenerable(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("expected a freshly regenerated recovery code to work")
+	}
+}
+
+// A code read over a shoulder, or caught on its way, is still current for up
+// to a minute and a half. Having been accepted once, it is not accepted
+// again — nor is an earlier one — whether to sign in or to prove the factor.
+func TestAuthenticatorCode_IsAcceptedOnce(t *testing.T) {
+	db := setupPostgres(t)
+	svc, us, ts := newTestService(t, db)
+	u := newTestUser(t, db, us, freshTenant(t, ts).ID)
+
+	setup, err := svc.SetupTOTP(u.ID)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	enabling := currentCode(t, setup.Secret)
+	if _, err := svc.VerifyAndEnable(u.ID, enabling); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	// The code that switched the factor on does not also sign in.
+	if ok, err := svc.Verify(u.ID, enabling); err != nil || ok {
+		t.Fatalf("the enabling code was accepted again (ok=%v, err=%v)", ok, err)
+	}
+
+	signIn := currentCode(t, setup.Secret)
+	earlier := codeAt(t, setup.Secret, testNow.Add(-totpPeriod*time.Second))
+	if ok, err := svc.Verify(u.ID, signIn); err != nil || !ok {
+		t.Fatalf("a fresh code was refused (ok=%v, err=%v)", ok, err)
+	}
+	if ok, _ := svc.Verify(u.ID, signIn); ok {
+		t.Error("the same code was accepted twice")
+	}
+	if ok, _ := svc.Verify(u.ID, earlier); ok {
+		t.Error("a code from before the one accepted was accepted afterwards")
+	}
+	// Nor does a used code prove the factor to switch it off.
+	if err := svc.Disable(u.ID, signIn); !errors.Is(err, ErrProofRequired) {
+		t.Errorf("a used code switched the factor off (err=%v)", err)
+	}
+
+	// The next code the authenticator shows works as ever.
+	if ok, err := svc.Verify(u.ID, currentCode(t, setup.Secret)); err != nil || !ok {
+		t.Errorf("the next code was refused (ok=%v, err=%v)", ok, err)
+	}
+}
+
+// Two requests carrying the same code arrive together: one wins.
+func TestAuthenticatorCode_IsAcceptedOnceUnderARace(t *testing.T) {
+	db := setupPostgres(t)
+	svc, us, ts := newTestService(t, db)
+	u := newTestUser(t, db, us, freshTenant(t, ts).ID)
+	setup, err := svc.SetupTOTP(u.ID)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if _, err := svc.VerifyAndEnable(u.ID, currentCode(t, setup.Secret)); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+
+	code := currentCode(t, setup.Secret)
+	const attempts = 8
+	results := make(chan bool, attempts)
+	for i := 0; i < attempts; i++ {
+		go func() {
+			ok, _ := svc.Verify(u.ID, code)
+			results <- ok
+		}()
+	}
+	accepted := 0
+	for i := 0; i < attempts; i++ {
+		if <-results {
+			accepted++
+		}
+	}
+	if accepted != 1 {
+		t.Errorf("the code was accepted %d times by %d concurrent requests, want once", accepted, attempts)
 	}
 }

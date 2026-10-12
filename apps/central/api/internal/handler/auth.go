@@ -198,15 +198,7 @@ func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User,
 // signedIn records a completed sign-in and sends the screen on.
 func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, remember bool, redirectTo string) error {
 	middleware.ResetRateLimitOnSuccess(c)
-	details := map[string]any{
-		"challenge": flow,
-		"remember":  remember,
-		"method":    method.audit,
-	}
-	if method.provider != "" {
-		details["provider"] = method.provider
-	}
-	h.logUserAudit(c, u, audit.ActionUserLogin, details)
+	h.logUserAudit(c, u, audit.ActionUserLogin, method.details(flow, remember))
 
 	return c.JSON(fiber.Map{
 		"next":        nextRedirect,

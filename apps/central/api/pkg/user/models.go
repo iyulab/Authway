@@ -32,7 +32,10 @@ type User struct {
 	TOTPSecret     *string    `json:"-" gorm:"column:totp_secret"`
 	TOTPEnabled    bool       `json:"totp_enabled" gorm:"default:false"`
 	TOTPVerifiedAt *time.Time `json:"totp_verified_at"`
-	RecoveryCodes  *string    `json:"-" gorm:"column:recovery_codes"` // JSON array of hashed codes
+	// TOTPLastStep is the time step of the last authenticator code accepted,
+	// so that a code is accepted once (RFC 6238 section 5.2).
+	TOTPLastStep  *int64  `json:"-" gorm:"column:totp_last_step"`
+	RecoveryCodes *string `json:"-" gorm:"column:recovery_codes"` // JSON array of hashed codes
 
 	LastLoginAt *time.Time     `json:"last_login_at"`
 	CreatedAt   time.Time      `json:"created_at"`

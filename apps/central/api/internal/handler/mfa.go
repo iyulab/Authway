@@ -35,10 +35,6 @@ type VerifyMFARequest struct {
 	Code string `json:"code" validate:"required,len=6"`
 }
 
-type VerifyRecoveryCodeRequest struct {
-	Code string `json:"code" validate:"required"`
-}
-
 // tenantForUser resolves a user's tenant for audit entries. Unknown users fall
 // back to uuid.Nil so the audit write never fails on its own lookup — the row
 // is still queryable by actor_id / resource_id.
@@ -161,36 +157,6 @@ func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": apierror.Message(err, "failed to get MFA status")})
 	}
 	return c.JSON(status)
-}
-
-// VerifyRecoveryCode verifies and consumes a recovery code
-// POST /api/v1/users/mfa/recovery
-func (h *MFAHandler) VerifyRecoveryCode(c *fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
-	var req VerifyRecoveryCodeRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
-	}
-	valid, err := h.mfaService.VerifyRecoveryCode(userID, req.Code)
-	if err != nil {
-		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
-			"phase": "recovery_code",
-		})
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify recovery code")})
-	}
-	if !valid {
-		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, "invalid recovery code", map[string]any{
-			"phase": "recovery_code",
-		})
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid recovery code"})
-	}
-	h.logMFASuccess(c, userID, audit.ActionUserMFAVerified, audit.SeverityInfo, map[string]any{
-		"phase": "recovery_code",
-	})
-	return c.JSON(fiber.Map{"message": "Recovery code verified", "valid": true})
 }
 
 // RegenerateRecoveryCodes generates new recovery codes

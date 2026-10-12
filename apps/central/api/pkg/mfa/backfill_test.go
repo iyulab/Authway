@@ -52,7 +52,7 @@ func TestBackfillTOTPSecrets_EncryptsLegacyPlaintextInPlace(t *testing.T) {
 
 	// The service must be reconstructed with the SAME cipher the backfill
 	// used — Verify still needs to decrypt what was just encrypted.
-	svcWithSameCipher := NewService(db, us, zap.NewNop(), "Authway Test", cipher)
+	svcWithSameCipher := onTestClock(NewService(db, us, zap.NewNop(), "Authway Test", cipher))
 	ok, err = svcWithSameCipher.Verify(u.ID, currentCode(t, plaintextSecret))
 	if err != nil {
 		t.Fatalf("Verify (post-backfill): %v", err)

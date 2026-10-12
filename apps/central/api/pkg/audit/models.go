@@ -19,7 +19,6 @@ const (
 	ActionUserPasswordReset    AuditAction = "user.password_reset"
 	ActionUserMFAEnabled       AuditAction = "user.mfa_enabled"
 	ActionUserMFADisabled      AuditAction = "user.mfa_disabled"
-	ActionUserMFAVerified      AuditAction = "user.mfa_verified"
 	ActionUserMFAFailed        AuditAction = "user.mfa_failed"
 	ActionUserEmailVerified    AuditAction = "user.email_verified"
 	ActionUserClaimsUpdated    AuditAction = "user.claims_updated"
@@ -66,7 +65,6 @@ var Actions = []struct {
 	{ActionUserPasswordReset, "Password reset with an emailed link"},
 	{ActionUserMFAEnabled, "MFA enabled"},
 	{ActionUserMFADisabled, "MFA disabled"},
-	{ActionUserMFAVerified, "MFA code accepted"},
 	{ActionUserMFAFailed, "MFA code refused"},
 	{ActionUserEmailVerified, "Email address verified"},
 	{ActionUserClaimsUpdated, "Claims stored for the user set or removed"},

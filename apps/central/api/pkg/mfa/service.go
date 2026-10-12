@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -41,10 +42,12 @@ type service struct {
 	logger      *zap.Logger
 	issuer      string
 	cipher      crypto.Cipher
+	// now is the clock codes are checked against.
+	now func() time.Time
 }
 
 func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issuer string, cipher crypto.Cipher) Service {
-	return &service{db: db, userService: userService, logger: logger, issuer: issuer, cipher: cipher}
+	return &service{db: db, userService: userService, logger: logger, issuer: issuer, cipher: cipher, now: time.Now}
 }
 
 type TOTPSetupResponse struct {
@@ -117,7 +120,9 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt TOTP secret: %w", err)
 	}
-	if !totp.Validate(code, secret) {
+	if ok, err := s.acceptCode(userID, secret, code); err != nil {
+		return nil, err
+	} else if !ok {
 		s.logger.Warn("Invalid TOTP code during setup", zap.String("user_id", userID.String()))
 		return nil, apierror.NewPublic("invalid TOTP code")
 	}
@@ -146,7 +151,47 @@ func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to decrypt TOTP secret: %w", err)
 	}
-	return totp.Validate(code, secret), nil
+	return s.acceptCode(userID, secret, code)
+}
+
+// totpPeriod is how long an authenticator code is current, in seconds.
+const totpPeriod = 30
+
+// acceptCode reports whether code is a code of secret that has not been
+// accepted before. A code is good for its own time step and the one either
+// side of it, to allow for clocks that differ — which is also how long a code
+// read over a shoulder or caught in transit stays usable. Accepting it once
+// ends that: the step it belongs to is recorded, and neither it nor an
+// earlier one is accepted again (RFC 6238 section 5.2).
+func (s *service) acceptCode(userID uuid.UUID, secret, code string) (bool, error) {
+	step, ok := matchingStep(secret, code, s.now())
+	if !ok {
+		return false, nil
+	}
+	// One statement, so two requests carrying the same code cannot both win.
+	used := s.db.Model(&user.User{}).
+		Where("id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)", userID, step).
+		Update("totp_last_step", step)
+	if used.Error != nil {
+		return false, fmt.Errorf("failed to record the accepted code: %w", used.Error)
+	}
+	if used.RowsAffected == 0 {
+		s.logger.Warn("TOTP code refused: already used", zap.String("user_id", userID.String()))
+	}
+	return used.RowsAffected == 1, nil
+}
+
+// matchingStep returns the time step code belongs to: the current one, or
+// the one before or after it.
+func matchingStep(secret, code string, at time.Time) (int64, bool) {
+	exact := totp.ValidateOpts{Period: totpPeriod, Skew: 0, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1}
+	for _, offset := range []int{0, -1, 1} {
+		t := at.Add(time.Duration(offset*totpPeriod) * time.Second)
+		if ok, err := totp.ValidateCustom(code, secret, t, exact); err == nil && ok {
+			return t.Unix() / totpPeriod, true
+		}
+	}
+	return 0, false
 }
 
 // proves reports whether proof is a current authenticator code or an unused
@@ -179,7 +224,7 @@ func (s *service) Disable(userID uuid.UUID, proof string) error {
 	} else if !ok {
 		return ErrProofRequired
 	}
-	updates := map[string]any{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "recovery_codes": nil}
+	updates := map[string]any{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "totp_last_step": nil, "recovery_codes": nil}
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to disable MFA: %w", err)
 	}

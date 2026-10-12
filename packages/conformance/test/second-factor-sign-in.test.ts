@@ -1,23 +1,10 @@
-import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
 import { Provider, type LoginOutcome, type TestClient, type TestUser } from '../src/provider.js'
 
 const config = loadConfig()
 const provider = new Provider(config)
-
-/** The current code of an authenticator holding `secret` (RFC 6238: SHA-1, 30 s, 6 digits). */
-function authenticatorCode(secret: string, at = Date.now()): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  let bits = ''
-  for (const ch of secret.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(ch).toString(2).padStart(5, '0')
-  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)))
-  const counter = Buffer.alloc(8)
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)))
-  const mac = createHmac('sha1', key).update(counter).digest()
-  const offset = mac[mac.length - 1] & 0xf
-  return ((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
-}
 
 const claimsOf = (jwt: string): Record<string, unknown> => JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString())
 
@@ -28,7 +15,7 @@ describe('a user with a second factor is asked for it however they sign in', () 
   let app: TestClient
   let user: TestUser
   let sub: string
-  let secret: string
+  let authenticator: Authenticator
   let offersLinks = false
 
   /** Expects a sign-in to have stopped for the second factor, on the flow it started in. */
@@ -54,8 +41,8 @@ describe('a user with a second factor is asked for it however they sign in', () 
       })
     const setup = await mfa('/setup')
     expect(setup.status, await setup.clone().text()).toBe(200)
-    secret = ((await setup.json()) as { secret: string }).secret
-    const enabled = await mfa('/verify', { code: authenticatorCode(secret) })
+    authenticator = new Authenticator(((await setup.json()) as { secret: string }).secret)
+    const enabled = await mfa('/verify', { code: await authenticator.next() })
     expect(enabled.status, await enabled.clone().text()).toBe(200)
   })
 
@@ -71,13 +58,22 @@ describe('a user with a second factor is asked for it however they sign in', () 
     const wrong = await provider.continueWithSecondFactor(pending, '000000')
     expect(wrong.kind, JSON.stringify(wrong)).toBe('rejected')
 
-    const outcome = await provider.continueWithSecondFactor(pending, authenticatorCode(secret))
+    const outcome = await provider.continueWithSecondFactor(pending, await authenticator.next())
     if (outcome.kind !== 'code') throw new Error(`The code was not accepted: ${JSON.stringify(outcome)}`)
     expect(outcome.sub).toBe(sub)
     expect(claimsOf(outcome.tokens.id_token ?? '').amr).toEqual(['pwd', 'otp', 'mfa'])
   })
 
-  it('after an emailed link', async ({ skip }) => {
+  // A code is current for a minute or so — long enough for someone who saw it
+  // typed to type it too. Accepted once, it is spent.
+  it('does not accept the same code a second time', async () => {
+    const attempt = await provider.startLogin(app)
+    const pending = expectSecondFactorOwed(await provider.continueLogin(attempt, user), attempt.flow)
+    const spent = await provider.continueWithSecondFactor(pending, authenticator.last())
+    expect(spent.kind, JSON.stringify(spent).slice(0, 200)).toBe('rejected')
+  })
+
+  it('after an emailed link', { timeout: 90_000 }, async ({ skip }) => {
     if (!offersLinks) skip()
     const attempt = await provider.startLogin(app)
     const pending = expectSecondFactorOwed(await provider.continueWithMagicLink(attempt, user.email), attempt.flow)
@@ -86,7 +82,7 @@ describe('a user with a second factor is asked for it however they sign in', () 
     const wrong = await provider.continueWithSecondFactor(pending, '000000')
     expect(wrong.kind, JSON.stringify(wrong)).toBe('rejected')
 
-    const outcome = await provider.continueWithSecondFactor(pending, authenticatorCode(secret))
+    const outcome = await provider.continueWithSecondFactor(pending, await authenticator.next())
     if (outcome.kind !== 'code') throw new Error(`The code was not accepted: ${JSON.stringify(outcome)}`)
     expect(outcome.sub).toBe(sub)
     // The tokens say both factors were used: the emailed link, then the authenticator.

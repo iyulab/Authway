@@ -443,7 +443,6 @@ func main() {
 	v1.Post("/users/mfa/verify", jwtAuth, mfaHandler.VerifyMFA)
 	v1.Delete("/users/mfa", jwtAuth, loginRateLimit, mfaHandler.DisableMFA)
 	v1.Get("/users/mfa/status", jwtAuth, mfaHandler.GetMFAStatus)
-	v1.Post("/users/mfa/recovery", jwtAuth, mfaHandler.VerifyRecoveryCode)
 	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, loginRateLimit, mfaHandler.RegenerateRecoveryCodes)
 
 	// User management routes (Admin only)

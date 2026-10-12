@@ -1,5 +1,5 @@
-import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
 import { Provider, type LoginOutcome, type TestClient, type TestUser } from '../src/provider.js'
 import { randomToken } from '../src/pkce.js'
@@ -7,19 +7,6 @@ import { StandInProvider, type StandInIdentity } from '../src/standin.js'
 
 const config = loadConfig()
 const provider = new Provider(config)
-
-/** The current code of an authenticator holding `secret` (RFC 6238: SHA-1, 30 s, 6 digits). */
-function authenticatorCode(secret: string, at = Date.now()): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  let bits = ''
-  for (const ch of secret.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(ch).toString(2).padStart(5, '0')
-  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)))
-  const counter = Buffer.alloc(8)
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)))
-  const mac = createHmac('sha1', key).update(counter).digest()
-  const offset = mac[mac.length - 1] & 0xf
-  return ((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
-}
 
 const claimsOf = (jwt: string): Record<string, unknown> => JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString())
 
@@ -119,8 +106,8 @@ describe('sign-in through another identity provider', () => {
       })
     const setup = await mfa('/setup')
     expect(setup.status, await setup.clone().text()).toBe(200)
-    const { secret } = (await setup.json()) as { secret: string }
-    const enabled = await mfa('/verify', { code: authenticatorCode(secret) })
+    const authenticator = new Authenticator(((await setup.json()) as { secret: string }).secret)
+    const enabled = await mfa('/verify', { code: await authenticator.next() })
     expect(enabled.status, await enabled.clone().text()).toBe(200)
 
     const attempt = await provider.startLogin(app)
@@ -128,7 +115,7 @@ describe('sign-in through another identity provider', () => {
     if (pending.kind !== 'second_factor') throw new Error(`The sign-in did not stop for the second factor: ${JSON.stringify(pending).slice(0, 300)}`)
     expect(pending.flow).toBe(attempt.flow)
 
-    const outcome = await provider.continueWithSecondFactor(pending, authenticatorCode(secret))
+    const outcome = await provider.continueWithSecondFactor(pending, await authenticator.next())
     if (outcome.kind !== 'code') throw new Error(`The code was not accepted: ${JSON.stringify(outcome)}`)
     expect(outcome.sub).toBe(memberSub)
     expect(claimsOf(outcome.tokens.id_token ?? '').amr).toEqual(['fed', 'otp', 'mfa'])

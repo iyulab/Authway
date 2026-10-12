@@ -42,6 +42,20 @@ func (m signInMethod) followedBy(second string, amr ...string) signInMethod {
 	}
 }
 
+// details is what the audit log records about a completed sign-in by m: the
+// same fields whichever handler finished it.
+func (m signInMethod) details(flow string, remember bool) map[string]any {
+	d := map[string]any{
+		"challenge": flow,
+		"remember":  remember,
+		"method":    m.audit,
+	}
+	if m.provider != "" {
+		d["provider"] = m.provider
+	}
+	return d
+}
+
 // firstFactor is the method a parked sign-in recorded as its first one. A
 // sign-in parked before the method was recorded came in by password — the
 // only way to reach the second step at the time.

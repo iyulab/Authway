@@ -153,20 +153,6 @@ replaces the user's recovery codes with eight new ones and answers
 or an unused recovery code (which is used up). Without it the answer is `403`
 (`mfa_code_required`).
 
-```http
-POST /api/v1/users/mfa/recovery
-Authorization: Bearer <the user's access token>
-Content-Type: application/json
-
-{ "code": "ABCD-EFGH-IJKL" }
-```
-
-checks a recovery code and uses it up: `200` with
-`{ "message", "valid": true }`, or `401` when it is not one of the user's
-unused codes. Dashes and letter case are ignored. This is not how a user signs
-in with a recovery code — that is `POST /api/v1/login-flows/{flow}/mfa/recovery`
-in the [login flow](login-flows.md#login).
-
 ### Turning it off
 
 ```http
