@@ -366,19 +366,29 @@ Endpoints (authorize, token, userinfo, end session, JWKS) then come from the
 issuer's standard OpenID Connect discovery document,
 `<issuer>/.well-known/openid-configuration`.
 
-### CORS Configuration
+### Browser origins (CORS)
 
-For cross-origin requests, configure CORS in Central API:
+Which pages may call the API from a browser is decided in three ways:
 
-```bash
-# In Central API .env
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,https://app.example.com
-```
+| Caller | What it may call | How it is admitted |
+|---|---|---|
+| A page on **any origin** | The documents that describe the deployment: `/.well-known/authway-config`, `/api/v1/capabilities` | Always (`Access-Control-Allow-Origin: *`) |
+| An **application's** pages | The routes a signed-in user calls with their own access token: `/api/v1/profile/*`, `/api/v1/users/mfa/*`, `POST /api/v1/logout` | The origin is listed in `allowed_origins` on one of the deployment's active clients. No cookies are accepted from it — the token is the credential. |
+| The deployment's **own** login screens and admin console | Everything, with cookies | The origin is listed in `AUTHWAY_CORS_ALLOWED_ORIGINS` (comma-separated) |
 
-Or use database configuration (recommended):
-```sql
-INSERT INTO clients (tenant_id, client_id, allowed_origins)
-VALUES ('tenant-id', 'my_spa_app', ARRAY['http://localhost:3000', 'https://app.example.com']);
+So a new browser application needs no change to the deployment: register its
+origin on its client and its pages can call the user-token routes. A change to
+`allowed_origins` takes effect within a minute.
+
+The admin API is never open to an application's origin. Call it from a backend.
+
+The OIDC endpoints (authorization, token, discovery, JWKS, userinfo) are served
+by the authorization server, which has its own CORS setting.
+
+Register an application's origin when you create its client:
+
+```json
+{ "public": true, "redirect_uris": ["https://app.example.com/callback"], "allowed_origins": ["https://app.example.com"] }
 ```
 
 ---
@@ -413,8 +423,9 @@ VALUES ('tenant-id', 'my_spa_app', ARRAY['http://localhost:3000', 'https://app.e
 - Check protocol (http vs https)
 
 **Issue: "CORS error"**
-- Add origin to `allowed_origins` in client config
-- Verify CORS headers in Central API
+- Calling a user-token route from an application: add the page's origin to `allowed_origins` on its client (exact match — scheme, host and port), then wait up to a minute
+- Calling the admin API from a browser application: not allowed — call it from a backend
+- A login screen or console you host yourself: add its origin to `AUTHWAY_CORS_ALLOWED_ORIGINS`
 
 **Issue: "Invalid client_secret"** (Confidential clients)
 - Verify secret is correct

@@ -134,6 +134,7 @@ func (f *fakeClientService) Create(req *client.CreateClientRequest) (*client.Cli
 func (f *fakeClientService) GetByID(uuid.UUID) (*client.Client, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (f *fakeClientService) AllowsOrigin(string) (bool, error) { return false, nil }
 func (f *fakeClientService) GetByClientID(clientID string) (*client.Client, error) {
 	if c, ok := f.byClientID[clientID]; ok {
 		return c, nil

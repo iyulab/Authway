@@ -575,7 +575,16 @@ paths:
                 public: { type: boolean }
                 redirect_uris: { type: array, items: { type: string } }
                 post_logout_redirect_uris: { type: array, items: { type: string } }
-                allowed_origins: { type: array, items: { type: string } }
+                allowed_origins:
+                  description: |
+                    The origins a browser application is served from. A page on
+                    one of them may call, with the user's access token and
+                    without cookies, the routes a user calls for themselves
+                    (the profile, MFA and sign-out routes). Each entry matches
+                    an origin exactly. Required for a public client with a web
+                    redirect URI.
+                  type: array
+                  items: { type: string }
                 audience:
                   description: |
                     The resource servers (APIs) this client's access tokens

@@ -238,7 +238,10 @@ func main() {
 	// Middleware
 	app.Use(logger.New())
 	app.Use(recover.New())
-	app.Use(middleware.CORS(cfg.CORS.AllowedOrigins))
+	// The deployment's own origins come from configuration; an application's
+	// origins come from its client registration, so a new application needs
+	// no redeploy.
+	app.Use(middleware.CORS(cfg.CORS.AllowedOrigins, middleware.RememberOrigins(clientService.AllowsOrigin, time.Minute)))
 	app.Use(middleware.RequestLogger(zapLogger))
 	app.Use(telemetry.RequestTracking(telemetryClient, zapLogger))
 

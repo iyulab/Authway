@@ -250,76 +250,38 @@ docker-compose up -d
 
 ## CORS Configuration
 
-### Overview
+Which pages may call the API from a browser is decided in three ways:
 
-CORS (Cross-Origin Resource Sharing) allows your frontend to communicate with the API from different domains.
+| Caller | What it may call | How it is admitted |
+|---|---|---|
+| A page on **any origin** | The documents that describe the deployment: `/.well-known/authway-config`, `/api/v1/capabilities` | Always (`Access-Control-Allow-Origin: *`) |
+| An **application's** pages | The routes a signed-in user calls with their own access token: `/api/v1/profile/*`, `/api/v1/users/mfa/*`, `POST /api/v1/logout` | The origin is listed in `allowed_origins` on one of the deployment's active clients. No cookies are accepted from it — the token is the credential. |
+| The deployment's **own** login screens and admin console | Everything, with cookies | The origin is listed in `AUTHWAY_CORS_ALLOWED_ORIGINS` (comma-separated) |
 
-### Database Configuration (Recommended)
+So a new browser application needs no change to the deployment: register its
+origin on its client and its pages can call the user-token routes. A change to
+`allowed_origins` takes effect within a minute.
 
-**Per-Client CORS**:
-```sql
-UPDATE clients
-SET allowed_origins = ARRAY[
-  'https://app.example.com',
-  'https://www.example.com',
-  'http://localhost:3000'
-]
-WHERE client_id = 'my_app';
-```
+The admin API is never open to an application's origin. Call it from a backend.
 
-**Query**:
-```sql
-SELECT client_id, allowed_origins FROM clients;
-```
+The OIDC endpoints (authorization, token, discovery, JWKS, userinfo) are served
+by the authorization server, which has its own CORS setting.
 
-### Environment Variable Configuration
+### Deployment setting
 
-**Central API `.env`**:
 ```bash
-ALLOWED_ORIGINS=https://app.example.com,https://www.example.com,http://localhost:3000
-```
-
-**Code Implementation**:
-```go
-// Automatic CORS middleware
-allowedOrigins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
-
-router.Use(cors.New(cors.Config{
-  AllowOrigins:     allowedOrigins,
-  AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-  AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-  AllowCredentials: true,
-  MaxAge:           12 * time.Hour,
-}))
-```
-
-### Preflight Requests
-
-**OPTIONS Request** (automatic):
-```http
-OPTIONS /api/v1/users HTTP/1.1
-Origin: https://app.example.com
-Access-Control-Request-Method: POST
-Access-Control-Request-Headers: Content-Type, Authorization
-
-Response:
-Access-Control-Allow-Origin: https://app.example.com
-Access-Control-Allow-Methods: POST, GET, OPTIONS
-Access-Control-Allow-Headers: Content-Type, Authorization
-Access-Control-Allow-Credentials: true
-Access-Control-Max-Age: 43200
+# The origins of the login screens and the admin console
+AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
 ```
 
 ### Troubleshooting
 
-**Issue: "CORS policy blocked"**
-- Add origin to `allowed_origins` in client config
-- Verify CORS middleware is enabled
-- Check protocol (http vs https)
+**Issue: "CORS policy blocked" in an application**
+- Add the page's origin to `allowed_origins` on the application's client. It must match exactly — scheme, host and port
+- The route must be one a user calls with their own token; the admin API is not open to application origins
 
-**Issue: "Credentials mode requires exact origin"**
-- Don't use wildcard `*` when credentials are required
-- Specify exact origins
+**Issue: the login screen or console cannot call the API**
+- Its origin must be in `AUTHWAY_CORS_ALLOWED_ORIGINS`; restart the API after changing it
 
 ---
 
@@ -336,7 +298,7 @@ HYDRA_PUBLIC_URL=https://oauth.authway.in
 # Optional
 PORT=8080
 LOG_LEVEL=info
-ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
+AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
 ```
 
 ### Hydra
@@ -381,7 +343,7 @@ Dropping a column or table is a two-deployment change — see
 
 - [ ] **HTTPS Everywhere**: All endpoints use HTTPS
 - [ ] **Secure Secrets**: Use environment variables or Azure Key Vault
-- [ ] **CORS Configured**: Allowed origins whitelisted
+- [ ] **CORS Configured**: `AUTHWAY_CORS_ALLOWED_ORIGINS` lists the login screens and console; each browser application has its origin in `allowed_origins`
 - [ ] **Cookie Security**: `Secure`, `HttpOnly`, `SameSite=Strict`
 - [ ] **Rate Limiting**: API rate limits configured
 - [ ] **SQL Injection**: Parameterized queries used
@@ -461,7 +423,7 @@ curl https://api.authway.in/.well-known/authway-config
 - Review Hydra logs
 
 **Issue: CORS errors in production**
-- Verify `allowed_origins` includes production domain
+- Verify the application's client lists the production origin in `allowed_origins` (exact match)
 - Check HTTPS vs HTTP protocol mismatch
 - Confirm credentials mode configuration
 

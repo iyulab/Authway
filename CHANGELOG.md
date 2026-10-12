@@ -118,6 +118,15 @@
 
 ### Fixed
 
+- **A browser application can call the API from the origin registered on its
+  client.** `allowed_origins` was required for a single-page application and
+  then never used: the API admitted only the deployment's own origins, so an
+  application's pages could not read `/.well-known/authway-config` (which the
+  JS SDK does unless `issuer` is set) or call `/api/v1/profile/me`. Now the
+  documents that describe the deployment are readable from any origin, and an
+  origin registered on an active client may call the routes a user calls with
+  their own token — without cookies, and never the admin API. The deployment's
+  own origins (`AUTHWAY_CORS_ALLOWED_ORIGINS`) behave as before.
 - **An audience the authorization request asked for is granted.** The consent
   step read the requested audience under the wrong name and always granted
   none, so `aud` stayed empty even for a client the authorization server

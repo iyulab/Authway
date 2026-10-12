@@ -17,6 +17,10 @@ type Service interface {
 	Create(req *CreateClientRequest) (*Client, *ClientCredentials, error)
 	GetByID(id uuid.UUID) (*Client, error)
 	GetByClientID(clientID string) (*Client, error)
+	// AllowsOrigin reports whether origin is registered (allowed_origins) on
+	// an active client — that is, whether a browser application served from
+	// it belongs to this deployment.
+	AllowsOrigin(origin string) (bool, error)
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client, int64, error)
 	// Update writes the patch to Authway's DB and propagates to Hydra.
 	// SyncStatus reflects the upstream outcome — DB success with sync failure
@@ -366,6 +370,20 @@ func (s *service) GetByClientID(clientID string) (*Client, error) {
 		return nil, fmt.Errorf("failed to get client: %w", err)
 	}
 	return &client, nil
+}
+
+func (s *service) AllowsOrigin(origin string) (bool, error) {
+	if origin == "" {
+		return false, nil
+	}
+	var n int64
+	err := s.db.Model(&Client{}).
+		Where("active = ? AND ? = ANY(allowed_origins)", true, origin).
+		Limit(1).Count(&n).Error
+	if err != nil {
+		return false, fmt.Errorf("failed to look up the origin: %w", err)
+	}
+	return n > 0, nil
 }
 
 func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncStatus, error) {
