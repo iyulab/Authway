@@ -3,8 +3,9 @@
 An application acts for its signed-in user with the **user's access token** —
 the one it received from the authorization server — as a bearer token. These
 calls need no admin key. [`packages/contract/openapi.yaml`](../../packages/contract/openapi.yaml)
-describes the profile calls (sections 1 and 2) under the `account` tag; the
-two-factor and sign-out calls (sections 3 and 4) are not part of that contract.
+describes the profile calls (sections 1 and 2) and the two-factor calls
+(section 3) under the `account` tag; the sign-out call (section 4) is not part
+of that contract.
 
 ---
 
@@ -103,9 +104,9 @@ POST /api/v1/users/mfa/setup
 Authorization: Bearer <the user's access token>
 ```
 
-answers `{ "secret", "qr_code_data_url", "issuer", "account_name" }`. `secret`
+answers `{ "secret", "otpauth_uri", "issuer", "account_name" }`. `secret`
 is the TOTP secret (base32), for typing into an authenticator by hand;
-`qr_code_data_url` is the same secret as an `otpauth://` URI — show it as a QR
+`otpauth_uri` is the same secret as an `otpauth://` URI — show it as a QR
 code. `account_name` is the user's email address. Nothing is turned on yet,
 and until it is, each call issues a new secret in place of the previous one.
 Once the second factor is on, `setup` answers `409` (`mfa_already_enabled`):
@@ -140,6 +141,16 @@ its user has just given a code and is looking at the recovery codes.
 | `others` | Every other session of the user has ended; the token used here still works |
 | `all` | Every session has ended, **this one too**: the access token did not say which session it came from (it was issued before sessions were named in tokens). Show the recovery codes from this answer, then send the user to sign in again |
 | `none` | The factor is on, but the sessions could not be ended (the authorization server did not answer). The user can sign out everywhere themselves |
+
+A refusal carries `error` and `code`, like every other call:
+
+| `code` | Status | When |
+|---|---|---|
+| `mfa_already_enabled` | 409 | `setup` or `verify` while the factor is on |
+| `mfa_not_set_up` | 409 | `verify` before `setup` |
+| `invalid_code` | 400 | `verify` with a code that is not current, or already used |
+| `mfa_code_required` | 403 | Turning the factor off or regenerating recovery codes without proof |
+| `mfa_not_enabled` | 409 | Turning off or regenerating while the factor is off |
 
 ### Status
 

@@ -261,6 +261,103 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/mfa/setup:
+    post:
+      tags: [account]
+      operationId: setUpSecondFactor
+      summary: Issue the secret of an authenticator the user is about to add
+      description: |
+        Nothing is on yet: the factor is turned on by `verify` with a code
+        from the authenticator that now holds the secret. Until then each
+        call issues a new secret in place of the previous one. Offered when
+        capabilities.mfa lists `totp`.
+
+        While the factor is on, the answer is `409 mfa_already_enabled`: the
+        factor in use is not replaced by a call that needs only the user's
+        token.
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The secret, to type in or to show as a QR code
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecondFactorSetup' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/mfa/verify:
+    post:
+      tags: [account]
+      operationId: turnOnSecondFactor
+      summary: Turn the second factor on with a code from the authenticator
+      description: |
+        From then on every sign-in asks the user for a code, however it
+        starts. The user's other sessions end, with the tokens issued in
+        them — they were opened on one factor — and the applications signed
+        in on them are told; the session of this request is kept.
+      security: [{ userToken: [] }]
+      requestBody: { $ref: '#/components/requestBodies/SecondFactorCode' }
+      responses:
+        '200':
+          description: The factor is on; the recovery codes are shown only here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecondFactorTurnedOn' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/mfa/status:
+    get:
+      tags: [account]
+      operationId: getSecondFactorStatus
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: Whether the user has a second factor
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecondFactorStatus' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/mfa:
+    delete:
+      tags: [account]
+      operationId: turnOffSecondFactor
+      summary: Turn the second factor off
+      description: |
+        Needs proof of the factor itself in the body — a current
+        authenticator code or an unused recovery code, which is used up:
+        the user's token says who they are and must not be enough to remove
+        the other factor (`403 mfa_code_required` without it).
+      security: [{ userToken: [] }]
+      requestBody: { $ref: '#/components/requestBodies/SecondFactorCode' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/mfa/recovery/regenerate:
+    post:
+      tags: [account]
+      operationId: regenerateRecoveryCodes
+      summary: Replace the user's recovery codes
+      description: The earlier codes stop working. Needs proof of the factor, as turning it off does.
+      security: [{ userToken: [] }]
+      requestBody: { $ref: '#/components/requestBodies/SecondFactorCode' }
+      responses:
+        '200':
+          description: The new recovery codes, shown only here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecoveryCodes' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /api/v1/consent-flows/{flow}:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
     get:
@@ -1593,6 +1690,17 @@ components:
       schema: { type: string, minLength: 1 }
 
   requestBodies:
+    SecondFactorCode:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code:
+                type: string
+                description: A current code from the user's authenticator, or — where proof of the factor is asked for — an unused recovery code.
+
     EmailAddress:
       required: true
       content:
@@ -1668,6 +1776,46 @@ components:
                   sync_status: { $ref: '#/components/schemas/SyncStatus' }
 
   schemas:
+    SecondFactorSetup:
+      type: object
+      required: [secret, otpauth_uri, issuer, account_name]
+      properties:
+        secret: { type: string, minLength: 1, description: The TOTP secret (base32), for typing into an authenticator by hand. }
+        otpauth_uri: { type: string, minLength: 1, description: 'The same secret as an `otpauth://` URI — show it as a QR code.' }
+        issuer: { type: string }
+        account_name: { type: string, description: The user's email address. }
+
+    RecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes: { type: array, minItems: 1, items: { type: string } }
+        message: { type: string }
+
+    SecondFactorTurnedOn:
+      allOf:
+        - $ref: '#/components/schemas/RecoveryCodes'
+        - type: object
+          required: [sessions_ended]
+          properties:
+            sessions_ended:
+              description: |
+                What became of the user's sessions. `others`: every other
+                session has ended and the token used here still works. `all`:
+                every session has ended, this one too — the token did not say
+                which session it came from; show the recovery codes from this
+                answer, then have the user sign in again. `none`: the factor
+                is on but the sessions could not be ended.
+              enum: [others, all, none]
+
+    SecondFactorStatus:
+      type: object
+      required: [enabled, recovery_codes_left]
+      properties:
+        enabled: { type: boolean }
+        enabled_at: { type: string }
+        recovery_codes_left: { type: integer, minimum: 0 }
+
     Redirect:
       type: object
       required: [next, redirect_to]

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
+import { conform } from '../src/contract.js'
 import { Provider, type LoginOutcome, type TestClient, type TestUser } from '../src/provider.js'
 
 const config = loadConfig()
@@ -33,12 +34,15 @@ describe('a user with a second factor is asked for it however they sign in', () 
     if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
     sub = outcome.sub
 
-    const mfa = (path: string, body?: unknown): Promise<Response> =>
-      fetch(`${config.api}/api/v1/users/mfa${path}`, {
+    const mfa = async (path: string, body?: unknown): Promise<Response> => {
+      const res = await fetch(`${config.api}/api/v1/users/mfa${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${outcome.tokens.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       })
+      await conform('POST', `/api/v1/users/mfa${path}`, res.clone())
+      return res
+    }
     const setup = await mfa('/setup')
     expect(setup.status, await setup.clone().text()).toBe(200)
     authenticator = new Authenticator(((await setup.json()) as { secret: string }).secret)

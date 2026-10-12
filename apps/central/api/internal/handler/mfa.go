@@ -97,15 +97,11 @@ func (h *MFAHandler) logMFAFailure(c *fiber.Ctx, userID uuid.UUID, action audit.
 func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	resp, err := h.mfaService.SetupTOTP(userID)
-	if errors.Is(err, mfa.ErrAlreadyEnabled) {
-		return apierror.Refuse(c, fiber.StatusConflict, "mfa_already_enabled", err.Error())
-	}
 	if err != nil {
-		h.logger.Error("MFA setup failed", zap.Error(err), zap.String("user_id", userID.String()))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to set up MFA")})
+		return h.refuse(c, userID, err, "failed to set up MFA")
 	}
 	// Setup alone does not enable MFA — the audit event fires on VerifyMFA
 	// success. Logging setup separately would just double every enablement.
@@ -117,11 +113,11 @@ func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	var req VerifyMFARequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
 	}
 	resp, err := h.mfaService.VerifyAndEnable(userID, req.Code)
 	if err != nil {
@@ -129,7 +125,7 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 		h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, err.Error(), map[string]any{
 			"phase": "enable",
 		})
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify MFA setup")})
+		return h.refuse(c, userID, err, "failed to verify MFA setup")
 	}
 	// A session opened before now was opened on one factor, and so were the
 	// tokens issued in it: whoever holds one would keep the account past the
@@ -161,7 +157,7 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	proof := factorProof(c)
 	err := h.mfaService.Disable(userID, proof)
@@ -169,8 +165,7 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 		return h.refuseWithoutProof(c, userID, "disable")
 	}
 	if err != nil {
-		h.logger.Error("MFA disable failed", zap.Error(err), zap.String("user_id", userID.String()))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to disable MFA")})
+		return h.refuse(c, userID, err, "failed to disable MFA")
 	}
 	h.logMFASuccess(c, userID, audit.ActionUserMFADisabled, audit.SeverityWarning, nil)
 	return c.JSON(fiber.Map{"message": "MFA disabled successfully"})
@@ -181,11 +176,11 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	status, err := h.mfaService.GetStatus(userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": apierror.Message(err, "failed to get MFA status")})
+		return h.refuse(c, userID, err, "failed to get MFA status")
 	}
 	return c.JSON(status)
 }
@@ -195,16 +190,34 @@ func (h *MFAHandler) GetMFAStatus(c *fiber.Ctx) error {
 func (h *MFAHandler) RegenerateRecoveryCodes(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	resp, err := h.mfaService.RegenerateRecoveryCodes(userID, factorProof(c))
 	if errors.Is(err, mfa.ErrProofRequired) {
 		return h.refuseWithoutProof(c, userID, "regenerate_recovery_codes")
 	}
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to regenerate recovery codes")})
+		return h.refuse(c, userID, err, "failed to regenerate recovery codes")
 	}
 	return c.JSON(resp)
+}
+
+// refuse answers a request about the second factor that was not carried out:
+// with the code the contract names for the reason, or as a server fault when
+// the reason is not one the caller can act on.
+func (h *MFAHandler) refuse(c *fiber.Ctx, userID uuid.UUID, err error, fault string) error {
+	switch {
+	case errors.Is(err, mfa.ErrAlreadyEnabled):
+		return apierror.Refuse(c, fiber.StatusConflict, "mfa_already_enabled", err.Error())
+	case errors.Is(err, mfa.ErrNotSetUp):
+		return apierror.Refuse(c, fiber.StatusConflict, "mfa_not_set_up", err.Error())
+	case errors.Is(err, mfa.ErrNotEnabled):
+		return apierror.Refuse(c, fiber.StatusConflict, "mfa_not_enabled", err.Error())
+	case errors.Is(err, mfa.ErrInvalidCode):
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_code", err.Error())
+	}
+	h.logger.Error(fault, zap.Error(err), zap.String("user_id", userID.String()))
+	return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", fault)
 }
 
 // factorProof reads the proof of the second factor that comes with a request

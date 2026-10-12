@@ -51,10 +51,10 @@ func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issue
 }
 
 type TOTPSetupResponse struct {
-	Secret        string `json:"secret"`
-	QRCodeDataURL string `json:"qr_code_data_url"`
-	Issuer        string `json:"issuer"`
-	AccountName   string `json:"account_name"`
+	Secret      string `json:"secret"`
+	OTPAuthURI  string `json:"otpauth_uri"`
+	Issuer      string `json:"issuer"`
+	AccountName string `json:"account_name"`
 }
 
 type RecoveryCodesResponse struct {
@@ -72,6 +72,17 @@ type MFAStatusResponse struct {
 // secret being set up would replace the one in use, and a setup needs nothing
 // but the user's token — so the factor is turned off first, which needs proof.
 var ErrAlreadyEnabled = apierror.NewPublic("MFA is already enabled; turn it off first to set up another authenticator")
+
+// ErrNotSetUp refuses to turn the second factor on before a setup has issued
+// the secret its code is checked against.
+var ErrNotSetUp = apierror.NewPublic("the second factor has not been set up; call setup first")
+
+// ErrNotEnabled refuses what only makes sense while the second factor is on.
+var ErrNotEnabled = apierror.NewPublic("MFA is not enabled")
+
+// ErrInvalidCode refuses a code that is not the authenticator's current one,
+// or that has been used.
+var ErrInvalidCode = apierror.NewPublic("invalid TOTP code")
 
 // ErrProofRequired refuses a change to the second factor that does not come
 // with a current authenticator code or an unused recovery code.
@@ -103,7 +114,7 @@ func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 	// or `@` past the first occurrence (e.g. `user+alias@example.com`).
 	qrCodeURL := key.URL()
 	s.logger.Info("TOTP setup initiated", zap.String("user_id", userID.String()), zap.String("email", u.Email))
-	return &TOTPSetupResponse{Secret: secret, QRCodeDataURL: qrCodeURL, Issuer: s.issuer, AccountName: u.Email}, nil
+	return &TOTPSetupResponse{Secret: secret, OTPAuthURI: qrCodeURL, Issuer: s.issuer, AccountName: u.Email}, nil
 }
 func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodesResponse, error) {
 	u, err := s.userService.GetByID(userID)
@@ -111,10 +122,10 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 		return nil, apierror.NewPublic("user not found")
 	}
 	if u.TOTPSecret == nil || *u.TOTPSecret == "" {
-		return nil, apierror.NewPublic("TOTP not set up for this user")
+		return nil, ErrNotSetUp
 	}
 	if u.TOTPEnabled {
-		return nil, apierror.NewPublic("MFA is already enabled")
+		return nil, ErrAlreadyEnabled
 	}
 	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
 	if err != nil {
@@ -124,7 +135,7 @@ func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodes
 		return nil, err
 	} else if !ok {
 		s.logger.Warn("Invalid TOTP code during setup", zap.String("user_id", userID.String()))
-		return nil, apierror.NewPublic("invalid TOTP code")
+		return nil, ErrInvalidCode
 	}
 	recoveryCodes, hashedCodes, err := generateRecoveryCodes(8)
 	if err != nil {
@@ -145,7 +156,7 @@ func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 		return false, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled || u.TOTPSecret == nil {
-		return false, apierror.NewPublic("MFA is not enabled")
+		return false, ErrNotEnabled
 	}
 	secret, err := s.cipher.Decrypt(*u.TOTPSecret)
 	if err != nil {
@@ -217,7 +228,7 @@ func (s *service) Disable(userID uuid.UUID, proof string) error {
 		return apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return apierror.NewPublic("MFA is not enabled")
+		return ErrNotEnabled
 	}
 	if ok, err := s.proves(userID, proof); err != nil {
 		return err
@@ -237,7 +248,7 @@ func (s *service) VerifyRecoveryCode(userID uuid.UUID, code string) (bool, error
 		return false, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return false, apierror.NewPublic("MFA is not enabled")
+		return false, ErrNotEnabled
 	}
 	if u.RecoveryCodes == nil || *u.RecoveryCodes == "" {
 		return false, apierror.NewPublic("no recovery codes")
@@ -271,7 +282,7 @@ func (s *service) RegenerateRecoveryCodes(userID uuid.UUID, proof string) (*Reco
 		return nil, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
-		return nil, apierror.NewPublic("MFA is not enabled")
+		return nil, ErrNotEnabled
 	}
 	if ok, err := s.proves(userID, proof); err != nil {
 		return nil, err

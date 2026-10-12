@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
+import { conform } from '../src/contract.js'
 import { Provider, type TestClient, type TestUser } from '../src/provider.js'
 
 const config = loadConfig()
@@ -16,12 +17,15 @@ describe('the second factor is not changed by a token alone', () => {
   let accessToken: string
   let authenticator: Authenticator
 
-  const mfa = (method: string, path: string, body?: unknown): Promise<Response> =>
-    fetch(`${config.api}/api/v1/users/mfa${path}`, {
+  const mfa = async (method: string, path: string, body?: unknown): Promise<Response> => {
+    const res = await fetch(`${config.api}/api/v1/users/mfa${path}`, {
       method,
       headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     })
+    await conform(method, `/api/v1/users/mfa${path}`, res.clone())
+    return res
+  }
   const isOn = async (): Promise<boolean> => ((await (await mfa('GET', '/status')).json()) as { enabled: boolean }).enabled
 
   beforeAll(async () => {

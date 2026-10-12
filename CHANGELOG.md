@@ -1,5 +1,21 @@
 ## [Unreleased]
 
+### Changed
+
+- **The two-factor calls of the account API are part of the contract**
+  (`packages/contract`, tag `account`): `setup`, `verify`, `status`, turning
+  the factor off and regenerating recovery codes, with their answers and
+  refusals. The conformance scenarios check every one of those answers
+  against it. Two things changed to get there, both breaking for an
+  application that calls them:
+  - **`qr_code_data_url` in the answer of `setup` is now `otpauth_uri`.** It
+    never held a data URL: it is the `otpauth://` URI to show as a QR code.
+  - **Every refusal carries `code`**, as the rest of the API does —
+    `mfa_already_enabled`, `mfa_not_set_up`, `mfa_not_enabled`,
+    `invalid_code`, `mfa_code_required`, `unauthorized`. Turning the factor on
+    before a setup, or off while it is off, is `409` (was `400`); a failure
+    the caller cannot act on is `500 internal_error` (was `400`).
+
 ### Fixed
 
 - **The deployment check compares the database with the migrations the
