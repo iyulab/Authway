@@ -62,8 +62,11 @@ A patch is refused as a whole, changing nothing, when it:
 Stored claims go into the tokens issued **from the user's next authorization
 on**; tokens issued earlier, and tokens refreshed from them, keep the claims
 they had. After changing a claim the application sends the user through
-authorization again (with the user's session still active this is a redirect
-round trip, without a sign-in form).
+authorization again. With the user's session still active there is no sign-in
+form; the consent screen appears as it would for any authorization — not at
+all for a client that skips it or while the user's earlier consent is
+remembered. Stored claims never change whether the user is asked. For a
+silent renewal use `prompt=none`.
 
 - **ID token**: at the top level.
 - **Access token**: under `ext` (Authway's authorization server nests session

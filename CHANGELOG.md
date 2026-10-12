@@ -40,6 +40,16 @@
   `useClaims`. `getClaims()` and `useClaims()` now read the claims from the ID
   token only.
 
+### Changed
+
+- **Claims are read from one place when tokens are issued.** The copies kept
+  in Redis per sign-in and per pending update are gone, and with them a rule
+  that would skip the consent screen for a user whose claims had just been
+  updated. Whether the user is asked for consent now depends only on the
+  client (`skip_consent`), a remembered consent, a silent request
+  (`prompt=none`) or single sign-on — never on what is stored about the user.
+  The claims service no longer uses Redis.
+
 ### Fixed
 
 - **The ID token carries `email_verified` on every consent path.** It was

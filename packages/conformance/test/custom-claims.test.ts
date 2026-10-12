@@ -78,6 +78,14 @@ describe('custom claims', () => {
     expect(claims.seats).toBe(5)
   })
 
+  // Stored claims are data about the user; they say nothing about whether
+  // the user agreed to share anything with this client.
+  it('still asks the user for consent when claims are stored', async () => {
+    const outcome = await provider.login(client, user)
+    if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
+    expect(outcome.consent).toBe('asked')
+  })
+
   it('refuses a claim the provider asserts, and changes nothing', async () => {
     const res = await patchClaims(sub, { tenant_id: '00000000-0000-0000-0000-000000000000', email_verified: true, plan: 'free' })
     await conform('PATCH', '/api/v1/users/{id}/claims', res.clone())

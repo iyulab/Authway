@@ -203,15 +203,6 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 // the login audit entry. Shared by Login and the two MFA-verify handlers so
 // none of them duplicate the accept/audit/response tail.
 func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User, remember bool, rememberFor int, method string) error {
-	userClaims, err := h.claimsService.GetClaimsForLogin(c.Context(), u.ID, u.TenantID, challenge)
-	if err != nil {
-		h.logger.Warn("Failed to get claims for login",
-			zap.String("user_id", u.ID.String()),
-			zap.Error(err))
-		// Continue without claims
-		userClaims = nil
-	}
-
 	acceptBody := &hydra.AcceptLoginRequest{
 		Subject:     u.ID.String(),
 		Remember:    remember,
@@ -223,9 +214,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 		},
 	}
 
-	h.logger.Info("Accepting login request",
-		zap.String("user_id", u.ID.String()),
-		zap.Int("claims_count", len(userClaims)))
+	h.logger.Info("Accepting login request", zap.String("user_id", u.ID.String()))
 
 	resp, err := acceptAuthenticatedLogin(h.hydraClient, h.authTimes, challenge, acceptBody)
 	if err != nil {
@@ -335,9 +324,21 @@ func issuedFor(u *user.User) claims.Issued {
 	}
 }
 
+// storedClaims returns the claims stored for u, for the tokens about to be
+// issued. A failure to read them does not fail the consent: the tokens then
+// carry the issuer's claims only.
+func (h *AuthHandler) storedClaims(c *fiber.Ctx, u *user.User) claims.ClaimMap {
+	stored, err := h.claimsService.List(c.Context(), u.ID, u.TenantID)
+	if err != nil {
+		h.logger.Warn("Failed to get stored claims for consent", zap.String("user_id", u.ID.String()), zap.Error(err))
+		return claims.ClaimMap{}
+	}
+	return stored
+}
+
 // GetConsentFlow tells the consent screen what to do with a consent flow:
 // {"next":"redirect","redirect_to":…} when no question needs asking (the
-// client skips consent, a silent or single-sign-on login, a claims update),
+// client skips consent, a silent or single-sign-on login),
 // otherwise {"next":"form",…} with what to ask.
 // GET /api/v1/consent-flows/:flow
 func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
@@ -359,16 +360,8 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	// Get claims for this consent flow
-	userClaims, claimsSource, err := h.claimsService.GetClaimsForConsent(c.Context(), consentReq.LoginChallenge, userID, user.TenantID)
-	if err != nil {
-		h.logger.Warn("Failed to get claims for consent", zap.Error(err))
-		userClaims = make(claims.ClaimMap)
-	}
+	userClaims := h.storedClaims(c, user)
 	issued := issuedFor(user)
-
-	// A claims update (workspace switch, etc.) does not ask again.
-	isClaimsUpdate := claimsSource == claims.ClaimsSourcePending || claimsSource == claims.ClaimsSourceLoginChallenge
 
 	// Check if this is a silent (prompt=none) authentication
 	// Hydra may not set Skip=true for prompt=none, but we should still auto-accept
@@ -391,22 +384,20 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	}
 
 	// Auto-accept consent if:
-	// 1. Client has skip_consent=true (from Hydra)
-	// 2. Claims update scenario (workspace switch, etc.)
-	// 3. Silent authentication (prompt=none)
-	// 4. SSO auto-login (user already authenticated, should not show consent again)
-	shouldAutoAccept := consentReq.Skip || isClaimsUpdate || isSilentAuth || isSSOLogin
+	// 1. Client has skip_consent=true, or the user's earlier consent is
+	//    remembered (from Hydra)
+	// 2. Silent authentication (prompt=none)
+	// 3. SSO auto-login (user already authenticated, should not show consent again)
+	// What is stored about the user never decides this.
+	shouldAutoAccept := consentReq.Skip || isSilentAuth || isSSOLogin
 
 	if shouldAutoAccept {
 		h.logger.Info("Auto-accepting consent",
 			zap.String("client_id", consentReq.Client.ClientID),
-			zap.String("claims_source", string(claimsSource)),
 			zap.Bool("skip_consent", consentReq.Skip),
-			zap.Bool("is_claims_update", isClaimsUpdate),
 			zap.Bool("is_silent_auth", isSilentAuth),
 			zap.Bool("is_sso_login", isSSOLogin),
-			zap.String("challenge", challenge[:min(50, len(challenge))]+"..."),
-			zap.Any("updated_claims", userClaims))
+			zap.String("challenge", challenge[:min(50, len(challenge))]+"..."))
 
 		// Auto-accept consent
 		acceptRequest := &hydra.AcceptConsentRequest{
@@ -435,7 +426,6 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	// Show consent page (only if client doesn't have skip_consent=true)
 	h.logger.Info("Showing consent page",
 		zap.String("client_id", consentReq.Client.ClientID),
-		zap.String("claims_source", string(claimsSource)),
 		zap.Bool("skip", consentReq.Skip))
 
 	return c.JSON(fiber.Map{
@@ -488,16 +478,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get claims for this consent flow (with fallback to pending/db claims if login_challenge mismatch)
-	userClaims, _, err := h.claimsService.GetClaimsForConsent(c.Context(), consentReq.LoginChallenge, userID, user.TenantID)
-	if err != nil {
-		h.logger.Warn("Failed to get claims for consent",
-			zap.String("login_challenge", consentReq.LoginChallenge),
-			zap.String("user_id", userID.String()),
-			zap.Error(err))
-		// Continue without additional claims
-		userClaims = make(claims.ClaimMap)
-	}
+	userClaims := h.storedClaims(c, user)
 	issued := issuedFor(user)
 
 	// Accept consent request

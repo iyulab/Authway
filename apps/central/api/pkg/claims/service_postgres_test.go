@@ -7,11 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -22,9 +19,9 @@ import (
 )
 
 // setupPostgres mirrors the same-named helper already established in
-// pkg/invitation, pkg/mfa, pkg/tenant, and pkg/user — the permanent-claim
-// half of this service is Postgres-backed (JSONB storage, a composite unique
-// index on user_id/tenant_id/claim_key).
+// pkg/invitation, pkg/mfa, pkg/tenant, and pkg/user — claims are stored in
+// Postgres (JSONB values, a composite unique index on
+// user_id/tenant_id/claim_key).
 func setupPostgres(t *testing.T) *gorm.DB {
 	t.Helper()
 	dsn := os.Getenv("MIGRATE_SMOKE_DSN")
@@ -41,24 +38,21 @@ func setupPostgres(t *testing.T) *gorm.DB {
 	return db
 }
 
-// newTestRedis mirrors pkg/middleware's ratelimit_test.go helper of the same
-// intent — an in-process miniredis instance, so the pending/login-claims
-// half of this service (Redis-backed) is exercised against something
-// Redis-shaped without a real Redis dependency.
-func newTestRedis(t *testing.T) *redis.Client {
-	t.Helper()
-	mr, err := miniredis.Run()
-	if err != nil {
-		t.Fatalf("miniredis.Run: %v", err)
-	}
-	t.Cleanup(mr.Close)
-	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
-}
-
 func newTestService(t *testing.T, db *gorm.DB) Service {
 	t.Helper()
-	repo := NewRepository(db, newTestRedis(t))
-	return NewService(repo, zap.NewNop())
+	return NewService(NewRepository(db), zap.NewNop())
+}
+
+// seedClaim stores a claim as a row, past the service's checks — the way a
+// claim written before those checks existed sits in the table.
+func seedClaim(t *testing.T, db *gorm.DB, userID, tenantID uuid.UUID, key string, value any) {
+	t.Helper()
+	if err := db.Create(&UserClaim{
+		ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: key,
+		ClaimValue: map[string]any{"value": value},
+	}).Error; err != nil {
+		t.Fatalf("seed %s: %v", key, err)
+	}
 }
 
 // fixtureUser creates a real tenant + user row — user_claims.user_id carries
@@ -174,16 +168,10 @@ func TestPatch_RefusalsChangeNothing(t *testing.T) {
 func TestPatch_RemovesAStoredReservedClaim(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
-	repo := NewRepository(db, newTestRedis(t))
-	svc := NewService(repo, zap.NewNop())
+	svc := newTestService(t, db)
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
-	if err := repo.SaveClaim(ctx, &UserClaim{
-		ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: "tenant_id",
-		ClaimValue: map[string]any{"value": "other"}, IsPermanent: true,
-	}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	seedClaim(t, db, userID, tenantID, "tenant_id", "other")
 
 	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"tenant_id": nil}); err != nil {
 		t.Fatalf("Patch (remove reserved): %v", err)
@@ -195,122 +183,60 @@ func TestPatch_RemovesAStoredReservedClaim(t *testing.T) {
 	}
 }
 
-// TestGetClaimsForConsent_PrefersLoginChallengeThenDatabase exercises the
-// fallback GetClaimsForConsent documents: the claims prepared for the login
-// challenge first, the stored claims when there are none.
-func TestGetClaimsForConsent_PrefersLoginChallengeThenDatabase(t *testing.T) {
+// TestList_LeavesOutStoredReservedClaims: List is what the tokens are built
+// from and what the claims API shows; a reserved claim stored before writes
+// were checked never comes out of it.
+func TestList_LeavesOutStoredReservedClaims(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
 	svc := newTestService(t, db)
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
-	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"plan": "pro"}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-
-	claims, source, err := svc.GetClaimsForConsent(ctx, "challenge-with-no-data", userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaimsForConsent (database fallback): %v", err)
-	}
-	if source != ClaimsSourceDatabase || claims["plan"] != "pro" {
-		t.Fatalf("database fallback: source=%v claims=%+v", source, claims)
-	}
-
-	loginChallenge := "challenge-" + uuid.New().String()[:8]
-	loginClaims, err := svc.GetClaimsForLogin(ctx, userID, tenantID, loginChallenge)
-	if err != nil {
-		t.Fatalf("GetClaimsForLogin: %v", err)
-	}
-	if loginClaims["plan"] != "pro" {
-		t.Fatalf("expected GetClaimsForLogin to carry the stored claim forward, got %+v", loginClaims)
-	}
-	viaChallenge, source, err := svc.GetClaimsForConsent(ctx, loginChallenge, userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaimsForConsent (login challenge): %v", err)
-	}
-	if source != ClaimsSourceLoginChallenge || viaChallenge["plan"] != "pro" {
-		t.Fatalf("login challenge: source=%v claims=%+v", source, viaChallenge)
-	}
-}
-
-// TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone guards the final
-// fallback rung: with no login-challenge data, no pending claims and no
-// stored claims, the result must still be a valid (empty, source=none) map
-// rather than an error or a nil claims payload a caller would need to
-// nil-check.
-func TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone(t *testing.T) {
-	ctx := context.Background()
-	db := setupPostgres(t)
-	svc := newTestService(t, db)
-	userID, tenantID := fixtureUser(t, db)
-	cleanupUserClaims(t, db, userID)
-
-	claims, source, err := svc.GetClaimsForConsent(ctx, "nonexistent-challenge", userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaimsForConsent: %v", err)
-	}
-	if source != ClaimsSourceNone || claims == nil || len(claims) != 0 {
-		t.Fatalf("expected an empty map with source=none, got %+v (%v)", claims, source)
-	}
-}
-
-// TestStoredReservedClaimsNeverReachATokenPath: a reserved claim stored
-// before writes were checked (or put there by any other means) is left out of
-// every path that feeds a token, and out of what the claims API shows.
-func TestStoredReservedClaimsNeverReachATokenPath(t *testing.T) {
-	ctx := context.Background()
-	db := setupPostgres(t)
-	repo := NewRepository(db, newTestRedis(t))
-	svc := NewService(repo, zap.NewNop())
-	userID, tenantID := fixtureUser(t, db)
-	cleanupUserClaims(t, db, userID)
-
 	for key, value := range map[string]any{"tenant_id": uuid.New().String(), "email_verified": true, "_source": "pending", "plan": "pro"} {
-		if err := repo.SaveClaim(ctx, &UserClaim{
-			ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: key,
-			ClaimValue: map[string]any{"value": value}, ClaimType: "user", IsPermanent: true,
-		}); err != nil {
-			t.Fatalf("seed %s: %v", key, err)
-		}
-	}
-	if err := repo.SetPendingClaims(ctx, userID, ClaimMap{"email": "attacker@example.com"}, time.Minute); err != nil {
-		t.Fatalf("seed pending: %v", err)
+		seedClaim(t, db, userID, tenantID, key, value)
 	}
 
-	onlyPlan := func(where string, claims ClaimMap) {
-		t.Helper()
-		if len(claims) != 1 || claims["plan"] != "pro" {
-			t.Fatalf("%s: want only plan=pro, got %+v", where, claims)
-		}
-	}
-
-	viaPending, source, err := svc.GetClaimsForConsent(ctx, "no-such-challenge", userID, tenantID)
-	if err != nil || source != ClaimsSourcePending {
-		t.Fatalf("GetClaimsForConsent (pending): source=%v err=%v", source, err)
-	}
-	onlyPlan("consent via pending", viaPending)
-
-	viaDatabase, _, err := svc.GetClaimsForConsent(ctx, "no-such-challenge", userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaimsForConsent (database): %v", err)
-	}
-	onlyPlan("consent via database", viaDatabase)
-
-	challenge := "challenge-" + uuid.New().String()[:8]
-	forLogin, err := svc.GetClaimsForLogin(ctx, userID, tenantID, challenge)
-	if err != nil {
-		t.Fatalf("GetClaimsForLogin: %v", err)
-	}
-	onlyPlan("login", forLogin)
-	viaChallenge, _, err := svc.GetClaimsForConsent(ctx, challenge, userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaimsForConsent (challenge): %v", err)
-	}
-	onlyPlan("consent via login challenge", viaChallenge)
-
-	shown, err := svc.List(ctx, userID, tenantID)
+	stored, err := svc.List(ctx, userID, tenantID)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	onlyPlan("GET /users/{id}/claims", shown)
+	if len(stored) != 1 || stored["plan"] != "pro" {
+		t.Fatalf("want only plan=pro, got %+v", stored)
+	}
+}
+
+// TestList_NoClaimsIsAnEmptyMap: a user with nothing stored gets an empty
+// map, not nil — callers merge into it.
+func TestList_NoClaimsIsAnEmptyMap(t *testing.T) {
+	db := setupPostgres(t)
+	svc := newTestService(t, db)
+	userID, tenantID := fixtureUser(t, db)
+
+	stored, err := svc.List(context.Background(), userID, tenantID)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if stored == nil || len(stored) != 0 {
+		t.Fatalf("want an empty map, got %#v", stored)
+	}
+}
+
+// TestWritesDoNotNameTheRetiredColumns: claim_type and is_permanent are
+// mapped read-only until a migration drops them. A write that named them
+// would fail on the instances still running while that migration is applied.
+func TestWritesDoNotNameTheRetiredColumns(t *testing.T) {
+	db := setupPostgres(t)
+	stmt := db.Session(&gorm.Session{DryRun: true}).Create(&UserClaim{
+		ID: uuid.New(), UserID: uuid.New(), TenantID: uuid.New(), ClaimKey: "plan",
+		ClaimValue: map[string]any{"value": "pro"},
+	}).Statement
+	sql := stmt.SQL.String()
+	if !strings.Contains(sql, "claim_key") {
+		t.Fatalf("not the insert this test means to read: %s", sql)
+	}
+	for _, column := range []string{"claim_type", "is_permanent"} {
+		if strings.Contains(sql, column) {
+			t.Fatalf("the insert names %s: %s", column, sql)
+		}
+	}
 }

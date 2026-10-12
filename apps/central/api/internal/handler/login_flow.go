@@ -98,12 +98,7 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 		return nil, false, nil
 	}
 
-	userClaims, err := h.claimsService.GetClaimsForLogin(ctx, sessionUser.ID, sessionUser.TenantID, flow)
-	if err != nil {
-		h.logger.Warn("Failed to get claims for SSO login", zap.String("user_id", sessionUser.ID.String()), zap.Error(err))
-		userClaims = nil
-	}
-	h.logger.Info("SSO login", zap.String("user_id", sessionUser.ID.String()), zap.Int("claims_count", len(userClaims)))
+	h.logger.Info("SSO login", zap.String("user_id", sessionUser.ID.String()))
 
 	resp, err := h.hydraClient.AcceptLoginRequest(flow, &hydra.AcceptLoginRequest{
 		Subject:     loginReq.Subject,

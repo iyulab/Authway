@@ -45,7 +45,19 @@ export interface LoginAttempt {
 
 /** What a login attempt produced at the step where it stopped. */
 export type LoginOutcome =
-  | { kind: 'code'; code: string; tokens: Tokens; sub: string; browser: Browser }
+  | {
+      kind: 'code'
+      code: string
+      tokens: Tokens
+      sub: string
+      browser: Browser
+      /**
+       * What the consent step did: 'asked' — the provider had the consent
+       * screen put the question to the user; 'skipped' — it continued without
+       * asking; 'none' — the authorization server never opened the screen.
+       */
+      consent: 'asked' | 'skipped' | 'none'
+    }
   | { kind: 'rejected'; status: number; body: string }
 
 /**
@@ -361,11 +373,27 @@ export class Provider {
       // The provider ended the whole authorization request instead of answering the login screen.
       return { kind: 'rejected', status, body: next.toString() }
     }
+    let consent: 'asked' | 'skipped' | 'none' = 'none'
     if (!next.searchParams.has('code')) {
-      const consentRes = await this.acceptConsent(browser, this.consentFlowFrom(next), scopes)
-      const consentBody = await consentRes.text()
-      if (!consentRes.ok) throw new Error(`Consent failed: ${consentRes.status} ${consentBody}`)
-      const { redirect_to: afterConsent } = JSON.parse(consentBody) as { redirect_to: string }
+      // As the consent screen does: first ask the provider whether there is a
+      // question to put to the user, and only then answer it.
+      const flow = this.consentFlowFrom(next)
+      const stepRes = await browser.fetch(this.flowUrl('consent-flows', flow))
+      await conform('GET', '/api/v1/consent-flows/{flow}', stepRes.clone())
+      const stepBody = await stepRes.text()
+      if (!stepRes.ok) throw new Error(`Consent flow failed: ${stepRes.status} ${stepBody}`)
+      const step = JSON.parse(stepBody) as { next: string; redirect_to?: string }
+      let afterConsent: string
+      if (step.next === 'redirect' && step.redirect_to) {
+        consent = 'skipped'
+        afterConsent = step.redirect_to
+      } else {
+        consent = 'asked'
+        const consentRes = await this.acceptConsent(browser, flow, scopes)
+        const consentBody = await consentRes.text()
+        if (!consentRes.ok) throw new Error(`Consent failed: ${consentRes.status} ${consentBody}`)
+        afterConsent = (JSON.parse(consentBody) as { redirect_to: string }).redirect_to
+      }
       next = await this.followUntil(browser, afterConsent, (u) => u.searchParams.has('code') || u.searchParams.has('error'))
     }
     const code = next.searchParams.get('code')
@@ -387,7 +415,7 @@ export class Provider {
     const tokens = (await tokenRes.json()) as Tokens
     const info = await this.userinfo(tokens.access_token)
     if (info.status !== 200) throw new Error(`userinfo rejected a fresh token: ${info.status}`)
-    return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub, browser }
+    return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub, browser, consent }
   }
 
   /** Full authorization-code + PKCE login with password and consent. */

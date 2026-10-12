@@ -172,7 +172,7 @@ func main() {
 	appleService := social.NewAppleService(&cfg.Apple, userService, invitationGate, clientService, zapLogger)
 
 	// Initialize Claims Service
-	claimsRepo := claims.NewRepository(db, redisClient)
+	claimsRepo := claims.NewRepository(db)
 	claimsService := claims.NewService(claimsRepo, zapLogger)
 
 	// Initialize email services

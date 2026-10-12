@@ -156,9 +156,7 @@ func (f *fakeClientService) RegenerateSecret(uuid.UUID) (*client.ClientCredentia
 }
 func (f *fakeClientService) SyncAllClientsToHydra() (int, int, error) { return 0, 0, nil }
 
-// fakeClaimsService is a no-op claims.Service — Login/completeLogin only call
-// GetClaimsForLogin, and its result is merely logged (count), never branched
-// on.
+// fakeClaimsService is a claims.Service nothing in the login path calls.
 type fakeClaimsService struct{}
 
 func (fakeClaimsService) List(context.Context, uuid.UUID, uuid.UUID) (claims.ClaimMap, error) {
@@ -166,12 +164,6 @@ func (fakeClaimsService) List(context.Context, uuid.UUID, uuid.UUID) (claims.Cla
 }
 func (fakeClaimsService) Patch(context.Context, uuid.UUID, uuid.UUID, map[string]any) (claims.ClaimMap, error) {
 	return nil, fmt.Errorf("not implemented")
-}
-func (fakeClaimsService) GetClaimsForLogin(context.Context, uuid.UUID, uuid.UUID, string) (claims.ClaimMap, error) {
-	return claims.ClaimMap{}, nil
-}
-func (fakeClaimsService) GetClaimsForConsent(context.Context, string, uuid.UUID, uuid.UUID) (claims.ClaimMap, claims.ClaimsSource, error) {
-	return claims.ClaimMap{}, claims.ClaimsSourceNone, nil
 }
 
 // allowedSignInMethods offers every method the client allows, as if the

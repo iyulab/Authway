@@ -38,12 +38,6 @@ func (p *patchOnly) Patch(_ context.Context, userID, _ uuid.UUID, patch map[stri
 	p.patched = append(p.patched, userID)
 	return ClaimMap(patch), nil
 }
-func (p *patchOnly) GetClaimsForLogin(context.Context, uuid.UUID, uuid.UUID, string) (ClaimMap, error) {
-	return nil, nil
-}
-func (p *patchOnly) GetClaimsForConsent(context.Context, string, uuid.UUID, uuid.UUID) (ClaimMap, ClaimsSource, error) {
-	return nil, ClaimsSourceNone, nil
-}
 
 // A tenant's service credential reaches only that tenant's users: a user of
 // another tenant is not found, the same answer as for an id that does not
