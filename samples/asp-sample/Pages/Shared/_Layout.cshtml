@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] — Authway ASP.NET sample</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header>
+        <a href="/">Authway ASP.NET sample</a>
+        <nav>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a href="/Account">@User.Identity.Name</a>
+            }
+            else
+            {
+                <a href="/login">Sign in</a>
+            }
+        </nav>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+</body>
+</html>

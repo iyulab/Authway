@@ -119,6 +119,40 @@ mapping code.
 
 ---
 
+## Signing users in to a server-side web app
+
+The sections below are about **APIs** that receive a bearer token. A web
+application that renders pages on the server is a different role — a *relying
+party*: the browser signs in at Authway, and the application keeps its own
+session. [`samples/asp-sample`](../samples/asp-sample) is a complete, small
+ASP.NET Core example; what it does applies to any server framework.
+
+- **Configure from discovery.** Give your OpenID Connect library the issuer
+  (the `issuer` of the deployment's `/.well-known/openid-configuration`) and
+  let it find every endpoint. Do not hard-code endpoint paths.
+- **Register a confidential client** (`"public": false`) with the
+  application's callback as a `redirect_uri` and its signed-out callback as a
+  `post_logout_redirect_uri`. Keep the secret out of tracked files.
+- **Use the authorization code flow with PKCE, and leave `state` and `nonce`
+  checking on.** Authway returns both; a library that validates them needs no
+  special configuration.
+- **Identify the user by `iss` + `sub`.** `sub` is the user's id in Authway,
+  stable for the life of the account. Do not look users up by `email`.
+- **Open your own session from your own user record.** Find (or create) your
+  user for that `iss` + `sub`, and sign in a principal built from your record.
+  Do not copy the ID token's claims into the session wholesale: roles and
+  permissions in your application are your application's decision. If you do
+  read a claim from the token — `tenant_id`, `email_verified`, or one your
+  backend stores through the [claims API](api/claims.md) — read that one claim
+  by name.
+- **Keep tokens out of the session cookie** unless you call an API for the
+  user; then keep them server-side. The ID token alone is enough to sign out.
+- **Sign out at both ends**: end your session, then send the browser to the
+  provider's `end_session_endpoint` with `id_token_hint` and your
+  `post_logout_redirect_uri`.
+
+---
+
 ## ASP.NET Integration
 
 ### 1. Install NuGet Packages

@@ -1,0 +1,26 @@
+@page
+@model AccountModel
+@{
+    ViewData["Title"] = "Account";
+}
+
+<h1>Your account</h1>
+
+<p>
+    This is the application's own record of you. The identity provider told
+    the application who signed in; what you may do here is the application's
+    decision.
+</p>
+
+<dl>
+    <dt>User id (this application's)</dt>
+    <dd>@Model.UserId</dd>
+    <dt>Name</dt>
+    <dd>@User.Identity?.Name</dd>
+    <dt>Role (given by this application)</dt>
+    <dd>@Model.Role</dd>
+</dl>
+
+<form method="post" asp-page-handler="Logout">
+    <button type="submit">Sign out</button>
+</form>

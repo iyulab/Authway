@@ -1,0 +1,19 @@
+@page
+@{
+    ViewData["Title"] = "Home";
+}
+
+<h1>A server-side relying party</h1>
+
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <p>Signed in as <strong>@User.Identity.Name</strong>. <a href="/Account">Your account</a></p>
+}
+else
+{
+    <p>
+        Signing in sends you to the identity provider and brings you back with
+        a session that belongs to this application.
+    </p>
+    <p><a class="button" href="/login?returnUrl=/Account">Sign in</a></p>
+}

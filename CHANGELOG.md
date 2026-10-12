@@ -50,6 +50,15 @@
   (`prompt=none`) or single sign-on — never on what is stored about the user.
   The claims service no longer uses Redis.
 
+- **`samples/asp-sample` is rewritten as a reference server-side relying
+  party** (.NET 10): the provider's answer lands in a temporary cookie and the
+  session is built from the application's own user record, found by issuer and
+  `sub`; state, nonce and PKCE stay on; only the ID token is carried into the
+  session; every endpoint comes from discovery. It no longer ships a client
+  secret — settings come from `dotnet user-secrets` or the environment. The
+  popup, silent re-authentication and claim-writing demos are gone.
+  `docs/BACKEND_INTEGRATION.md` gains a section on server-side web apps.
+
 ### Fixed
 
 - **The ID token carries `email_verified` on every consent path.** It was
