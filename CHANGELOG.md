@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-13
+
+> Minor, with breaking changes for operators. The address a client registers
+> for back-channel logout can no longer point into the deployment's own
+> network: it must be `https` at a public address, checked by the API and
+> again by the authorization server each time it connects. The setting that
+> opens private networks for development is renamed
+> `AUTHWAY_ALLOW_PRIVATE_TARGETS` (the server refuses to start with the old
+> name) and no longer opens link-local addresses. The admin console edits a
+> client's API audiences and back-channel logout address.
+
 ### Security
 
 - **A client's back-channel logout address can no longer point into the
