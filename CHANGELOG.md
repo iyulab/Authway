@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-13
+
+> Minor, with breaking changes to the two-factor calls of the account API:
+> they are described by the contract now, `qr_code_data_url` is `otpauth_uri`,
+> and every refusal carries a `code` (a state conflict is `409`). The
+> deployment check compares the database with what the deployed image ships.
+
 ### Changed
 
 - **The two-factor calls of the account API are part of the contract**
