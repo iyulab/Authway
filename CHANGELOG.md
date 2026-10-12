@@ -19,6 +19,13 @@
   applications are on its own network sets it to `false` there and
   `AUTHWAY_ALLOW_PRIVATE_TARGETS=true` on the API.
 
+### Added
+
+- **The admin console edits a client's API audiences and back-channel logout
+  address.** Both could only be set through the API. The client form takes the
+  audiences one per line and the logout address as one URL; emptying either
+  clears it.
+
 ### Fixed
 
 - **A client the authorization server refuses to register is answered `400`

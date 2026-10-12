@@ -6,6 +6,14 @@ import { Input, Textarea, Select, Checkbox, CheckboxGroup, Button } from '@/comp
 import { useQuery } from '@tanstack/react-query'
 import { Client, capabilitiesApi } from '@/lib/api'
 
+/** The non-empty lines of a one-per-line field, trimmed. */
+export function lines(value?: string): string[] {
+  return (value ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
 /**
  * Whether any redirect URI returns the user to a web page — an https URL, or
  * http to a named host. A native app is called back on a loopback IP literal
@@ -13,11 +21,7 @@ import { Client, capabilitiesApi } from '@/lib/api'
  * server rule; `localhost` counts as a web page there too.
  */
 export function usesBrowserRedirect(redirectUris: string): boolean {
-  return redirectUris
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .some((uri) => {
+  return lines(redirectUris).some((uri) => {
       const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(uri)?.[1].toLowerCase()
       if (scheme === 'https') return true
       if (scheme !== 'http') return scheme === undefined
@@ -40,6 +44,10 @@ export const clientFormSchema = z.object({
   // superRefine below, mirroring the server rule
   // (public_client_missing_allowed_origins).
   allowed_origins: z.string().optional(),
+  // One identifier per line — see the superRefine below.
+  audience: z.string().optional(),
+  // A single address; the server decides whether it may be called.
+  backchannel_logout_uri: z.string().optional(),
   grant_types: z.array(z.string()).min(1, 'At least one Grant Type is required'),
   scopes: z.array(z.string()).min(1, 'At least one Scope is required'),
   public: z.boolean(),
@@ -78,6 +86,37 @@ export const clientFormSchema = z.object({
       path: ['allowed_origins'],
       message: 'Public clients with Authorization Code need at least one Allowed Origin for browser CORS',
     })
+  }
+
+  // Mirrors the server rule (invalid_audience): each identifier is distinct,
+  // has no whitespace and is at most 255 characters.
+  const audiences = lines(data.audience)
+  if (audiences.some((a) => /\s/.test(a) || a.length > 255) || new Set(audiences).size !== audiences.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['audience'],
+      message: 'Each audience must be a distinct identifier without spaces, at most 255 characters',
+    })
+  }
+
+  // The shape only (invalid_backchannel_logout_uri). Whether the address may
+  // be called — https, not a local or private address — is the server's to
+  // say: it knows what the deployment allows and what the name resolves to.
+  const logoutAddress = (data.backchannel_logout_uri ?? '').trim()
+  if (logoutAddress !== '') {
+    let parsed: URL | undefined
+    try {
+      parsed = new URL(logoutAddress)
+    } catch {
+      parsed = undefined
+    }
+    if (!parsed || !['https:', 'http:'].includes(parsed.protocol) || parsed.hash !== '' || /\s/.test(logoutAddress)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['backchannel_logout_uri'],
+        message: 'Enter one absolute https URL without a fragment (#…)',
+      })
+    }
   }
 })
 
@@ -143,6 +182,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           redirect_uris: (initialData.redirect_uris || []).join('\n'),
           post_logout_redirect_uris: (initialData.post_logout_redirect_uris || []).join('\n'),
           allowed_origins: (initialData.allowed_origins || []).join('\n'),
+          audience: (initialData.audience || []).join('\n'),
+          backchannel_logout_uri: initialData.backchannel_logout_uri || '',
           grant_types: initialData.grant_types,
           scopes: initialData.scopes,
           public: initialData.public,
@@ -281,6 +322,25 @@ export const ClientForm: React.FC<ClientFormProps> = ({
             : 'Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code — a native app called back on http://127.0.0.1/… or its own URI scheme needs none.'
         }
         error={errors.allowed_origins?.message}
+      />
+
+      {/* API audiences */}
+      <Textarea
+        {...register('audience')}
+        label="API Audiences (Optional)"
+        placeholder={`https://api.example.com`}
+        rows={2}
+        helperText="Enter the identifier of each API this client's access tokens are for, one per line (usually the API's URL). They become the token's aud claim, which the API checks for its own identifier. Empty: the tokens name no API."
+        error={errors.audience?.message}
+      />
+
+      {/* Back-channel logout */}
+      <Input
+        {...register('backchannel_logout_uri')}
+        label="Back-Channel Logout URL (Optional)"
+        placeholder="https://app.example.com/backchannel-logout"
+        helperText="For an application that keeps its own server-side session: a logout token is POSTed here whenever a session of one of its users ends. Must be a public https address — the call is made from the server, not from a browser. Empty: the application is not told."
+        error={errors.backchannel_logout_uri?.message}
       />
 
       {/* Consent Flow */}

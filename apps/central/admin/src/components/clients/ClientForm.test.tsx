@@ -277,3 +277,87 @@ describe('usesBrowserRedirect', () => {
     expect(usesBrowserRedirect(uris)).toBe(expected)
   })
 })
+
+// The two settings a client that works with other parts of a deployment
+// needs: which APIs its tokens are for, and where its backend is told about a
+// logout. Both were reachable through the API only.
+describe('ClientForm — API audiences and the back-channel logout address', () => {
+  const existing = {
+    id: 'c1',
+    tenant_id: 't1',
+    client_id: 'app',
+    name: 'Web App',
+    redirect_uris: ['https://app.example.com/callback'],
+    grant_types: ['authorization_code'],
+    scopes: ['openid'],
+    public: false,
+    active: true,
+    audience: ['https://api.example.com', 'https://billing.example.com'],
+    backchannel_logout_uri: 'https://app.example.com/backchannel-logout',
+  } as Client
+
+  it('shows what an existing client has and submits it unchanged', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: existing })
+
+    expect(screen.getByLabelText('API Audiences (Optional)')).toHaveValue('https://api.example.com\nhttps://billing.example.com')
+    expect(screen.getByLabelText('Back-Channel Logout URL (Optional)')).toHaveValue('https://app.example.com/backchannel-logout')
+
+    await submit(user)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      audience: 'https://api.example.com\nhttps://billing.example.com',
+      backchannel_logout_uri: 'https://app.example.com/backchannel-logout',
+    })
+  })
+
+  it('lets both be cleared', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: existing })
+
+    await user.clear(screen.getByLabelText('API Audiences (Optional)'))
+    await user.clear(screen.getByLabelText('Back-Channel Logout URL (Optional)'))
+    await submit(user)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ audience: '', backchannel_logout_uri: '' })
+  })
+
+  it('rejects an audience with a space in it, and one named twice', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: { ...existing, audience: [] } })
+    const field = screen.getByLabelText('API Audiences (Optional)')
+    const refusal = 'Each audience must be a distinct identifier without spaces, at most 255 characters'
+
+    await user.type(field, 'https://api.example.com billing')
+    await submit(user)
+    expect(await screen.findByText(refusal)).toBeInTheDocument()
+
+    await user.clear(field)
+    await user.type(field, 'https://api.example.com{enter}https://api.example.com')
+    await submit(user)
+    expect(await screen.findByText(refusal)).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('rejects a logout address that is not one absolute URL without a fragment', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: { ...existing, backchannel_logout_uri: '' } })
+    const field = screen.getByLabelText('Back-Channel Logout URL (Optional)')
+
+    for (const bad of ['/backchannel-logout', 'app.example.com/logout', 'https://app.example.com/logout#done', 'myapp://logout']) {
+      await user.clear(field)
+      await user.type(field, bad)
+      await submit(user)
+      expect(await screen.findByText('Enter one absolute https URL without a fragment (#…)'), bad).toBeInTheDocument()
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    // Whether an address may be called is the server's to say: the form lets
+    // a well-formed one through and shows the server's answer.
+    await user.clear(field)
+    await user.type(field, 'https://app.example.com/backchannel-logout')
+    await submit(user)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+  })
+})

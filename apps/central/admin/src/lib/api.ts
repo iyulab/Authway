@@ -84,6 +84,11 @@ export interface Client {
   // public client using authorization_code — without it, the reverse proxy
   // has nothing to validate a cross-origin token request against.
   allowed_origins?: string[]
+  // The APIs this client's access tokens are for (their `aud` claim).
+  audience?: string[]
+  // Where the client's backend is told that a user's session has ended.
+  // '' on update clears it.
+  backchannel_logout_uri?: string
   grant_types: string[]
   scopes: string[]
   public: boolean
@@ -205,6 +210,8 @@ export const clientsApi = {
     redirect_uris: string[]
     post_logout_redirect_uris?: string[]
     allowed_origins?: string[]
+    audience?: string[]
+    backchannel_logout_uri?: string
     grant_types: string[]
     scopes: string[]
     public: boolean

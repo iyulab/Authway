@@ -11,7 +11,7 @@ import {
 import { clientsApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Card, Modal } from '@/components/ui'
-import { ClientForm, ClientFormData } from '@/components/clients'
+import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
 const ClientCreatePage: React.FC = () => {
   const navigate = useNavigate()
@@ -29,24 +29,11 @@ const ClientCreatePage: React.FC = () => {
         throw new Error('No tenant selected')
       }
 
-      const redirectUris = data.redirect_uris
-        .split('\n')
-        .map((uri) => uri.trim())
-        .filter((uri) => uri.length > 0)
-
-      const postLogoutRedirectUris = data.post_logout_redirect_uris
-        ? data.post_logout_redirect_uris
-            .split('\n')
-            .map((uri) => uri.trim())
-            .filter((uri) => uri.length > 0)
-        : []
-
-      const allowedOrigins = data.allowed_origins
-        ? data.allowed_origins
-            .split('\n')
-            .map((origin) => origin.trim())
-            .filter((origin) => origin.length > 0)
-        : []
+      const redirectUris = lines(data.redirect_uris)
+      const postLogoutRedirectUris = lines(data.post_logout_redirect_uris)
+      const allowedOrigins = lines(data.allowed_origins)
+      const audience = lines(data.audience)
+      const backChannelLogoutUri = (data.backchannel_logout_uri ?? '').trim()
 
       return clientsApi.create({
         tenant_id: selectedTenant.id,
@@ -57,6 +44,8 @@ const ClientCreatePage: React.FC = () => {
         post_logout_redirect_uris:
           postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,
         allowed_origins: allowedOrigins.length > 0 ? allowedOrigins : undefined,
+        audience: audience.length > 0 ? audience : undefined,
+        backchannel_logout_uri: backChannelLogoutUri || undefined,
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,

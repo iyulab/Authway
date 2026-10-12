@@ -12,7 +12,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { clientsApi } from '@/lib/api'
 import { Button, Card, Loading, Badge, ConfirmDialog, Modal } from '@/components/ui'
-import { ClientForm, ClientFormData } from '@/components/clients'
+import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
 const ClientDetailPage: React.FC = () => {
   const { clientId } = useParams<{ clientId: string }>()
@@ -37,24 +37,11 @@ const ClientDetailPage: React.FC = () => {
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: (data: ClientFormData) => {
-      const redirectUris = data.redirect_uris
-        .split('\n')
-        .map((uri) => uri.trim())
-        .filter((uri) => uri.length > 0)
-
-      const postLogoutRedirectUris = data.post_logout_redirect_uris
-        ? data.post_logout_redirect_uris
-            .split('\n')
-            .map((uri) => uri.trim())
-            .filter((uri) => uri.length > 0)
-        : []
-
-      const allowedOrigins = data.allowed_origins
-        ? data.allowed_origins
-            .split('\n')
-            .map((origin) => origin.trim())
-            .filter((origin) => origin.length > 0)
-        : []
+      const redirectUris = lines(data.redirect_uris)
+      const postLogoutRedirectUris = lines(data.post_logout_redirect_uris)
+      const allowedOrigins = lines(data.allowed_origins)
+      const audience = lines(data.audience)
+      const backChannelLogoutUri = (data.backchannel_logout_uri ?? '').trim()
 
       return clientsApi.update(clientId!, {
         name: data.name,
@@ -63,6 +50,9 @@ const ClientDetailPage: React.FC = () => {
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris,
         allowed_origins: allowedOrigins,
+        // Sent as they stand: an empty list or '' clears what was there.
+        audience,
+        backchannel_logout_uri: backChannelLogoutUri,
         grant_types: data.grant_types,
         scopes: data.scopes,
         public: data.public,
