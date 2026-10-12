@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-12
+
+> Minor, with breaking changes for API consumers: a user can no longer write
+> the claims in their own tokens (an application's backend does, through the
+> admin API or a tenant's service credential), and signing in with a provider
+> reaches an account only through an address the provider has verified or an
+> existing link. New for relying parties: `amr` in the ID token, an `aud` that
+> comes from the client's registration, a documented way for an API to verify
+> an access token, back-channel logout, token introspection, and browser
+> origins that follow a client's registration. Client secrets are no longer
+> stored. The SDK packages are versioned separately.
+
 ### Security
 
 - **Only a trusted party writes the claims in a user's tokens.** A user could
