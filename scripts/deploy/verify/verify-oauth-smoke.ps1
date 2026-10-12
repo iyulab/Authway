@@ -213,7 +213,8 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
 
     # --- 6. consent accept ---
     Write-Host "6️⃣  consent accept" -ForegroundColor Yellow
-    $consentBody = @{ grant_scope = @("openid") } | ConvertTo-Json -Compress
+    # remember: 아래 8-2 의 prompt=none 이 code 로 답하려면 기억된 동의가 있어야 한다.
+    $consentBody = @{ grant_scope = @("openid"); remember = $true } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $consentBody -NoNewline -Encoding UTF8
     $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/api/v1/consent-flows/$([uri]::EscapeDataString($consentFlow))/accept" `
@@ -262,6 +263,36 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         exit 1
     }
     Write-Host "   ✅ 액세스 토큰 최상위 클레임 확인 (tenant_id, email, auth_time)" -ForegroundColor Green
+
+    # --- 8-2. 로그인이 세션을 열었는가 ---
+    # 「로그인 상태 유지」 없이 로그인했어도 세션이 있어야 한다: 같은 브라우저(쿠키)의
+    # prompt=none 인가 요청이 화면 없이 code 로 끝난다. 세션이 없으면 login_required,
+    # 화면이 폼을 요구하면 그것도 실패다(docs/api/login-flows.md 「Sessions」).
+    Write-Host "7️⃣-2 세션 재사용 (prompt=none)" -ForegroundColor Yellow
+    $silentUrl = "$authUrl&prompt=none"
+    $silentOutcome = $null
+    foreach ($hop in 1..10) {
+        $rs = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($silentUrl)
+        if (-not $rs.Location) { $silentOutcome = "리다이렉트 없음(status=$($rs.Status))"; break }
+        if ($rs.Location -match '[?&]error=([^&]+)') { $silentOutcome = "error=$($matches[1])"; break }
+        if ($rs.Location -match '[?&]code=') { $silentOutcome = 'code'; break }
+        if ($rs.Location -match '[?&]flow=([^&]+)') {
+            # 화면이 하는 일: flow 가 무엇을 보여 달라는지 API 에 묻는다. 답은 redirect 여야 한다.
+            $silentFlow = $matches[1]
+            $kind = if ($rs.Location -match '/consent\?') { 'consent-flows' } else { 'login-flows' }
+            $stepResp = & curl.exe -s -c $cookieJar -b $cookieJar "$apiUrl/api/v1/$kind/$silentFlow"
+            $stepJson = $stepResp | ConvertFrom-Json
+            if ($stepJson.next -ne 'redirect' -or -not $stepJson.redirect_to) { $silentOutcome = "$kind 가 폼을 요구함: $stepResp"; break }
+            $silentUrl = $stepJson.redirect_to
+        } else {
+            $silentUrl = $rs.Location
+        }
+    }
+    if ($silentOutcome -ne 'code') {
+        Write-Host "❌ 세션이 재사용되지 않음 — prompt=none 의 답: $silentOutcome" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ 화면 없이 code — 로그인이 세션을 열었고 재사용됨" -ForegroundColor Green
 
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
     # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
