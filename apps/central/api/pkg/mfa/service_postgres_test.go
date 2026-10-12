@@ -177,7 +177,7 @@ func TestMFALifecycle_SetupVerifyEnableDisable(t *testing.T) {
 		t.Fatal("expected Verify to reject a wrong code")
 	}
 
-	if err := svc.Disable(u.ID); err != nil {
+	if err := svc.Disable(u.ID, currentCode(t, setup.Secret)); err != nil {
 		t.Fatalf("Disable: %v", err)
 	}
 
@@ -233,7 +233,7 @@ func TestMFARecoveryCodes_ConsumedOnceAndRegenerable(t *testing.T) {
 		t.Fatal("expected a recovery code to be rejected on reuse")
 	}
 
-	regenerated, err := svc.RegenerateRecoveryCodes(u.ID)
+	regenerated, err := svc.RegenerateRecoveryCodes(u.ID, currentCode(t, setup.Secret))
 	if err != nil {
 		t.Fatalf("RegenerateRecoveryCodes: %v", err)
 	}

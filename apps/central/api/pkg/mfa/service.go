@@ -25,9 +25,13 @@ type Service interface {
 	SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error)
 	VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodesResponse, error)
 	Verify(userID uuid.UUID, code string) (bool, error)
-	Disable(userID uuid.UUID) error
+	// Disable turns the second factor off. proof is a current authenticator
+	// code or an unused recovery code: knowing who the user is (a token) is
+	// one factor, and must not be enough to remove the other.
+	Disable(userID uuid.UUID, proof string) error
 	VerifyRecoveryCode(userID uuid.UUID, code string) (bool, error)
-	RegenerateRecoveryCodes(userID uuid.UUID) (*RecoveryCodesResponse, error)
+	// RegenerateRecoveryCodes replaces the recovery codes; proof as for Disable.
+	RegenerateRecoveryCodes(userID uuid.UUID, proof string) (*RecoveryCodesResponse, error)
 	GetStatus(userID uuid.UUID) (*MFAStatusResponse, error)
 }
 
@@ -61,10 +65,22 @@ type MFAStatusResponse struct {
 	RecoveryCodesLeft int        `json:"recovery_codes_left"`
 }
 
+// ErrAlreadyEnabled refuses a new setup while the second factor is on. The
+// secret being set up would replace the one in use, and a setup needs nothing
+// but the user's token — so the factor is turned off first, which needs proof.
+var ErrAlreadyEnabled = apierror.NewPublic("MFA is already enabled; turn it off first to set up another authenticator")
+
+// ErrProofRequired refuses a change to the second factor that does not come
+// with a current authenticator code or an unused recovery code.
+var ErrProofRequired = apierror.NewPublic("a current authenticator code or an unused recovery code is required")
+
 func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
 		return nil, apierror.NewPublic("user not found")
+	}
+	if u.TOTPEnabled {
+		return nil, ErrAlreadyEnabled
 	}
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: s.issuer, AccountName: u.Email, SecretSize: 32})
 	if err != nil {
@@ -133,13 +149,35 @@ func (s *service) Verify(userID uuid.UUID, code string) (bool, error) {
 	return totp.Validate(code, secret), nil
 }
 
-func (s *service) Disable(userID uuid.UUID) error {
+// proves reports whether proof is a current authenticator code or an unused
+// recovery code of the user. A recovery code is used up by proving.
+func (s *service) proves(userID uuid.UUID, proof string) (bool, error) {
+	if proof == "" {
+		return false, nil
+	}
+	if ok, err := s.Verify(userID, proof); err != nil || ok {
+		return ok, err
+	}
+	ok, err := s.VerifyRecoveryCode(userID, proof)
+	if err != nil {
+		// No recovery codes left is simply "not proven".
+		return false, nil
+	}
+	return ok, nil
+}
+
+func (s *service) Disable(userID uuid.UUID, proof string) error {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
 		return apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
 		return apierror.NewPublic("MFA is not enabled")
+	}
+	if ok, err := s.proves(userID, proof); err != nil {
+		return err
+	} else if !ok {
+		return ErrProofRequired
 	}
 	updates := map[string]any{"totp_enabled": false, "totp_secret": nil, "totp_verified_at": nil, "recovery_codes": nil}
 	if err := s.db.Model(&user.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
@@ -182,13 +220,18 @@ func (s *service) VerifyRecoveryCode(userID uuid.UUID, code string) (bool, error
 	s.logger.Info("Recovery code used", zap.String("user_id", userID.String()), zap.Int("remaining", len(hashedCodes)))
 	return true, nil
 }
-func (s *service) RegenerateRecoveryCodes(userID uuid.UUID) (*RecoveryCodesResponse, error) {
+func (s *service) RegenerateRecoveryCodes(userID uuid.UUID, proof string) (*RecoveryCodesResponse, error) {
 	u, err := s.userService.GetByID(userID)
 	if err != nil {
 		return nil, apierror.NewPublic("user not found")
 	}
 	if !u.TOTPEnabled {
 		return nil, apierror.NewPublic("MFA is not enabled")
+	}
+	if ok, err := s.proves(userID, proof); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, ErrProofRequired
 	}
 	recoveryCodes, hashedCodes, err := generateRecoveryCodes(8)
 	if err != nil {

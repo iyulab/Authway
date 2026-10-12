@@ -107,7 +107,10 @@ answers `{ "secret", "qr_code_data_url", "issuer", "account_name" }`. `secret`
 is the TOTP secret (base32), for typing into an authenticator by hand;
 `qr_code_data_url` is the same secret as an `otpauth://` URI — show it as a QR
 code. `account_name` is the user's email address. Nothing is turned on yet,
-and each call issues a new secret in place of the previous one.
+and until it is, each call issues a new secret in place of the previous one.
+Once the second factor is on, `setup` answers `409` (`mfa_already_enabled`):
+the factor in use is not replaced by a call that needs only the user's token.
+To change authenticators, turn it off first.
 
 ```http
 POST /api/v1/users/mfa/verify
@@ -138,10 +141,16 @@ left out while the second factor is off.
 ```http
 POST /api/v1/users/mfa/recovery/regenerate
 Authorization: Bearer <the user's access token>
+Content-Type: application/json
+
+{ "code": "123456" }
 ```
 
 replaces the user's recovery codes with eight new ones and answers
 `{ "recovery_codes": […], "message" }`. The earlier codes stop working.
+`code` is proof of the second factor: a current code from the authenticator,
+or an unused recovery code (which is used up). Without it the answer is `403`
+(`mfa_code_required`).
 
 ```http
 POST /api/v1/users/mfa/recovery
@@ -162,7 +171,16 @@ in the [login flow](login-flows.md#login).
 ```http
 DELETE /api/v1/users/mfa
 Authorization: Bearer <the user's access token>
+Content-Type: application/json
+
+{ "code": "123456" }
 ```
+
+`code` is proof of the second factor, as for regenerating recovery codes: a
+current authenticator code or an unused recovery code. The user's token alone
+is not enough — it is one factor, and must not be able to remove the other.
+Without valid proof the answer is `403` (`mfa_code_required`), and repeated
+wrong codes are rate limited like failed sign-ins.
 
 On `200` (`{ "message" }`) the second factor is off, and the secret and the
 recovery codes are removed. To turn it on again, start from `setup`.

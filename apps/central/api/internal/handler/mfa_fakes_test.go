@@ -19,9 +19,19 @@ type fakeMFAService struct {
 	validTOTPCode     string
 	validRecoveryCode string
 	status            *mfa.MFAStatusResponse
+	// enabled makes the fake behave as a user whose second factor is on:
+	// a setup is refused, and a change needs one of the valid codes.
+	enabled bool
+}
+
+func (f *fakeMFAService) proven(proof string) bool {
+	return !f.enabled || (proof != "" && (proof == f.validTOTPCode || proof == f.validRecoveryCode))
 }
 
 func (f *fakeMFAService) SetupTOTP(uuid.UUID) (*mfa.TOTPSetupResponse, error) {
+	if f.enabled {
+		return nil, mfa.ErrAlreadyEnabled
+	}
 	return &mfa.TOTPSetupResponse{Secret: "SECRET", Issuer: "Authway"}, nil
 }
 
@@ -33,13 +43,21 @@ func (f *fakeMFAService) Verify(_ uuid.UUID, code string) (bool, error) {
 	return code == f.validTOTPCode, nil
 }
 
-func (f *fakeMFAService) Disable(uuid.UUID) error { return nil }
+func (f *fakeMFAService) Disable(_ uuid.UUID, proof string) error {
+	if !f.proven(proof) {
+		return mfa.ErrProofRequired
+	}
+	return nil
+}
 
 func (f *fakeMFAService) VerifyRecoveryCode(_ uuid.UUID, code string) (bool, error) {
 	return code == f.validRecoveryCode, nil
 }
 
-func (f *fakeMFAService) RegenerateRecoveryCodes(uuid.UUID) (*mfa.RecoveryCodesResponse, error) {
+func (f *fakeMFAService) RegenerateRecoveryCodes(_ uuid.UUID, proof string) (*mfa.RecoveryCodesResponse, error) {
+	if !f.proven(proof) {
+		return nil, mfa.ErrProofRequired
+	}
 	return &mfa.RecoveryCodesResponse{RecoveryCodes: []string{"DDDD-EEEE-FFFF"}}, nil
 }
 

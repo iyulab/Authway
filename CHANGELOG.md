@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security
+
+- **A user's token alone can no longer replace their second factor or issue
+  new recovery codes.** With two-factor authentication on,
+  `POST /api/v1/users/mfa/setup` replaced the authenticator secret in use —
+  the caller's authenticator then passed and the owner's no longer did — and
+  `POST /api/v1/users/mfa/recovery/regenerate` handed out fresh recovery codes,
+  both for nothing but the access token. Whoever held a user's token could
+  take over the second factor. Now a setup is refused while the factor is on
+  (`409 mfa_already_enabled`), and turning it off or regenerating recovery
+  codes needs `{"code": …}`: a current authenticator code or an unused
+  recovery code (`403 mfa_code_required` without it, rate limited like failed
+  sign-ins). To change authenticators, turn the factor off first.
+
+### Fixed
+
+- **A user can turn their second factor off.** `DELETE /api/v1/users/mfa` was
+  answered by the admin route for `/api/v1/users/{id}` (401) and never reached
+  its handler.
+
 ## [0.7.0] - 2026-10-12
 
 > Minor, with breaking changes for API consumers: a user can no longer write

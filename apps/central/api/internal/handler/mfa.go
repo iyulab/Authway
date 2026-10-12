@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -8,6 +11,7 @@ import (
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/mfa"
+	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/user"
 )
 
@@ -90,6 +94,9 @@ func (h *MFAHandler) SetupMFA(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 	resp, err := h.mfaService.SetupTOTP(userID)
+	if errors.Is(err, mfa.ErrAlreadyEnabled) {
+		return apierror.Refuse(c, fiber.StatusConflict, "mfa_already_enabled", err.Error())
+	}
 	if err != nil {
 		h.logger.Error("MFA setup failed", zap.Error(err), zap.String("user_id", userID.String()))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to set up MFA")})
@@ -129,7 +136,12 @@ func (h *MFAHandler) DisableMFA(c *fiber.Ctx) error {
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
-	if err := h.mfaService.Disable(userID); err != nil {
+	proof := factorProof(c)
+	err := h.mfaService.Disable(userID, proof)
+	if errors.Is(err, mfa.ErrProofRequired) {
+		return h.refuseWithoutProof(c, userID, "disable")
+	}
+	if err != nil {
 		h.logger.Error("MFA disable failed", zap.Error(err), zap.String("user_id", userID.String()))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to disable MFA")})
 	}
@@ -188,9 +200,32 @@ func (h *MFAHandler) RegenerateRecoveryCodes(c *fiber.Ctx) error {
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
-	resp, err := h.mfaService.RegenerateRecoveryCodes(userID)
+	resp, err := h.mfaService.RegenerateRecoveryCodes(userID, factorProof(c))
+	if errors.Is(err, mfa.ErrProofRequired) {
+		return h.refuseWithoutProof(c, userID, "regenerate_recovery_codes")
+	}
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to regenerate recovery codes")})
 	}
 	return c.JSON(resp)
+}
+
+// factorProof reads the proof of the second factor that comes with a request
+// to change it: {"code": "..."} — a current authenticator code or an unused
+// recovery code.
+func factorProof(c *fiber.Ctx) string {
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = c.BodyParser(&body)
+	return strings.TrimSpace(body.Code)
+}
+
+// refuseWithoutProof answers a change to the second factor that came without
+// valid proof. It counts against the caller's address like a failed sign-in:
+// the caller already holds the user's token and is guessing the other factor.
+func (h *MFAHandler) refuseWithoutProof(c *fiber.Ctx, userID uuid.UUID, phase string) error {
+	middleware.IncrementRateLimitOnFailure(c)
+	h.logMFAFailure(c, userID, audit.ActionUserMFAFailed, mfa.ErrProofRequired.Error(), map[string]any{"phase": phase})
+	return apierror.Refuse(c, fiber.StatusForbidden, "mfa_code_required", mfa.ErrProofRequired.Error())
 }

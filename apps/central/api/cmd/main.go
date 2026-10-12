@@ -432,19 +432,23 @@ func main() {
 	v1.Delete("/docs/*", adminAuth, docsHandler.DeleteDoc)
 	v1.Post("/docs/upload", adminAuth, docsHandler.UploadDoc)
 
+	// MFA management routes (authenticated users). Registered before the
+	// admin routes on /users/:id: a route matches in the order it was
+	// registered, and "mfa" would otherwise be taken for a user id — which
+	// is how turning the second factor off was answered by the admin route
+	// (401) instead of ever reaching its handler.
+	v1.Post("/users/mfa/setup", jwtAuth, mfaHandler.SetupMFA)
+	v1.Post("/users/mfa/verify", jwtAuth, mfaHandler.VerifyMFA)
+	v1.Delete("/users/mfa", jwtAuth, loginRateLimit, mfaHandler.DisableMFA)
+	v1.Get("/users/mfa/status", jwtAuth, mfaHandler.GetMFAStatus)
+	v1.Post("/users/mfa/recovery", jwtAuth, mfaHandler.VerifyRecoveryCode)
+	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, loginRateLimit, mfaHandler.RegenerateRecoveryCodes)
+
 	// User management routes (Admin only)
 	v1.Get("/users", adminAuth, userHandler.List)
 	v1.Get("/users/:id", adminAuth, userHandler.Get)
 	v1.Put("/users/:id", adminAuth, userHandler.Update)
 	v1.Delete("/users/:id", adminAuth, userHandler.Delete)
-
-	// MFA management routes (authenticated users)
-	v1.Post("/users/mfa/setup", jwtAuth, mfaHandler.SetupMFA)
-	v1.Post("/users/mfa/verify", jwtAuth, mfaHandler.VerifyMFA)
-	v1.Delete("/users/mfa", jwtAuth, mfaHandler.DisableMFA)
-	v1.Get("/users/mfa/status", jwtAuth, mfaHandler.GetMFAStatus)
-	v1.Post("/users/mfa/recovery", jwtAuth, mfaHandler.VerifyRecoveryCode)
-	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, mfaHandler.RegenerateRecoveryCodes)
 
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
