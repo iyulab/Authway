@@ -605,6 +605,78 @@ func (c *Client) RevokeUserSessions(subject string) error {
 	return nil
 }
 
+// RevokeOtherSessions ends every session of a user except the one named, and
+// tells the applications that were signed in on the others. With keep empty
+// it is RevokeUserSessions: there is no session to tell apart.
+//
+// What ends a session's tokens is revoking the consent granted in it, named
+// by its own id; deleting the login session alone leaves its access and
+// refresh tokens working (both measured against v26.2.0). A consent names the
+// login session it was granted in, so the consents of other sessions are
+// revoked one by one and their login sessions ended by id, which is also what
+// sends the logout token. The consents are read first: ending a login session
+// blanks the session id on its consents.
+func (c *Client) RevokeOtherSessions(subject, keep string) error {
+	if keep == "" {
+		return c.RevokeUserSessions(subject)
+	}
+	consents, err := c.consentSessions(url.QueryEscape(subject))
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	ended := map[string]bool{}
+	for _, consent := range consents {
+		if consent.LoginSessionID == keep {
+			continue
+		}
+		if id := consent.LoginSessionID; id != "" && !ended[id] {
+			ended[id] = true
+			if err := c.deleteSessions("login?sid=" + url.QueryEscape(id)); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("%w: %v", ErrApplicationsNotNotified, err)
+			}
+		}
+		if err := c.deleteSessions("consent?consent_request_id=" + url.QueryEscape(consent.RequestID)); err != nil {
+			return fmt.Errorf("failed to revoke a consent session: %w", err)
+		}
+	}
+	return firstErr
+}
+
+// consentSession is a consent a user granted: its own id and the login
+// session it was granted in (empty once that session has ended).
+type consentSession struct {
+	RequestID      string
+	LoginSessionID string
+}
+
+// consentSessions lists the consents a subject has granted.
+func (c *Client) consentSessions(escapedSubject string) ([]consentSession, error) {
+	resp, err := c.client.Get(c.AdminURL + "/admin/oauth2/auth/sessions/consent?page_size=500&subject=" + escapedSubject)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to list sessions: status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var listed []struct {
+		RequestID      string `json:"consent_request_id"`
+		ConsentRequest struct {
+			LoginSessionID string `json:"login_session_id"`
+		} `json:"consent_request"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		return nil, fmt.Errorf("failed to decode sessions: %w", err)
+	}
+	sessions := make([]consentSession, 0, len(listed))
+	for _, l := range listed {
+		sessions = append(sessions, consentSession{RequestID: l.RequestID, LoginSessionID: l.ConsentRequest.LoginSessionID})
+	}
+	return sessions, nil
+}
+
 // deleteSessions calls DELETE /admin/oauth2/auth/sessions/<pathAndQuery>.
 // Nothing to delete is not a failure.
 func (c *Client) deleteSessions(pathAndQuery string) error {

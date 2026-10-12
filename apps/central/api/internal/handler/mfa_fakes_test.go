@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/mfa"
@@ -35,7 +36,10 @@ func (f *fakeMFAService) SetupTOTP(uuid.UUID) (*mfa.TOTPSetupResponse, error) {
 	return &mfa.TOTPSetupResponse{Secret: "SECRET", Issuer: "Authway"}, nil
 }
 
-func (f *fakeMFAService) VerifyAndEnable(uuid.UUID, string) (*mfa.RecoveryCodesResponse, error) {
+func (f *fakeMFAService) VerifyAndEnable(_ uuid.UUID, code string) (*mfa.RecoveryCodesResponse, error) {
+	if code != f.validTOTPCode {
+		return nil, apierror.NewPublic("invalid TOTP code")
+	}
 	return &mfa.RecoveryCodesResponse{RecoveryCodes: []string{"AAAA-BBBB-CCCC"}}, nil
 }
 

@@ -307,7 +307,7 @@ func main() {
 	docsHandler := handler.NewDocsHandler(zapLogger)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, zapLogger)
 	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
-	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService)
+	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)
 
 	// The authorization server sends the browser here to start a login; it is
 	// handed on to the login UI with an opaque flow id.

@@ -12,6 +12,19 @@
   (RFC 6238, section 5.2). A user who signs in twice within the same
   half-minute waits for their authenticator's next code.
 
+- **Turning the second factor on ends the sessions opened before it.** A
+  session opened on one factor, and the access and refresh tokens issued in
+  it, stayed valid after the user turned two-factor authentication on —
+  whoever already held one kept the account. `POST /api/v1/users/mfa/verify`
+  now ends the user's other sessions and their tokens and tells the
+  applications signed in on them; the session that turned the factor on is
+  kept. The answer carries `sessions_ended`: `others`, or `all` when the
+  token did not say which session it came from (one issued before this
+  release) and every session — that one included — had to end, or `none` when
+  the authorization server could not be reached. Access tokens now carry the
+  id of their login session in their session data (`sid`, read back by
+  introspection).
+
 ### Removed
 
 - **`POST /api/v1/users/mfa/recovery` is removed.** It checked a recovery

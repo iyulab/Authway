@@ -100,14 +100,23 @@ func acceptAuthenticatedLogin(hc *hydra.Client, store *AuthenticationStore, chal
 	return resp, err
 }
 
-// withAuthTime returns claims for an access token with auth_time added when
-// the session's authentication time is known. The map it is given is left
-// untouched: the same claims may also go into the ID token, whose auth_time
-// the authorization server sets itself.
-func withAuthTime(claims map[string]any, store *AuthenticationStore, sessionID string) map[string]any {
-	out := make(map[string]any, len(claims)+1)
+// sessionClaim names, in an access token's session data, the login session
+// the token was issued in. The API reads it back by introspection to tell
+// "this session" from the user's others; it is not part of the token contract.
+const sessionClaim = "sid"
+
+// withSession returns claims for an access token with what is known of the
+// login session it is issued in: the session's id, and auth_time when the
+// session's authentication time is known. The map it is given is left
+// untouched: the same claims may also go into the ID token, whose sid and
+// auth_time the authorization server sets itself.
+func withSession(claims map[string]any, store *AuthenticationStore, sessionID string) map[string]any {
+	out := make(map[string]any, len(claims)+2)
 	for k, v := range claims {
 		out[k] = v
+	}
+	if sessionID != "" {
+		out[sessionClaim] = sessionID
 	}
 	if a, ok := store.Lookup(sessionID); ok {
 		out["auth_time"] = a.At.Unix()

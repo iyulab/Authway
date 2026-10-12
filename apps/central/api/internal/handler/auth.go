@@ -404,7 +404,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 			Remember:                 true,
 			RememberFor:              3600,
 			Session: &hydra.ConsentSession{
-				AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
+				AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 				IDToken:     issued.IDToken(userClaims),
 			},
 		}
@@ -487,7 +487,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		Remember:                 req.Remember,
 		RememberFor:              req.RememberFor,
 		Session: &hydra.ConsentSession{
-			AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
+			AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 			IDToken:     issued.IDToken(userClaims),
 		},
 	}

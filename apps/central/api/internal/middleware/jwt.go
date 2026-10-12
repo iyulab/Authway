@@ -52,7 +52,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// branch that decoded JWTs locally without checking the signature
 		// accepted ANY base64-encoded payload as authentication, allowing
 		// trivial token forgery for `sub` and `tenant_id` claims.
-		userID, tenantID, authTime, err := introspectToken(token, hydraClient, logger)
+		userID, tenantID, authTime, sessionID, err := introspectToken(token, hydraClient, logger)
 		if err != nil {
 			logger.Error("Token introspection failed",
 				zap.Error(err),
@@ -84,6 +84,11 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		if !authTime.IsZero() {
 			c.Locals("auth_time", authTime)
 		}
+		// The login session the token was issued in; absent for a token issued
+		// before sessions were named in tokens.
+		if sessionID != "" {
+			c.Locals("session_id", sessionID)
+		}
 
 		logger.Info("Token authenticated",
 			zap.String("user_id", userID.String()),
@@ -99,20 +104,20 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 // Hydra's introspection performs full signature/expiration/active checks for
 // both token formats, so this is the only safe validation path — local JWT
 // decode-without-verify is NEVER acceptable in this codebase.
-func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, time.Time, error) {
+func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, time.Time, string, error) {
 	introspectResp, err := hydraClient.IntrospectToken(token)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, time.Time{}, err
+		return uuid.Nil, uuid.Nil, time.Time{}, "", err
 	}
 
 	if !introspectResp.Active {
-		return uuid.Nil, uuid.Nil, time.Time{}, fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
+		return uuid.Nil, uuid.Nil, time.Time{}, "", fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
 	}
 
 	// Extract user_id from subject
 	userID, err := uuid.Parse(introspectResp.Subject)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, time.Time{}, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
+		return uuid.Nil, uuid.Nil, time.Time{}, "", fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
 	}
 
 	// Extract tenant_id from ext claims
@@ -133,7 +138,9 @@ func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger
 		authTime = time.Unix(int64(unix), 0)
 	}
 
-	return userID, tenantID, authTime, nil
+	sessionID, _ := introspectResp.Ext["sid"].(string)
+
+	return userID, tenantID, authTime, sessionID, nil
 }
 
 // (Removed: extractClaimsFromToken — it decoded JWTs without verifying their

@@ -124,8 +124,22 @@ Content-Type: application/json
 factor is on — every sign-in now asks the user for a code, whether it starts
 with a password, an emailed link or another identity provider (`next: mfa`
 in the [login flow](login-flows.md#login)) — and the answer is
-`{ "recovery_codes": ["ABCD-EFGH-IJKL", …], "message" }`: eight single-use
-recovery codes. They are shown only here; have the user save them.
+`{ "recovery_codes": ["ABCD-EFGH-IJKL", …], "message", "sessions_ended" }`:
+eight single-use recovery codes. They are shown only here; have the user save
+them.
+
+Turning the factor on **ends the user's other sessions**, and the tokens
+issued in them: they were opened on one factor, and whoever held one would
+otherwise keep the account past the second. Applications signed in on those
+sessions are told (back-channel logout). The session of the request stays —
+its user has just given a code and is looking at the recovery codes.
+`sessions_ended` says what happened:
+
+| `sessions_ended` | |
+|---|---|
+| `others` | Every other session of the user has ended; the token used here still works |
+| `all` | Every session has ended, **this one too**: the access token did not say which session it came from (it was issued before sessions were named in tokens). Show the recovery codes from this answer, then send the user to sign in again |
+| `none` | The factor is on, but the sessions could not be ended (the authorization server did not answer). The user can sign out everywhere themselves |
 
 ### Status
 

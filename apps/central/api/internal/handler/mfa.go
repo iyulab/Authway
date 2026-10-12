@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/mfa"
@@ -20,10 +21,19 @@ type MFAHandler struct {
 	userService  user.Service
 	logger       *zap.Logger
 	auditService audit.Service
+	sessions     SessionEnder
 }
 
-func NewMFAHandler(mfaService mfa.Service, userService user.Service, logger *zap.Logger, auditService audit.Service) *MFAHandler {
+// SessionEnder ends a user's sessions at the authorization server.
+type SessionEnder interface {
+	// RevokeOtherSessions ends every session of subject but keep (all of
+	// them when keep is empty) and their tokens.
+	RevokeOtherSessions(subject, keep string) error
+}
+
+func NewMFAHandler(mfaService mfa.Service, userService user.Service, logger *zap.Logger, auditService audit.Service, sessions SessionEnder) *MFAHandler {
 	return &MFAHandler{
+		sessions:     sessions,
 		mfaService:   mfaService,
 		userService:  userService,
 		logger:       logger,
@@ -121,8 +131,29 @@ func (h *MFAHandler) VerifyMFA(c *fiber.Ctx) error {
 		})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to verify MFA setup")})
 	}
-	h.logMFASuccess(c, userID, audit.ActionUserMFAEnabled, audit.SeverityWarning, nil)
-	return c.JSON(resp)
+	// A session opened before now was opened on one factor, and so were the
+	// tokens issued in it: whoever holds one would keep the account past the
+	// second factor. They end here. This session stays — its user has just
+	// given a code, and the answer carries the recovery codes they have to
+	// write down. A token that does not say which session it came from
+	// cannot be told apart, so then every session ends, this one included.
+	keep, _ := c.Locals("session_id").(string)
+	ended := "others"
+	if keep == "" {
+		ended = "all"
+	}
+	if err := h.sessions.RevokeOtherSessions(userID.String(), keep); err != nil && !errors.Is(err, hydra.ErrApplicationsNotNotified) {
+		// The factor is on either way; say what did not happen.
+		h.logger.Error("Second factor enabled, but the user's earlier sessions could not be ended",
+			zap.Error(err), zap.String("user_id", userID.String()))
+		ended = "none"
+	}
+	h.logMFASuccess(c, userID, audit.ActionUserMFAEnabled, audit.SeverityWarning, map[string]any{"sessions_ended": ended})
+	return c.JSON(fiber.Map{
+		"recovery_codes": resp.RecoveryCodes,
+		"message":        resp.Message,
+		"sessions_ended": ended,
+	})
 }
 
 // DisableMFA disables MFA for the user

@@ -23,7 +23,7 @@ func TestMFAHandlers_AcceptUUIDLocals(t *testing.T) {
 		status:            &mfa.MFAStatusResponse{Enabled: true},
 		validTOTPCode:     "000000",
 		validRecoveryCode: "AAAA-BBBB-CCCC",
-	}, nil, zap.NewNop(), nil)
+	}, nil, zap.NewNop(), nil, &fakeSessions{})
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -70,7 +70,7 @@ func TestMFAHandlers_AcceptUUIDLocals(t *testing.T) {
 // no auth middleware ran at all (Locals unset) — the fixed code path must
 // not regress this pre-existing behavior.
 func TestMFAHandlers_MissingLocals(t *testing.T) {
-	h := NewMFAHandler(&fakeMFAService{}, nil, zap.NewNop(), nil)
+	h := NewMFAHandler(&fakeMFAService{}, nil, zap.NewNop(), nil, &fakeSessions{})
 	app := fiber.New()
 	app.Get("/status", h.GetMFAStatus)
 

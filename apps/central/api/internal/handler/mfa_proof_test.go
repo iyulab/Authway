@@ -16,7 +16,7 @@ import (
 // With the factor on, turning it off or replacing the recovery codes needs a
 // code, and a new setup is refused outright.
 func TestMFAHandlers_ChangingAFactorThatIsOnNeedsProof(t *testing.T) {
-	h := NewMFAHandler(&fakeMFAService{enabled: true, validTOTPCode: "123456", validRecoveryCode: "AAAA-BBBB-CCCC"}, nil, zap.NewNop(), nil)
+	h := NewMFAHandler(&fakeMFAService{enabled: true, validTOTPCode: "123456", validRecoveryCode: "AAAA-BBBB-CCCC"}, nil, zap.NewNop(), nil, &fakeSessions{})
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error { c.Locals("user_id", uuid.New()); return c.Next() })
 	app.Post("/users/mfa/setup", h.SetupMFA)

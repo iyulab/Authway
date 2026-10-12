@@ -225,22 +225,23 @@ func TestAuthenticationStore_ReadsARecordWrittenBeforeMethodsWereKept(t *testing
 	}
 }
 
-// The access token gets auth_time; the map shared with the ID token must not,
-// because the authorization server sets that token's auth_time itself.
-func TestWithAuthTime_AddsItToACopy(t *testing.T) {
+// The access token gets auth_time and the id of its login session; the map
+// shared with the ID token must not, because the authorization server sets
+// that token's own.
+func TestWithSession_AddsToACopy(t *testing.T) {
 	store, _ := newAuthenticationStore(t)
 	at := time.Now().Truncate(time.Second)
 	store.Record("session-1", Authentication{At: at})
 	shared := map[string]any{"tenant_id": "t"}
 
-	access := withAuthTime(shared, store, "session-1")
-	if access["auth_time"] != at.Unix() || access["tenant_id"] != "t" {
+	access := withSession(shared, store, "session-1")
+	if access["auth_time"] != at.Unix() || access["tenant_id"] != "t" || access["sid"] != "session-1" {
 		t.Errorf("access token claims = %v", access)
 	}
-	if _, leaked := shared["auth_time"]; leaked {
-		t.Error("auth_time was written into the map shared with the ID token")
+	if len(shared) != 1 {
+		t.Errorf("the map shared with the ID token was written to: %v", shared)
 	}
-	if _, has := withAuthTime(shared, store, "unknown-session")["auth_time"]; has {
+	if _, has := withSession(shared, store, "unknown-session")["auth_time"]; has {
 		t.Error("a session without a known authentication time got auth_time")
 	}
 }
