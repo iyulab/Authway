@@ -32,18 +32,22 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - custom_claims: claims stored for a user by an administrator or a
 //     tenant's service credential go into the user's tokens
 //     (GET/PATCH /api/v1/users/{id}/claims)
+//   - backchannel_logout: a client that registers backchannel_logout_uri is
+//     told there when a user's session ends (OpenID Connect Back-Channel
+//     Logout 1.0)
 //   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
 //     approval (OpenID CIBA) — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
-		"multi_tenant":     true,
-		"providers":        h.social.ConfiguredProviders(),
-		"magic_link":       true,
-		"mfa":              []string{"totp"},
-		"signup_modes":     []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
-		"account_deletion": true,
-		"custom_claims":    true,
-		"token_exchange":   false,
-		"ciba":             false,
+		"multi_tenant":       true,
+		"providers":          h.social.ConfiguredProviders(),
+		"magic_link":         true,
+		"mfa":                []string{"totp"},
+		"signup_modes":       []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
+		"account_deletion":   true,
+		"custom_claims":      true,
+		"backchannel_logout": true,
+		"token_exchange":     false,
+		"ciba":               false,
 	})
 }

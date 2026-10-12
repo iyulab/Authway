@@ -56,6 +56,11 @@ func (l *eventLog) add(e string) {
 func revokingHydra(t *testing.T, log *eventLog, status int) *hydra.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The user's sessions are listed first; this one has none to end by id.
+		if r.Method == http.MethodGet && r.URL.Path == "/admin/oauth2/auth/sessions/consent" {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
 		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/admin/oauth2/auth/sessions/") {
 			log.add("revoke " + strings.TrimPrefix(r.URL.Path, "/admin/oauth2/auth/sessions/") + " of " + r.URL.Query().Get("subject"))
 			w.WriteHeader(status)

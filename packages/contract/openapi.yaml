@@ -593,6 +593,15 @@ paths:
                     empty list clears them.
                   type: array
                   items: { type: string }
+                backchannel_logout_uri:
+                  description: |
+                    Where the client's backend is told that a user's session
+                    has ended: the provider POSTs a `logout_token`
+                    (OpenID Connect Back-Channel Logout 1.0) to it. The token
+                    names the session by `sid`, the same value as in the ID
+                    tokens of that session. An empty string clears it.
+                    Offered when capabilities.backchannel_logout is true.
+                  type: string
                 grant_types: { type: array, items: { type: string } }
                 scopes: { type: array, items: { type: string } }
                 enabled_auth_providers:
@@ -675,6 +684,15 @@ paths:
                     empty list clears them.
                   type: array
                   items: { type: string }
+                backchannel_logout_uri:
+                  description: |
+                    Where the client's backend is told that a user's session
+                    has ended: the provider POSTs a `logout_token`
+                    (OpenID Connect Back-Channel Logout 1.0) to it. The token
+                    names the session by `sid`, the same value as in the ID
+                    tokens of that session. An empty string clears it.
+                    Offered when capabilities.backchannel_logout is true.
+                  type: string
                 allowed_origins: { type: array, items: { type: string } }
                 grant_types: { type: array, items: { type: string } }
                 scopes: { type: array, items: { type: string } }
@@ -1724,6 +1742,13 @@ components:
             Unix time at which the user of the session the token came from
             last signed in. Refreshing the token, or reusing the session
             without signing in again, does not change it.
+        sid:
+          type: string
+          description: |
+            In the ID token, the session the token came from. Every ID token
+            issued from one browser session carries the same `sid`, and a
+            logout token names the session that ended by it — an application
+            that keeps `sid` with its own session can end exactly that one.
         amr:
           type: array
           items: { type: string }
@@ -1959,6 +1984,9 @@ components:
           description: The resource servers this client's access tokens are for (their `aud` claim).
           type: array
           items: { type: string }
+        backchannel_logout_uri:
+          description: Where the client's backend is told that a user's session has ended. Empty when it is not told.
+          type: string
         allowed_origins: { type: [array, 'null'], items: { type: string } }
         grant_types: { type: array, items: { type: string } }
         scopes: { type: array, items: { type: string } }
@@ -1983,7 +2011,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -1998,6 +2026,13 @@ components:
           type: boolean
         custom_claims:
           description: Claims an administrator stores for a user go into the user's tokens (/api/v1/users/{id}/claims).
+          type: boolean
+        backchannel_logout:
+          description: |
+            A client that registers `backchannel_logout_uri` is told there
+            when a user's session ends, however it ends: the user signs out
+            from any application, signs out everywhere, resets their password
+            or deletes their account.
           type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }

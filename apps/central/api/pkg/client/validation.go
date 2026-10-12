@@ -231,3 +231,25 @@ func validateAudience(audience []string) *ConfigError {
 	}
 	return nil
 }
+
+// maxBackChannelLogoutURILength bounds the logout address.
+const maxBackChannelLogoutURILength = 2048
+
+// validateBackChannelLogoutURI checks the address a client's backend is told
+// about a logout at. It is called by the authorization server, not by a
+// browser, so it is an absolute http(s) URL; a fragment would never be sent.
+// Empty is valid: the client is not told.
+func validateBackChannelLogoutURI(uri string) *ConfigError {
+	if uri == "" {
+		return nil
+	}
+	u, err := url.Parse(uri)
+	if err != nil || len(uri) > maxBackChannelLogoutURILength || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
+		return &ConfigError{
+			Code:    "invalid_backchannel_logout_uri",
+			Message: "backchannel_logout_uri must be an absolute http(s) URL without a fragment",
+			Hint:    "Give the URL of an endpoint on the application's backend that accepts a POST with a logout_token, e.g. https://app.example.com/backchannel-logout.",
+		}
+	}
+	return nil
+}

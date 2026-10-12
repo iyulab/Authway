@@ -50,6 +50,11 @@ type Client struct {
 	// only tokens issued for it.
 	Audience pq.StringArray `json:"audience" gorm:"type:text[];column:audience;default:'{}'"`
 
+	// BackChannelLogoutURI is where the authorization server tells this
+	// client's backend that a user's session has ended (OpenID Connect
+	// Back-Channel Logout 1.0). Empty = the client is not told.
+	BackChannelLogoutURI string `json:"backchannel_logout_uri" gorm:"column:backchannel_logout_uri;not null;default:''"`
+
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
@@ -126,6 +131,9 @@ type PublicClient struct {
 
 	// Resource servers the client's access tokens are for.
 	Audience []string `json:"audience"`
+
+	// Where the client's backend is told that a user's session has ended.
+	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
@@ -205,6 +213,8 @@ func (c *Client) ToPublic() PublicClient {
 
 		Audience: nonNil(c.Audience),
 
+		BackChannelLogoutURI: c.BackChannelLogoutURI,
+
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
 		AllowEmailSignup:     c.AllowEmailSignup,
@@ -272,6 +282,11 @@ type CreateClientRequest struct {
 	// Audience: the resource servers the client's access tokens are for.
 	// Validated in validateAudience.
 	Audience []string `json:"audience"`
+
+	// BackChannelLogoutURI: where the client's backend receives a logout
+	// token when a user's session ends. Validated in
+	// validateBackChannelLogoutURI.
+	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
@@ -365,6 +380,9 @@ type UpdateClientRequest struct {
 
 	// Audience: empty array means "clear", nil means "not provided".
 	Audience []string `json:"audience"`
+
+	// BackChannelLogoutURI: "" means "clear", nil means "not provided".
+	BackChannelLogoutURI *string `json:"backchannel_logout_uri"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)

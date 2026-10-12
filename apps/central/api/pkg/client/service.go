@@ -59,6 +59,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
+		return nil, nil, cerr
+	}
 
 	// Validate tenant_id
 	tenantID, err := uuid.Parse(req.TenantID)
@@ -285,6 +288,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	}
 
 	client.Audience = req.Audience
+	client.BackChannelLogoutURI = req.BackChannelLogoutURI
 
 	// Logout Redirect Policy Configuration (Smart Defaults)
 	// Philosophy: Minimize boilerplate - auto-populate from redirect_uris if not explicitly set
@@ -428,6 +432,11 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, SyncStatus{}, cerr
 	}
+	if req.BackChannelLogoutURI != nil {
+		if cerr := validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
+			return nil, SyncStatus{}, cerr
+		}
+	}
 
 	// Update fields
 	// Note: For string fields, we update even if empty to allow clearing values
@@ -488,6 +497,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// Audience: nil = not provided, empty = clear
 	if req.Audience != nil {
 		client.Audience = req.Audience
+	}
+	if req.BackChannelLogoutURI != nil {
+		client.BackChannelLogoutURI = *req.BackChannelLogoutURI
 	}
 
 	// Consent flow configuration
@@ -760,19 +772,23 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 	}
 
 	return &hydra.OAuth2Client{
-		ClientID:                c.ClientID,
-		ClientSecret:            secret,
-		ClientName:              c.Name,
-		RedirectUris:            nonNilURIs(c.RedirectURIs),
-		PostLogoutRedirectUris:  postLogoutURIs,
-		Audience:                nonNil(c.Audience),
-		GrantTypes:              c.GrantTypes,
-		ResponseTypes:           []string{"code"},
-		Scope:                   strings.Join(c.Scopes, " "),
-		TokenEndpointAuthMethod: authMethod,
-		SkipConsent:             c.SkipConsent,
-		SkipLogoutConsent:       c.SkipLogoutConsent,
-		AccessTokenStrategy:     derefStrategy(c.AccessTokenStrategy),
+		ClientID:               c.ClientID,
+		ClientSecret:           secret,
+		ClientName:             c.Name,
+		RedirectUris:           nonNilURIs(c.RedirectURIs),
+		PostLogoutRedirectUris: postLogoutURIs,
+		Audience:               nonNil(c.Audience),
+		// The logout token names the session (sid), which is what an
+		// application has from the ID token to match it against.
+		BackChannelLogoutURI:             c.BackChannelLogoutURI,
+		BackChannelLogoutSessionRequired: c.BackChannelLogoutURI != "",
+		GrantTypes:                       c.GrantTypes,
+		ResponseTypes:                    []string{"code"},
+		Scope:                            strings.Join(c.Scopes, " "),
+		TokenEndpointAuthMethod:          authMethod,
+		SkipConsent:                      c.SkipConsent,
+		SkipLogoutConsent:                c.SkipLogoutConsent,
+		AccessTokenStrategy:              derefStrategy(c.AccessTokenStrategy),
 	}
 }
 

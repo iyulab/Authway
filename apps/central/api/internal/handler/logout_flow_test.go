@@ -55,6 +55,9 @@ func (f *fakeHydraLogout) server(t *testing.T) *httptest.Server {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"redirect_to":"https://example.com/logged-out"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/sessions/consent"):
+			// The subject's sessions are listed before they are ended.
+			_, _ = w.Write([]byte("[]"))
 		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/sessions/login"):
 			f.revokedLogin = r.URL.Query().Get("subject")
 			w.WriteHeader(f.revokeStatus)

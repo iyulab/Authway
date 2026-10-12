@@ -337,11 +337,43 @@ await client.logout()
 ### Telling other applications about a logout
 
 A logout ends the user's session at Authway, for every application. An
-application that keeps its **own** server-side session is not told: it stays
-signed in until its session expires or it next sends the user through
-authorization. Client registration has no logout notification address yet
-(neither front-channel nor back-channel), so keep such sessions short or
-re-check them periodically.
+application that keeps its **own** server-side session is not in the browser
+when that happens, so it registers an address and is told there
+(OpenID Connect Back-Channel Logout 1.0):
+
+```json
+{ "backchannel_logout_uri": "https://app.example.com/backchannel-logout" }
+```
+
+When a session ends, Authway POSTs `logout_token=<JWT>` (form-encoded) to the
+address of every application the user was signed in to on that session. It
+ends however the session ends: the user signs out of any one application,
+signs out everywhere (`POST /api/v1/logout`), resets their password, or
+deletes their account.
+
+**What the application does with it**
+
+1. Validate the token like an ID token: signature against the issuer's JWKS,
+   `iss` is the issuer, `aud` contains the application's `client_id`, `iat` is
+   recent.
+2. Check it is a logout token: `events` has the member
+   `http://schemas.openid.net/event/backchannel-logout`, and there is no
+   `nonce`.
+3. End the session it names. The token carries **`sid`**, the same value as
+   the `sid` claim of the ID tokens issued on that session — keep `sid` with
+   your own session when the user signs in, and end the sessions that have it.
+   There is no `sub` in the token.
+4. Answer `200`. Anything the application wants to show the user happens the
+   next time the browser calls it.
+
+The address is called from the provider, not from a browser: it must be
+reachable from where the provider runs, and it receives no cookies.
+`GET /api/v1/capabilities` says `backchannel_logout: true` where this is
+offered. Front-channel logout (an iframe per application) is not offered —
+browsers no longer send the cookies it depends on.
+
+An application without an address is not told: it stays signed in until its
+own session expires or it next sends the user through authorization.
 
 ### Security Best Practices
 

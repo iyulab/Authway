@@ -26,6 +26,15 @@
 
 ### Added
 
+- **Applications are told when a user's session ends (back-channel logout).**
+  A client registers `backchannel_logout_uri`; when a session ends — the user
+  signs out of any application, signs out everywhere, resets their password or
+  deletes their account — the provider POSTs a logout token to the address of
+  every application signed in on that session (OpenID Connect Back-Channel
+  Logout 1.0). The token names the session by `sid`, which the ID token now
+  documents as part of the contract. `GET /api/v1/capabilities` reports
+  `backchannel_logout`. See "Telling other applications about a logout" in
+  `docs/FEATURES.md`.
 - **`GET` and `PATCH /api/v1/users/{id}/claims`** — an application's backend
   reads and changes the claims stored for a user, which go into the user's
   tokens from their next authorization on (the ID token at the top level).

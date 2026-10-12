@@ -146,6 +146,7 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
+| `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `http(s)` URL, or has a fragment | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
 | `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
 
 ### Application-type matrix
@@ -189,6 +190,20 @@ authorization code in one of two ways ([RFC 8252](https://www.rfc-editor.org/rfc
 No `allowed_origins` is needed: the token request comes from the app, not from
 a page in a browser, so there is no origin to allow. Use PKCE (`S256`) on every
 request; a public client has no secret.
+
+### Applications that keep their own session: `backchannel_logout_uri`
+
+An application with a server-side session registers where it wants to be told
+that the user's session at the provider has ended:
+
+```json
+{ "backchannel_logout_uri": "https://app.example.com/backchannel-logout" }
+```
+
+The provider POSTs a logout token there whenever a session of a user signed in
+to the application ends. On update, an empty string clears it; leaving the
+field out keeps it. What the application does with the token is in
+[FEATURES.md](../FEATURES.md#telling-other-applications-about-a-logout).
 
 ### Clients whose tokens go to an API: `audience`
 

@@ -64,11 +64,16 @@ type OAuth2Client struct {
 	// Audience is the resource servers the client's access tokens may be
 	// for. Not omitempty: an update replaces the whole client, and an empty
 	// list has to reach Hydra to clear one set earlier.
-	Audience                []string `json:"audience"`
-	GrantTypes              []string `json:"grant_types"`
-	ResponseTypes           []string `json:"response_types"`
-	Scope                   string   `json:"scope"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	Audience []string `json:"audience"`
+	// BackChannelLogoutURI is where the client is told that a session ended
+	// (OpenID Connect Back-Channel Logout). Omitted when empty, which on an
+	// update clears it.
+	BackChannelLogoutURI             string   `json:"backchannel_logout_uri,omitempty"`
+	BackChannelLogoutSessionRequired bool     `json:"backchannel_logout_session_required,omitempty"`
+	GrantTypes                       []string `json:"grant_types"`
+	ResponseTypes                    []string `json:"response_types"`
+	Scope                            string   `json:"scope"`
+	TokenEndpointAuthMethod          string   `json:"token_endpoint_auth_method"`
 
 	// Consent flow configuration (Hydra admin-API-only fields).
 	// Deliberately NOT omitempty: the Authway DB is the source of truth, so a
@@ -528,58 +533,97 @@ func (c *Client) RejectConsentRequest(challenge string, error_code, error_descri
 }
 
 // Session Management
-// RevokeUserSessions revokes all OAuth2 sessions for a specific user.
+// ErrApplicationsNotNotified reports that a user's sessions were ended but the
+// applications signed in on them could not all be told (back-channel logout).
+// The sessions are gone either way; callers treat it as a warning.
+var ErrApplicationsNotNotified = errors.New("sessions ended, but not every application could be notified")
+
+// RevokeUserSessions ends every session of a user and tells the applications
+// that were signed in on them.
 //
-// Subject is URL-escaped so non-UUID identifiers (emails, names, anything
-// containing spaces or `&`) are transmitted intact instead of producing a
-// 400 Bad Request from Hydra. Pre-fix this silently failed for any subject
-// containing reserved URL characters.
+// Ending the sessions of a subject in one call is silent: the authorization
+// server sends a logout token to an application's backchannel_logout_uri only
+// when a session is ended by its id (measured against v26.2.0). So the
+// subject's sessions are listed and ended one by one first; the by-subject
+// calls that follow remove whatever is left and the remembered consents.
+//
+// The subject is URL-escaped, so an identifier containing reserved characters
+// is transmitted intact.
 func (c *Client) RevokeUserSessions(subject string) error {
 	escapedSubject := url.QueryEscape(subject)
 
-	// Revoke login sessions
-	req, err := http.NewRequest(
-		http.MethodDelete,
-		fmt.Sprintf("%s/admin/oauth2/auth/sessions/login?subject=%s", c.AdminURL, escapedSubject),
-		nil,
-	)
+	var notifyErr error
+	sessionIDs, err := c.loginSessionIDs(escapedSubject)
 	if err != nil {
-		return fmt.Errorf("failed to create revoke login sessions request: %w", err)
+		notifyErr = err
+	}
+	for _, id := range sessionIDs {
+		if err := c.deleteSessions("login?sid=" + url.QueryEscape(id)); err != nil {
+			notifyErr = err
+		}
 	}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
+	if err := c.deleteSessions("login?subject=" + escapedSubject); err != nil {
 		return fmt.Errorf("failed to revoke login sessions: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to revoke login sessions: status=%d body=%s", resp.StatusCode, string(body))
-	}
-
-	// Revoke consent sessions
-	req, err = http.NewRequest(
-		http.MethodDelete,
-		fmt.Sprintf("%s/admin/oauth2/auth/sessions/consent?subject=%s&all=true", c.AdminURL, escapedSubject),
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create revoke consent sessions request: %w", err)
-	}
-
-	resp, err = c.client.Do(req)
-	if err != nil {
+	if err := c.deleteSessions("consent?subject=" + escapedSubject + "&all=true"); err != nil {
 		return fmt.Errorf("failed to revoke consent sessions: %w", err)
 	}
-	defer resp.Body.Close()
+	if notifyErr != nil {
+		return fmt.Errorf("%w: %v", ErrApplicationsNotNotified, notifyErr)
+	}
+	return nil
+}
 
+// deleteSessions calls DELETE /admin/oauth2/auth/sessions/<pathAndQuery>.
+// Nothing to delete is not a failure.
+func (c *Client) deleteSessions(pathAndQuery string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.AdminURL+"/admin/oauth2/auth/sessions/"+pathAndQuery, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to revoke consent sessions: status=%d body=%s", resp.StatusCode, string(body))
+		return fmt.Errorf("status=%d body=%s", resp.StatusCode, string(body))
 	}
-
 	return nil
+}
+
+// loginSessionIDs returns the ids of the login sessions the subject has used
+// with an application. The authorization server offers no list of login
+// sessions; the consent sessions name the login session each was granted in.
+func (c *Client) loginSessionIDs(escapedSubject string) ([]string, error) {
+	resp, err := c.client.Get(c.AdminURL + "/admin/oauth2/auth/sessions/consent?page_size=500&subject=" + escapedSubject)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to list sessions: status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var consents []struct {
+		ConsentRequest struct {
+			LoginSessionID string `json:"login_session_id"`
+		} `json:"consent_request"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&consents); err != nil {
+		return nil, fmt.Errorf("failed to read the session list: %w", err)
+	}
+	seen := map[string]bool{}
+	var ids []string
+	for _, consent := range consents {
+		if id := consent.ConsentRequest.LoginSessionID; id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
 // Token Introspection

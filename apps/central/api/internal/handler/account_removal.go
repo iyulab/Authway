@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -27,7 +28,9 @@ const recentAuthentication = 10 * time.Minute
 // could not be revoked by anyone looking for that account.
 func removeAccount(hc *hydra.Client, users user.Service, id uuid.UUID) error {
 	if hc != nil {
-		if err := hc.RevokeUserSessions(id.String()); err != nil {
+		// Sessions that ended without every application being told are still
+		// ended; the removal goes on.
+		if err := hc.RevokeUserSessions(id.String()); err != nil && !errors.Is(err, hydra.ErrApplicationsNotNotified) {
 			return fmt.Errorf("revoke the user's sessions: %w", err)
 		}
 	}

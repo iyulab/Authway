@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -628,7 +629,12 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	// Direct session revocation via Hydra Admin API — revokes every OAuth2
 	// session for the authenticated subject only.
-	if err := h.hydraClient.RevokeUserSessions(subject); err != nil {
+	err := h.hydraClient.RevokeUserSessions(subject)
+	if errors.Is(err, hydra.ErrApplicationsNotNotified) {
+		h.logger.Warn("Sessions revoked, but not every application was notified", zap.String("subject", subject), zap.Error(err))
+		err = nil
+	}
+	if err != nil {
 		h.logger.Error("Failed to revoke user sessions",
 			zap.String("subject", subject),
 			zap.Error(err))

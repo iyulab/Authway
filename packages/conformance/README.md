@@ -37,6 +37,7 @@ pnpm --filter @authway/conformance test
 | `CONFORMANCE_ADMIN_KEY` | Admin API key used to provision test clients and invitations |
 | `CONFORMANCE_MAIL_API` | MailHog-compatible HTTP API (`/api/v2/search`) |
 | `CONFORMANCE_TENANT_ID` | Optional. Tenant to provision into; defaults to the `default` tenant |
+| `CONFORMANCE_CALLBACK_HOST` | Optional. The name under which the provider reaches the machine running the suite, for the scenarios in which the provider calls the suite (back-channel logout). Defaults to `localhost`; with the authorization server in a container on Docker Desktop, `host.docker.internal` |
 
 The provider must send mail to the capture service, and the links in that mail
 must point at its login UI (`/invitation/accept?token=…`). With the repository's

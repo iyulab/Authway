@@ -17,6 +17,12 @@ export interface ConformanceConfig {
   mailApi: string
   /** Tenant to provision into; resolved from the admin API when omitted. */
   tenantId?: string
+  /**
+   * The name under which the provider reaches this machine, for scenarios in
+   * which the provider calls the suite (back-channel logout). `localhost`
+   * unless the provider runs somewhere that calls this machine differently.
+   */
+  callbackHost: string
 }
 
 const REQUIRED = {
@@ -42,5 +48,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConformanceCon
     adminKey: env[REQUIRED.adminKey]!,
     mailApi: trim(env[REQUIRED.mailApi]!),
     tenantId: env.CONFORMANCE_TENANT_ID || undefined,
+    callbackHost: env.CONFORMANCE_CALLBACK_HOST || 'localhost',
   }
 }
