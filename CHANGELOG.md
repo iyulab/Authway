@@ -36,6 +36,16 @@
   move between deployments, that `tenant_id` is always present, and that the
   name is one `name` claim.
 
+- **The contract has a resource server profile (`JwtAccessToken`).** An API
+  that receives access tokens verifies them with a standard JOSE library, the
+  issuer and the keys discovery publishes, and reads `sub`, `client_id`,
+  `scope` and Authway's claims at the top level — the same way for every
+  provider. A client gets such tokens by registering with
+  `access_token_strategy: jwt`. Conformance verifies an access token this way,
+  with nothing that knows the authorization server, and that a changed token
+  and another issuer's are refused. `docs/BACKEND_INTEGRATION.md` no longer
+  suggests token introspection, which no resource server can reach.
+
 ### Removed
 
 - **The user-token claims endpoints**: `POST /api/v1/claims/update`,

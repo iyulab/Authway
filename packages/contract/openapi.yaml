@@ -653,7 +653,10 @@ paths:
                 skip_consent: { type: boolean }
                 skip_logout_consent: { type: boolean }
                 access_token_strategy:
-                  description: jwt or opaque pins this client; an empty string returns it to the deployment default.
+                  description: |
+                    jwt or opaque pins this client; an empty string returns it
+                    to the deployment default. With jwt the client's access
+                    tokens follow the resource server profile (JwtAccessToken).
                   type: string
                   enum: ['', jwt, opaque]
       responses:
@@ -1706,6 +1709,44 @@ components:
             does not know how the session was authenticated. The provider
             issues no `acr`.
 
+    JwtAccessToken:
+      description: |
+        **The resource server profile.** How an API that receives access
+        tokens verifies them and reads who they are about, knowing only the
+        provider's issuer — the same way for every provider.
+
+        A client registered with `access_token_strategy: jwt` receives access
+        tokens that are JWTs, signed and not encrypted. A resource server
+        verifies one with a standard JOSE library: the keys at the `jwks_uri`
+        of the issuer's OpenID Connect discovery document, and the `iss`
+        claim equal to the issuer. It needs no call to the provider and no
+        knowledge of which authorization server issued the token.
+
+        Such a token is valid until it expires: revoking the session or the
+        account does not reach a token a resource server verifies offline.
+        That is the choice the client makes by asking for JWTs; keep their
+        lifetime short where that matters.
+
+        Access tokens of other clients are opaque to everyone but the
+        provider. Whether and how a resource server can ask the provider about
+        one (token introspection) is not part of this contract.
+      allOf:
+        - $ref: '#/components/schemas/TokenClaims'
+        - type: object
+          required: [iss, sub, exp, iat, client_id, scope]
+          properties:
+            iss: { type: string, description: The issuer. }
+            exp: { type: integer }
+            iat: { type: integer }
+            client_id: { type: string, description: The client the token was issued to. }
+            scope:
+              type: string
+              description: The granted scopes, space-separated (RFC 9068).
+            aud:
+              description: The resource servers the token is meant for.
+              type: array
+              items: { type: string }
+
     StoredClaims:
       type: object
       required: [claims]
@@ -1888,7 +1929,9 @@ components:
         skip_consent: { type: boolean }
         skip_logout_consent: { type: boolean }
         access_token_strategy:
-          description: null when the client follows the deployment default.
+          description: |
+            null when the client follows the deployment default. jwt: the
+            resource server profile (JwtAccessToken).
           type: ['null', string]
           enum: [null, jwt, opaque]
 

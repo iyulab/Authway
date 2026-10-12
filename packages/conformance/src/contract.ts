@@ -72,3 +72,21 @@ export async function conform(method: string, path: string, res: Response): Prom
     throw new Error(`${method} ${path} ${status} breaks the contract: ${ajv.errorsText(validate.errors)}\n${text.slice(0, 500)}`)
   }
 }
+
+/**
+ * Validates a value against a named schema of the contract — for what the
+ * contract describes that is not the body of an answer, such as the claims of
+ * a token.
+ */
+export function conformTo(schema: string, value: unknown): void {
+  const ref = `contract#/components/schemas/${segment(schema)}`
+  let validate = compiled.get(ref)
+  if (!validate) {
+    validate = ajv.compile({ $ref: ref })
+    compiled.set(ref, validate)
+  }
+  if (!validate(value)) {
+    throw new Error(`The value breaks the contract's ${schema}: ${ajv.errorsText(validate.errors)}
+${JSON.stringify(value).slice(0, 500)}`)
+  }
+}

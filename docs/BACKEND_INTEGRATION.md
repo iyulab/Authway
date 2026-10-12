@@ -65,9 +65,19 @@ Existing clients can be switched with `PUT /api/v1/clients/{id}`
 the deployment-wide default.
 
 **The trade-off is real**: a JWT is validated offline, so it stays valid until it
-expires — revoking it before then is not possible. Opt in for service-to-service
-APIs that need offline validation; leave interactive clients on opaque and check
-tokens via the token introspection endpoint instead.
+expires — signing the user out or deleting the account does not reach a token
+your API has already been handed. Opt in for the clients whose tokens an API of
+yours receives, and keep access tokens short-lived where that matters.
+
+**An API cannot check an opaque token.** Authway has no token introspection
+endpoint a resource server can call: the authorization server's own is on its
+admin interface, which is not reachable from outside the deployment. A client
+whose tokens go to your API needs `access_token_strategy: "jwt"`.
+
+What a JWT access token contains, and how to verify one knowing only the
+issuer, is part of the contract — the *resource server profile*
+([`JwtAccessToken`](../packages/contract/openapi.yaml)) — and is the same from
+every Authway provider.
 
 Verify which format you got:
 
@@ -78,8 +88,9 @@ echo "$ACCESS_TOKEN" | awk -F. '{print NF" segments"}'
 
 ### Where the claims are
 
-Registered claims (`sub`, `iss`, `aud`, `exp`, `iat`, `scp`, `client_id`) are
-top-level, and so are **Authway's own claims**:
+Registered claims (`sub`, `iss`, `aud`, `exp`, `iat`, `client_id`, and the
+granted scopes as the space-separated string `scope`) are top-level, and so
+are **Authway's own claims**:
 
 | Claim | Meaning |
 |-------|---------|
