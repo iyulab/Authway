@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-13
+
+> Minor, with one breaking removal. The second factor is closed off at its
+> edges: an authenticator code is accepted once, turning the factor on ends
+> the sessions and tokens opened before it (the session that turned it on is
+> kept), and `POST /api/v1/users/mfa/recovery` — a way to guess recovery
+> codes with a user's token — is removed.
+
 ### Security
 
 - **An authenticator code is accepted once.** A code stays current for its
