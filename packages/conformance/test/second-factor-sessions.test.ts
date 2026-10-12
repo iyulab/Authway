@@ -24,11 +24,8 @@ describe('turning the second factor on ends the sessions opened before it', () =
     if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
     return outcome
   }
-  /** What the login screen is told to do for a new authorization request in `browser`. */
-  const nextStepIn = async (signedIn: SignedIn): Promise<string> => {
-    const attempt = await provider.startLogin(app, ['openid', 'profile', 'email'], signedIn.browser)
-    return ((await (await fetch(provider.loginFlowUrl(attempt.flow))).json()) as { next: string }).next
-  }
+  /** Whether a new authorization request in the browser still goes on without the sign-in form. */
+  const signedInAt = (signedIn: SignedIn): Promise<boolean> => provider.isSignedIn(signedIn.browser, app)
 
   beforeAll(async () => {
     app = await provider.createPublicClient()
@@ -46,7 +43,7 @@ describe('turning the second factor on ends the sessions opened before it', () =
   it('keeps the session that turned it on and ends the others, tokens included', async () => {
     // Before: both browsers are signed in.
     expect((await provider.userinfo(elsewhere.tokens.access_token)).status).toBe(200)
-    expect(await nextStepIn(elsewhere)).toBe('redirect')
+    expect(await signedInAt(elsewhere)).toBe(true)
 
     const mfa = async (path: string, body?: unknown): Promise<Response> => {
       const res = await fetch(`${config.api}/api/v1/users/mfa${path}`, {
@@ -68,11 +65,11 @@ describe('turning the second factor on ends the sessions opened before it', () =
 
     // The other browser: its token is dead and it is no longer signed in.
     expect((await provider.userinfo(elsewhere.tokens.access_token)).status).toBe(401)
-    expect(await nextStepIn(elsewhere)).toBe('form')
+    expect(await signedInAt(elsewhere)).toBe(false)
 
     // This browser: the token that turned the factor on still works — the
     // recovery codes have just been shown on it — and the session is kept.
     expect((await provider.userinfo(here.tokens.access_token)).status).toBe(200)
-    expect(await nextStepIn(here)).toBe('redirect')
+    expect(await signedInAt(here)).toBe(true)
   })
 })

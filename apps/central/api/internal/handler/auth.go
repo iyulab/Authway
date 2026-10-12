@@ -354,46 +354,13 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	userClaims := h.storedClaims(c, user)
-	issued := issuedFor(user)
-
-	// The user is not asked when their earlier answer is remembered, or when
-	// the client is registered to skip the question (its own application of
-	// the tenant). Nothing else decides this: not what is stored about the
-	// user, and not that they arrived on an existing session — a session says
-	// who the user is, not what they allowed this client.
-	//
-	// The authorization server reports the client's registration only as
-	// client.skip_consent; `skip` is true for a remembered consent alone.
-	skipsQuestion := consentReq.Client != nil && consentReq.Client.SkipConsent
-
-	if consentReq.Skip || skipsQuestion {
-		h.logger.Info("Consent continues without a question",
-			zap.String("client_id", consentReq.Client.ClientID),
-			zap.Bool("remembered", consentReq.Skip),
-			zap.Bool("client_skips_consent", skipsQuestion),
-			zap.String("challenge", challenge[:min(50, len(challenge))]+"..."))
-
-		acceptRequest := &hydra.AcceptConsentRequest{
-			GrantScope:               consentReq.RequestedScope,
-			GrantAccessTokenAudience: grantedAudience(consentReq),
-			Remember:                 true,
-			RememberFor:              int(autoConsentRememberedFor.Seconds()),
-			Session: &hydra.ConsentSession{
-				AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
-				IDToken:     issued.IDToken(userClaims),
-			},
-		}
-
-		redirectTo, err := h.hydraClient.AcceptConsentRequest(challenge, acceptRequest)
-		if err != nil {
-			h.logger.Error("Failed to auto-accept consent", zap.Error(err))
-			return respondFlowLookupError(c, err)
-		}
-
+	if redirectTo, settled, err := h.consentWithoutQuestion(c, challenge, consentReq, user); err != nil {
+		h.logger.Error("Failed to auto-accept consent", zap.Error(err))
+		return respondFlowLookupError(c, err)
+	} else if settled {
 		return c.JSON(fiber.Map{
 			"next":        nextRedirect,
-			"redirect_to": redirectTo.RedirectTo,
+			"redirect_to": redirectTo,
 		})
 	}
 
@@ -411,6 +378,70 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 			"name":  user.Name,
 		},
 	})
+}
+
+// ConsentWithoutScreen settles a consent flow at the moment the authorization
+// server sends the browser over, when there is no question to put to the user
+// (FlowSettler). Anything unexpected leaves it to the screen, which reports it.
+func (h *AuthHandler) ConsentWithoutScreen(c *fiber.Ctx, flow string) (string, bool) {
+	consentReq, err := h.hydraClient.GetConsentRequest(flow)
+	if err != nil {
+		return "", false
+	}
+	userID, err := uuid.Parse(consentReq.Subject)
+	if err != nil {
+		return "", false
+	}
+	user, err := h.userService.GetByID(userID)
+	if err != nil {
+		return "", false
+	}
+	redirectTo, settled, err := h.consentWithoutQuestion(c, flow, consentReq, user)
+	if err != nil {
+		h.logger.Error("Failed to auto-accept consent", zap.Error(err))
+		return "", false
+	}
+	return redirectTo, settled
+}
+
+// consentWithoutQuestion accepts a consent flow whose user is not to be
+// asked, and reports settled=false when they are.
+//
+// The user is not asked when their earlier answer is remembered, or when the
+// client is registered to skip the question (its own application of the
+// tenant). Nothing else decides this: not what is stored about the user, and
+// not that they arrived on an existing session — a session says who the user
+// is, not what they allowed this client.
+//
+// The authorization server reports the client's registration only as
+// client.skip_consent; `skip` is true for a remembered consent alone.
+func (h *AuthHandler) consentWithoutQuestion(c *fiber.Ctx, challenge string, consentReq *hydra.ConsentRequest, user *user.User) (string, bool, error) {
+	skipsQuestion := consentReq.Client != nil && consentReq.Client.SkipConsent
+	if !consentReq.Skip && !skipsQuestion {
+		return "", false, nil
+	}
+	h.logger.Info("Consent continues without a question",
+		zap.String("client_id", consentReq.Client.ClientID),
+		zap.Bool("remembered", consentReq.Skip),
+		zap.Bool("client_skips_consent", skipsQuestion),
+		zap.String("challenge", challenge[:min(50, len(challenge))]+"..."))
+
+	userClaims := h.storedClaims(c, user)
+	issued := issuedFor(user)
+	resp, err := h.hydraClient.AcceptConsentRequest(challenge, &hydra.AcceptConsentRequest{
+		GrantScope:               consentReq.RequestedScope,
+		GrantAccessTokenAudience: grantedAudience(consentReq),
+		Remember:                 true,
+		RememberFor:              int(autoConsentRememberedFor.Seconds()),
+		Session: &hydra.ConsentSession{
+			AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
+			IDToken:     issued.IDToken(userClaims),
+		},
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return resp.RedirectTo, true, nil
 }
 
 // AcceptConsentRequest is the body of POST /api/v1/consent-flows/:flow/accept.

@@ -38,25 +38,13 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		})
 	}
 
-	if loginReq.Skip && loginReq.Subject != "" {
-		if redirect, handled, err := h.skipLoginForm(c.Context(), flow, loginReq, requestedClient.TenantID); err != nil {
-			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-				"error": "The authorization server is unavailable. Try again shortly.",
-				"code":  "authorization_server_unavailable",
-			})
-		} else if handled {
-			return c.JSON(redirect)
-		}
-		if asksForNoPrompt(loginReq.RequestURL) {
-			// The application asked for an answer without the user being
-			// shown anything, and the browser's session is not one this
-			// client can use. The answer is "sign-in required", not a form.
-			resp, err := h.hydraClient.RejectLoginRequest(flow, "login_required", "The browser has no session for this application.")
-			if err != nil {
-				return respondFlowLookupError(c, err)
-			}
-			return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo})
-		}
+	if step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID); err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"error": "The authorization server is unavailable. Try again shortly.",
+			"code":  "authorization_server_unavailable",
+		})
+	} else if settled {
+		return c.JSON(step)
 	}
 
 	return c.JSON(fiber.Map{
@@ -71,6 +59,51 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 			"allow_email_signup": requestedClient.AllowEmailSignup,
 		},
 	})
+}
+
+// LoginWithoutScreen settles a login flow at the moment the authorization
+// server sends the browser over, when the browser's session already answers
+// it (FlowSettler). The screen would be told the same thing if it were opened
+// — it is not opened, so a reused session costs no page load.
+func (h *AuthHandler) LoginWithoutScreen(c *fiber.Ctx, flow string) (string, bool) {
+	loginReq, err := h.hydraClient.GetLoginRequest(flow)
+	if err != nil || loginReq.Client == nil {
+		return "", false
+	}
+	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
+	if err != nil {
+		return "", false
+	}
+	step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID)
+	if err != nil || !settled {
+		return "", false
+	}
+	redirectTo, _ := step["redirect_to"].(string)
+	return redirectTo, redirectTo != ""
+}
+
+// loginWithoutForm settles a login flow that needs no form: the browser has a
+// session this client can use, or the application asked for an answer without
+// a prompt and there is no such session. It reports settled=false when the
+// user has to sign in.
+func (h *AuthHandler) loginWithoutForm(ctx context.Context, flow string, loginReq *hydra.LoginRequest, clientTenantID uuid.UUID) (fiber.Map, bool, error) {
+	if !loginReq.Skip || loginReq.Subject == "" {
+		return nil, false, nil
+	}
+	if step, settled, err := h.skipLoginForm(ctx, flow, loginReq, clientTenantID); err != nil || settled {
+		return step, settled, err
+	}
+	if !asksForNoPrompt(loginReq.RequestURL) {
+		return nil, false, nil
+	}
+	// The application asked for an answer without the user being shown
+	// anything, and the browser's session is not one this client can use.
+	// The answer is "sign-in required", not a form.
+	resp, err := h.hydraClient.RejectLoginRequest(flow, "login_required", "The browser has no session for this application.")
+	if err != nil {
+		return nil, false, err
+	}
+	return fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo}, true, nil
 }
 
 // skipLoginForm handles a flow Hydra marks as skippable (the browser already

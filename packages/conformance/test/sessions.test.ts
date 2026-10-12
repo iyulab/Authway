@@ -83,16 +83,32 @@ describe('the session a sign-in opens', () => {
     // allowed anything yet, and it is not one that skips the question.
     const other = await provider.createPublicClient()
     try {
-      const attempt = await provider.startLogin(other, ['openid', 'profile', 'email'], first.browser)
-      const step = (await (await first.browser.fetch(provider.loginFlowUrl(attempt.flow))).json()) as { next: string; redirect_to: string }
-      expect(step.next).toBe('redirect')
-      const stop = await provider.afterLogin(first.browser, step.redirect_to)
+      const reached = await provider.pastTheLoginStep(first.browser, other)
+      expect(reached, 'the user was asked to sign in again').toBeDefined()
+      const stop = reached!.stop
       expect(stop.searchParams.has('code'), `the application was answered without the user being asked: ${stop.origin}${stop.pathname}`).toBe(false)
       const consent = (await (await first.browser.fetch(provider.flowUrl('consent-flows', provider.consentFlowFrom(stop)))).json()) as { next: string }
       expect(consent.next).toBe('form')
     } finally {
       await provider.deleteClient(other)
     }
+  })
+
+  it('is reused without the login UI being opened: nothing is asked, so no screen is loaded', async () => {
+    const { auth_ui: loginUi } = (await (await fetch(`${provider.config.api}/.well-known/authway-config`)).json()) as { auth_ui: string }
+    const first = await signIn(ownApp)
+    const screensOpened = (from: number) => first.browser.sentTo.slice(from).filter((u) => u.origin === new URL(loginUi).origin)
+
+    // A request without a prompt, and an ordinary one: both end at the
+    // application without a page of the login UI in between.
+    let mark = first.browser.sentTo.length
+    const silent = await provider.silentAuthorize(first.browser, ownApp)
+    expect(silent.kind, JSON.stringify(silent)).toBe('code')
+    expect(screensOpened(mark).map(String)).toEqual([])
+
+    mark = first.browser.sentTo.length
+    await provider.reauthorize(first.browser, ownApp)
+    expect(screensOpened(mark).map(String)).toEqual([])
   })
 
   it('ends with a logout: the next request without a prompt is told sign-in is required', async () => {

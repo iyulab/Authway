@@ -20,6 +20,13 @@ of the login UI with an opaque **flow id**:
 | `GET /consent?consent_challenge=…` | `<login UI>/consent?flow=<id>` |
 | `GET /logout?logout_challenge=…` | `<login UI>/logout?flow=<id>` |
 
+A flow that needs nothing from the user never opens a screen: when the browser
+already has a session the client can use, or there is no consent to ask for,
+the API settles the flow where the authorization server sent the browser and
+sends it straight back. A screen is opened only to show something — and it
+still asks first (`GET …-flows/{flow}`), because the answer may have become
+"go on" by the time it loads.
+
 A screen treats the flow id as opaque: it only ever passes it back, URL-encoded
 in a path segment. Point the authorization server's login, consent and logout
 URLs at the API (`URLS_LOGIN=<API>/login`, `URLS_CONSENT=<API>/consent`,
@@ -171,8 +178,8 @@ authorization request.
 ### Asking without a prompt
 
 An authorization request with `prompt=none` is answered without showing the
-user anything — with a code, or with an error at the application's redirect
-URI:
+user anything, and without loading a page of the login UI — with a code, or
+with an error at the application's redirect URI:
 
 | The browser has | Answer |
 |---|---|

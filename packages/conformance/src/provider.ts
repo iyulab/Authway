@@ -228,9 +228,9 @@ export class Provider {
   }
 
   /**
-   * Follows the authorization server's redirects after an accepted login to
-   * where they stop: the consent screen (the address carries a flow id), or
-   * the application, when no question is put to the user.
+   * Follows the authorization server's redirects to where they stop: a screen
+   * of the login UI (the address carries a flow id), or the application, when
+   * nothing is asked of the user.
    */
   async afterLogin(browser: Browser, redirectTo: string): Promise<URL> {
     return this.followUntil(browser, redirectTo, (u) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error'))
@@ -470,10 +470,14 @@ export class Provider {
 
   /** From the authorization server's answer to an accepted login to tokens: consent if asked, then the code exchange. */
   private async finishAuthorization(attempt: LoginAttempt, afterLogin: string, status: number): Promise<LoginOutcome> {
-    const { browser, client, scopes, pkce } = attempt
-
     // After login the authorization server either answers the client or opens the consent screen.
-    let next = await this.followUntil(browser, afterLogin, (u) => u.searchParams.has('flow') || u.searchParams.has('code') || u.searchParams.has('error'))
+    return this.fromConsentOn(attempt, await this.afterLogin(attempt.browser, afterLogin), status)
+  }
+
+  /** Goes on from where the browser stands once the login step is behind it: the consent screen, or the application. */
+  private async fromConsentOn(attempt: LoginAttempt, stop: URL, status: number): Promise<LoginOutcome> {
+    const { browser, client, scopes, pkce } = attempt
+    let next = stop
     if (next.searchParams.has('error')) {
       // The provider ended the whole authorization request instead of answering the login screen.
       return { kind: 'rejected', status, body: next.toString() }
@@ -511,21 +515,47 @@ export class Provider {
   }
 
   /**
-   * A second authorization in a browser that already has a session. The login
-   * screen asks the provider what to show, as it does for every flow, and is
-   * told to continue without a form (single sign-on).
+   * A second authorization in a browser that already has a session (single
+   * sign-on): the user is not asked to sign in. A provider may settle the
+   * login step before any screen opens; if it opens the login screen, the
+   * screen asks what to show, as it does for every flow, and is told to
+   * continue without a form.
    */
   async reauthorize(browser: Browser, client: TestClient, scopes = ['openid', 'profile', 'email']): Promise<Tokens> {
-    const attempt = await this.startLogin(client, scopes, browser)
-    const res = await browser.fetch(this.loginFlowUrl(attempt.flow))
-    await conform('GET', '/api/v1/login-flows/{flow}', res.clone())
-    const step = (await res.json()) as { next?: string; redirect_to?: string }
-    if (step.next !== 'redirect' || !step.redirect_to) {
-      throw new Error(`The session was not reused — the login screen was told: ${JSON.stringify(step)}`)
-    }
-    const outcome = await this.finishAuthorization(attempt, step.redirect_to, res.status)
+    const reached = await this.pastTheLoginStep(browser, client, scopes)
+    if (!reached) throw new Error('The session was not reused — the user was asked to sign in')
+    const outcome = await this.fromConsentOn(reached.attempt, reached.stop, 200)
     if (outcome.kind !== 'code') throw new Error(`Reusing the session failed: ${JSON.stringify(outcome)}`)
     return outcome.tokens
+  }
+
+  /** Whether the provider still knows the browser: an authorization request there goes on without the sign-in form. */
+  async isSignedIn(browser: Browser, client: TestClient): Promise<boolean> {
+    return (await this.pastTheLoginStep(browser, client, ['openid'])) !== undefined
+  }
+
+  /**
+   * Starts an authorization request in `browser` and takes it past the login
+   * step if the provider lets it through without a form: returns where the
+   * browser then stands — the consent screen or the application. Undefined
+   * when the user would have to sign in.
+   */
+  async pastTheLoginStep(
+    browser: Browser,
+    client: TestClient,
+    scopes = ['openid', 'profile', 'email'],
+  ): Promise<{ attempt: LoginAttempt; stop: URL } | undefined> {
+    const pkce = createPkce()
+    const attempt: LoginAttempt = { client, scopes, browser, pkce, flow: '' }
+    const stop = await this.afterLogin(browser, await this.authorizeUrl(client, scopes, pkce))
+    if (!stop.searchParams.has('flow') || stop.pathname.endsWith('/consent')) return { attempt, stop }
+    // The login screen was opened: it asks what to show.
+    const flow = this.loginFlowFrom(stop)
+    const res = await browser.fetch(this.loginFlowUrl(flow))
+    await conform('GET', '/api/v1/login-flows/{flow}', res.clone())
+    const step = (await res.json()) as { next?: string; redirect_to?: string }
+    if (step.next !== 'redirect' || !step.redirect_to) return undefined
+    return { attempt: { ...attempt, flow }, stop: await this.afterLogin(browser, step.redirect_to) }
   }
 
   /**

@@ -8,6 +8,9 @@
 export class Browser {
   private readonly jar = new Map<string, Map<string, string>>()
 
+  /** Every address this user agent has been redirected to, in order — followed or not. */
+  readonly sentTo: URL[] = []
+
   async fetch(url: string, init: RequestInit = {}): Promise<Response> {
     const target = new URL(url)
     const headers = new Headers(init.headers)
@@ -26,7 +29,9 @@ export class Browser {
       const body = await res.text()
       throw new Error(`Expected a redirect from ${url}, got ${res.status}: ${body.slice(0, 300)}`)
     }
-    return new URL(location, url)
+    const to = new URL(location, url)
+    this.sentTo.push(to)
+    return to
   }
 
   private cookieHeader(url: URL): string {

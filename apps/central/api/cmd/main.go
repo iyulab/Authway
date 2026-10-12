@@ -318,7 +318,7 @@ func main() {
 
 	// The authorization server sends the browser here to start a login; it is
 	// handed on to the login UI with an opaque flow id.
-	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL)
+	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL, authHandler)
 	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
 	app.Get("/login", flowEntryHandler.Login)
 	app.Get("/consent", flowEntryHandler.Consent)

@@ -289,3 +289,58 @@ func TestConsentFlow_RememberedAnswerIsKeptUntilRevoked(t *testing.T) {
 		}
 	}
 }
+
+// The same decisions, taken where the authorization server sends the browser
+// first: a flow that is settled there never opens a screen.
+func TestFlowSettler_SettlesWhatNeedsNoScreen(t *testing.T) {
+	tenantID := uuid.New()
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com"}
+	own := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
+	foreign := &client.Client{ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
+	session := func(requestURL string) hydra.LoginRequest {
+		return hydra.LoginRequest{
+			Challenge: "flow-1", Skip: true, Subject: u.ID.String(), RequestURL: requestURL,
+			Client: &hydra.OAuth2Client{ClientID: testClientID},
+		}
+	}
+	silent := "https://issuer.example/oauth2/auth?prompt=none"
+
+	settle := func(h *sessionHydra, c *client.Client, method string) (string, bool) {
+		handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
+		entry := NewFlowEntryHandler(testFrontendURL, handler)
+		app := fiber.New()
+		app.Get("/login", entry.Login)
+		app.Get("/consent", entry.Consent)
+		resp := get(t, app, method, "")
+		if resp.StatusCode != fiber.StatusFound {
+			t.Fatalf("%s: status %d", method, resp.StatusCode)
+		}
+		location := resp.Header.Get("Location")
+		return location, !strings.HasPrefix(location, testFrontendURL)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		hydra   *sessionHydra
+		client  *client.Client
+		path    string
+		settled bool
+		want    string
+	}{
+		{"a session the client can use", &sessionHydra{login: session("")}, own, "/login?login_challenge=flow-1", true, "https://issuer.example/after-login"},
+		{"no session: the user signs in", &sessionHydra{login: hydra.LoginRequest{Challenge: "flow-1", Client: &hydra.OAuth2Client{ClientID: testClientID}}}, own, "/login?login_challenge=flow-1", false, testFrontendURL + "/login?flow=flow-1"},
+		{"another tenant's session: the user signs in", &sessionHydra{login: session("")}, foreign, "/login?login_challenge=flow-1", false, testFrontendURL + "/login?flow=flow-1"},
+		{"another tenant's session, asked without a prompt", &sessionHydra{login: session(silent)}, foreign, "/login?login_challenge=flow-1", true, "https://app.example/callback?error=login_required"},
+		{"a client registered to skip consent", &sessionHydra{consent: consentRequestFor(u, false, true, nil)}, own, "/consent?consent_challenge=cf-1", true, "https://issuer.example/after-consent"},
+		{"a remembered consent", &sessionHydra{consent: consentRequestFor(u, true, false, nil)}, own, "/consent?consent_challenge=cf-1", true, "https://issuer.example/after-consent"},
+		{"a consent to ask for", &sessionHydra{consent: consentRequestFor(u, false, false, nil)}, own, "/consent?consent_challenge=cf-1", false, testFrontendURL + "/consent?flow=cf-1"},
+	} {
+		location, settled := settle(tc.hydra, tc.client, tc.path)
+		if settled != tc.settled || location != tc.want {
+			t.Errorf("%s: went to %q (settled=%v), want %q (settled=%v)", tc.name, location, settled, tc.want, tc.settled)
+		}
+		if !tc.settled && (tc.hydra.acceptedLogin != nil || tc.hydra.rejectedLogin != nil || tc.hydra.acceptedConsent != nil) {
+			t.Errorf("%s: the flow was settled behind a screen that is still to be shown", tc.name)
+		}
+	}
+}

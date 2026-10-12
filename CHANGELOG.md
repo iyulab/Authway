@@ -18,6 +18,14 @@
   else.** Arriving signed in used to skip the consent screen for any client.
   The question is skipped only when the user's earlier answer is remembered
   or the client is registered with `skip_consent`.
+- **A flow that needs nothing from the user no longer opens a screen.** A
+  sign-in in a browser that already has a session, and a consent that is not
+  asked for, went by way of the login UI: the page loaded, asked the API what
+  to show, and was told to go on. The API now settles such a flow where the
+  authorization server sends the browser, so single sign-on and a request
+  with `prompt=none` are a chain of redirects with no page load in it. A
+  login screen is unaffected: it is opened only when there is something to
+  show.
 - **Consent the user asks to be remembered is kept until it is revoked**, not
   for an hour. `remember_for` is no longer part of
   `POST /api/v1/consent-flows/{flow}/accept`; a login screen that still sends
