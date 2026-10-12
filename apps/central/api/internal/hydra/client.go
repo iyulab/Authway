@@ -638,8 +638,12 @@ type IntrospectResponse struct {
 	ClientID  string         `json:"client_id,omitempty"`
 	Scope     string         `json:"scope,omitempty"`
 	TokenType string         `json:"token_type,omitempty"`
+	TokenUse  string         `json:"token_use,omitempty"`
+	Issuer    string         `json:"iss,omitempty"`
+	Audience  []string       `json:"aud,omitempty"`
 	Exp       int64          `json:"exp,omitempty"`
 	Iat       int64          `json:"iat,omitempty"`
+	Nbf       int64          `json:"nbf,omitempty"`
 	Ext       map[string]any `json:"ext,omitempty"`
 }
 

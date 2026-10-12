@@ -69,10 +69,33 @@ expires — signing the user out or deleting the account does not reach a token
 your API has already been handed. Opt in for the clients whose tokens an API of
 yours receives, and keep access tokens short-lived where that matters.
 
-**An API cannot check an opaque token.** Authway has no token introspection
-endpoint a resource server can call: the authorization server's own is on its
-admin interface, which is not reachable from outside the deployment. A client
-whose tokens go to your API needs `access_token_strategy: "jwt"`.
+**When an API must know at once** that a user signed out or an account was
+deleted, it asks about each token instead of trusting it until it expires
+(token introspection, RFC 7662):
+
+```bash
+curl -u "$CLIENT_ID:$CLIENT_SECRET" -d "token=$ACCESS_TOKEN"   https://<authway-api>/api/v1/oauth2/introspect
+# → {"active": true, "sub": "…", "client_id": "…", "scope": "openid …", "exp": …,
+#    "tenant_id": "…", "email": "…", "name": "…", "auth_time": …}
+# → {"active": false}      once the token is expired, revoked, or not yours to ask about
+```
+
+- The API authenticates as a **confidential client of the same tenant** (register
+  one with `client_credentials` for the API itself), with HTTP Basic or with
+  `client_id`/`client_secret` in the form. It is told about tokens issued to
+  clients of its own tenant only.
+- It works for opaque and JWT tokens alike. Standard middleware does this for
+  you (ASP.NET `AddOAuth2Introspection`, Spring `opaqueToken()`), pointed at
+  the URL above.
+- `active: false` is the only answer for a token that is not good; a `503`
+  means the provider could not check just now — do not treat that as a logout.
+- Every request costs a call to the provider. Cache an `active: true` answer
+  for a few seconds if your API is busy; the price is being that many seconds
+  late to notice a logout.
+- `GET /api/v1/capabilities` says `token_introspection: true` where it is offered.
+
+A client whose tokens an API validates **offline** needs
+`access_token_strategy: "jwt"`; an opaque token can only be introspected.
 
 What a JWT access token contains, and how to verify one knowing only the
 issuer, is part of the contract — the *resource server profile*

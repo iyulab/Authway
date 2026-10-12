@@ -345,6 +345,10 @@ func main() {
 	// What this deployment offers, so screens show only what works.
 	v1.Get("/capabilities", handler.NewCapabilitiesHandler(socialHandler).Get)
 
+	// A resource server asks whether a token is still good (RFC 7662). The
+	// caller is a confidential client, not a user and not an administrator.
+	v1.Post("/oauth2/introspect", handler.NewIntrospectionHandler(clientService, hydraClient, zapLogger).Introspect)
+
 	// What the sign-in screen should do with a login flow: show the form (and
 	// which sign-in methods the client allows) or redirect.
 	v1.Get("/login-flows/:flow", authHandler.GetLoginFlow)

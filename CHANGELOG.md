@@ -36,6 +36,14 @@
 
 ### Added
 
+- **A resource server can ask whether a token is still good (token
+  introspection, RFC 7662).** `POST /api/v1/oauth2/introspect`, called by a
+  confidential client with its id and secret, answers for the tokens of that
+  client's tenant — active with the contract's claims, or `{"active": false}`
+  for anything else. It is for an API that must know at once that a user
+  signed out; an API that accepts a JWT until it expires does not need it.
+  `GET /api/v1/capabilities` reports `token_introspection`. See "When an API
+  must know at once" in `docs/BACKEND_INTEGRATION.md`.
 - **Applications are told when a user's session ends (back-channel logout).**
   A client registers `backchannel_logout_uri`; when a session ends — the user
   signs out of any application, signs out everywhere, resets their password or

@@ -63,6 +63,56 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Capabilities' }
 
+  /api/v1/oauth2/introspect:
+    post:
+      operationId: introspectToken
+      summary: Whether a token is still good (RFC 7662)
+      description: |
+        For a resource server that must know at once when a user has signed
+        out or a token was revoked. A resource server that can accept a token
+        until it expires validates the JWT itself (see JwtAccessToken) and
+        never calls this. Offered when capabilities.token_introspection is
+        true.
+
+        The caller authenticates as a confidential client, with its id and
+        secret as HTTP Basic or in the form. It learns about tokens issued to
+        the clients of its own tenant; every other token — unknown, expired,
+        revoked or another tenant's — is answered `{"active": false}`.
+      security: [{ clientSecret: [] }, {}]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                token_type_hint: { type: string }
+                client_id: { type: string, description: With client_secret, instead of HTTP Basic. }
+                client_secret: { type: string }
+      responses:
+        '200':
+          description: What is known about the token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Introspection' }
+        '400':
+          description: No token was given (error invalid_request)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: The caller is not a confidential client with the right secret (error invalid_client)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '503':
+          description: The token could not be checked just now (error temporarily_unavailable)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+
   /api/v1/login-flows/{flow}:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
     get:
@@ -1487,6 +1537,10 @@ components:
       type: http
       scheme: bearer
       description: The deployment's admin API key, or an admin console session token.
+    clientSecret:
+      type: http
+      scheme: basic
+      description: A confidential client's id and secret (or the same two in the form, as client_id and client_secret).
     userToken:
       type: http
       scheme: bearer
@@ -2011,7 +2065,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -2034,8 +2088,46 @@ components:
             from any application, signs out everywhere, resets their password
             or deletes their account.
           type: boolean
+        token_introspection:
+          description: A confidential client can ask whether a token of its tenant is still good (POST /api/v1/oauth2/introspect).
+          type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }
+
+    Introspection:
+      description: |
+        RFC 7662. An inactive token carries `active: false` and nothing else.
+        An active one carries what a JWT access token of the contract carries
+        at its top level (see TokenClaims), whichever format the token has.
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean }
+        client_id: { type: string }
+        sub: { type: string }
+        scope: { type: string, description: Space-separated. }
+        token_type: { type: string }
+        token_use: { type: string }
+        iss: { type: string }
+        aud: { type: array, items: { type: string } }
+        exp: { type: integer }
+        iat: { type: integer }
+        nbf: { type: integer }
+        tenant_id: { type: string }
+        email: { type: string }
+        name: { type: ['null', string] }
+        auth_time: { type: integer }
+        ext:
+          description: Claims stored for the user by an administrator or a service credential.
+          type: object
+
+    OAuthError:
+      description: An OAuth 2.0 error (RFC 6749 §5.2).
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        error_description: { type: string }
 
     Error:
       type: object
