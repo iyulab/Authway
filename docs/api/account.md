@@ -199,12 +199,11 @@ recovery codes are removed. To turn it on again, start from `setup`.
 
 ### Other answers
 
-These calls answer an error as `{ "error": "<message>" }`, without a `code`.
-
-| Status | Meaning |
-|--------|---------|
-| `400` | The call does not apply or the code is wrong; `error` says which, for example `invalid TOTP code`, `TOTP not set up for this user` (`verify` before `setup`), `MFA is already enabled`, `MFA is not enabled` |
-| `401` | No token, or one that is no longer valid |
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `400` | `invalid_request` | The body could not be read as JSON |
+| `401` | `unauthorized` | No token, or one that is no longer valid |
+| `500` | `internal_error` | The call failed for a reason the caller cannot act on |
 
 ---
 
