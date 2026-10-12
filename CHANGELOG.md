@@ -24,6 +24,16 @@
   that does not qualify is refused with `access_denied`. Microsoft sign-in
   requires the app registration to emit the `xms_edov` claim.
 
+- **A client's secret is no longer stored.** The API kept every confidential
+  client's secret as it is, although nothing needs it back: the authorization
+  server authenticates the client with its own copy, and an update that names
+  no secret keeps the one it has. A new or regenerated secret is now kept only
+  as a password hash, an update no longer sends the secret anywhere, and on
+  start the secrets of existing clients are hashed. The secrets already stored
+  are left in place — removing them cannot be undone, so it is a step for the
+  operator: once every client has a hash,
+  `UPDATE clients SET client_secret = '' WHERE client_secret_hash <> '';`.
+
 ### Added
 
 - **Applications are told when a user's session ends (back-channel logout).**

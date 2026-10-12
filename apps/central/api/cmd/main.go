@@ -165,6 +165,9 @@ func main() {
 		})
 	}))
 	clientService := client.NewService(db, zapLogger, hydraClient)
+	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
+		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
+	}
 	// Social sign-in may only create an account for an invited address
 	// (invitation-only onboarding). The gate is a read-only view of the
 	// invitations table, so it exists well before the invitation service does.

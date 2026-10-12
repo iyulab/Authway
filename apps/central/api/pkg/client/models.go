@@ -11,19 +11,25 @@ import (
 // Client represents an OAuth 2.0 client application
 // Each client belongs to one tenant
 type Client struct {
-	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID     uuid.UUID      `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	ClientID     string         `json:"client_id" gorm:"uniqueIndex;not null"`
-	ClientSecret string         `json:"-" gorm:"not null"`
-	Name         string         `json:"name" gorm:"not null"`
-	Description  string         `json:"description"`
-	Website      string         `json:"website"`
-	Logo         string         `json:"logo"`
-	RedirectURIs pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
-	GrantTypes   pq.StringArray `json:"grant_types" gorm:"type:text[]"`
-	Scopes       pq.StringArray `json:"scopes" gorm:"type:text[]"`
-	Public       bool           `json:"public" gorm:"default:false"`
-	Active       bool           `json:"active"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	ClientID string    `json:"client_id" gorm:"uniqueIndex;not null"`
+	// ClientSecret held the secret itself until secrets were hashed; it is
+	// written empty now and read only for rows that predate the hash.
+	ClientSecret string `json:"-" gorm:"not null"`
+	// ClientSecretHash is what the secret is checked against (see secret.go).
+	// The authorization server authenticates the client at the token
+	// endpoint with its own copy; this one lets the API recognise the client.
+	ClientSecretHash string         `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
+	Name             string         `json:"name" gorm:"not null"`
+	Description      string         `json:"description"`
+	Website          string         `json:"website"`
+	Logo             string         `json:"logo"`
+	RedirectURIs     pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
+	GrantTypes       pq.StringArray `json:"grant_types" gorm:"type:text[]"`
+	Scopes           pq.StringArray `json:"scopes" gorm:"type:text[]"`
+	Public           bool           `json:"public" gorm:"default:false"`
+	Active           bool           `json:"active"`
 
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`

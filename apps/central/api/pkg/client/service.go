@@ -186,15 +186,25 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		// Client doesn't exist, proceed with creation
 	}
 
+	// The secret is returned to the caller once and registered with the
+	// authorization server; only a hash of it stays here.
+	secretHash := ""
+	if clientSecret != "" {
+		var err error
+		if secretHash, err = hashSecret(clientSecret); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	client := &Client{
-		ID:           uuid.New(),
-		TenantID:     tenantID,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		Name:         req.Name,
-		Description:  req.Description,
-		Website:      req.Website,
-		Logo:         req.Logo,
+		ID:               uuid.New(),
+		TenantID:         tenantID,
+		ClientID:         clientID,
+		ClientSecretHash: secretHash,
+		Name:             req.Name,
+		Description:      req.Description,
+		Website:          req.Website,
+		Logo:             req.Logo,
 		// nonNilURIs, not req.RedirectURIs: clients.redirect_uris is NOT NULL, and
 		// GORM writes an explicit NULL for a nil slice rather than omitting the
 		// column, so the DB default never applies. Now that M2M clients legitimately
@@ -568,7 +578,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 
 	// Update client in Hydra
-	hydraUpdate := client.hydraRegistration(client.ClientSecret)
+	// No secret is sent: the authorization server keeps the one it has when an
+	// update names none (measured against v26.2.0).
+	hydraUpdate := client.hydraRegistration("")
 
 	syncStatus := SyncStatus{State: SyncStateOK}
 	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
@@ -651,7 +663,7 @@ func (s *service) ValidateClient(clientID, clientSecret string) (*Client, error)
 	}
 
 	// Validate client secret for confidential clients
-	if client.ClientSecret != clientSecret {
+	if !client.secretMatches(clientSecret) {
 		return nil, apierror.NewPublic("invalid client credentials")
 	}
 
@@ -675,7 +687,11 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	// Generate new secret
 	newSecret := s.generateClientSecret()
 
-	if err := s.db.Model(client).Update("client_secret", newSecret).Error; err != nil {
+	newHash, err := hashSecret(newSecret)
+	if err != nil {
+		return nil, SyncStatus{}, err
+	}
+	if err := s.db.Model(client).Updates(map[string]any{"client_secret": "", "client_secret_hash": newHash}).Error; err != nil {
 		s.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", id.String()))
 		return nil, SyncStatus{}, fmt.Errorf("failed to regenerate client secret: %w", err)
 	}
