@@ -21,6 +21,9 @@ import (
 // yet.
 var allowedScopes = map[string]bool{
 	"admin.clients:write": true,
+	// Read and write the claims stored for the tenant's users
+	// (GET/PATCH /api/v1/users/{id}/claims).
+	"admin.claims:write": true,
 }
 
 // The grant_types a scoped-service-authenticated client-creation request may
@@ -33,7 +36,7 @@ var allowedScopes = map[string]bool{
 
 type CreateServiceClientRequest struct {
 	Name   string   `json:"name" validate:"required"`
-	Scopes []string `json:"scopes" validate:"required,min=1,dive,oneof=admin.clients:write"`
+	Scopes []string `json:"scopes" validate:"required,min=1,dive,oneof=admin.clients:write admin.claims:write"`
 }
 
 type ClientCredentials struct {

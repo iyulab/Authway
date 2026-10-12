@@ -16,7 +16,6 @@ export interface AuthContextValue extends AuthState {
   getAccessToken: () => Promise<string>
   getAccessTokenWithPopup: (options?: any) => Promise<string>
   getIdTokenClaims: () => Promise<any | null>
-  updateClaims: (claims: any) => Promise<void>
 }
 
 export const AuthwayContext = createContext<AuthContextValue | null>(null)

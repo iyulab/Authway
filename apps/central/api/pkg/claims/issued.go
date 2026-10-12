@@ -1,6 +1,7 @@
 package claims
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -57,6 +58,50 @@ func checkWritable(claims ClaimMap) error {
 	}
 	sort.Strings(keys)
 	return &ReservedClaimError{Keys: keys}
+}
+
+// maxKeyLength is the longest claim name stored (the column's width).
+const maxKeyLength = 255
+
+// maxClaimsSize bounds the stored claims of one user, serialized as JSON.
+// They travel in every token issued to the user, and tokens travel in
+// headers and cookies.
+const maxClaimsSize = 8 * 1024
+
+// InvalidClaimError refuses a claim name that cannot be stored.
+type InvalidClaimError struct {
+	Key string
+}
+
+func (e *InvalidClaimError) Error() string {
+	return fmt.Sprintf("claim names must be 1 to %d characters: %q", maxKeyLength, e.Key)
+}
+
+// ClaimsTooLargeError refuses claims that would make the tokens too large.
+type ClaimsTooLargeError struct {
+	Size int
+}
+
+func (e *ClaimsTooLargeError) Error() string {
+	return fmt.Sprintf("a user's claims may take up to %d bytes as JSON; these would take %d", maxClaimsSize, e.Size)
+}
+
+func checkKey(key string) error {
+	if key == "" || len(key) > maxKeyLength {
+		return &InvalidClaimError{Key: key}
+	}
+	return nil
+}
+
+func checkSize(claims ClaimMap) error {
+	encoded, err := json.Marshal(claims)
+	if err != nil {
+		return fmt.Errorf("failed to measure claims: %w", err)
+	}
+	if len(encoded) > maxClaimsSize {
+		return &ClaimsTooLargeError{Size: len(encoded)}
+	}
+	return nil
 }
 
 // withoutReserved copies claims without the reserved keys — a stored claim

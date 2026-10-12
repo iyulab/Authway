@@ -120,8 +120,6 @@ docs/
 │   ├── JAVASCRIPT_QUICKSTART.md
 │   ├── PYTHON_QUICKSTART.md
 │   └── GO_QUICKSTART.md
-├── features/
-│   └── DYNAMIC_CLAIMS.md
 └── deployment/
     └── azure-architecture.md
 ```

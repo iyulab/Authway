@@ -29,7 +29,6 @@ import {
   buildUrl,
   parseCallbackUrl,
   postForm,
-  patch,
   createSessionStorage,
   getDPoPKeyPair,
   createDPoPProof,
@@ -214,8 +213,6 @@ export class AuthwayClient {
       useRefreshTokens: config.useRefreshTokens ?? true,
       cacheLocation: config.cacheLocation || 'localstorage',
       tenantId: config.tenantId,
-      enableDynamicClaims: config.enableDynamicClaims ?? true,
-      claimsUpdateInterval: config.claimsUpdateInterval || 0,
       leeway: config.leeway || 60,
       maxAge: config.maxAge || 86400,
       useDPoP: config.useDPoP || false
@@ -230,12 +227,6 @@ export class AuthwayClient {
   private async endpoints(): Promise<ProviderEndpoints> {
     await this.configReady
     return this.provider!.endpoints
-  }
-
-  /** Base URL for Authway-specific APIs (claims), once discovery has finished. */
-  private async apiUrl(): Promise<string> {
-    await this.configReady
-    return this.provider!.apiUrl
   }
 
   // ==========================================
@@ -620,134 +611,20 @@ export class AuthwayClient {
   }
 
   /**
-   * Get user claims (combines system claims from ID token + dynamic claims from backend)
+   * The user's claims from the ID token, without the ones OpenID Connect
+   * uses to describe the token itself. Claims an application's backend
+   * stores for the user (through the admin API) appear here from the user's
+   * next sign-in on.
    */
   async getClaims(): Promise<Claims> {
-    const user = await this.getUser()
-    if (!user) {
+    if (!this.cache.idToken) {
       return {}
     }
-
-    // 1. Get ALL claims from ID token (system claims)
-    const idToken = await this.getIdToken()
-    const tokenClaims = decodeToken(idToken)
-
-    // Filter out JWT-specific fields, keep only user claims
-    const systemClaims: Claims = { ...tokenClaims }
-    delete systemClaims.iss
-    delete systemClaims.aud
-    delete systemClaims.exp
-    delete systemClaims.iat
-    delete systemClaims.auth_time
-    delete systemClaims.nonce
-    delete systemClaims.at_hash
-    delete systemClaims.c_hash
-    delete systemClaims.sid
-
-    // 2. Get dynamic claims from backend API
-    try {
-      const accessToken = await this.getAccessToken()
-      const url = `${await this.apiUrl()}/api/v1/claims`
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const dynamicClaims = data.claims || {}
-
-        // 3. Merge: system claims + dynamic claims (dynamic overrides system if same key)
-        return {
-          ...systemClaims,
-          ...dynamicClaims
-        }
-      }
-    } catch (err) {
-      // If backend fails, return just system claims
-      console.warn('Failed to fetch dynamic claims from backend:', err)
+    const claims: Claims = { ...decodeToken(this.cache.idToken) }
+    for (const key of ['iss', 'aud', 'exp', 'iat', 'nbf', 'auth_time', 'nonce', 'at_hash', 'c_hash', 'sid', 'azp', 'jti', 'amr', 'acr']) {
+      delete claims[key]
     }
-
-    // Fallback: return only system claims if backend fails
-    return systemClaims
-  }
-
-  /**
-   * Update dynamic claims
-   * Note: Claims updates require re-authentication to take effect
-   * This method will automatically redirect to re-authenticate
-   */
-  async updateClaims(claims: Partial<Claims>): Promise<void> {
-    if (!this.config.enableDynamicClaims) {
-      throw new Error('Dynamic claims not enabled')
-    }
-
-    const accessToken = await this.getAccessToken()
-    const url = `${await this.apiUrl()}/api/v1/claims`
-
-    // Backend requires client_id and redirect_uri for OAuth flow
-    const payload = {
-      claims,
-      client_id: this.config.clientId,
-      redirect_uri: typeof window !== 'undefined' ? window.location.origin : this.config.redirectUri
-    }
-
-    const response = await patch<{ success: boolean; auth_url: string; message: string }>(
-      url,
-      payload,
-      { Authorization: `Bearer ${accessToken}` }
-    )
-
-    // Claims update requires re-authentication
-    // Automatically start new login flow to get updated token
-    if (response.auth_url) {
-      // Store app state before redirect
-      const appState = { returnTo: window.location.pathname }
-      this.sessionStorage.set('appState', JSON.stringify(appState))
-
-      // Redirect to re-authenticate and get new token with updated claims
-      if (typeof window !== 'undefined') {
-        window.location.href = response.auth_url
-      }
-    }
-  }
-
-  /**
-   * Update user-level claims (NO re-authentication required)
-   * Use this for user preferences, metadata, custom data
-   */
-  async updateUserClaims(claims: Partial<Claims>): Promise<void> {
-    const accessToken = await this.getAccessToken()
-    const url = `${await this.apiUrl()}/api/v1/claims/user`
-
-    await patch(
-      url,
-      { claims },
-      { Authorization: `Bearer ${accessToken}` }
-    )
-  }
-
-  /**
-   * Get user-level claims (claim_type='user')
-   */
-  async getUserClaims(): Promise<Claims> {
-    const accessToken = await this.getAccessToken()
-    const url = `${await this.apiUrl()}/api/v1/claims/user`
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to get user claims')
-    }
-
-    const data = await response.json()
-    return data.claims || {}
+    return claims
   }
 
   // ==========================================

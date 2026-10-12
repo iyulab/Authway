@@ -173,8 +173,7 @@ func main() {
 
 	// Initialize Claims Service
 	claimsRepo := claims.NewRepository(db, redisClient)
-	claimsService := claims.NewService(claimsRepo, cfg.Hydra.PublicURL, zapLogger)
-	claimsHandler := claims.NewHandler(claimsService, zapLogger)
+	claimsService := claims.NewService(claimsRepo, zapLogger)
 
 	// Initialize email services
 	var emailService email.EmailService
@@ -399,15 +398,13 @@ func main() {
 	// Client Hydra sync (admin operation for one-time migration)
 	v1.Post("/clients/sync-hydra", adminAuth, clientHandler.SyncToHydra)
 
-	// System claims management routes (require re-authentication)
-	v1.Post("/claims/update", jwtAuth, claimsHandler.HandleUpdateClaims) // Legacy endpoint
-	v1.Patch("/claims", jwtAuth, claimsHandler.HandleUpdateClaims)       // RESTful endpoint
-	v1.Get("/claims", jwtAuth, claimsHandler.HandleGetClaims)
-	v1.Delete("/claims/:claim_key", jwtAuth, claimsHandler.HandleDeleteClaim)
-
-	// User claims management routes (no re-authentication required)
-	v1.Patch("/claims/user", jwtAuth, claimsHandler.HandleUpdateUserClaims)
-	v1.Get("/claims/user", jwtAuth, claimsHandler.HandleGetUserClaims)
+	// Claims stored for a user go into the tokens issued to them, so only a
+	// trusted party writes them: the admin API, or a tenant's service
+	// credential granted admin.claims:write (scoped to that tenant's users).
+	claimsHandler := claims.NewHandler(claimsService, userService, auditService, zapLogger)
+	claimsAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.claims:write")
+	v1.Get("/users/:id/claims", claimsAuth, claimsHandler.List)
+	v1.Patch("/users/:id/claims", claimsAuth, claimsHandler.Patch)
 
 	// Documentation API routes (public read, admin write)
 	v1.Get("/docs", docsHandler.ListDocs)

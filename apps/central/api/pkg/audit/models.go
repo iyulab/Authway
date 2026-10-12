@@ -22,6 +22,7 @@ const (
 	ActionUserMFAVerified      AuditAction = "user.mfa_verified"
 	ActionUserMFAFailed        AuditAction = "user.mfa_failed"
 	ActionUserEmailVerified    AuditAction = "user.email_verified"
+	ActionUserClaimsUpdated    AuditAction = "user.claims_updated"
 	ActionClientCreated        AuditAction = "client.created"
 	ActionClientUpdated        AuditAction = "client.updated"
 	ActionClientDeleted        AuditAction = "client.deleted"
@@ -68,6 +69,7 @@ var Actions = []struct {
 	{ActionUserMFAVerified, "MFA code accepted"},
 	{ActionUserMFAFailed, "MFA code refused"},
 	{ActionUserEmailVerified, "Email address verified"},
+	{ActionUserClaimsUpdated, "Claims stored for the user set or removed"},
 	{ActionClientCreated, "OAuth client created"},
 	{ActionClientUpdated, "OAuth client updated"},
 	{ActionClientDeleted, "OAuth client deleted"},

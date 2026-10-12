@@ -35,50 +35,14 @@ func (c UserClaim) value() any {
 // ClaimMap represents a map of claims (key-value pairs)
 type ClaimMap map[string]any
 
-// UpdateClaimsRequest represents a request to update claims
-type UpdateClaimsRequest struct {
-	Claims      ClaimMap `json:"claims" validate:"required"`
-	Permanent   bool     `json:"permanent"`
-	ClientID    string   `json:"client_id" validate:"required"`
-	RedirectURI string   `json:"redirect_uri" validate:"required,url"`
+// PatchClaimsRequest is the body of PATCH /api/v1/users/{id}/claims: a JSON
+// merge patch (RFC 7396) of the user's claims — a value sets the claim, null
+// removes it, a claim not named is left alone.
+type PatchClaimsRequest struct {
+	Claims map[string]any `json:"claims"`
 }
 
-// UpdateClaimsResponse represents a response after updating claims
-type UpdateClaimsResponse struct {
-	Success bool   `json:"success"`
-	AuthURL string `json:"auth_url"`
-	Message string `json:"message"`
-}
-
-// GetClaimsResponse represents a response for get claims request
-type GetClaimsResponse struct {
-	UserID          uuid.UUID `json:"user_id"`
-	TenantID        uuid.UUID `json:"tenant_id"`
-	Claims          ClaimMap  `json:"claims"`
-	PermanentClaims []string  `json:"permanent_claims"`
-	SessionClaims   []string  `json:"session_claims,omitempty"`
-}
-
-// DeleteClaimResponse represents a response for delete claim request
-type DeleteClaimResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
-// UpdateUserClaimsRequest represents a request to update user-level claims (no re-auth required)
-type UpdateUserClaimsRequest struct {
-	Claims ClaimMap `json:"claims" validate:"required"`
-}
-
-// UpdateUserClaimsResponse represents a response after updating user claims
-type UpdateUserClaimsResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
-// GetUserClaimsResponse represents a response for get user claims request
-type GetUserClaimsResponse struct {
-	UserID   uuid.UUID `json:"user_id"`
-	TenantID uuid.UUID `json:"tenant_id"`
-	Claims   ClaimMap  `json:"claims"`
+// ClaimsResponse is the user's stored claims.
+type ClaimsResponse struct {
+	Claims ClaimMap `json:"claims"`
 }

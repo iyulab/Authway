@@ -2,23 +2,49 @@
 
 ### Security
 
-- **A stored claim can no longer replace a claim the issuer asserts.** A user
-  writes claims with their own token (`PATCH /api/v1/claims`,
-  `PATCH /api/v1/claims/user`), and on some consent paths a stored
-  `tenant_id`, `email`, `name` or `email_verified` replaced the real one in the
-  tokens issued afterwards. Writes that name such a claim, a claim OAuth or
-  OpenID Connect defines (`sub`, `aud`, `auth_time`, …) or one starting with
-  `_` are now refused with `400 reserved_claim` and the offending `keys`;
-  stored ones are left out of tokens and of what the claims API returns. On
-  every consent path the issuer's claims are applied last.
+- **Only a trusted party writes the claims in a user's tokens.** A user could
+  write any claim into their own tokens with their own access token
+  (`PATCH /api/v1/claims`, `PATCH /api/v1/claims/user`) — including `role` or
+  `permissions`, which a relying party may decide access from — and on some
+  consent paths even replace `tenant_id`, `email`, `name` or `email_verified`.
+  Claims are now written only through the admin API or a tenant's service
+  credential (see Added), and a stored claim never replaces one Authway
+  asserts: on every consent path Authway's claims are applied last, and stored
+  claims with such names are left out of tokens.
+
+### Added
+
+- **`GET` and `PATCH /api/v1/users/{id}/claims`** — an application's backend
+  reads and changes the claims stored for a user, which go into the user's
+  tokens from their next authorization on (the ID token at the top level).
+  The body is a JSON merge patch of `claims`: a value sets a claim, `null`
+  removes it. Callers: the admin API key or session, or a tenant's service
+  credential with the new `admin.claims:write` scope, which reaches only that
+  tenant's users. A claim Authway asserts or OAuth / OpenID Connect defines,
+  or one starting with `_`, is refused with `400 reserved_claim` (with
+  `keys`); claims over 8 KB as JSON with `413 claims_too_large`. Each change
+  is audited as `user.claims_updated` (names, not values), which the security
+  view lists. `GET /api/v1/capabilities` reports the feature as
+  `custom_claims`. See `docs/api/claims.md`.
+
+### Removed
+
+- **The user-token claims endpoints**: `POST /api/v1/claims/update`,
+  `GET`/`PATCH /api/v1/claims`, `DELETE /api/v1/claims/{key}` and
+  `GET`/`PATCH /api/v1/claims/user`, with the session-only ("pending") claims
+  and the re-authentication URL they returned. Move claim writes to the
+  application's backend and `PATCH /api/v1/users/{id}/claims`.
+- **SDK (`@authway/client`, `@authway/react` 0.4.0)**: `updateClaims`,
+  `updateUserClaims`, `getUserClaims`, the `enableDynamicClaims` and
+  `claimsUpdateInterval` options, and `updateClaims` of the React context and
+  `useClaims`. `getClaims()` and `useClaims()` now read the claims from the ID
+  token only.
 
 ### Fixed
 
 - **The ID token carries `email_verified` on every consent path.** It was
   missing when a client skips the consent screen or the user is signed in
   silently.
-- **The claims API's refusals carry a `code`** (`invalid_request`,
-  `reserved_claim`), like the other endpoints.
 
 ## [0.6.0] - 2026-10-12
 

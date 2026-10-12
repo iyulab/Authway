@@ -19,7 +19,7 @@ yarn add @authway/react @authway/client
 ## 주요 기능
 
 - ✅ **OIDC Discovery** - Authway API URL만 지정, 엔드포인트는 OpenID Connect Discovery 로 자동 해석
-- ✅ **React Hooks** - useAuth, useUser, useClaims, useWorkspace
+- ✅ **React Hooks** - useAuth, useUser, useClaims, useAccessToken
 - ✅ **팝업 로그인** - 페이지 이동 없이 팝업으로 인증
 - ✅ **자동 콜백 처리** - OAuth 콜백 자동 감지 및 처리
 - ✅ **동적 클레임** - 실시간 사용자 클레임 관리
@@ -177,33 +177,17 @@ const { user, isLoading } = useUser()
 
 ### useClaims
 
-동적 클레임 관리를 위한 훅입니다.
+로그인한 사용자의 클레임을 ID 토큰에서 읽는 훅입니다. 클레임은 애플리케이션 백엔드가
+관리 API(`PATCH /api/v1/users/{id}/claims`)로 저장하며, 브라우저에서는 쓰지 않습니다.
+바뀐 클레임은 사용자가 다음에 로그인할 때부터 보입니다.
 
 ```tsx
 const {
   claims,           // 현재 클레임
-  updateClaims,     // 클레임 업데이트
+  refreshClaims,    // 다시 읽기
   isLoading,        // 로딩 상태
   error             // 에러 정보
 } = useClaims()
-
-// 클레임 업데이트
-await updateClaims({
-  role: 'admin',
-  department: 'engineering'
-})
-```
-
-### useWorkspace
-
-멀티 테넌시 환경에서 워크스페이스 관리를 위한 훅입니다.
-
-```tsx
-const {
-  workspace,        // 현재 워크스페이스
-  switchWorkspace,  // 워크스페이스 변경
-  workspaces,       // 사용 가능한 워크스페이스 목록
-} = useWorkspace()
 ```
 
 ## 컴포넌트
@@ -353,28 +337,16 @@ function DataFetcher() {
 }
 ```
 
-### 동적 클레임 업데이트
+### 클레임 표시
 
 ```tsx
-function ClaimsManager() {
-  const { claims, updateClaims, isLoading } = useClaims()
-
-  const handleUpdate = async () => {
-    await updateClaims({
-      role: 'admin',
-      department: 'engineering',
-      permissions: ['read', 'write', 'delete']
-    })
-  }
+function ClaimsView() {
+  const { claims, isLoading } = useClaims()
 
   if (isLoading) return <div>로딩 중...</div>
 
-  return (
-    <div>
-      <pre>{JSON.stringify(claims, null, 2)}</pre>
-      <button onClick={handleUpdate}>클레임 업데이트</button>
-    </div>
-  )
+  // 클레임은 백엔드가 관리 API 로 저장한다 — 브라우저에서 쓰지 않는다
+  return <pre>{JSON.stringify(claims, null, 2)}</pre>
 }
 ```
 

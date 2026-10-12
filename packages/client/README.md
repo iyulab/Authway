@@ -134,21 +134,17 @@ const response = await fetch('http://localhost:8080/api/v1/profile/me', {
 })
 ```
 
-## 동적 클레임 관리
+## 클레임
 
 ```typescript
-// 클레임 조회
-const claims = await client.getClaims(token)
-
-// 클레임 업데이트
-await client.updateClaims(token, {
-  role: 'admin',
-  department: 'engineering'
-})
-
-// 사용자별 클레임 조회
-const userClaims = await client.getUserClaims(token, 'user-id')
+// ID 토큰의 클레임 (토큰 자체를 설명하는 iss·aud·exp 등은 빠짐)
+const claims = await client.getClaims()
 ```
+
+사용자에게 붙는 커스텀 클레임(플랜·역할 등)은 애플리케이션 **백엔드**가 관리 API
+`PATCH /api/v1/users/{id}/claims` 로 저장합니다(관리 키 또는 `admin.claims:write` 범위의
+테넌트 서비스 자격증명). 권한 판단에 쓰일 수 있는 값이므로 브라우저나 사용자 토큰으로는 쓸 수
+없습니다. 저장한 클레임은 사용자가 다음에 로그인할 때부터 ID 토큰에 실립니다.
 
 ## 로그아웃
 
@@ -196,10 +192,8 @@ const client = new AuthwayClient({
 
 ### 클레임
 
-- `getClaims(token)` - 클레임 조회
-- `updateClaims(token, claims)` - 클레임 업데이트
-- `getUserClaims(token, userId)` - 사용자별 클레임 조회
-- `updateUserClaims(token, userId, claims)` - 사용자별 클레임 업데이트
+- `getClaims()` - ID 토큰의 클레임
+- `getIdTokenClaims()` - ID 토큰 전체
 
 ### 유틸리티
 

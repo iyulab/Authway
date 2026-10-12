@@ -3,7 +3,9 @@ import { useAuth } from './useAuth'
 import { Claims } from '@authway/client'
 
 /**
- * Hook for managing user claims
+ * The signed-in user's claims, from the ID token. They are written by the
+ * application's backend through the admin API, never from the browser, and
+ * a change shows from the user's next sign-in on.
  */
 export function useClaims() {
   const { client, isAuthenticated } = useAuth()
@@ -11,7 +13,6 @@ export function useClaims() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  // Load claims (backend returns both system and user claims)
   const loadClaims = useCallback(async () => {
     if (!isAuthenticated || !client) {
       setClaims({})
@@ -22,9 +23,7 @@ export function useClaims() {
     setError(null)
 
     try {
-      // Get ALL claims from backend (system + user)
-      const allClaims = await client.getClaims()
-      setClaims(allClaims)
+      setClaims(await client.getClaims())
     } catch (err) {
       setError(err as Error)
     } finally {
@@ -32,30 +31,6 @@ export function useClaims() {
     }
   }, [client, isAuthenticated])
 
-  // Update claims
-  const updateClaims = useCallback(
-    async (newClaims: Partial<Claims>) => {
-      if (!client) {
-        throw new Error('Not authenticated')
-      }
-
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        await client.updateClaims(newClaims)
-        await loadClaims() // Reload claims after update
-      } catch (err) {
-        setError(err as Error)
-        throw err
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [client, loadClaims]
-  )
-
-  // Load claims on mount and when auth state changes
   useEffect(() => {
     loadClaims()
   }, [loadClaims])
@@ -64,7 +39,6 @@ export function useClaims() {
     claims,
     isLoading,
     error,
-    updateClaims,
     refreshClaims: loadClaims
   }
 }

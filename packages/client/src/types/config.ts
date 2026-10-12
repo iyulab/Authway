@@ -62,19 +62,6 @@ export interface AuthwayConfig {
   tenantId?: string
 
   /**
-   * Enable dynamic claims support
-   * @default true
-   */
-  enableDynamicClaims?: boolean
-
-  /**
-   * Auto-sync claims interval (milliseconds)
-   * Set to 0 to disable
-   * @default 0
-   */
-  claimsUpdateInterval?: number
-
-  /**
    * Custom token leeway for expiration checks (seconds)
    * @default 60
    */

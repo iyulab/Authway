@@ -1374,6 +1374,63 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/{id}/claims:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: getUserClaims
+      description: |
+        The claims stored for the user. Offered when capabilities.custom_claims
+        is true. A provider may also accept a credential scoped to the user's
+        tenant; such a caller does not find users of other tenants (404).
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The stored claims
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoredClaims' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [admin]
+      operationId: patchUserClaims
+      description: |
+        Sets and removes claims stored for the user, as a JSON merge patch
+        (RFC 7396) of `claims`: a value sets the claim, null removes it, a
+        claim not named is left alone. The stored claims go into the tokens
+        issued to the user from their next authorization on — at the top level
+        of the ID token. Only a trusted party writes them; the user cannot.
+
+        Refused as a whole, changing nothing: a claim the provider asserts or
+        OAuth / OpenID Connect defines (`400 reserved_claim`, with `keys`), an
+        empty or overlong name (`400 invalid_request`), or claims that would
+        make the user's tokens too large (`413 claims_too_large`).
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claims]
+              properties:
+                claims:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: The claims stored afterwards
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoredClaims' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     adminKey:
@@ -1615,6 +1672,14 @@ components:
             last signed in. Refreshing the token, or reusing the session
             without signing in again, does not change it.
 
+    StoredClaims:
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: object
+          additionalProperties: true
+
     OwnProfile:
       type: object
       required: [id, email, email_verified]
@@ -1803,7 +1868,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -1815,6 +1880,9 @@ components:
         signup_modes: { type: array, items: { type: string } }
         account_deletion:
           description: A signed-in user can delete their own account (DELETE /api/v1/profile/me).
+          type: boolean
+        custom_claims:
+          description: Claims an administrator stores for a user go into the user's tokens (/api/v1/users/{id}/claims).
           type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }

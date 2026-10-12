@@ -3,12 +3,12 @@
 **Version**: 0.2.0
 **Last Updated**: 2025-12-03
 
-Comprehensive guide to Authway's key features: i18n, Dynamic Claims, Popup Login, Logout Policies, and OAuth/JWT best practices.
+Comprehensive guide to Authway's key features: i18n, Custom Claims, Popup Login, Logout Policies, and OAuth/JWT best practices.
 
 ## Table of Contents
 
 - [Internationalization (i18n)](#internationalization-i18n)
-- [Dynamic Claims](#dynamic-claims)
+- [Custom Claims](#custom-claims)
 - [Popup Login](#popup-login)
 - [Logout & Redirect Policies](#logout--redirect-policies)
 - [OAuth & JWT Best Practices](#oauth--jwt-best-practices)
@@ -77,106 +77,28 @@ locales/
 
 ---
 
-## Dynamic Claims
+## Custom Claims
 
-Manage user claims at runtime without modifying tokens.
+An application's backend stores claims for a user — a plan, a role, an
+organization — and Authway carries them in the user's tokens (the ID token at
+the top level). Only a trusted party writes them: the admin API, or a tenant's
+service credential with the `admin.claims:write` scope. The user, and a
+browser app holding the user's token, cannot — a relying party may decide
+what the user is allowed to do from these claims.
 
-### Overview
+```http
+PATCH /api/v1/users/{id}/claims
+Authorization: Bearer <admin key, or a service credential's access token>
 
-Dynamic claims allow you to:
-- ✅ Add/update/remove user claims in real-time
-- ✅ Override token claims without re-authentication
-- ✅ Implement role-based access control (RBAC)
-- ✅ Customize user attributes per application
-
-### How It Works
-
-```
-Token Claims (static) + Dynamic Claims (runtime) = Final User Object
+{ "claims": { "plan": "pro", "trial": null } }
 ```
 
-**Example**:
-```json
-{
-  "sub": "user123",           // From token
-  "email": "user@example.com", // From token
-  "role": "admin",            // Dynamic claim (overrides token)
-  "department": "engineering"  // Dynamic claim (added)
-}
-```
+A value sets the claim, `null` removes it. Claims Authway asserts
+(`tenant_id`, `email`, `name`, `email_verified`) and those OAuth / OpenID
+Connect define cannot be set. The SDK reads the claims from the ID token
+(`client.getClaims()`, `useClaims()`).
 
-### API Usage
-
-**Set Dynamic Claims**:
-```bash
-POST /api/v1/users/{user_id}/claims
-```
-```json
-{
-  "role": "admin",
-  "department": "engineering",
-  "permissions": ["read", "write", "delete"]
-}
-```
-
-**Get User with Dynamic Claims**:
-```bash
-GET /userinfo
-Authorization: Bearer {access_token}
-```
-```json
-{
-  "sub": "user123",
-  "email": "user@example.com",
-  "role": "admin",           // Dynamic claim
-  "department": "engineering" // Dynamic claim
-}
-```
-
-### SDK Integration
-
-**React**:
-```tsx
-const { user } = useAuth()
-
-// user object includes both token and dynamic claims
-console.log(user.role)       // 'admin' (from dynamic claims)
-console.log(user.department) // 'engineering'
-```
-
-**Vanilla JS**:
-```typescript
-const user = await client.getUser()
-console.log(user.role) // Dynamic claims merged automatically
-```
-
-### Use Cases
-
-1. **Role-Based Access Control**:
-   ```typescript
-   if (user.role === 'admin') {
-     // Show admin panel
-   }
-   ```
-
-2. **Feature Flags**:
-   ```json
-   {
-     "features": {
-       "beta_feature": true,
-       "new_ui": false
-     }
-   }
-   ```
-
-3. **Organizational Data**:
-   ```json
-   {
-     "organization": "acme-corp",
-     "department": "sales",
-     "team": "enterprise"
-   }
-   ```
+Full reference: [api/claims.md](api/claims.md).
 
 ---
 
@@ -606,7 +528,7 @@ jwt.verify(token, getKey, {
 
 | Feature | Use Case | Documentation |
 |---------|----------|---------------|
-| **Dynamic Claims** | Runtime user attributes, RBAC | [Database Schema](./DATABASE.md) |
+| **Custom Claims** | Claims a backend stores for a user, carried in their tokens | [Claims API](./api/claims.md) |
 | **Popup Login** | No-redirect auth, external OAuth | [Setup Guide](./SETUP.md) |
 | **Logout Policies** | Secure redirect control | [Setup Guide](./SETUP.md) |
 | **OAuth/JWT** | Security best practices | [Backend Integration](./BACKEND_INTEGRATION.md) |

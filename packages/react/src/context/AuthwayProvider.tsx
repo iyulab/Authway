@@ -160,16 +160,6 @@ export function AuthwayProvider({
     [client]
   )
 
-  const updateClaims = useCallback(
-    async (claims: any) => {
-      await client.updateClaims(claims)
-      // Refresh user
-      const user = await client.getUser()
-      setState(prev => ({ ...prev, user }))
-    },
-    [client]
-  )
-
   const contextValue = {
     ...state,
     client,
@@ -178,8 +168,7 @@ export function AuthwayProvider({
     logout,
     getAccessToken,
     getAccessTokenWithPopup,
-    getIdTokenClaims,
-    updateClaims
+    getIdTokenClaims
   }
 
   return (

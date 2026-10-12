@@ -161,19 +161,10 @@ func (f *fakeClientService) SyncAllClientsToHydra() (int, int, error) { return 0
 // on.
 type fakeClaimsService struct{}
 
-func (fakeClaimsService) UpdateClaims(context.Context, uuid.UUID, uuid.UUID, *claims.UpdateClaimsRequest) (*claims.UpdateClaimsResponse, error) {
+func (fakeClaimsService) List(context.Context, uuid.UUID, uuid.UUID) (claims.ClaimMap, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (fakeClaimsService) GetClaims(context.Context, uuid.UUID, uuid.UUID) (*claims.GetClaimsResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (fakeClaimsService) DeleteClaim(context.Context, uuid.UUID, uuid.UUID, string) (*claims.DeleteClaimResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (fakeClaimsService) UpdateUserClaims(context.Context, uuid.UUID, uuid.UUID, *claims.UpdateUserClaimsRequest) (*claims.UpdateUserClaimsResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-func (fakeClaimsService) GetUserClaims(context.Context, uuid.UUID, uuid.UUID) (*claims.GetUserClaimsResponse, error) {
+func (fakeClaimsService) Patch(context.Context, uuid.UUID, uuid.UUID, map[string]any) (claims.ClaimMap, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 func (fakeClaimsService) GetClaimsForLogin(context.Context, uuid.UUID, uuid.UUID, string) (claims.ClaimMap, error) {

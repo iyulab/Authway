@@ -17,8 +17,8 @@ type Repository interface {
 	// Database operations
 	SaveClaim(ctx context.Context, claim *UserClaim) error
 	GetUserClaims(ctx context.Context, userID, tenantID uuid.UUID) ([]UserClaim, error)
-	GetUserClaimsByType(ctx context.Context, userID, tenantID uuid.UUID, claimType string) ([]UserClaim, error)
-	DeleteClaim(ctx context.Context, userID, tenantID uuid.UUID, claimKey string) error
+	// ApplyPatch stores set and deletes remove, in one transaction.
+	ApplyPatch(ctx context.Context, userID, tenantID uuid.UUID, set ClaimMap, remove []string) error
 
 	// Redis operations for pending claims
 	SetPendingClaims(ctx context.Context, userID uuid.UUID, claims ClaimMap, ttl time.Duration) error
@@ -72,35 +72,31 @@ func (r *repository) GetUserClaims(ctx context.Context, userID, tenantID uuid.UU
 	return claims, nil
 }
 
-// GetUserClaimsByType retrieves claims of a specific type for a user in a tenant
-func (r *repository) GetUserClaimsByType(ctx context.Context, userID, tenantID uuid.UUID, claimType string) ([]UserClaim, error) {
-	var claims []UserClaim
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND tenant_id = ? AND claim_type = ?", userID, tenantID, claimType).
-		Find(&claims).Error
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user claims by type: %w", err)
-	}
-
-	return claims, nil
-}
-
-// DeleteClaim deletes a specific claim from the database
-func (r *repository) DeleteClaim(ctx context.Context, userID, tenantID uuid.UUID, claimKey string) error {
-	result := r.db.WithContext(ctx).
-		Where("user_id = ? AND tenant_id = ? AND claim_key = ?", userID, tenantID, claimKey).
-		Delete(&UserClaim{})
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete claim: %w", result.Error)
-	}
-
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("claim not found")
-	}
-
-	return nil
+// ApplyPatch stores set and deletes remove for a user, in one transaction.
+func (r *repository) ApplyPatch(ctx context.Context, userID, tenantID uuid.UUID, set ClaimMap, remove []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(remove) > 0 {
+			if err := tx.Where("user_id = ? AND tenant_id = ? AND claim_key IN ?", userID, tenantID, remove).
+				Delete(&UserClaim{}).Error; err != nil {
+				return fmt.Errorf("failed to delete claims: %w", err)
+			}
+		}
+		now := time.Now()
+		for key, value := range set {
+			claim := &UserClaim{
+				ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: key,
+				ClaimValue: map[string]any{"value": value}, IsPermanent: true,
+				CreatedAt: now, UpdatedAt: now,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "user_id"}, {Name: "tenant_id"}, {Name: "claim_key"}},
+				DoUpdates: clause.AssignmentColumns([]string{"claim_value", "updated_at"}),
+			}).Create(claim).Error; err != nil {
+				return fmt.Errorf("failed to save claim: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 // SetPendingClaims stores pending claims in Redis for a user session

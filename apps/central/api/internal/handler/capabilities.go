@@ -29,6 +29,9 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - signup_modes: the values a tenant's signup_mode accepts
 //   - account_deletion: a signed-in user can delete their own account
 //     (DELETE /api/v1/profile/me)
+//   - custom_claims: claims stored for a user by an administrator or a
+//     tenant's service credential go into the user's tokens
+//     (GET/PATCH /api/v1/users/{id}/claims)
 //   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
 //     approval (OpenID CIBA) — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
@@ -39,6 +42,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"mfa":              []string{"totp"},
 		"signup_modes":     []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
 		"account_deletion": true,
+		"custom_claims":    true,
 		"token_exchange":   false,
 		"ciba":             false,
 	})

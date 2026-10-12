@@ -58,7 +58,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 func newTestService(t *testing.T, db *gorm.DB) Service {
 	t.Helper()
 	repo := NewRepository(db, newTestRedis(t))
-	return NewService(repo, "http://localhost:4444", zap.NewNop())
+	return NewService(repo, zap.NewNop())
 }
 
 // fixtureUser creates a real tenant + user row — user_claims.user_id carries
@@ -92,192 +92,151 @@ func cleanupUserClaims(t *testing.T, db *gorm.DB, userID uuid.UUID) {
 	t.Cleanup(func() { db.Exec(`DELETE FROM user_claims WHERE user_id = ?`, userID) })
 }
 
-// TestUpdateClaims_PermanentPersistsAndPendingOverridesOnRead is the key
-// precedence guard documented in GetClaims: a pending (session, Redis-backed)
-// claim must override a same-key permanent (database) claim on read, while
-// the database row itself stays untouched.
-func TestUpdateClaims_PermanentPersistsAndPendingOverridesOnRead(t *testing.T) {
+// TestPatch_SetsAndRemovesClaims: a merge patch sets the claims it names
+// with a value, removes those it names with null, and leaves the rest.
+func TestPatch_SetsAndRemovesClaims(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
 	svc := newTestService(t, db)
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
 
-	_, err := svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
-		Claims:      ClaimMap{"role": "member", "org": "acme"},
-		Permanent:   true,
-		ClientID:    "test-client",
-		RedirectURI: "https://app.example.com/callback",
-	})
+	got, err := svc.Patch(ctx, userID, tenantID, map[string]any{"plan": "pro", "org": "acme"})
 	if err != nil {
-		t.Fatalf("UpdateClaims (permanent): %v", err)
+		t.Fatalf("Patch (set): %v", err)
+	}
+	if len(got) != 2 || got["plan"] != "pro" || got["org"] != "acme" {
+		t.Fatalf("Patch (set) returned %+v", got)
 	}
 
-	got, err := svc.GetClaims(ctx, userID, tenantID)
+	got, err = svc.Patch(ctx, userID, tenantID, map[string]any{"org": nil, "seats": float64(5), "plan": "team"})
 	if err != nil {
-		t.Fatalf("GetClaims (after permanent write): %v", err)
+		t.Fatalf("Patch (mixed): %v", err)
 	}
-	if got.Claims["role"] != "member" || got.Claims["org"] != "acme" {
-		t.Fatalf("expected both permanent claims present, got %+v", got.Claims)
+	stored, err := svc.List(ctx, userID, tenantID)
+	if err != nil {
+		t.Fatalf("List: %v", err)
 	}
-	if len(got.PermanentClaims) != 2 {
-		t.Fatalf("expected 2 permanent claim keys, got %v", got.PermanentClaims)
-	}
-	// UpdateClaims always stages its claims as pending too (step 1 in the
-	// implementation runs unconditionally; Permanent only controls the
-	// additional database write) — so both keys are also session claims
-	// right after this first, permanent=true call.
-	if len(got.SessionClaims) != 2 {
-		t.Fatalf("expected both keys staged as session claims after the initial update, got %v", got.SessionClaims)
+	for name, claims := range map[string]ClaimMap{"returned": got, "stored": stored} {
+		if len(claims) != 2 || claims["plan"] != "team" || claims["seats"] != float64(5) {
+			t.Fatalf("%s after the second patch: %+v", name, claims)
+		}
 	}
 
-	// A non-permanent update for a single key REPLACES the whole pending set
-	// (SetPendingClaims overwrites the Redis key, it does not merge) — so
-	// afterward only "role" is pending, while "org" still reads from the
-	// untouched database row.
-	if _, err := svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
-		Claims:      ClaimMap{"role": "admin"},
-		Permanent:   false,
-		ClientID:    "test-client",
-		RedirectURI: "https://app.example.com/callback",
-	}); err != nil {
-		t.Fatalf("UpdateClaims (pending): %v", err)
-	}
-
-	got, err = svc.GetClaims(ctx, userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaims (after pending override): %v", err)
-	}
-	if got.Claims["role"] != "admin" {
-		t.Fatalf("expected the pending claim to override the permanent one, got role=%v", got.Claims["role"])
-	}
-	if got.Claims["org"] != "acme" {
-		t.Fatalf("expected the untouched permanent claim to still be present, got org=%v", got.Claims["org"])
-	}
-	if len(got.SessionClaims) != 1 || got.SessionClaims[0] != "role" {
-		t.Fatalf("expected exactly ['role'] as session claims (pending set was replaced, not merged), got %v", got.SessionClaims)
+	// Removing a claim that is not stored is not an error.
+	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"absent": nil}); err != nil {
+		t.Fatalf("Patch (remove absent): %v", err)
 	}
 }
 
-// TestDeleteClaim_RemovesPermanentClaimAndRepeatDeleteErrors guards the
-// repository's RowsAffected-based not-found signal reaching the service layer
-// as an actual error, not a silent success.
-func TestDeleteClaim_RemovesPermanentClaimAndRepeatDeleteErrors(t *testing.T) {
+// TestPatch_RefusalsChangeNothing: a patch naming a reserved claim, an
+// unusable name, or making the claims too large for a token is refused as a
+// whole.
+func TestPatch_RefusalsChangeNothing(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
 	svc := newTestService(t, db)
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
-
-	if _, err := svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
-		Claims:      ClaimMap{"plan": "pro"},
-		Permanent:   true,
-		ClientID:    "test-client",
-		RedirectURI: "https://app.example.com/callback",
-	}); err != nil {
-		t.Fatalf("UpdateClaims: %v", err)
+	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"plan": "pro"}); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 
-	if _, err := svc.DeleteClaim(ctx, userID, tenantID, "plan"); err != nil {
-		t.Fatalf("DeleteClaim: %v", err)
+	_, err := svc.Patch(ctx, userID, tenantID, map[string]any{"tenant_id": uuid.New().String(), "sub": "x", "plan": nil})
+	var reservedErr *ReservedClaimError
+	if !errors.As(err, &reservedErr) || strings.Join(reservedErr.Keys, ",") != "sub,tenant_id" {
+		t.Fatalf("reserved: want ReservedClaimError{sub,tenant_id}, got %v", err)
 	}
 
-	if _, err := svc.DeleteClaim(ctx, userID, tenantID, "plan"); err == nil {
-		t.Fatal("expected deleting an already-deleted claim to error, not succeed silently")
-	}
-}
-
-// TestUserClaims_IsolatedByClaimType guards that UpdateUserClaims/GetUserClaims
-// (claim_type="user", no re-auth) is a distinct, independently-readable set
-// from the general permanent-claim store, keyed only by claim_type.
-func TestUserClaims_IsolatedByClaimType(t *testing.T) {
-	ctx := context.Background()
-	db := setupPostgres(t)
-	svc := newTestService(t, db)
-	userID, tenantID := fixtureUser(t, db)
-	cleanupUserClaims(t, db, userID)
-
-	if _, err := svc.UpdateUserClaims(ctx, userID, tenantID, &UpdateUserClaimsRequest{
-		Claims: ClaimMap{"theme": "dark"},
-	}); err != nil {
-		t.Fatalf("UpdateUserClaims: %v", err)
+	_, err = svc.Patch(ctx, userID, tenantID, map[string]any{"": "x", "plan": nil})
+	var invalidErr *InvalidClaimError
+	if !errors.As(err, &invalidErr) {
+		t.Fatalf("empty name: want InvalidClaimError, got %v", err)
 	}
 
-	userClaims, err := svc.GetUserClaims(ctx, userID, tenantID)
+	_, err = svc.Patch(ctx, userID, tenantID, map[string]any{"notes": strings.Repeat("x", maxClaimsSize), "plan": nil})
+	var tooLargeErr *ClaimsTooLargeError
+	if !errors.As(err, &tooLargeErr) {
+		t.Fatalf("too large: want ClaimsTooLargeError, got %v", err)
+	}
+
+	stored, err := svc.List(ctx, userID, tenantID)
 	if err != nil {
-		t.Fatalf("GetUserClaims: %v", err)
+		t.Fatalf("List: %v", err)
 	}
-	if userClaims.Claims["theme"] != "dark" {
-		t.Fatalf("expected theme=dark in user claims, got %+v", userClaims.Claims)
+	if len(stored) != 1 || stored["plan"] != "pro" {
+		t.Fatalf("a refused patch changed the stored claims: %+v", stored)
 	}
 }
 
-// TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenDatabase
-// exercises the three-strategy fallback GetClaimsForConsent documents in its
-// own comment — this is the exact logic Hydra's consent flow depends on to
-// inject the right claims into the issued token.
-func TestGetClaimsForConsent_PrefersLoginChallengeThenFallsBackToPendingThenDatabase(t *testing.T) {
+// TestPatch_RemovesAStoredReservedClaim: a reserved claim stored before
+// writes were checked can be removed, though never set.
+func TestPatch_RemovesAStoredReservedClaim(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
 	repo := NewRepository(db, newTestRedis(t))
-	svc := NewService(repo, "http://localhost:4444", zap.NewNop())
+	svc := NewService(repo, zap.NewNop())
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
-
-	// Strategy 3 (no login-challenge claims, no pending): base user info + an
-	// existing permanent claim, source=database. UpdateClaims always stages
-	// its claims as pending too (see the sibling precedence test), so the
-	// pending window is cleared explicitly here to reach the state this
-	// strategy actually targets — a permanent claim outliving its 5-minute
-	// pending window.
-	if _, err := svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
-		Claims: ClaimMap{"plan": "pro"}, Permanent: true,
-		ClientID: "c", RedirectURI: "https://app.example.com/cb",
+	if err := repo.SaveClaim(ctx, &UserClaim{
+		ID: uuid.New(), UserID: userID, TenantID: tenantID, ClaimKey: "tenant_id",
+		ClaimValue: map[string]any{"value": "other"}, IsPermanent: true,
 	}); err != nil {
-		t.Fatalf("UpdateClaims (seed permanent): %v", err)
+		t.Fatalf("seed: %v", err)
 	}
-	if err := repo.DeletePendingClaims(ctx, userID); err != nil {
-		t.Fatalf("DeletePendingClaims (simulate expiry): %v", err)
+
+	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"tenant_id": nil}); err != nil {
+		t.Fatalf("Patch (remove reserved): %v", err)
+	}
+	var rows int64
+	db.Model(&UserClaim{}).Where("user_id = ? AND claim_key = ?", userID, "tenant_id").Count(&rows)
+	if rows != 0 {
+		t.Fatalf("the stored reserved claim is still there (%d rows)", rows)
+	}
+}
+
+// TestGetClaimsForConsent_PrefersLoginChallengeThenDatabase exercises the
+// fallback GetClaimsForConsent documents: the claims prepared for the login
+// challenge first, the stored claims when there are none.
+func TestGetClaimsForConsent_PrefersLoginChallengeThenDatabase(t *testing.T) {
+	ctx := context.Background()
+	db := setupPostgres(t)
+	svc := newTestService(t, db)
+	userID, tenantID := fixtureUser(t, db)
+	cleanupUserClaims(t, db, userID)
+	if _, err := svc.Patch(ctx, userID, tenantID, map[string]any{"plan": "pro"}); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 
 	claims, source, err := svc.GetClaimsForConsent(ctx, "challenge-with-no-data", userID, tenantID)
 	if err != nil {
 		t.Fatalf("GetClaimsForConsent (database fallback): %v", err)
 	}
-	if source != ClaimsSourceDatabase {
-		t.Fatalf("expected source=database, got %v", source)
-	}
-	if claims["plan"] != "pro" {
-		t.Fatalf("expected the permanent claim, got %+v", claims)
+	if source != ClaimsSourceDatabase || claims["plan"] != "pro" {
+		t.Fatalf("database fallback: source=%v claims=%+v", source, claims)
 	}
 
-	// Strategy 1: claims explicitly associated with a login challenge take
-	// priority over everything else.
 	loginChallenge := "challenge-" + uuid.New().String()[:8]
 	loginClaims, err := svc.GetClaimsForLogin(ctx, userID, tenantID, loginChallenge)
 	if err != nil {
 		t.Fatalf("GetClaimsForLogin: %v", err)
 	}
 	if loginClaims["plan"] != "pro" {
-		t.Fatalf("expected GetClaimsForLogin to carry the permanent claim forward, got %+v", loginClaims)
+		t.Fatalf("expected GetClaimsForLogin to carry the stored claim forward, got %+v", loginClaims)
 	}
-
 	viaChallenge, source, err := svc.GetClaimsForConsent(ctx, loginChallenge, userID, tenantID)
 	if err != nil {
 		t.Fatalf("GetClaimsForConsent (login challenge): %v", err)
 	}
-	if source != ClaimsSourceLoginChallenge {
-		t.Fatalf("expected source=login_challenge, got %v", source)
-	}
-	if viaChallenge["plan"] != "pro" {
-		t.Fatalf("expected the login-challenge claims to include the permanent claim, got %+v", viaChallenge)
+	if source != ClaimsSourceLoginChallenge || viaChallenge["plan"] != "pro" {
+		t.Fatalf("login challenge: source=%v claims=%+v", source, viaChallenge)
 	}
 }
 
 // TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone guards the final
 // fallback rung: with no login-challenge data, no pending claims and no
-// permanent claims, the result must still be a valid (empty, source=none)
-// map rather than an error or a nil claims payload a caller would need to
+// stored claims, the result must still be a valid (empty, source=none) map
+// rather than an error or a nil claims payload a caller would need to
 // nil-check.
 func TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone(t *testing.T) {
 	ctx := context.Background()
@@ -295,42 +254,6 @@ func TestGetClaimsForConsent_NoClaimsAnywhereReportsSourceNone(t *testing.T) {
 	}
 }
 
-// TestClaimWrites_RefuseReservedClaims: a user writes their own claims with
-// their own token, so neither write path may take a claim the issuer asserts
-// (tenant_id, email, …) or one OAuth defines — and a refused write stores
-// nothing, not even its other claims.
-func TestClaimWrites_RefuseReservedClaims(t *testing.T) {
-	ctx := context.Background()
-	db := setupPostgres(t)
-	svc := newTestService(t, db)
-	userID, tenantID := fixtureUser(t, db)
-	cleanupUserClaims(t, db, userID)
-
-	_, err := svc.UpdateUserClaims(ctx, userID, tenantID, &UpdateUserClaimsRequest{
-		Claims: ClaimMap{"tenant_id": uuid.New().String(), "theme": "dark"},
-	})
-	var reservedErr *ReservedClaimError
-	if !errors.As(err, &reservedErr) || len(reservedErr.Keys) != 1 || reservedErr.Keys[0] != "tenant_id" {
-		t.Fatalf("UpdateUserClaims: want ReservedClaimError{tenant_id}, got %v", err)
-	}
-
-	_, err = svc.UpdateClaims(ctx, userID, tenantID, &UpdateClaimsRequest{
-		Claims:    ClaimMap{"email_verified": true, "auth_time": 4102444800, "sub": "someone-else", "plan": "pro"},
-		Permanent: true, ClientID: "c", RedirectURI: "https://app.example.com/cb",
-	})
-	if !errors.As(err, &reservedErr) || strings.Join(reservedErr.Keys, ",") != "auth_time,email_verified,sub" {
-		t.Fatalf("UpdateClaims: want ReservedClaimError{auth_time,email_verified,sub}, got %v", err)
-	}
-
-	got, err := svc.GetClaims(ctx, userID, tenantID)
-	if err != nil {
-		t.Fatalf("GetClaims: %v", err)
-	}
-	if len(got.Claims) != 0 {
-		t.Fatalf("a refused write stored claims: %+v", got.Claims)
-	}
-}
-
 // TestStoredReservedClaimsNeverReachATokenPath: a reserved claim stored
 // before writes were checked (or put there by any other means) is left out of
 // every path that feeds a token, and out of what the claims API shows.
@@ -338,7 +261,7 @@ func TestStoredReservedClaimsNeverReachATokenPath(t *testing.T) {
 	ctx := context.Background()
 	db := setupPostgres(t)
 	repo := NewRepository(db, newTestRedis(t))
-	svc := NewService(repo, "http://localhost:4444", zap.NewNop())
+	svc := NewService(repo, zap.NewNop())
 	userID, tenantID := fixtureUser(t, db)
 	cleanupUserClaims(t, db, userID)
 
@@ -385,9 +308,9 @@ func TestStoredReservedClaimsNeverReachATokenPath(t *testing.T) {
 	}
 	onlyPlan("consent via login challenge", viaChallenge)
 
-	shown, err := svc.GetUserClaims(ctx, userID, tenantID)
+	shown, err := svc.List(ctx, userID, tenantID)
 	if err != nil {
-		t.Fatalf("GetUserClaims: %v", err)
+		t.Fatalf("List: %v", err)
 	}
-	onlyPlan("GET /claims/user", shown.Claims)
+	onlyPlan("GET /users/{id}/claims", shown)
 }

@@ -182,14 +182,16 @@ func (s *service) GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]Audi
 	}
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
 	// What an administrator looking for trouble wants first: refused
-	// authentication, and changes to how an account is protected or whether
-	// it exists. Every action here is one the API records.
+	// authentication, and changes to how an account is protected, to whether
+	// it exists or to the claims its tokens carry. Every action here is one the
+	// API records.
 	securityActions := []AuditAction{
 		ActionUserLoginFailed,
 		ActionUserMFAFailed,
 		ActionUserMFADisabled,
 		ActionUserPasswordReset,
 		ActionUserDeleted,
+		ActionUserClaimsUpdated,
 		ActionConsentRevoked,
 	}
 	var logs []AuditLog
