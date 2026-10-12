@@ -128,6 +128,20 @@ type GoogleOAuthConfig struct {
 	ClientSecret string `mapstructure:"client_secret"`
 	RedirectURL  string `mapstructure:"redirect_url"`
 	Enabled      bool   `mapstructure:"enabled"`
+	// AuthURL, TokenURL and UserInfoURL are where Google is reached
+	// (AUTHWAY_GOOGLE_AUTH_URL, _TOKEN_URL, _USERINFO_URL). Empty means
+	// Google's own endpoints. They exist to point sign-in at a stand-in
+	// provider under test and are refused outside development: whatever
+	// answers there decides who signs in.
+	AuthURL     string `mapstructure:"auth_url"`
+	TokenURL    string `mapstructure:"token_url"`
+	UserInfoURL string `mapstructure:"userinfo_url"`
+}
+
+// EndpointsOverridden reports whether sign-in is pointed somewhere other than
+// Google itself.
+func (g GoogleOAuthConfig) EndpointsOverridden() bool {
+	return g.AuthURL != "" || g.TokenURL != "" || g.UserInfoURL != ""
 }
 
 type GitHubOAuthConfig struct {
@@ -221,6 +235,15 @@ func Load() (*Config, error) {
 	}
 	if enabled := os.Getenv("AUTHWAY_GOOGLE_ENABLED"); enabled != "" {
 		config.Google.Enabled = (enabled == "true")
+	}
+	if v := os.Getenv("AUTHWAY_GOOGLE_AUTH_URL"); v != "" {
+		config.Google.AuthURL = v
+	}
+	if v := os.Getenv("AUTHWAY_GOOGLE_TOKEN_URL"); v != "" {
+		config.Google.TokenURL = v
+	}
+	if v := os.Getenv("AUTHWAY_GOOGLE_USERINFO_URL"); v != "" {
+		config.Google.UserInfoURL = v
 	}
 
 	// Manual override for GitHub OAuth config
@@ -439,6 +462,9 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL outside development, got %q — emailed links would point at the container itself", c.App.FrontendURL))
 	}
 
+	if c.Google.EndpointsOverridden() && IsProduction(c.App.Environment) {
+		errors = append(errors, "google.auth_url, google.token_url and google.userinfo_url (AUTHWAY_GOOGLE_*_URL) point sign-in at a stand-in provider and are only accepted in development")
+	}
 	if c.Email.UseSendway && strings.TrimSpace(c.Email.SendwayBaseURL) == "" {
 		errors = append(errors, "email.sendway_base_url (AUTHWAY_EMAIL_SENDWAY_BASE_URL) is required when email.use_sendway is true")
 	}

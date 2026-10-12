@@ -40,6 +40,19 @@
   provider account must resolve that before upgrading — the migration's header
   has the query.
 
+### Added
+
+- **Conformance scenarios for sign-in through another identity provider.**
+  The suite plays the provider itself (a stand-in it serves at
+  `CONFORMANCE_IDP_STANDIN`) and checks what the provider under test does with
+  its word: an existing account is reached by an address the provider has
+  verified, the provider account then names the user whatever address it
+  reports, an unverified address reaches no account, and a user's own second
+  factor is still asked for. A deployment that offers such sign-in must be
+  given a stand-in to run the suite. For Authway, `AUTHWAY_GOOGLE_AUTH_URL`,
+  `AUTHWAY_GOOGLE_TOKEN_URL` and `AUTHWAY_GOOGLE_USERINFO_URL` say where Google
+  is reached; they are refused outside development.
+
 ### Fixed
 
 - **Every sign-in records the user's last sign-in time.** Only a sign-in

@@ -46,7 +46,27 @@ type GoogleTokenResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
+// Google's own endpoints, used unless the configuration names others.
+const (
+	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"
+	googleTokenURL    = "https://oauth2.googleapis.com/token"
+	googleUserInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
+)
+
+func endpoint(configured, google string) string {
+	if configured != "" {
+		return configured
+	}
+	return google
+}
+
 func NewGoogleService(cfg *config.GoogleOAuthConfig, userService user.Service, invitations InvitationGate, clientService client.Service, logger *zap.Logger) *GoogleService {
+	if cfg.EndpointsOverridden() {
+		logger.Warn("Google sign-in is pointed at configured endpoints, not at Google: whatever answers there decides who signs in",
+			zap.String("auth_url", endpoint(cfg.AuthURL, googleAuthURL)),
+			zap.String("token_url", endpoint(cfg.TokenURL, googleTokenURL)),
+			zap.String("userinfo_url", endpoint(cfg.UserInfoURL, googleUserInfoURL)))
+	}
 	return &GoogleService{
 		config:        cfg,
 		userService:   userService,
@@ -136,7 +156,7 @@ func (g *GoogleService) GetAuthURLForClient(state string, clientID string) strin
 		zap.String("redirect_url", oauthConfig.RedirectURL),
 		zap.String("oauth_client_id", clientID))
 
-	baseURL := "https://accounts.google.com/o/oauth2/v2/auth"
+	baseURL := endpoint(g.config.AuthURL, googleAuthURL)
 	params := url.Values{}
 	params.Add("client_id", oauthConfig.ClientID)
 	params.Add("redirect_uri", oauthConfig.RedirectURL)
@@ -161,7 +181,7 @@ func (g *GoogleService) ExchangeCodeForClient(ctx context.Context, code string, 
 		return nil, fmt.Errorf("failed to get OAuth config: %w", err)
 	}
 
-	tokenURL := "https://oauth2.googleapis.com/token"
+	tokenURL := endpoint(g.config.TokenURL, googleTokenURL)
 
 	data := url.Values{}
 	data.Set("client_id", oauthConfig.ClientID)
@@ -198,7 +218,7 @@ func (g *GoogleService) ExchangeCodeForClient(ctx context.Context, code string, 
 
 // GetUserInfo retrieves user information from Google
 func (g *GoogleService) GetUserInfo(ctx context.Context, accessToken string) (*GoogleUserInfo, error) {
-	userInfoURL := "https://www.googleapis.com/oauth2/v2/userinfo"
+	userInfoURL := endpoint(g.config.UserInfoURL, googleUserInfoURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
 	if err != nil {

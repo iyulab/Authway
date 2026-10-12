@@ -3,6 +3,7 @@ import { Browser } from './browser.js'
 import { conform } from './contract.js'
 import { waitForLink } from './mail.js'
 import { createPkce, randomToken, type Pkce } from './pkce.js'
+import { type StandInIdentity, type StandInProvider } from './standin.js'
 
 export const REDIRECT_URI = 'http://localhost:9999/conformance-callback'
 export const POST_LOGOUT_REDIRECT_URI = 'http://localhost:9999/conformance-signed-out'
@@ -398,6 +399,47 @@ export class Provider {
     return this.afterFirstFactor(attempt, redeemRes.status, await redeemRes.text())
   }
 
+  /**
+   * Signs in through another identity provider, played by the suite's
+   * stand-in: starts the provider step of the login flow, and — as the user
+   * who has just signed in at the provider — comes back with a code that
+   * stands for `identity`.
+   *
+   * How a provider answers that return is its own business: a redirect, or a
+   * page that navigates onward. Either leads to the application, to the login
+   * UI's second factor step, or back to the application with an error.
+   */
+  async continueWithProvider(attempt: LoginAttempt, standIn: StandInProvider, identity: StandInIdentity): Promise<LoginOutcome> {
+    const { browser, flow } = attempt
+    const toProvider = await browser.redirectFrom(this.loginFlowUrl(flow, `/social/${this.config.idpStandInAs}`))
+    if (toProvider.origin !== standIn.origin) {
+      throw new Error(`The provider step went to ${toProvider.origin}${toProvider.pathname}, not to the stand-in at ${standIn.origin}`)
+    }
+    const state = toProvider.searchParams.get('state')
+    const redirectUri = toProvider.searchParams.get('redirect_uri')
+    if (!state || !redirectUri) throw new Error(`The provider step carries no state or redirect_uri: ${toProvider}`)
+
+    const back = new URL(redirectUri)
+    back.searchParams.set('code', standIn.codeFor(identity))
+    back.searchParams.set('state', state)
+    const res = await browser.fetch(back.toString())
+    const next = await navigationFrom(res, back)
+
+    if (next.pathname.endsWith('/mfa/verify')) {
+      const owedFlow = next.searchParams.get('flow')
+      const challenge = next.searchParams.get('mfa_challenge')
+      if (!owedFlow || !challenge) throw new Error(`The second factor step was opened without a flow or challenge: ${next}`)
+      const { auth_ui: loginUi } = (await (await fetch(`${this.config.api}/.well-known/authway-config`)).json()) as { auth_ui: string }
+      if (next.origin !== new URL(loginUi).origin) throw new Error(`The second factor step is not on the login UI (${loginUi}): ${next}`)
+      return { kind: 'second_factor', attempt, flow: owedFlow, challenge }
+    }
+    // Straight to an error screen: no one was signed in and the request could not be handed back.
+    if (next.searchParams.has('error')) return { kind: 'rejected', status: res.status, body: next.toString() }
+    // Otherwise on by way of the authorization server — which answers the
+    // application with a code, or with the error of a refused sign-in.
+    return this.finishAuthorization(attempt, next.toString(), res.status)
+  }
+
   /** From the authorization server's answer to an accepted login to tokens: consent if asked, then the code exchange. */
   private async finishAuthorization(attempt: LoginAttempt, afterLogin: string, status: number): Promise<LoginOutcome> {
     const { browser, client, scopes, pkce } = attempt
@@ -489,4 +531,16 @@ export class Provider {
     }
     return { status: res.status, body }
   }
+}
+
+/** Where a response sends the browser: a redirect's Location, or the address a returned page navigates to. */
+async function navigationFrom(res: Response, from: URL): Promise<URL> {
+  const location = res.headers.get('location')
+  if (res.status >= 300 && res.status < 400 && location) return new URL(location, from)
+  const page = await res.text()
+  const scripted = /window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/.exec(page)
+  const refreshed = /http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"']+)["']/i.exec(page)
+  const target = scripted?.[1] ?? refreshed?.[1]
+  if (!target) throw new Error(`Expected a redirect or a page that navigates onward from ${from}, got ${res.status}: ${page.slice(0, 300)}`)
+  return new URL(target, from)
 }

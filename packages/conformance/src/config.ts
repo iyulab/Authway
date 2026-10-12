@@ -23,6 +23,16 @@ export interface ConformanceConfig {
    * unless the provider runs somewhere that calls this machine differently.
    */
   callbackHost: string
+  /**
+   * Where the suite serves a stand-in identity provider, e.g.
+   * `http://localhost:9912`. The provider under test must be configured to
+   * exchange codes and read profiles there for the sign-in provider named in
+   * `idpStandInAs`. Required when the provider offers sign-in through other
+   * identity providers at all.
+   */
+  idpStandIn?: string
+  /** The sign-in provider the stand-in is put in the place of. */
+  idpStandInAs: string
 }
 
 const REQUIRED = {
@@ -49,5 +59,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConformanceCon
     mailApi: trim(env[REQUIRED.mailApi]!),
     tenantId: env.CONFORMANCE_TENANT_ID || undefined,
     callbackHost: env.CONFORMANCE_CALLBACK_HOST || 'localhost',
+    idpStandIn: env.CONFORMANCE_IDP_STANDIN ? trim(env.CONFORMANCE_IDP_STANDIN) : undefined,
+    idpStandInAs: env.CONFORMANCE_IDP_STANDIN_AS || 'google',
   }
 }

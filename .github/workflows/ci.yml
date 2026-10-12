@@ -206,6 +206,14 @@ jobs:
           AUTHWAY_EMAIL_SMTP_HOST: localhost
           AUTHWAY_EMAIL_SMTP_PORT: '1025'
           AUTHWAY_ADMIN_API_KEY: ${{ env.ADMIN_API_KEY }}
+          # Sign-in through Google is pointed at the stand-in provider the
+          # conformance suite serves (packages/conformance/README.md).
+          AUTHWAY_GOOGLE_ENABLED: 'true'
+          AUTHWAY_GOOGLE_CLIENT_ID: standin
+          AUTHWAY_GOOGLE_CLIENT_SECRET: standin
+          AUTHWAY_GOOGLE_AUTH_URL: http://localhost:9912/authorize
+          AUTHWAY_GOOGLE_TOKEN_URL: http://localhost:9912/token
+          AUTHWAY_GOOGLE_USERINFO_URL: http://localhost:9912/userinfo
         run: |
           set -euo pipefail
           go build -o "$RUNNER_TEMP/authway-api" ./apps/central/api/cmd
@@ -224,6 +232,7 @@ jobs:
           CONFORMANCE_API: http://localhost:8080
           CONFORMANCE_ADMIN_KEY: ${{ env.ADMIN_API_KEY }}
           CONFORMANCE_MAIL_API: http://localhost:8025
+          CONFORMANCE_IDP_STANDIN: http://localhost:9912
         run: pnpm --filter @authway/conformance test
 
       - name: Show service logs
