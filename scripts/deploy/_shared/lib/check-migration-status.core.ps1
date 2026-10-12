@@ -15,7 +15,13 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("prod", "staging")]
-    [string]$Target
+    [string]$Target,
+
+    # The versions the deployed API ships, comma-separated (its /health names
+    # them). Given, they are what the database is checked against; without
+    # them the migration files of this working tree are, which is only the
+    # deployed code when the image was built from this tree as it stands.
+    [string]$Shipped = ""
 )
 
 $LibDir = $PSScriptRoot
@@ -57,6 +63,21 @@ if ($repoVersions.Count -eq 0) {
     exit 1
 }
 
+$basis = "작업 트리"
+if ($Shipped.Trim() -ne '') {
+    # 배포된 이미지가 가진 버전이 기준. 이름은 작업 트리에 같은 버전이 있으면 빌려 온다.
+    $basis = "배포된 이미지"
+    $treeNames = $repoVersions
+    $repoVersions = [ordered]@{}
+    foreach ($v in ($Shipped -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' } | Sort-Object)) {
+        $repoVersions[$v] = if ($treeNames.Contains($v)) { $treeNames[$v] } else { "(이미지)" }
+    }
+    $onlyInTree = @($treeNames.Keys | Where-Object { -not $repoVersions.Contains($_) })
+    if ($onlyInTree.Count -gt 0) {
+        Write-Host "ℹ️  작업 트리에만 있고 배포된 이미지에는 없는 마이그레이션: $($onlyInTree -join ', ') — 이 배포의 대상이 아님" -ForegroundColor Gray
+    }
+}
+
 $query = @"
 SELECT version, name, success, TO_CHAR(executed_at, 'YYYY-MM-DD HH24:MI:SS')
 FROM schema_migrations
@@ -95,9 +116,10 @@ $latestRepo = @($repoVersions.Keys)[-1]
 $latestApplied = @($applied.Keys | Sort-Object)[-1]
 
 Write-Host "📊 요약" -ForegroundColor Cyan
-Write-Host "  저장소 최신 버전 : $latestRepo"
+Write-Host "  기준             : $basis"
+Write-Host "  기준의 최신 버전 : $latestRepo"
 Write-Host "  DB 최신 적용 버전: $latestApplied"
-Write-Host "  적용: $($applied.Count) / 저장소 파일: $($repoVersions.Count)"
+Write-Host "  적용: $($applied.Count) / 기준의 마이그레이션: $($repoVersions.Count)"
 
 if ($pending.Count -gt 0) {
     Write-Host "  ⏳ 보류: $($pending.Count)개" -ForegroundColor Yellow

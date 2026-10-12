@@ -381,16 +381,29 @@ try {
     }
 
     # ------------------------------------------------------------
-    # Migrations: did the new image apply everything this tree ships?
+    # Migrations: did the new image apply everything it ships?
     # ------------------------------------------------------------
     # The API applies migrations at startup and exits on failure, so a healthy
-    # new version already implies success — this makes it explicit and catches
-    # a migration file that never reached the image. Compared against this
-    # working tree, i.e. the code being deployed. Runs in its own process
-    # because the checker ends with exit.
+    # new version already implies success — this makes it explicit. The image
+    # says which migrations it ships (/health); the database is checked
+    # against that, not against this working tree: with -ImageTag -SkipBuild
+    # the tree is not what is being deployed, and a migration file only in
+    # the tree is not this deployment's to apply. An image from before it
+    # named its migrations is checked against the tree, as before. Runs in
+    # its own process because the checker ends with exit.
     Write-Host "🗄  migration status..." -ForegroundColor Yellow
     $checker = Join-Path $LibDir "check-migration-status.core.ps1"
-    & (Get-Process -Id $PID).Path -NoProfile -File $checker -Target $Target | Out-Host
+    $shipped = ""
+    try {
+        $health = Invoke-RestMethod -Uri "$ApiUrl/health" -TimeoutSec 20
+        if ($health.migrations) { $shipped = (@($health.migrations) -join ',') }
+    } catch {
+        Write-Host "⚠️  /health 에서 이미지의 마이그레이션 목록을 읽지 못함: $_" -ForegroundColor Yellow
+    }
+    if ($shipped -eq "") {
+        Write-Host "ℹ️  이미지가 마이그레이션 목록을 말하지 않음 — 작업 트리를 기준으로 확인" -ForegroundColor Gray
+    }
+    & (Get-Process -Id $PID).Path -NoProfile -File $checker -Target $Target -Shipped $shipped | Out-Host
     switch ($LASTEXITCODE) {
         0 { Write-Host "✓ 마이그레이션 보류·실패 없음" -ForegroundColor Green }
         2 { throw "마이그레이션 검증 실패: 새 이미지 기동 후에도 보류 또는 실패 기록이 있음" }

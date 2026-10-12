@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+### Fixed
+
+- **The deployment check compares the database with the migrations the
+  deployed image ships**, not with the migration files of the tree the script
+  runs from. Deploying an image built earlier (`-ImageTag … -SkipBuild`) from
+  a tree that had moved on reported a failed deployment for a migration the
+  image was never meant to apply — and a tree behind the image would have
+  hidden one it did not apply. `GET /health` now lists the versions built into
+  the API (`migrations`); `check-migration-status` takes them as `-Shipped`.
+
 ## [0.10.0] - 2026-10-13
 
 > Minor, with one breaking removal. The second factor is closed off at its

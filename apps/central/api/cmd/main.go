@@ -250,13 +250,19 @@ func main() {
 	app.Use(middleware.RequestLogger(zapLogger))
 	app.Use(telemetry.RequestTracking(telemetryClient, zapLogger))
 
-	// Health check
+	// Health check. It names the migrations this binary ships, so a deployment
+	// can check the database against what was deployed.
+	shippedMigrations, err := database.ShippedVersions()
+	if err != nil {
+		zapLogger.Fatal("Failed to read the migrations built into the binary", zap.Error(err))
+	}
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"status":    "ok",
-			"service":   "authway",
-			"version":   cfg.App.Version,
-			"timestamp": c.Context().Time(),
+			"status":     "ok",
+			"service":    "authway",
+			"version":    cfg.App.Version,
+			"migrations": shippedMigrations,
+			"timestamp":  c.Context().Time(),
 		})
 	})
 

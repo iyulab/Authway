@@ -108,6 +108,22 @@ func RunMigrations(db *gorm.DB, logger *zap.Logger) error {
 var migrationFilenamePattern = regexp.MustCompile(`^(\d+)_(.+)\.sql$`)
 
 // getMigrationFiles reads all migration files from the embedded filesystem.
+// ShippedVersions lists the versions of the migrations built into this
+// binary, in order. A deployment check compares them with what the database
+// records as applied: the binary, not whatever tree the check runs from, is
+// what was deployed.
+func ShippedVersions() ([]string, error) {
+	migrations, err := getMigrationFiles()
+	if err != nil {
+		return nil, err
+	}
+	versions := make([]string, len(migrations))
+	for i, m := range migrations {
+		versions[i] = m.Version
+	}
+	return versions, nil
+}
+
 func getMigrationFiles() ([]migrationFile, error) {
 	sub, err := fs.Sub(migrationFiles, "migrations")
 	if err != nil {

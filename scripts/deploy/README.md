@@ -111,6 +111,8 @@ az --version; docker --version; psql --version; swa --version; npx wrangler@late
 # 종료 코드: 0 = 보류·실패 없음, 1 = 접속/조회 실패, 2 = 보류 또는 실패 기록 있음
 ```
 
+기준은 둘 중 하나다. 인자가 없으면 **이 작업 트리의 마이그레이션 파일** — 방금 이 트리로 빌드해 배포했을 때만 맞다. `-Shipped "000,001,…"` 을 주면 **배포된 이미지가 가진 버전**(API 의 `GET /health` → `migrations`)이 기준이다. `publish-api` 의 배포 후 검증은 `/health` 에서 읽어 후자로 확인한다 — `-ImageTag … -SkipBuild` 로 앞서 빌드한 이미지를 올릴 때 트리가 그 이미지와 달라도 오보·누락이 없다.
+
 ## 첫 staging 배포 절차 (2026-04-15 이후)
 
 **선결 (인간 작업)**:
