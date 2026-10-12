@@ -663,15 +663,23 @@ IDX10214: Audience validation failed. Audiences: 'xxx'.
 Did not match: validationParameters.ValidAudience
 ```
 
-**Cause**: Frontend not requesting `audience` in authorization flow
+**Cause**: The client that obtained the token is not registered for your API,
+so the token's `aud` is empty (or names another API).
 
-**Solution**: Add `audience` parameter to authorization URL
+**Solution**: Put your API's identifier in the client's `audience` — the same
+value your API validates against:
 
-```javascript
-// Frontend SDK configuration
-const authUrl = new URL(authorizationEndpoint);
-authUrl.searchParams.set('audience', 'api');  // ✅ Add this!
+```bash
+curl -X PUT http://localhost:8080/api/v1/clients/<client id> \
+  -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "audience": ["api"] }'
 ```
+
+Tokens issued after that carry it; the application's authorization request
+does not change. See [client management](api/client-management.md#clients-whose-tokens-go-to-an-api-audience).
+Do not turn audience validation off: it is what keeps another application's
+token out of your API.
 
 ### Issue 3: CORS errors
 

@@ -45,6 +45,11 @@ type Client struct {
 	// via SyncAllClientsToHydra) and alone decides where the browser goes.
 	PostLogoutRedirectURIs pq.StringArray `json:"post_logout_redirect_uris" gorm:"type:text[];column:post_logout_redirect_uris;default:'{}'"`
 
+	// Audience names the resource servers (APIs) this client's access tokens
+	// are for. It becomes the token's aud claim, which an API checks to accept
+	// only tokens issued for it.
+	Audience pq.StringArray `json:"audience" gorm:"type:text[];column:audience;default:'{}'"`
+
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
@@ -118,6 +123,9 @@ type PublicClient struct {
 
 	// Logout Redirect Policy
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+
+	// Resource servers the client's access tokens are for.
+	Audience []string `json:"audience"`
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
@@ -195,6 +203,8 @@ func (c *Client) ToPublic() PublicClient {
 		// Logout policy
 		PostLogoutRedirectURIs: c.PostLogoutRedirectURIs,
 
+		Audience: nonNil(c.Audience),
+
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
 		AllowEmailSignup:     c.AllowEmailSignup,
@@ -258,6 +268,10 @@ type CreateClientRequest struct {
 
 	// Logout Redirect Policy Configuration
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
+
+	// Audience: the resource servers the client's access tokens are for.
+	// Validated in validateAudience.
+	Audience []string `json:"audience"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
@@ -349,6 +363,9 @@ type UpdateClientRequest struct {
 	// PostLogoutRedirectURIs: empty array means "clear", nil means "not provided"
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris" validate:"omitempty,dive,url"`
 
+	// Audience: empty array means "clear", nil means "not provided".
+	Audience []string `json:"audience"`
+
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	// Empty array means "clear all", nil means "not provided"
@@ -407,4 +424,13 @@ type SyncStatus struct {
 // OK reports whether the sync completed successfully (or wasn't needed).
 func (s SyncStatus) OK() bool {
 	return s.State == SyncStateOK || s.State == SyncStateSkipped
+}
+
+// nonNil returns values, or an empty list for nil, so a JSON answer carries
+// [] rather than null.
+func nonNil(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

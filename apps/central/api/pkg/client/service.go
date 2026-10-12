@@ -52,6 +52,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateAccessTokenStrategy(req.AccessTokenStrategy); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateAudience(req.Audience); cerr != nil {
+		return nil, nil, cerr
+	}
 
 	// Validate tenant_id
 	tenantID, err := uuid.Parse(req.TenantID)
@@ -277,6 +280,8 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		client.AllowedOrigins = req.AllowedOrigins
 	}
 
+	client.Audience = req.Audience
+
 	// Logout Redirect Policy Configuration (Smart Defaults)
 	// Philosophy: Minimize boilerplate - auto-populate from redirect_uris if not explicitly set
 	if len(req.PostLogoutRedirectURIs) > 0 {
@@ -307,32 +312,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	}
 
 	// Register client in Hydra
-	// Set token_endpoint_auth_method based on public client setting
-	authMethod := "client_secret_post"
-	if client.Public {
-		authMethod = "none"
-	}
-
-	// Smart fallback: Ensure Hydra always has valid post_logout_redirect_uris
-	hydraPostLogoutURIs := client.PostLogoutRedirectURIs
-	if len(hydraPostLogoutURIs) == 0 && len(client.RedirectURIs) > 0 {
-		hydraPostLogoutURIs = client.RedirectURIs
-	}
-
-	hydraClient := &hydra.OAuth2Client{
-		ClientID:                clientID,
-		ClientSecret:            clientSecret,
-		ClientName:              client.Name,
-		RedirectUris:            nonNilURIs(client.RedirectURIs),
-		PostLogoutRedirectUris:  hydraPostLogoutURIs,
-		GrantTypes:              client.GrantTypes,
-		ResponseTypes:           []string{"code"}, // Default to authorization code flow
-		Scope:                   strings.Join(client.Scopes, " "),
-		TokenEndpointAuthMethod: authMethod,
-		SkipConsent:             client.SkipConsent,
-		SkipLogoutConsent:       client.SkipLogoutConsent,
-		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
-	}
+	hydraClient := client.hydraRegistration(clientSecret)
 
 	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
 	if err != nil {
@@ -427,6 +407,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 			return nil, SyncStatus{}, cerr
 		}
 	}
+	if cerr := validateAudience(req.Audience); cerr != nil {
+		return nil, SyncStatus{}, cerr
+	}
 
 	// Update fields
 	// Note: For string fields, we update even if empty to allow clearing values
@@ -482,6 +465,11 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// PostLogoutRedirectURIs: nil = not provided, empty = clear values
 	if req.PostLogoutRedirectURIs != nil {
 		client.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
+	}
+
+	// Audience: nil = not provided, empty = clear
+	if req.Audience != nil {
+		client.Audience = req.Audience
 	}
 
 	// Consent flow configuration
@@ -550,35 +538,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 
 	// Update client in Hydra
-	// Set token_endpoint_auth_method based on public client setting
-	authMethod := "client_secret_post"
-	if client.Public {
-		authMethod = "none"
-	}
-
-	// Smart fallback: If PostLogoutRedirectURIs is empty, use RedirectURIs for Hydra
-	// This ensures logout always works even if user clears the explicit list
-	hydraPostLogoutURIs := client.PostLogoutRedirectURIs
-	if len(hydraPostLogoutURIs) == 0 && len(client.RedirectURIs) > 0 {
-		hydraPostLogoutURIs = client.RedirectURIs
-		s.logger.Debug("Using redirect_uris as fallback for empty post_logout_redirect_uris in Hydra",
-			zap.String("client_id", client.ClientID))
-	}
-
-	hydraUpdate := &hydra.OAuth2Client{
-		ClientID:                client.ClientID,
-		ClientSecret:            client.ClientSecret,
-		ClientName:              client.Name,
-		RedirectUris:            nonNilURIs(client.RedirectURIs),
-		PostLogoutRedirectUris:  hydraPostLogoutURIs,
-		GrantTypes:              client.GrantTypes,
-		ResponseTypes:           []string{"code"},
-		Scope:                   strings.Join(client.Scopes, " "),
-		TokenEndpointAuthMethod: authMethod,
-		SkipConsent:             client.SkipConsent,
-		SkipLogoutConsent:       client.SkipLogoutConsent,
-		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
-	}
+	hydraUpdate := client.hydraRegistration(client.ClientSecret)
 
 	syncStatus := SyncStatus{State: SyncStateOK}
 	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
@@ -691,25 +651,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	}
 
 	// Update secret in Hydra
-	// Set token_endpoint_auth_method based on public client setting
-	authMethod := "client_secret_post"
-	if client.Public {
-		authMethod = "none"
-	}
-
-	hydraUpdate := &hydra.OAuth2Client{
-		ClientID:                client.ClientID,
-		ClientSecret:            newSecret,
-		ClientName:              client.Name,
-		RedirectUris:            nonNilURIs(client.RedirectURIs),
-		GrantTypes:              client.GrantTypes,
-		ResponseTypes:           []string{"code"},
-		Scope:                   strings.Join(client.Scopes, " "),
-		TokenEndpointAuthMethod: authMethod,
-		SkipConsent:             client.SkipConsent,
-		SkipLogoutConsent:       client.SkipLogoutConsent,
-		AccessTokenStrategy:     derefStrategy(client.AccessTokenStrategy),
-	}
+	hydraUpdate := client.hydraRegistration(newSecret)
 
 	syncStatus := SyncStatus{State: SyncStateOK}
 	if _, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate); errHydra != nil {
@@ -780,6 +722,40 @@ func nonNilURIs(uris []string) []string {
 		return []string{}
 	}
 	return uris
+}
+
+// hydraRegistration is the client as the authorization server stores it.
+// Creating, updating and regenerating the secret all send this one shape: an
+// update replaces the whole client there, so a field one of them left out
+// would be reset.
+func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
+	authMethod := "client_secret_post"
+	if c.Public {
+		authMethod = "none"
+	}
+
+	// A client that names no post-logout address may return to its redirect
+	// addresses, so that signing out works without further configuration.
+	postLogoutURIs := []string(c.PostLogoutRedirectURIs)
+	if len(postLogoutURIs) == 0 && len(c.RedirectURIs) > 0 {
+		postLogoutURIs = c.RedirectURIs
+	}
+
+	return &hydra.OAuth2Client{
+		ClientID:                c.ClientID,
+		ClientSecret:            secret,
+		ClientName:              c.Name,
+		RedirectUris:            nonNilURIs(c.RedirectURIs),
+		PostLogoutRedirectUris:  postLogoutURIs,
+		Audience:                nonNil(c.Audience),
+		GrantTypes:              c.GrantTypes,
+		ResponseTypes:           []string{"code"},
+		Scope:                   strings.Join(c.Scopes, " "),
+		TokenEndpointAuthMethod: authMethod,
+		SkipConsent:             c.SkipConsent,
+		SkipLogoutConsent:       c.SkipLogoutConsent,
+		AccessTokenStrategy:     derefStrategy(c.AccessTokenStrategy),
+	}
 }
 
 // derefStrategy flattens the optional per-client access token strategy for the

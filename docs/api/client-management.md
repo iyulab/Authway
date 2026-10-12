@@ -146,6 +146,7 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
+| `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
 
 ### Application-type matrix
 
@@ -188,3 +189,40 @@ authorization code in one of two ways ([RFC 8252](https://www.rfc-editor.org/rfc
 No `allowed_origins` is needed: the token request comes from the app, not from
 a page in a browser, so there is no origin to allow. Use PKCE (`S256`) on every
 request; a public client has no secret.
+
+### Clients whose tokens go to an API: `audience`
+
+When an application calls an API of yours with the user's access token, the
+API has to know the token was issued **for it** — otherwise it accepts the
+token of every other application of the same issuer. Name the API on the
+client:
+
+```json
+{
+  "name": "Orders app",
+  "public": true,
+  "redirect_uris": ["https://orders.example.com/callback"],
+  "allowed_origins": ["https://orders.example.com"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "scopes": ["openid", "profile", "email"],
+  "access_token_strategy": "jwt",
+  "audience": ["https://orders-api.example.com"]
+}
+```
+
+- `audience` is a list of identifiers, each the name an API knows itself by —
+  by convention its URL. Authway does not call it.
+- The client's access tokens carry them as the `aud` claim, with no change to
+  the application's authorization request. A request that names some of them
+  (`audience` parameter) gets those only; one it is not registered for is
+  never granted.
+- The API checks that `aud` contains its own identifier. Every JWT library has
+  this as its *audience* setting.
+- A client registered for none gets tokens with an empty `aud`, which an API
+  that checks its audience refuses.
+- `PUT /api/v1/clients/{id}` with `"audience": []` clears it; leaving the field
+  out keeps it.
+
+This applies to tokens issued to a user (authorization code). A
+machine-to-machine client (`client_credentials`) names the audience it wants in
+its token request (`audience` parameter).

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -325,6 +326,28 @@ func issuedFor(u *user.User) claims.Issued {
 	}
 }
 
+// grantedAudience is the audience of the access token a consent grants: the
+// resource servers the client is registered for. A request that names some of
+// them gets those only. The authorization server takes whatever audience the
+// consent grants, so nothing the client is not registered for is granted
+// here.
+func grantedAudience(consentReq *hydra.ConsentRequest) []string {
+	if consentReq.Client == nil {
+		return nil
+	}
+	registered := consentReq.Client.Audience
+	if len(consentReq.RequestedAudience) == 0 {
+		return registered
+	}
+	var granted []string
+	for _, requested := range consentReq.RequestedAudience {
+		if slices.Contains(registered, requested) {
+			granted = append(granted, requested)
+		}
+	}
+	return granted
+}
+
 // storedClaims returns the claims stored for u, for the tokens about to be
 // issued. A failure to read them does not fail the consent: the tokens then
 // carry the issuer's claims only.
@@ -403,7 +426,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 		// Auto-accept consent
 		acceptRequest := &hydra.AcceptConsentRequest{
 			GrantScope:               consentReq.RequestedScope,
-			GrantAccessTokenAudience: consentReq.RequestedAudience,
+			GrantAccessTokenAudience: grantedAudience(consentReq),
 			Remember:                 true,
 			RememberFor:              3600,
 			Session: &hydra.ConsentSession{
@@ -483,9 +506,10 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	issued := issuedFor(user)
 
 	// Accept consent request
+	audience := grantedAudience(consentReq)
 	acceptBody := &hydra.AcceptConsentRequest{
 		GrantScope:               req.GrantScope,
-		GrantAccessTokenAudience: consentReq.RequestedAudience,
+		GrantAccessTokenAudience: audience,
 		Remember:                 req.Remember,
 		RememberFor:              req.RememberFor,
 		Session: &hydra.ConsentSession{
@@ -498,7 +522,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	h.logger.Info("Sending consent accept to Hydra",
 		zap.String("challenge", challenge),
 		zap.Strings("grant_scope", req.GrantScope),
-		zap.Strings("grant_access_token_audience", consentReq.RequestedAudience),
+		zap.Strings("grant_access_token_audience", audience),
 		zap.Bool("remember", req.Remember),
 		zap.Int("remember_for", req.RememberFor),
 		zap.String("user_id", user.ID.String()),
@@ -519,7 +543,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	h.logUserAudit(c, user, audit.ActionConsentGranted, map[string]any{
 		"challenge":   challenge,
 		"grant_scope": req.GrantScope,
-		"audience":    consentReq.RequestedAudience,
+		"audience":    audience,
 		"client_id":   consentReq.Client.ClientID,
 		"remember":    req.Remember,
 	})

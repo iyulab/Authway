@@ -576,12 +576,24 @@ paths:
                 redirect_uris: { type: array, items: { type: string } }
                 post_logout_redirect_uris: { type: array, items: { type: string } }
                 allowed_origins: { type: array, items: { type: string } }
+                audience:
+                  description: |
+                    The resource servers (APIs) this client's access tokens
+                    are for — each an identifier the API knows itself by,
+                    usually its URL. They become the token's `aud` claim. An
+                    empty list clears them.
+                  type: array
+                  items: { type: string }
                 grant_types: { type: array, items: { type: string } }
                 scopes: { type: array, items: { type: string } }
                 enabled_auth_providers:
                   description: Sign-in methods to offer — email, magic_link, google, github, microsoft, apple.
                   type: array
                   items: { type: string }
+                access_token_strategy:
+                  description: jwt gives the client access tokens that follow the resource server profile (JwtAccessToken).
+                  type: string
+                  enum: ['', jwt, opaque]
       responses:
         '201':
           description: Registered
@@ -646,6 +658,14 @@ paths:
                 active: { type: boolean }
                 redirect_uris: { type: array, items: { type: string } }
                 post_logout_redirect_uris: { type: array, items: { type: string } }
+                audience:
+                  description: |
+                    The resource servers (APIs) this client's access tokens
+                    are for — each an identifier the API knows itself by,
+                    usually its URL. They become the token's `aud` claim. An
+                    empty list clears them.
+                  type: array
+                  items: { type: string }
                 allowed_origins: { type: array, items: { type: string } }
                 grant_types: { type: array, items: { type: string } }
                 scopes: { type: array, items: { type: string } }
@@ -1718,8 +1738,8 @@ components:
         A client registered with `access_token_strategy: jwt` receives access
         tokens that are JWTs, signed and not encrypted. A resource server
         verifies one with a standard JOSE library: the keys at the `jwks_uri`
-        of the issuer's OpenID Connect discovery document, and the `iss`
-        claim equal to the issuer. It needs no call to the provider and no
+        of the issuer's OpenID Connect discovery document, the `iss` claim
+        equal to the issuer, and its own identifier among `aud`. It needs no call to the provider and no
         knowledge of which authorization server issued the token.
 
         Such a token is valid until it expires: revoking the session or the
@@ -1743,7 +1763,12 @@ components:
               type: string
               description: The granted scopes, space-separated (RFC 9068).
             aud:
-              description: The resource servers the token is meant for.
+              description: |
+                The resource servers the token is for: those the client is
+                registered for (`audience` of the client), or the ones among
+                them the authorization request named. A resource server
+                accepts a token only when `aud` contains its own identifier;
+                it is empty for a client registered for none.
               type: array
               items: { type: string }
 
@@ -1921,6 +1946,10 @@ components:
         public: { type: boolean }
         redirect_uris: { type: [array, 'null'], items: { type: string } }
         post_logout_redirect_uris: { type: [array, 'null'], items: { type: string } }
+        audience:
+          description: The resource servers this client's access tokens are for (their `aud` claim).
+          type: array
+          items: { type: string }
         allowed_origins: { type: [array, 'null'], items: { type: string } }
         grant_types: { type: array, items: { type: string } }
         scopes: { type: array, items: { type: string } }

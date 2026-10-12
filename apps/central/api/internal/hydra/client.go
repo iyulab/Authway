@@ -56,11 +56,15 @@ func NewClient(adminURL string) *Client {
 
 // OAuth2 Client Management
 type OAuth2Client struct {
-	ClientID                string   `json:"client_id"`
-	ClientName              string   `json:"client_name"`
-	ClientSecret            string   `json:"client_secret,omitempty"`
-	RedirectUris            []string `json:"redirect_uris"`
-	PostLogoutRedirectUris  []string `json:"post_logout_redirect_uris,omitempty"`
+	ClientID               string   `json:"client_id"`
+	ClientName             string   `json:"client_name"`
+	ClientSecret           string   `json:"client_secret,omitempty"`
+	RedirectUris           []string `json:"redirect_uris"`
+	PostLogoutRedirectUris []string `json:"post_logout_redirect_uris,omitempty"`
+	// Audience is the resource servers the client's access tokens may be
+	// for. Not omitempty: an update replaces the whole client, and an empty
+	// list has to reach Hydra to clear one set earlier.
+	Audience                []string `json:"audience"`
 	GrantTypes              []string `json:"grant_types"`
 	ResponseTypes           []string `json:"response_types"`
 	Scope                   string   `json:"scope"`
@@ -250,7 +254,7 @@ func (c *Client) DeleteOAuth2Client(clientID string) error {
 type LoginRequest struct {
 	Challenge         string        `json:"challenge"`
 	RequestedScope    []string      `json:"requested_scope"`
-	RequestedAudience []string      `json:"requested_audience"`
+	RequestedAudience []string      `json:"requested_access_token_audience"`
 	Subject           string        `json:"subject"`
 	Client            *OAuth2Client `json:"client"`
 	RequestURL        string        `json:"request_url"`
@@ -385,7 +389,7 @@ func (c *Client) RejectLoginRequest(challenge string, error_code, error_descript
 type ConsentRequest struct {
 	Challenge         string         `json:"challenge"`
 	RequestedScope    []string       `json:"requested_scope"`
-	RequestedAudience []string       `json:"requested_audience"`
+	RequestedAudience []string       `json:"requested_access_token_audience"`
 	Subject           string         `json:"subject"`
 	Client            *OAuth2Client  `json:"client"`
 	LoginChallenge    string         `json:"login_challenge"`

@@ -208,3 +208,26 @@ func containsAny(haystack []string, needles ...string) bool {
 	}
 	return false
 }
+
+// maxAudienceLength bounds one resource identifier.
+const maxAudienceLength = 255
+
+// validateAudience checks the resource identifiers a client names. Each is an
+// opaque identifier the resource server compares its own with — commonly the
+// API's URL — so it must be something that survives as one value of a JWT's
+// aud claim: not empty, no whitespace, not repeated.
+func validateAudience(audience []string) *ConfigError {
+	seen := map[string]bool{}
+	for _, value := range audience {
+		if value == "" || len(value) > maxAudienceLength || strings.ContainsAny(value, " \t\r\n") || seen[value] {
+			return &ConfigError{
+				Code:    "invalid_audience",
+				Field:   "audience",
+				Message: "each audience must be a distinct identifier of 1 to 255 characters without whitespace",
+				Hint:    "Name each API the client's access tokens are for, usually by its URL (https://api.example.com). The API checks that the token's aud claim contains its own identifier.",
+			}
+		}
+		seen[value] = true
+	}
+	return nil
+}

@@ -46,6 +46,15 @@
   and another issuer's are refused. `docs/BACKEND_INTEGRATION.md` no longer
   suggests token introspection, which no resource server can reach.
 
+- **A client names the APIs its access tokens are for (`audience`).** The
+  identifiers become the token's `aud` claim, so an API accepts only tokens
+  issued for it instead of every token of the issuer. Set on client
+  registration and update (`"audience": ["https://api.example.com"]`; an empty
+  list clears it); granted without any change to the application's
+  authorization request, narrowed to the ones a request names. Migration 027
+  adds the column, empty for every existing client. See
+  `docs/api/client-management.md`.
+
 ### Removed
 
 - **The user-token claims endpoints**: `POST /api/v1/claims/update`,
@@ -89,6 +98,13 @@
 
 ### Fixed
 
+- **An audience the authorization request asked for is granted.** The consent
+  step read the requested audience under the wrong name and always granted
+  none, so `aud` stayed empty even for a client the authorization server
+  allowed it for.
+- **Regenerating a client's secret keeps its post-logout addresses.** The
+  update sent to the authorization server left them out, which reset them
+  there until the client was next saved.
 - **The ID token carries `email_verified` on every consent path.** It was
   missing when a client skips the consent screen or the user is signed in
   silently.
