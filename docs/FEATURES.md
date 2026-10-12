@@ -1,8 +1,5 @@
 # Authway Features Guide
 
-**Version**: 0.2.0
-**Last Updated**: 2025-12-03
-
 Comprehensive guide to Authway's key features: i18n, Custom Claims, Popup Login, Logout Policies, and OAuth/JWT best practices.
 
 ## Table of Contents
@@ -394,10 +391,11 @@ own session expires or it next sends the user through authorization.
    // Wildcard patterns are not supported — register each address.
    ```
 
-3. **Validate Client ID**:
+3. **Let the SDK Identify the Session**:
    ```javascript
-   // Always pass id_token_hint for validation
-   await client.logout({ idTokenHint: user.idToken })
+   // The SDK adds client_id and id_token_hint (the ID token it holds) to the
+   // logout request itself; logout() takes returnTo, or localOnly to skip the redirect
+   await client.logout({ returnTo: 'https://app.example.com/logged-out' })
    ```
 
 ---
@@ -406,26 +404,49 @@ own session expires or it next sends the user through authorization.
 
 ### Token Management
 
+#### Where the SDK keeps tokens
+
+`@authway/client` keeps the access, ID and refresh tokens together, in the
+place its `cacheLocation` option names:
+
+| `cacheLocation` | Where | On a page reload |
+|-----------------|-------|------------------|
+| `'localstorage'` (default) | The browser's `localStorage`, under keys starting with `authway.` | The user stays signed in |
+| `'memory'` | The client instance only — nothing is persisted | The tokens are gone; the user has to sign in again |
+
+```typescript
+const client = new AuthwayClient({
+  domain: 'https://auth.example.com',
+  clientId: 'my-client-id',
+  cacheLocation: 'memory'
+})
+```
+
+Whatever is in `localStorage` can be read by any script running on the page,
+so a cross-site scripting flaw exposes the tokens — the refresh token
+included. Prefer `'memory'` when the application can afford re-authentication
+on reload. With the default, keep untrusted scripts off the page and token
+lifetimes short.
+
 #### Access Token
 
 **Purpose**: API authorization
 **Lifetime**: Short (15-60 minutes recommended)
-**Storage**: Memory only (never localStorage)
+**Storage**: Kept by the SDK (see above)
 
 ```typescript
-// ✅ Good - Store in memory
-let accessToken: string | null = null
-accessToken = await client.getAccessToken()
+// ✅ Good - Ask the SDK each time; it returns a valid token, refreshing if needed
+const accessToken = await client.getAccessToken()
 
-// ❌ Bad - Don't persist
-localStorage.setItem('access_token', token) // XSS vulnerability
+// ❌ Bad - A copy of your own, which the SDK neither refreshes nor clears on logout
+localStorage.setItem('access_token', token)
 ```
 
 #### Refresh Token
 
 **Purpose**: Obtain new access tokens
 **Lifetime**: Long (days to months)
-**Storage**: HttpOnly cookie (backend) or secure storage (mobile)
+**Storage**: Kept by the SDK with the other tokens (see above). A server-side application keeps it on the server; a mobile app in the platform's secure storage
 
 ```typescript
 // ✅ Good - SDK handles refresh automatically
@@ -439,7 +460,7 @@ const refreshToken = localStorage.getItem('refresh_token')
 
 **Purpose**: User authentication proof
 **Lifetime**: Short (same as access token)
-**Storage**: Memory or HttpOnly cookie
+**Storage**: Kept by the SDK with the other tokens (see above)
 
 ```typescript
 // ✅ Good - Validate on every use
@@ -497,10 +518,10 @@ fetch(tokenEndpoint, {
 
 #### Storage
 
-- ✅ Access Token: Memory only
-- ✅ Refresh Token: HttpOnly cookie (secure, sameSite)
-- ✅ ID Token: Memory or HttpOnly cookie
-- ❌ Never use localStorage for tokens
+- ✅ Browser app that can re-authenticate on reload: `cacheLocation: 'memory'`
+- ✅ Browser app that must stay signed in across reloads: the SDK default (`'localstorage'`), with a strict Content Security Policy and short token lifetimes
+- ✅ Server-side app: tokens stay on the server, behind an HttpOnly session cookie (`Secure`, `SameSite`)
+- ❌ Don't keep your own copies of tokens outside the SDK
 
 #### Network
 
@@ -513,15 +534,15 @@ fetch(tokenEndpoint, {
 
 #### XSS (Cross-Site Scripting)
 
-**Risk**: Attacker steals tokens from localStorage
+**Risk**: An injected script reads tokens kept in localStorage — where the SDK keeps them by default
 
 **Prevention**:
 ```typescript
-// ✅ Good
-const token = await client.getAccessToken() // Memory only
+// ✅ Good - Keep tokens out of localStorage when a reload may re-authenticate
+const client = new AuthwayClient({ ...config, cacheLocation: 'memory' })
 
-// ❌ Bad
-localStorage.setItem('token', token) // Vulnerable to XSS
+// ❌ Bad - An extra copy of the token outside the SDK
+localStorage.setItem('token', token)
 ```
 
 #### CSRF (Cross-Site Request Forgery)

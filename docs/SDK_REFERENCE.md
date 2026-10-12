@@ -69,9 +69,14 @@ interface AuthwayConfig {
   redirectUri?: string        // Redirect URI (default: window.location.origin)
   scope?: string              // OAuth scopes (default: 'openid profile email')
   audience?: string           // Token audience
-  popupRedirectUri?: string   // Popup callback URI
+  cacheLocation?: 'memory' | 'localstorage'  // Where tokens are kept (default: 'localstorage')
 }
 ```
+
+`cacheLocation` decides where the access, ID and refresh tokens are kept:
+
+- `'localstorage'` (the default) — in the browser's `localStorage`, so the user stays signed in across page reloads. Any script running on the page can read them.
+- `'memory'` — in the client instance only. Nothing is persisted; the user signs in again after a page reload.
 
 **Example**:
 
@@ -177,13 +182,13 @@ interface User {
 
 ##### `getAccessToken()`
 
-Get current access token.
+Get a valid access token.
 
 ```typescript
-await client.getAccessToken(): Promise<string | null>
+await client.getAccessToken(): Promise<string>
 ```
 
-Returns `null` if not authenticated or token expired.
+Returns the cached token while it is valid; otherwise refreshes it with the refresh token first. It never returns `null`: with no valid token and no refresh token it throws `LoginRequiredError`; if the token endpoint refuses the refresh, the call rejects with that request's error (`ApiError`, or `TimeoutError`).
 
 ##### `logout()`
 
@@ -291,7 +296,7 @@ interface AuthState {
   loginWithPopup: (options?: PopupOptions) => Promise<void>
   loginWithRedirect: () => Promise<void>
   logout: (options?: LogoutOptions) => Promise<void>
-  getAccessToken: () => Promise<string | null>
+  getAccessToken: () => Promise<string>  // throws LoginRequiredError when not signed in
 }
 ```
 
@@ -328,16 +333,17 @@ function Dashboard() {
 
 ### LoginButton Component
 
-Pre-built login button (optional).
+Pre-built login button (optional). It starts a redirect login
+(`loginWithRedirect`); for a popup login, call `loginWithPopup` from `useAuth`
+on a button of your own.
 
 #### Props
 
 ```typescript
-interface LoginButtonProps {
-  children?: ReactNode
-  mode?: 'popup' | 'redirect'  // default: 'popup'
+interface LoginButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children?: ReactNode                 // default: 'Log In'
+  loginOptions?: RedirectLoginOptions  // passed to loginWithRedirect
   className?: string
-  onClick?: () => void
 }
 ```
 
@@ -349,8 +355,10 @@ import { LoginButton } from '@authway/react'
 function App() {
   return (
     <div>
-      <LoginButton mode="popup">Sign In</LoginButton>
-      <LoginButton mode="redirect">Sign In with Redirect</LoginButton>
+      <LoginButton>Sign In</LoginButton>
+      <LoginButton loginOptions={{ appState: { returnTo: '/dashboard' } }}>
+        Sign In and Return to Dashboard
+      </LoginButton>
     </div>
   )
 }
@@ -363,11 +371,17 @@ function App() {
 ### Custom Token Refresh
 
 ```typescript
-// Check token expiry and refresh if needed
-const token = await client.getAccessToken()
-if (!token) {
-  // Token expired, need re-authentication
-  await client.loginWithPopup()
+// getAccessToken() refreshes an expired token itself and throws when it cannot
+import { ApiError, LoginRequiredError } from '@authway/client'
+
+let token: string
+try {
+  token = await client.getAccessToken()
+} catch (err) {
+  // LoginRequiredError: no valid token and no refresh token
+  // ApiError: the token endpoint refused the refresh (e.g. the refresh token expired)
+  if (!(err instanceof LoginRequiredError || err instanceof ApiError)) throw err
+  token = await client.getAccessTokenWithPopup()  // sign in again
 }
 ```
 
@@ -439,7 +453,7 @@ interface AuthwayConfig {
   redirectUri?: string
   scope?: string
   audience?: string
-  popupRedirectUri?: string
+  cacheLocation?: 'memory' | 'localstorage'  // default: 'localstorage'
 }
 ```
 
@@ -479,11 +493,11 @@ interface LogoutOptions {
 
 ### Common Errors
 
-#### `ConfigNotLoadedError`
+#### `ConfigurationError`
 
-SDK config not loaded before operation.
+`domain` or `clientId` is missing (thrown by the constructor), or provider discovery failed (rejects `waitForReady()` and the methods that need the provider's endpoints).
 
-**Solution**: Call `await client.waitForReady()` first
+**Solution**: Check `domain` and `clientId`, and that the deployment named by `domain` is reachable from the browser
 
 #### `AuthenticationError`
 
@@ -491,24 +505,32 @@ Authentication failed or was cancelled.
 
 **Solution**: Check user cancelled popup, or OAuth configuration issues
 
-#### `TokenExpiredError`
+#### `LoginRequiredError`
 
-Access token expired.
+There is no valid token and no refresh token to renew it with. Thrown by `getAccessToken()` and `getIdToken()`.
 
 **Solution**: Re-authenticate user
 
 ### Error Types
 
+All are exported from `@authway/client`.
+
 ```typescript
 class AuthwayError extends Error {
   code: string
-  details?: any
+  statusCode?: number
 }
 
 // Specific error types
-class ConfigNotLoadedError extends AuthwayError
-class AuthenticationError extends AuthwayError
-class TokenExpiredError extends AuthwayError
+class ConfigurationError extends AuthwayError        // code: 'configuration_error'
+class ApiError extends AuthwayError                  // code: 'api_error'; statusCode and response of the failed request
+class AuthenticationError extends AuthwayError       // code: the OAuth error, or 'authentication_error'
+class LoginRequiredError extends AuthenticationError // code: 'login_required'
+class TokenError extends AuthwayError                // code: 'token_error'
+class MissingRefreshTokenError extends TokenError    // code: 'missing_refresh_token'
+class TimeoutError extends AuthwayError              // code: 'timeout_error'
+class PopupTimeoutError extends AuthwayError         // code: 'timeout'
+class PopupCancelledError extends AuthwayError       // code: 'cancelled'
 ```
 
 ---

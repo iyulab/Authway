@@ -398,7 +398,7 @@ Register an application's origin when you create its client:
 ### Development
 - **[SDK Reference](./SDK_REFERENCE.md)** - Complete API documentation
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Integrate with your backend
-- **[Features Guide](./FEATURES.md)** - Dynamic claims, popup login, logout policies
+- **[Features Guide](./FEATURES.md)** - Custom claims written by your backend ([claims API](./api/claims.md)), popup login, logout policies
 
 ### Deployment
 - **[Deployment Guide](./DEPLOYMENT.md)** - Azure, Docker, production setup

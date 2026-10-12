@@ -130,6 +130,10 @@ be one of the client's registered `post_logout_redirect_uris`.
   "magic_link": true,
   "mfa": ["totp"],
   "signup_modes": ["invite_only", "open"],
+  "account_deletion": true,
+  "custom_claims": true,
+  "backchannel_logout": true,
+  "token_introspection": true,
   "token_exchange": false,
   "ciba": false
 }

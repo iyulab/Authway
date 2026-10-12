@@ -23,7 +23,7 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 - **[SDK Reference](./SDK_REFERENCE.md)** - Full API documentation for React and Vanilla JS SDKs
 
 ### Features & Integration
-- **[Features Guide](./FEATURES.md)** - Dynamic Claims, Popup Login, Logout Redirects, OAuth/JWT Best Practices
+- **[Features Guide](./FEATURES.md)** - Custom claims written by your backend ([claims API](./api/claims.md)), Popup Login, Logout Redirects, OAuth/JWT Best Practices
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
 - **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
 - **[The User's Own Account](./api/account.md)** - Reading the profile and deleting the account with the user's access token; the recent sign-in requirement

@@ -1,8 +1,5 @@
 # Backend Integration Guide
 
-**Version**: 0.1.6
-**Last Updated**: 2026-07-20
-
 Complete guide for integrating Authway authentication into backend APIs (ASP.NET, Node.js, Go, etc.)
 
 ---
@@ -48,6 +45,7 @@ Opt the client in per client — there is no need to change the format for every
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/clients \
+  -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "tenant_id": "YOUR_TENANT_ID",
@@ -55,9 +53,18 @@ curl -X POST http://localhost:8080/api/v1/clients \
     "public": false,
     "grant_types": ["client_credentials"],
     "scopes": ["api"],
-    "access_token_strategy": "jwt"
+    "access_token_strategy": "jwt",
+    "audience": ["api"]
   }'
 ```
+
+`audience` names the API the client's tokens are for — the identifier your API
+validates `aud` against (`"api"` in the examples below). A client registered
+for none gets tokens with an empty `aud`, which an API that checks its audience
+refuses. A client that signs users in gets its registered audience in every
+access token; a machine-to-machine client like this one also names it in its
+token request (`audience` parameter). See
+[client management](api/client-management.md#clients-whose-tokens-go-to-an-api-audience).
 
 Existing clients can be switched with `PUT /api/v1/clients/{id}`
 (`"access_token_strategy": "jwt"`), or in the Admin Console under

@@ -3,7 +3,8 @@
 An application acts for its signed-in user with the **user's access token** —
 the one it received from the authorization server — as a bearer token. These
 calls need no admin key. [`packages/contract/openapi.yaml`](../../packages/contract/openapi.yaml)
-describes them under the `account` tag.
+describes the profile calls (sections 1 and 2) under the `account` tag; the
+two-factor and sign-out calls (sections 3 and 4) are not part of that contract.
 
 ---
 
@@ -85,3 +86,125 @@ A typical "delete my account" button therefore does:
 
 An administrator deleting a user (`DELETE /api/v1/users/{id}`) ends that
 user's sessions and tokens in the same way.
+
+---
+
+## 3. Two-factor authentication
+
+A user adds an authenticator app (TOTP) as a second factor with the calls
+below. A deployment offers them when `GET /api/v1/capabilities` lists `"totp"`
+under `mfa`. Each call takes the user's access token and acts on that user
+only.
+
+### Turning it on
+
+```http
+POST /api/v1/users/mfa/setup
+Authorization: Bearer <the user's access token>
+```
+
+answers `{ "secret", "qr_code_data_url", "issuer", "account_name" }`. `secret`
+is the TOTP secret (base32), for typing into an authenticator by hand;
+`qr_code_data_url` is the same secret as an `otpauth://` URI — show it as a QR
+code. `account_name` is the user's email address. Nothing is turned on yet,
+and each call issues a new secret in place of the previous one.
+
+```http
+POST /api/v1/users/mfa/verify
+Authorization: Bearer <the user's access token>
+Content-Type: application/json
+
+{ "code": "123456" }
+```
+
+`code` is the current 6-digit code from the authenticator. On `200` the second
+factor is on — a password sign-in now asks the user for a code (`next: mfa`
+in the [login flow](login-flows.md#login)) — and the answer is
+`{ "recovery_codes": ["ABCD-EFGH-IJKL", …], "message" }`: eight single-use
+recovery codes. They are shown only here; have the user save them.
+
+### Status
+
+```http
+GET /api/v1/users/mfa/status
+Authorization: Bearer <the user's access token>
+```
+
+answers `{ "enabled", "enabled_at", "recovery_codes_left" }`. `enabled_at` is
+left out while the second factor is off.
+
+### Recovery codes
+
+```http
+POST /api/v1/users/mfa/recovery/regenerate
+Authorization: Bearer <the user's access token>
+```
+
+replaces the user's recovery codes with eight new ones and answers
+`{ "recovery_codes": […], "message" }`. The earlier codes stop working.
+
+```http
+POST /api/v1/users/mfa/recovery
+Authorization: Bearer <the user's access token>
+Content-Type: application/json
+
+{ "code": "ABCD-EFGH-IJKL" }
+```
+
+checks a recovery code and uses it up: `200` with
+`{ "message", "valid": true }`, or `401` when it is not one of the user's
+unused codes. Dashes and letter case are ignored. This is not how a user signs
+in with a recovery code — that is `POST /api/v1/login-flows/{flow}/mfa/recovery`
+in the [login flow](login-flows.md#login).
+
+### Turning it off
+
+```http
+DELETE /api/v1/users/mfa
+Authorization: Bearer <the user's access token>
+```
+
+On `200` (`{ "message" }`) the second factor is off, and the secret and the
+recovery codes are removed. To turn it on again, start from `setup`.
+
+### Other answers
+
+These calls answer an error as `{ "error": "<message>" }`, without a `code`.
+
+| Status | Meaning |
+|--------|---------|
+| `400` | The call does not apply or the code is wrong; `error` says which, for example `invalid TOTP code`, `TOTP not set up for this user` (`verify` before `setup`), `MFA is already enabled`, `MFA is not enabled` |
+| `401` | No token, or one that is no longer valid |
+
+---
+
+## 4. Signing out everywhere
+
+```http
+POST /api/v1/logout
+Authorization: Bearer <the user's access token>
+```
+
+ends every session of the user at the authorization server — on every device
+and for every application — together with their remembered consents and the
+tokens issued under them. The access token used for this call stops working,
+as does any refresh token. Applications that registered a
+`backchannel_logout_uri` are
+[told](../FEATURES.md#telling-other-applications-about-a-logout).
+
+On `200` the answer is `{ "success": true, "message" }`; discard the tokens
+you hold. The user is always the one the token belongs to — the body cannot
+name another.
+
+This is an API call, not a browser redirect: it answers JSON and sends the
+browser nowhere. A JSON body is optional: with `post_logout_redirect_uri` (and
+optionally `state`) the answer also carries `redirect_url` — that address as
+given, with `?state=…` appended when `state` is sent — for the application to
+navigate to. To sign
+the user out through the browser instead, send it to the authorization
+server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
+
+| Status | Meaning |
+|--------|---------|
+| `401` | No token, or one that is no longer valid |
+| `500` | The sessions could not be ended (`{ "success": false, "error", "guide", "details" }`) — try again |

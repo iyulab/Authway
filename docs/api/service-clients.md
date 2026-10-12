@@ -1,9 +1,9 @@
 # Service Clients
 
 A **service client** is a tenant-scoped, revocable machine-to-machine (M2M)
-credential that lets a consumer application create OAuth clients
-programmatically — without holding the long-lived `AUTHWAY_ADMIN_API_KEY` or
-an admin session.
+credential that lets a consumer application's backend call a limited part of
+the admin API for its own tenant — without holding the long-lived
+`AUTHWAY_ADMIN_API_KEY` or an admin session.
 
 Under the hood a service client is a Hydra `client_credentials` OAuth2Client
 paired with an Authway-side row that records which tenant it belongs to and
@@ -11,9 +11,17 @@ which scopes it was granted. Hydra is the credential store (`client_id` /
 `client_secret`); Authway only tracks the tenant + scope mapping and whether
 the credential has been revoked.
 
-Today the only scope a service client can be granted is
-`admin.clients:write`, which authorizes exactly one action: creating OAuth
-clients in the credential's own tenant via `POST /api/v1/clients`.
+A service client can be granted two scopes, each authorizing one set of
+endpoints, always for the credential's own tenant:
+
+| Scope | What it allows |
+|---|---|
+| `admin.clients:write` | Creating OAuth clients in its tenant via `POST /api/v1/clients`, with a reduced set of fields (section 3). |
+| `admin.claims:write` | Reading and writing the claims stored for its tenant's users via `GET` and `PATCH /api/v1/users/{id}/claims` — see [claims.md](claims.md). A user of another tenant answers `404`. |
+
+The scopes that count are the ones granted when the service client was
+provisioned (section 1). A valid credential calling an endpoint whose scope
+it was not granted is answered `403` with code `insufficient_scope`.
 
 ---
 

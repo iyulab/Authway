@@ -52,7 +52,7 @@ export interface AuthwayConfig {
    * Token cache location
    * - 'memory': Most secure, tokens lost on page refresh
    * - 'localstorage': Persistent, vulnerable to XSS
-   * @default 'memory'
+   * @default 'localstorage'
    */
   cacheLocation?: 'memory' | 'localstorage'
 
