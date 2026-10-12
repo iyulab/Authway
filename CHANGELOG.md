@@ -27,6 +27,15 @@
   view lists. `GET /api/v1/capabilities` reports the feature as
   `custom_claims`. See `docs/api/claims.md`.
 
+- **The ID token says how the user signed in (`amr`).** `pwd` for a password,
+  `otp` for an authenticator code and `mfa` when a second factor was used
+  (RFC 8176); `email` for an emailed link and `fed` for a social provider. A
+  session reused without signing in again keeps the methods it was opened
+  with, as it keeps `auth_time`. The contract's `TokenClaims` now also states
+  which claims the provider vouches for, that `sub` is stable and survives a
+  move between deployments, that `tenant_id` is always present, and that the
+  name is one `name` claim.
+
 ### Removed
 
 - **The user-token claims endpoints**: `POST /api/v1/claims/update`,

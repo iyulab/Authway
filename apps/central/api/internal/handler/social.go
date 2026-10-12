@@ -24,7 +24,7 @@ type SocialHandler struct {
 	auditService     audit.Service
 	clientService    client.Service
 	stateStore       *OAuthStateStore
-	authTimes        *AuthTimeStore
+	authentications  *AuthenticationStore
 	frontendURL      string // login UI, for the error screen
 }
 
@@ -42,13 +42,13 @@ func NewSocialHandlerWithAllProviders(
 	stateStore *OAuthStateStore,
 	frontendURL string,
 ) *SocialHandler {
-	var authTimes *AuthTimeStore
+	var authentications *AuthenticationStore
 	if stateStore != nil {
-		authTimes = NewAuthTimeStore(stateStore.redis)
+		authentications = NewAuthenticationStore(stateStore.redis)
 	}
 	return &SocialHandler{
 		stateStore:       stateStore,
-		authTimes:        authTimes,
+		authentications:  authentications,
 		frontendURL:      frontendURL,
 		googleService:    googleService,
 		githubService:    githubService,
@@ -190,6 +190,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(), // Use user ID as subject (consistent with regular login)
 		Remember:    true,
 		RememberFor: 3600, // 1 hour
+		AMR:         amrFederated,
 		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "google",
@@ -204,7 +205,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		zap.String("email", authUser.Email),
 		zap.String("tenant_id", authUser.TenantID.String()))
 
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authTimes, loginChallenge, acceptLoginRequest)
+	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request",
 			zap.Error(err),
@@ -318,6 +319,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
+		AMR:         amrFederated,
 		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "github",
@@ -326,7 +328,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		},
 	}
 
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authTimes, loginChallenge, acceptLoginRequest)
+	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
 		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
@@ -409,6 +411,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
+		AMR:         amrFederated,
 		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "microsoft",
@@ -417,7 +420,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		},
 	}
 
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authTimes, loginChallenge, acceptLoginRequest)
+	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
 		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
@@ -512,6 +515,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		Subject:     authUser.ID.String(),
 		Remember:    true,
 		RememberFor: 3600,
+		AMR:         amrFederated,
 		Context: map[string]any{
 			"user_id":   authUser.ID.String(),
 			"provider":  "apple",
@@ -520,7 +524,7 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		},
 	}
 
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authTimes, loginChallenge, acceptLoginRequest)
+	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
 	if err != nil {
 		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
 		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)

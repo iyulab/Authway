@@ -79,5 +79,22 @@ describe('token claims', () => {
     expect(typeof claims.auth_time).toBe('number')
     // Whether the provider verified the address: an invited user's was.
     expect(typeof claims.email_verified).toBe('boolean')
+    // How the user signed in: with a password, and nothing else.
+    expect(claims.amr).toEqual(['pwd'])
+    // No assurance level is defined, so none is claimed.
+    expect(claims.acr ?? '').toBe('')
+  })
+
+  it('keeps how the session was authenticated when the session is reused', async () => {
+    // A second authorization in the same browser reuses the session: no
+    // password is asked for, and the tokens still say the session was opened
+    // with one — at the time it was.
+    const first = await provider.login(client, user, { remember: true })
+    if (first.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(first)}`)
+    const again = await provider.reauthorize(first.browser, client)
+    const before = claimsOf(first.tokens.id_token ?? '')
+    const after = claimsOf(again.id_token ?? '')
+    expect(after.amr).toEqual(['pwd'])
+    expect(after.auth_time).toBe(before.auth_time)
   })
 })

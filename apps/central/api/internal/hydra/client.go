@@ -259,11 +259,14 @@ type LoginRequest struct {
 }
 
 type AcceptLoginRequest struct {
-	Subject     string         `json:"subject"`
-	Remember    bool           `json:"remember"`
-	RememberFor int            `json:"remember_for"`
-	ACR         string         `json:"acr,omitempty"`
-	Context     map[string]any `json:"context,omitempty"`
+	Subject     string `json:"subject"`
+	Remember    bool   `json:"remember"`
+	RememberFor int    `json:"remember_for"`
+	ACR         string `json:"acr,omitempty"`
+	// AMR is how the user authenticated; the authorization server puts it in
+	// the ID token as the amr claim.
+	AMR     []string       `json:"amr,omitempty"`
+	Context map[string]any `json:"context,omitempty"`
 }
 
 type LoginResponse struct {

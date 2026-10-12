@@ -23,16 +23,16 @@ import (
 )
 
 type AuthHandler struct {
-	userService   user.Service
-	clientService client.Service
-	claimsService claims.Service
-	mfaService    mfa.Service
-	hydraClient   *hydra.Client
-	logger        *zap.Logger
-	auditService  audit.Service
-	mfaStore      *MFAChallengeStore
-	authTimes     *AuthTimeStore
-	signIn        SignInMethodSource
+	userService     user.Service
+	clientService   client.Service
+	claimsService   claims.Service
+	mfaService      mfa.Service
+	hydraClient     *hydra.Client
+	logger          *zap.Logger
+	auditService    audit.Service
+	mfaStore        *MFAChallengeStore
+	authentications *AuthenticationStore
+	signIn          SignInMethodSource
 }
 
 // SignInMethodSource says how a client's users can sign in on this
@@ -43,16 +43,16 @@ type SignInMethodSource interface {
 
 func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signIn SignInMethodSource) *AuthHandler {
 	return &AuthHandler{
-		signIn:        signIn,
-		userService:   userService,
-		clientService: clientService,
-		claimsService: claimsService,
-		mfaService:    mfaService,
-		hydraClient:   hydraClient,
-		logger:        logger,
-		auditService:  auditService,
-		mfaStore:      NewMFAChallengeStore(redisClient),
-		authTimes:     NewAuthTimeStore(redisClient),
+		signIn:          signIn,
+		userService:     userService,
+		clientService:   clientService,
+		claimsService:   claimsService,
+		mfaService:      mfaService,
+		hydraClient:     hydraClient,
+		logger:          logger,
+		auditService:    auditService,
+		mfaStore:        NewMFAChallengeStore(redisClient),
+		authentications: NewAuthenticationStore(redisClient),
 	}
 }
 
@@ -195,18 +195,19 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	return h.completeLogin(c, flow, user, req.Remember, rememberFor, "password")
+	return h.completeLogin(c, flow, user, req.Remember, rememberFor, byPassword)
 }
 
 // completeLogin accepts the Hydra login request for an already-authenticated
 // user (password alone, or password + a verified second factor) and records
 // the login audit entry. Shared by Login and the two MFA-verify handlers so
 // none of them duplicate the accept/audit/response tail.
-func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User, remember bool, rememberFor int, method string) error {
+func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User, remember bool, rememberFor int, method signInMethod) error {
 	acceptBody := &hydra.AcceptLoginRequest{
 		Subject:     u.ID.String(),
 		Remember:    remember,
 		RememberFor: rememberFor,
+		AMR:         method.amr,
 		Context: map[string]any{
 			"email":     u.Email,
 			"name":      u.Name,
@@ -216,7 +217,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 
 	h.logger.Info("Accepting login request", zap.String("user_id", u.ID.String()))
 
-	resp, err := acceptAuthenticatedLogin(h.hydraClient, h.authTimes, challenge, acceptBody)
+	resp, err := acceptAuthenticatedLogin(h.hydraClient, h.authentications, challenge, acceptBody)
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
@@ -226,7 +227,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User
 	h.logUserAudit(c, u, audit.ActionUserLogin, map[string]any{
 		"challenge": challenge,
 		"remember":  remember,
-		"method":    method,
+		"method":    method.audit,
 	})
 
 	return c.JSON(fiber.Map{
@@ -284,9 +285,9 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	}
 
 	h.mfaStore.Delete(req.MFAChallenge)
-	method := "password+totp"
+	method := byPasswordAndTOTP
 	if phase == "recovery_code" {
-		method = "password+recovery_code"
+		method = byPasswordAndRecoveryCode
 	}
 	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, method)
 }
@@ -406,7 +407,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 			Remember:                 true,
 			RememberFor:              3600,
 			Session: &hydra.ConsentSession{
-				AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authTimes, consentReq.LoginSessionID),
+				AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 				IDToken:     issued.IDToken(userClaims),
 			},
 		}
@@ -488,7 +489,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 		Remember:                 req.Remember,
 		RememberFor:              req.RememberFor,
 		Session: &hydra.ConsentSession{
-			AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authTimes, consentReq.LoginSessionID),
+			AccessToken: withAuthTime(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
 			IDToken:     issued.IDToken(userClaims),
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -51,6 +52,9 @@ func newTestHydraServer(t *testing.T) (client *hydra.Client, acceptCount *int) {
 			})
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/requests/login/accept"):
 			count++
+			var sent hydra.AcceptLoginRequest
+			_ = json.NewDecoder(r.Body).Decode(&sent)
+			acceptedAMR.Store(t.Name(), strings.Join(sent.AMR, ","))
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(hydra.LoginResponse{RedirectTo: "https://example.com/callback"})
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/requests/login/reject"):
@@ -62,6 +66,17 @@ func newTestHydraServer(t *testing.T) (client *hydra.Client, acceptCount *int) {
 	}))
 	t.Cleanup(srv.Close)
 	return hydra.NewClient(srv.URL), &count
+}
+
+// acceptedAMR holds, per test, the amr of the last login the fake Hydra was
+// asked to accept.
+var acceptedAMR sync.Map
+
+func wantAcceptedAMR(t *testing.T, want string) {
+	t.Helper()
+	if got, _ := acceptedAMR.Load(t.Name()); got != want {
+		t.Errorf("the accepted login carried amr %q, want %q", got, want)
+	}
 }
 
 func buildTestUser(t *testing.T, password string, totpEnabled bool) *user.User {
@@ -123,6 +138,7 @@ func TestLogin_NoMFA_AcceptsImmediately(t *testing.T) {
 	if *acceptCount != 1 {
 		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
 	}
+	wantAcceptedAMR(t, "pwd")
 }
 
 // TestLogin_MFAEnabled_DoesNotAcceptYet is the regression this cycle exists
@@ -185,6 +201,7 @@ func TestVerifyMFALogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	if *acceptCount != 1 {
 		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
 	}
+	wantAcceptedAMR(t, "pwd,otp,mfa")
 
 	// One-time use: replaying the same challenge (even with the right code)
 	// must fail now that it has been consumed.
@@ -247,6 +264,8 @@ func TestVerifyMFARecoveryLogin_CompletesLoginOnCorrectCode(t *testing.T) {
 	if *acceptCount != 1 {
 		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
 	}
+	// A recovery code is a second factor, though not one RFC 8176 names.
+	wantAcceptedAMR(t, "pwd,mfa")
 }
 
 // TestLogin_TenantScoped_SameEmailDifferentTenant: the schema explicitly

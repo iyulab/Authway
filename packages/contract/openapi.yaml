@@ -1652,16 +1652,37 @@ components:
         may repeat them elsewhere in the token; only the top level is part of
         this contract.)
 
-        The provider asserts these claims itself. No other source — claims
-        an application or the user stored — replaces them, nor any claim
-        OAuth or OpenID Connect defines.
+        **These are the claims the provider vouches for.** It asserts them
+        itself, and no other source replaces them, nor any claim OAuth or
+        OpenID Connect defines. Every other claim in a token is one the
+        tenant's administrator or backend stored for the user
+        (/api/v1/users/{id}/claims): the provider carries it and does not vouch
+        for what it means. Roles and permissions are not among the provider's
+        claims — what a user may do in an application is that application's
+        decision.
+
+        An application identifies a user by issuer and `sub`.
       type: object
       required: [sub, tenant_id, email, auth_time]
       properties:
-        sub: { type: string, description: The user's id. }
-        tenant_id: { type: string, description: The tenant the user belongs to. }
+        sub:
+          type: string
+          description: |
+            The user's id. It does not change while the account exists and is
+            never given to another account. Moving a user base to another
+            deployment keeps each user's `sub`; the issuer is the
+            deployment's own.
+        tenant_id:
+          type: string
+          description: |
+            The tenant the user belongs to. Always present: a provider with a
+            single tenant carries that tenant's id.
         email: { type: string }
-        name: { type: ['null', string] }
+        name:
+          type: ['null', string]
+          description: |
+            The user's display name, as one string. The provider carries no
+            given_name, family_name or preferred_username.
         email_verified:
           type: boolean
           description: In the ID token, whether the provider verified the address.
@@ -1671,6 +1692,19 @@ components:
             Unix time at which the user of the session the token came from
             last signed in. Refreshing the token, or reusing the session
             without signing in again, does not change it.
+        amr:
+          type: array
+          items: { type: string }
+          description: |
+            In the ID token, how the user of the session signed in
+            (Authentication Method Reference values): `pwd` for a password,
+            `otp` for a one-time code from an authenticator, `mfa` when more
+            than one factor was used — the values of RFC 8176 — and, where it
+            registers none, `email` for an emailed link and `fed` for another
+            identity provider. Like auth_time it describes the sign-in, not
+            the token: a reused session keeps it. Absent when the provider
+            does not know how the session was authenticated. The provider
+            issues no `acr`.
 
     StoredClaims:
       type: object

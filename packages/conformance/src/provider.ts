@@ -299,10 +299,12 @@ export class Provider {
 
   // ---- authorization-code + PKCE login ------------------------------------
 
-  /** Starts an authorization-code + PKCE request and stops at the login screen. */
-  async startLogin(client: TestClient, scopes = ['openid', 'profile', 'email']): Promise<LoginAttempt> {
+  /**
+   * Starts an authorization-code + PKCE request and stops at the login screen.
+   * Pass the browser of an earlier login to start in its session.
+   */
+  async startLogin(client: TestClient, scopes = ['openid', 'profile', 'email'], browser = new Browser()): Promise<LoginAttempt> {
     const d = await this.discovery()
-    const browser = new Browser()
     const pkce = createPkce()
     const authorize = new URL(d.authorization_endpoint)
     authorize.search = new URLSearchParams({
@@ -416,6 +418,24 @@ export class Provider {
     const info = await this.userinfo(tokens.access_token)
     if (info.status !== 200) throw new Error(`userinfo rejected a fresh token: ${info.status}`)
     return { kind: 'code', code, tokens, sub: (info.body as { sub: string }).sub, browser, consent }
+  }
+
+  /**
+   * A second authorization in a browser that already has a session. The login
+   * screen asks the provider what to show, as it does for every flow, and is
+   * told to continue without a form (single sign-on).
+   */
+  async reauthorize(browser: Browser, client: TestClient, scopes = ['openid', 'profile', 'email']): Promise<Tokens> {
+    const attempt = await this.startLogin(client, scopes, browser)
+    const res = await browser.fetch(this.loginFlowUrl(attempt.flow))
+    await conform('GET', '/api/v1/login-flows/{flow}', res.clone())
+    const step = (await res.json()) as { next?: string; redirect_to?: string }
+    if (step.next !== 'redirect' || !step.redirect_to) {
+      throw new Error(`The session was not reused — the login screen was told: ${JSON.stringify(step)}`)
+    }
+    const outcome = await this.finishAuthorization(attempt, step.redirect_to, res.status)
+    if (outcome.kind !== 'code') throw new Error(`Reusing the session failed: ${JSON.stringify(outcome)}`)
+    return outcome.tokens
   }
 
   /** Full authorization-code + PKCE login with password and consent. */

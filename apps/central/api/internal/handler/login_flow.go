@@ -100,10 +100,18 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 
 	h.logger.Info("SSO login", zap.String("user_id", sessionUser.ID.String()))
 
+	// A reused session was authenticated earlier: its tokens say how it was
+	// then, not that anything was proved now.
+	var amr []string
+	if earlier, ok := h.authentications.Lookup(loginReq.SessionID); ok {
+		amr = earlier.Methods
+	}
+
 	resp, err := h.hydraClient.AcceptLoginRequest(flow, &hydra.AcceptLoginRequest{
 		Subject:     loginReq.Subject,
 		Remember:    true,
 		RememberFor: 3600,
+		AMR:         amr,
 		Context: map[string]any{
 			"email":     sessionUser.Email,
 			"name":      sessionUser.Name,

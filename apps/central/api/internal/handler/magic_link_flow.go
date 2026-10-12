@@ -112,5 +112,5 @@ func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 			"code":  "invalid_link",
 		})
 	}
-	return h.auth.completeLogin(c, link.LoginFlow, u, false, 0, "magic_link")
+	return h.auth.completeLogin(c, link.LoginFlow, u, false, 0, byEmailedLink)
 }

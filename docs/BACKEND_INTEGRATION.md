@@ -103,6 +103,18 @@ Read them at the top level. That is what the contract
 ([`TokenClaims`](../packages/contract/openapi.yaml)) describes, and it is the
 same from every Authway provider.
 
+The **ID token** carries the same claims plus two about the sign-in:
+`email_verified`, and `amr` — how the user signed in: `pwd` (password), `otp`
+(authenticator code), `mfa` (more than one factor), `email` (emailed link),
+`fed` (another identity provider). An application that requires a second
+factor checks for `mfa` in `amr`; one that requires a recent sign-in asks for
+it with `max_age` and checks `auth_time`.
+
+These are the claims Authway vouches for. Any other claim in a token was
+stored for the user by the tenant's administrator or backend
+([claims API](api/claims.md)); Authway carries it and does not vouch for what
+it means.
+
 The token also carries an `ext` object repeating its session claims — that is
 how this provider's authorization server (Ory Hydra) shapes tokens, and how the
 introspection endpoint answers. Do not write code against `ext` for the claims

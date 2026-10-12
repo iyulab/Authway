@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -164,51 +165,67 @@ func TestDeleteMe_DeletesTheAccountOfAUserWhoJustSignedIn(t *testing.T) {
 	}
 }
 
-func newAuthTimeStore(t *testing.T) (*AuthTimeStore, *miniredis.Miniredis) {
+func newAuthenticationStore(t *testing.T) (*AuthenticationStore, *miniredis.Miniredis) {
 	t.Helper()
 	mr, err := miniredis.Run()
 	if err != nil {
 		t.Fatalf("miniredis.Run: %v", err)
 	}
 	t.Cleanup(mr.Close)
-	return NewAuthTimeStore(redis.NewClient(&redis.Options{Addr: mr.Addr()})), mr
+	return NewAuthenticationStore(redis.NewClient(&redis.Options{Addr: mr.Addr()})), mr
 }
 
-func TestAuthTimeStore_RemembersWhenASessionAuthenticated(t *testing.T) {
-	store, mr := newAuthTimeStore(t)
+func TestAuthenticationStore_RemembersWhenAndHowASessionAuthenticated(t *testing.T) {
+	store, mr := newAuthenticationStore(t)
 	at := time.Now().Add(-3 * time.Minute).Truncate(time.Second)
 
 	if _, ok := store.Lookup("session-1"); ok {
-		t.Fatal("an unknown session has an authentication time")
+		t.Fatal("an unknown session has an authentication")
 	}
-	store.Record("session-1", at)
-	if got, ok := store.Lookup("session-1"); !ok || !got.Equal(at) {
-		t.Fatalf("Lookup = %v %v, want %v", got, ok, at)
+	store.Record("session-1", Authentication{At: at, Methods: []string{"pwd", "otp", "mfa"}})
+	got, ok := store.Lookup("session-1")
+	if !ok || !got.At.Equal(at) || strings.Join(got.Methods, ",") != "pwd,otp,mfa" {
+		t.Fatalf("Lookup = %+v %v, want %v by pwd,otp,mfa", got, ok, at)
 	}
 
-	mr.FastForward(authTimeTTL + time.Minute)
+	mr.FastForward(authenticationTTL + time.Minute)
 	if _, ok := store.Lookup("session-1"); ok {
-		t.Error("the authentication time outlived its limit")
+		t.Error("the authentication outlived its limit")
 	}
 
 	// A store without Redis, and a request without a session id, record nothing.
-	var none *AuthTimeStore
-	none.Record("session-2", at)
+	var none *AuthenticationStore
+	none.Record("session-2", Authentication{At: at})
 	if _, ok := none.Lookup("session-2"); ok {
-		t.Error("a nil store returned a time")
+		t.Error("a nil store returned an authentication")
 	}
-	store.Record("", at)
+	store.Record("", Authentication{At: at})
 	if _, ok := store.Lookup(""); ok {
-		t.Error("an empty session id has an authentication time")
+		t.Error("an empty session id has an authentication")
+	}
+}
+
+// A session recorded before the methods were kept holds the time alone; it
+// keeps that time (the step-up check reads it) and has no methods.
+func TestAuthenticationStore_ReadsARecordWrittenBeforeMethodsWereKept(t *testing.T) {
+	store, mr := newAuthenticationStore(t)
+	at := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := mr.Set("auth_time:old-session", strconv.FormatInt(at.Unix(), 10)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := store.Lookup("old-session")
+	if !ok || !got.At.Equal(at) || got.Methods != nil {
+		t.Fatalf("Lookup = %+v %v, want %v with no methods", got, ok, at)
 	}
 }
 
 // The access token gets auth_time; the map shared with the ID token must not,
 // because the authorization server sets that token's auth_time itself.
 func TestWithAuthTime_AddsItToACopy(t *testing.T) {
-	store, _ := newAuthTimeStore(t)
+	store, _ := newAuthenticationStore(t)
 	at := time.Now().Truncate(time.Second)
-	store.Record("session-1", at)
+	store.Record("session-1", Authentication{At: at})
 	shared := map[string]any{"tenant_id": "t"}
 
 	access := withAuthTime(shared, store, "session-1")
@@ -223,8 +240,8 @@ func TestWithAuthTime_AddsItToACopy(t *testing.T) {
 	}
 }
 
-// acceptAuthenticatedLogin records the time only for a login the
-// authorization server accepted.
+// acceptAuthenticatedLogin records when and how only for a login the
+// authorization server accepted, and sends the methods along as amr.
 func TestAcceptAuthenticatedLogin_RecordsOnlyAnAcceptedLogin(t *testing.T) {
 	for name, tc := range map[string]struct {
 		acceptStatus int
@@ -233,26 +250,36 @@ func TestAcceptAuthenticatedLogin_RecordsOnlyAnAcceptedLogin(t *testing.T) {
 		"accepted": {http.StatusOK, true},
 		"refused":  {http.StatusInternalServerError, false},
 	} {
-		store, _ := newAuthTimeStore(t)
+		store, _ := newAuthenticationStore(t)
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			switch {
 			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/requests/login"):
 				json.NewEncoder(w).Encode(map[string]any{"challenge": "c", "session_id": "session-9", "client": map[string]any{"client_id": "x"}})
 			case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/requests/login/accept"):
+				var sent struct {
+					AMR []string `json:"amr"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&sent); err != nil || strings.Join(sent.AMR, ",") != "pwd" {
+					t.Errorf("%s: the accepted login carried amr %v (%v), want [pwd]", name, sent.AMR, err)
+				}
 				w.WriteHeader(tc.acceptStatus)
 				json.NewEncoder(w).Encode(map[string]any{"redirect_to": "https://example.com/next"})
 			default:
 				t.Errorf("unexpected request: %s %s", r.Method, r.URL)
 			}
 		}))
-		_, err := acceptAuthenticatedLogin(hydra.NewClient(srv.URL), store, "c", &hydra.AcceptLoginRequest{Subject: "u"})
+		_, err := acceptAuthenticatedLogin(hydra.NewClient(srv.URL), store, "c", &hydra.AcceptLoginRequest{Subject: "u", AMR: byPassword.amr})
 		srv.Close()
 		if (err == nil) != tc.wantRecorded {
 			t.Fatalf("%s: err = %v", name, err)
 		}
-		if _, ok := store.Lookup("session-9"); ok != tc.wantRecorded {
+		recorded, ok := store.Lookup("session-9")
+		if ok != tc.wantRecorded {
 			t.Errorf("%s: recorded = %v, want %v", name, ok, tc.wantRecorded)
+		}
+		if ok && strings.Join(recorded.Methods, ",") != "pwd" {
+			t.Errorf("%s: recorded methods = %v, want [pwd]", name, recorded.Methods)
 		}
 	}
 }
