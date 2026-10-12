@@ -48,6 +48,16 @@ describe('the second factor is not changed by a token alone', () => {
     if (app) await provider.deleteClient(app)
   })
 
+  // Without the user's token there is no one to act on: the refusal has the
+  // shape every refusal has, so an application can tell it from the others.
+  it('refuses a call that carries no token, in the shape the contract gives a refusal', async () => {
+    for (const [method, path] of [['GET', '/status'], ['POST', '/setup'], ['DELETE', '']] as const) {
+      const res = await fetch(`${config.api}/api/v1/users/mfa${path}`, { method })
+      await conform(method, `/api/v1/users/mfa${path}`, res.clone())
+      expect(res.status, `${method} ${path}`).toBe(401)
+    }
+  })
+
   it('refuses to set up another authenticator while one is on', async () => {
     const res = await mfa('POST', '/setup')
     expect(res.status).toBe(409)

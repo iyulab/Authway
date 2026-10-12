@@ -26,6 +26,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 			logger.Warn("Missing Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Missing authorization header",
+				"code":  "unauthorized",
 			})
 		}
 
@@ -35,6 +36,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 			logger.Warn("Invalid Authorization header format")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid authorization header format",
+				"code":  "unauthorized",
 			})
 		}
 
@@ -43,6 +45,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 			logger.Warn("Empty bearer token")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Empty bearer token",
+				"code":  "unauthorized",
 			})
 		}
 
@@ -59,6 +62,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 				zap.String("token_prefix", token[:min(20, len(token))]))
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid token",
+				"code":  "unauthorized",
 			})
 		}
 
