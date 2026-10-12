@@ -72,7 +72,9 @@ func (f *fakeMFAService) GetStatus(uuid.UUID) (*mfa.MFAStatusResponse, error) {
 // map keyed by email, because the whole point of GetByEmailAndTenant's
 // regression coverage is two users sharing an email across tenants.
 type fakeUserService struct {
-	users []*user.User
+	// signIns counts the sign-ins recorded as the last login.
+	signIns int
+	users   []*user.User
 }
 
 func newFakeUserService(users ...*user.User) *fakeUserService {
@@ -124,7 +126,10 @@ func (f *fakeUserService) VerifyPassword(*user.User, string) bool { return false
 func (f *fakeUserService) ChangePassword(uuid.UUID, *user.ChangePasswordRequest) error {
 	return fmt.Errorf("not implemented")
 }
-func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error           { return nil }
+func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error {
+	f.signIns++
+	return nil
+}
 func (f *fakeUserService) UpdateEmailVerified(uuid.UUID, bool) error { return nil }
 func (f *fakeUserService) UpdatePassword(uuid.UUID, string) error    { return nil }
 

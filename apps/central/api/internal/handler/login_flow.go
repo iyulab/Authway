@@ -57,7 +57,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		"tenant_id":       requestedClient.TenantID.String(),
 		"client": fiber.Map{
 			"client_id":          requestedClient.ClientID,
-			"sign_in_methods":    h.signIn.SignInMethodsFor(requestedClient),
+			"sign_in_methods":    h.signInMethods.SignInMethodsFor(requestedClient),
 			"allow_email_signup": requestedClient.AllowEmailSignup,
 		},
 	})

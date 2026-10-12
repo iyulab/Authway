@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/internal/service/social"
@@ -24,8 +26,8 @@ type SocialHandler struct {
 	auditService     audit.Service
 	clientService    client.Service
 	stateStore       *OAuthStateStore
-	authentications  *AuthenticationStore
-	frontendURL      string // login UI, for the error screen
+	flows            *signIn
+	frontendURL      string // login UI: the error screen and the second factor step
 }
 
 // NewSocialHandlerWithAllProviders creates a SocialHandler with all OAuth providers
@@ -42,13 +44,13 @@ func NewSocialHandlerWithAllProviders(
 	stateStore *OAuthStateStore,
 	frontendURL string,
 ) *SocialHandler {
-	var authentications *AuthenticationStore
+	var flows *signIn
 	if stateStore != nil {
-		authentications = NewAuthenticationStore(stateStore.redis)
+		flows = newSignIn(hydraClient, userService, logger, stateStore.redis)
 	}
 	return &SocialHandler{
 		stateStore:       stateStore,
-		authentications:  authentications,
+		flows:            flows,
 		frontendURL:      frontendURL,
 		googleService:    googleService,
 		githubService:    githubService,
@@ -204,78 +206,7 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		return s.failSocialSignIn(c, "google", retrievedClientID, loginChallenge, err)
 	}
 
-	// Update last login time using the service
-	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
-		s.logger.Error("Failed to update last login time", zap.Error(err))
-		// Continue despite error as user is authenticated
-	}
-
-	// Accept the Hydra login request
-	acceptLoginRequest := &hydra.AcceptLoginRequest{
-		Subject:     authUser.ID.String(), // Use user ID as subject (consistent with regular login)
-		Remember:    true,
-		RememberFor: 3600, // 1 hour
-		AMR:         amrFederated,
-		Context: map[string]any{
-			"user_id":   authUser.ID.String(),
-			"provider":  "google",
-			"email":     authUser.Email,
-			"tenant_id": authUser.TenantID.String(),
-		},
-	}
-
-	s.logger.Info("Sending AcceptLoginRequest to Hydra",
-		zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]),
-		zap.String("subject", authUser.ID.String()),
-		zap.String("email", authUser.Email),
-		zap.String("tenant_id", authUser.TenantID.String()))
-
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
-	if err != nil {
-		s.logger.Error("Failed to accept Hydra login request",
-			zap.Error(err),
-			zap.String("challenge", loginChallenge[:min(50, len(loginChallenge))]))
-		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
-	}
-
-	s.logger.Info("Google OAuth login successful",
-		zap.String("user_id", authUser.ID.String()),
-		zap.String("email", authUser.Email),
-		zap.String("provider", "google"),
-		zap.String("redirect_to", acceptResp.RedirectTo))
-
-	s.logSocialLogin(c, authUser, "google", map[string]any{
-		"client_id": retrievedClientID,
-	})
-
-	// Return HTML page with JavaScript redirect to ensure proper browser navigation
-	// This is more reliable than HTTP 302 redirect for cross-origin OAuth flows
-	html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>Redirecting...</title>
-    <meta charset="utf-8">
-</head>
-<body>
-    <div style="text-align: center; padding: 50px; font-family: sans-serif;">
-        <div style="font-size: 18px; color: #666; margin-bottom: 20px;">로그인 처리 중...</div>
-        <div style="width: 40px; height: 40px; margin: 0 auto; border: 4px solid #f3f3f3; border-top: 4px solid #4F46E5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-    </div>
-    <style>
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-    <script>
-        // Redirect to Hydra's OAuth endpoint with login_verifier
-        window.location.href = "` + acceptResp.RedirectTo + `";
-    </script>
-</body>
-</html>`
-
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return c.SendString(html)
+	return s.finishSignIn(c, "google", retrievedClientID, loginChallenge, authUser)
 }
 
 // ======================================
@@ -330,38 +261,7 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		return s.failSocialSignIn(c, "github", retrievedClientID, loginChallenge, err)
 	}
 
-	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
-		s.logger.Error("Failed to update last login time", zap.Error(err))
-	}
-
-	acceptLoginRequest := &hydra.AcceptLoginRequest{
-		Subject:     authUser.ID.String(),
-		Remember:    true,
-		RememberFor: 3600,
-		AMR:         amrFederated,
-		Context: map[string]any{
-			"user_id":   authUser.ID.String(),
-			"provider":  "github",
-			"email":     authUser.Email,
-			"tenant_id": authUser.TenantID.String(),
-		},
-	}
-
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
-	if err != nil {
-		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
-	}
-
-	s.logger.Info("GitHub OAuth login successful",
-		zap.String("user_id", authUser.ID.String()),
-		zap.String("email", authUser.Email))
-
-	s.logSocialLogin(c, authUser, "github", map[string]any{
-		"client_id": retrievedClientID,
-	})
-
-	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+	return s.finishSignIn(c, "github", retrievedClientID, loginChallenge, authUser)
 }
 
 // ======================================
@@ -416,38 +316,7 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		return s.failSocialSignIn(c, "microsoft", retrievedClientID, loginChallenge, err)
 	}
 
-	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
-		s.logger.Error("Failed to update last login time", zap.Error(err))
-	}
-
-	acceptLoginRequest := &hydra.AcceptLoginRequest{
-		Subject:     authUser.ID.String(),
-		Remember:    true,
-		RememberFor: 3600,
-		AMR:         amrFederated,
-		Context: map[string]any{
-			"user_id":   authUser.ID.String(),
-			"provider":  "microsoft",
-			"email":     authUser.Email,
-			"tenant_id": authUser.TenantID.String(),
-		},
-	}
-
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
-	if err != nil {
-		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
-	}
-
-	s.logger.Info("Microsoft OAuth login successful",
-		zap.String("user_id", authUser.ID.String()),
-		zap.String("email", authUser.Email))
-
-	s.logSocialLogin(c, authUser, "microsoft", map[string]any{
-		"client_id": retrievedClientID,
-	})
-
-	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+	return s.finishSignIn(c, "microsoft", retrievedClientID, loginChallenge, authUser)
 }
 
 // ======================================
@@ -514,43 +383,36 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		return s.failSocialSignIn(c, "apple", retrievedClientID, loginChallenge, err)
 	}
 
-	if err := s.userService.UpdateLastLogin(authUser.ID); err != nil {
-		s.logger.Error("Failed to update last login time", zap.Error(err))
-	}
-
-	acceptLoginRequest := &hydra.AcceptLoginRequest{
-		Subject:     authUser.ID.String(),
-		Remember:    true,
-		RememberFor: 3600,
-		AMR:         amrFederated,
-		Context: map[string]any{
-			"user_id":   authUser.ID.String(),
-			"provider":  "apple",
-			"email":     authUser.Email,
-			"tenant_id": authUser.TenantID.String(),
-		},
-	}
-
-	acceptResp, err := acceptAuthenticatedLogin(s.hydraClient, s.authentications, loginChallenge, acceptLoginRequest)
-	if err != nil {
-		s.logger.Error("Failed to accept Hydra login request", zap.Error(err))
-		return s.endSignIn(c, loginChallenge, "server_error", msgSignInFailed)
-	}
-
-	s.logger.Info("Apple OAuth login successful",
-		zap.String("user_id", authUser.ID.String()),
-		zap.String("email", authUser.Email))
-
-	s.logSocialLogin(c, authUser, "apple", map[string]any{
-		"client_id": retrievedClientID,
-	})
-
-	return s.renderRedirectPage(c, acceptResp.RedirectTo)
+	return s.finishSignIn(c, "apple", retrievedClientID, loginChallenge, authUser)
 }
 
 // ======================================
 // Helper Methods
 // ======================================
+
+// finishSignIn continues the login flow for a user the provider has vouched
+// for. The provider's word is one factor: a user with a second factor of
+// their own is sent to the sign-in screen to give it, whatever the provider
+// asked of them.
+func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow string, u *user.User) error {
+	step, err := s.flows.afterFirstFactor(flow, u, byProvider(provider), true, 3600)
+	if err != nil {
+		s.logger.Error("Failed to continue the login flow after a social sign-in",
+			zap.String("provider", provider), zap.Error(err))
+		return s.endSignIn(c, flow, "server_error", msgSignInFailed)
+	}
+	if step.MFAChallenge != "" {
+		s.logger.Info("Provider sign-in verified, second factor required",
+			zap.String("user_id", u.ID.String()), zap.String("provider", provider))
+		q := url.Values{"flow": {flow}, "mfa_challenge": {step.MFAChallenge}}
+		return c.Redirect(strings.TrimRight(s.frontendURL, "/")+"/mfa/verify?"+q.Encode(), fiber.StatusFound)
+	}
+
+	s.logger.Info("Social sign-in successful",
+		zap.String("user_id", u.ID.String()), zap.String("provider", provider))
+	s.logSocialLogin(c, u, provider, map[string]any{"client_id": clientID})
+	return s.renderRedirectPage(c, step.RedirectTo)
+}
 
 // renderRedirectPage renders an HTML page with JavaScript redirect
 func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) error {

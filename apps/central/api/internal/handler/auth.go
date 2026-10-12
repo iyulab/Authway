@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/apierror"
@@ -15,7 +14,6 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/middleware"
-	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -34,7 +32,8 @@ type AuthHandler struct {
 	auditService    audit.Service
 	mfaStore        *MFAChallengeStore
 	authentications *AuthenticationStore
-	signIn          SignInMethodSource
+	signInMethods   SignInMethodSource
+	flows           *signIn
 }
 
 // SignInMethodSource says how a client's users can sign in on this
@@ -43,9 +42,11 @@ type SignInMethodSource interface {
 	SignInMethodsFor(cl *client.Client) []string
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signIn SignInMethodSource) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signInMethods SignInMethodSource) *AuthHandler {
+	flows := newSignIn(hydraClient, userService, logger, redisClient)
 	return &AuthHandler{
-		signIn:          signIn,
+		flows:           flows,
+		signInMethods:   signInMethods,
 		userService:     userService,
 		clientService:   clientService,
 		claimsService:   claimsService,
@@ -53,8 +54,8 @@ func NewAuthHandler(userService user.Service, clientService client.Service, clai
 		hydraClient:     hydraClient,
 		logger:          logger,
 		auditService:    auditService,
-		mfaStore:        NewMFAChallengeStore(redisClient),
-		authentications: NewAuthenticationStore(redisClient),
+		mfaStore:        flows.pending,
+		authentications: flows.authentications,
 	}
 }
 
@@ -103,14 +104,6 @@ func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action au
 	if err := h.auditService.Log(context.Background(), entry); err != nil {
 		h.logger.Warn("Failed to record auth-failure audit", zap.Error(err), zap.String("action", string(action)))
 	}
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // PasswordLoginRequest is the body of POST /api/v1/login-flows/:flow/password.
@@ -173,68 +166,51 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 		rememberFor = 3600 // 1 hour
 	}
 
-	// A password alone is not enough for a TOTP-enabled user — park the
-	// verified-but-not-yet-accepted login and hand the screen an
-	// mfa_challenge instead of touching Hydra. The mfa_challenge proves the
-	// password step passed; the flow id alone must not open the second step.
-	if user.TOTPEnabled {
-		challenge, err := tokenhash.Generate()
-		if err != nil {
-			h.logger.Error("Failed to generate mfa_challenge", zap.Error(err))
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to start MFA challenge"})
-		}
-		h.mfaStore.Set(challenge, &pendingMFALogin{
-			HydraChallenge: flow,
-			UserID:         user.ID,
-			Remember:       req.Remember,
-			RememberFor:    rememberFor,
-			CreatedAt:      time.Now(),
-		})
-		h.logger.Info("Password verified, MFA required", zap.String("user_id", user.ID.String()))
-		return c.JSON(fiber.Map{
-			"next":          nextMFA,
-			"mfa_challenge": challenge,
-		})
-	}
-
-	return h.completeLogin(c, flow, user, req.Remember, rememberFor, byPassword)
+	return h.firstFactorPassed(c, flow, user, byPassword, req.Remember, rememberFor)
 }
 
-// completeLogin accepts the Hydra login request for an already-authenticated
-// user (password alone, or password + a verified second factor) and records
-// the login audit entry. Shared by Login and the two MFA-verify handlers so
-// none of them duplicate the accept/audit/response tail.
-func (h *AuthHandler) completeLogin(c *fiber.Ctx, challenge string, u *user.User, remember bool, rememberFor int, method signInMethod) error {
-	acceptBody := &hydra.AcceptLoginRequest{
-		Subject:     u.ID.String(),
-		Remember:    remember,
-		RememberFor: rememberFor,
-		AMR:         method.amr,
-		Context: map[string]any{
-			"email":     u.Email,
-			"name":      u.Name,
-			"tenant_id": u.TenantID.String(),
-		},
+// firstFactorPassed answers the sign-in screen for a user who has just proved
+// who they are by first: the second factor step when they have one, signed in
+// otherwise. The step names its flow, which a screen that came in by an
+// emailed link does not otherwise know.
+func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User, first signInMethod, remember bool, rememberFor int) error {
+	step, err := h.flows.afterFirstFactor(flow, u, first, remember, rememberFor)
+	if errors.Is(err, errSecondFactorNotStarted) {
+		h.logger.Error("Failed to start the second factor step", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to start MFA challenge", "code": "internal_error"})
 	}
-
-	h.logger.Info("Accepting login request", zap.String("user_id", u.ID.String()))
-
-	resp, err := acceptAuthenticatedLogin(h.hydraClient, h.authentications, challenge, acceptBody)
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
 	}
+	if step.MFAChallenge != "" {
+		h.logger.Info("First factor verified, second factor required",
+			zap.String("user_id", u.ID.String()), zap.String("method", first.audit))
+		return c.JSON(fiber.Map{
+			"next":          nextMFA,
+			"mfa_challenge": step.MFAChallenge,
+			"flow":          flow,
+		})
+	}
+	return h.signedIn(c, flow, u, first, remember, step.RedirectTo)
+}
 
+// signedIn records a completed sign-in and sends the screen on.
+func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, remember bool, redirectTo string) error {
 	middleware.ResetRateLimitOnSuccess(c)
-	h.logUserAudit(c, u, audit.ActionUserLogin, map[string]any{
-		"challenge": challenge,
+	details := map[string]any{
+		"challenge": flow,
 		"remember":  remember,
 		"method":    method.audit,
-	})
+	}
+	if method.provider != "" {
+		details["provider"] = method.provider
+	}
+	h.logUserAudit(c, u, audit.ActionUserLogin, details)
 
 	return c.JSON(fiber.Map{
 		"next":        nextRedirect,
-		"redirect_to": resp.RedirectTo,
+		"redirect_to": redirectTo,
 	})
 }
 
@@ -246,7 +222,7 @@ type VerifyMFALoginRequest struct {
 	Code         string `json:"code"`
 }
 
-// VerifyMFALogin completes a login that SubmitPassword parked pending TOTP.
+// VerifyMFALogin completes a login parked pending TOTP after its first factor.
 // POST /api/v1/login-flows/:flow/mfa — the mfa_challenge is the bearer
 // credential for this one-shot exchange and must belong to the flow.
 func (h *AuthHandler) VerifyMFALogin(c *fiber.Ctx) error {
@@ -287,11 +263,16 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	}
 
 	h.mfaStore.Delete(req.MFAChallenge)
-	method := byPasswordAndTOTP
+	method := firstFactor(pending.First, pending.Provider).withTOTP()
 	if phase == "recovery_code" {
-		method = byPasswordAndRecoveryCode
+		method = firstFactor(pending.First, pending.Provider).withRecoveryCode()
 	}
-	return h.completeLogin(c, pending.HydraChallenge, u, pending.Remember, pending.RememberFor, method)
+	redirectTo, err := h.flows.accept(pending.HydraChallenge, u, method, pending.Remember, pending.RememberFor)
+	if err != nil {
+		h.logger.Error("Failed to accept login request", zap.Error(err))
+		return respondFlowLookupError(c, err)
+	}
+	return h.signedIn(c, pending.HydraChallenge, u, method, pending.Remember, redirectTo)
 }
 
 func respondInvalidMFAChallenge(c *fiber.Ctx) error {

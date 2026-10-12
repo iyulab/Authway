@@ -2,6 +2,21 @@
 
 ### Security
 
+- **A user's second factor is asked for however they sign in.** Only the
+  password step asked for it: a user with two-factor authentication on who
+  signed in with an emailed link, or through Google, GitHub, Microsoft or
+  Apple, was signed in on that one factor — so whoever could read their mail
+  could skip the second. Every means of signing in now ends in the same step.
+  Redeeming a link answers `next: mfa` (with `mfa_challenge` and the `flow`
+  it belongs to) for such a user, and a provider sign-in returns the browser
+  to the login UI's second factor step,
+  `<login UI>/mfa/verify?flow=…&mfa_challenge=…`, instead of to the
+  application. The ID token's `amr` lists both factors (`email`/`fed`, then
+  `otp` and `mfa`). What a provider asked of the user is not taken as the
+  second factor. **A custom login UI must handle `next: mfa` from
+  `POST /api/v1/magic-links/redeem` and serve `/mfa/verify`**; the bundled
+  one does. The `mfa` answer now always carries `flow`.
+
 - **A user's token alone can no longer replace their second factor or issue
   new recovery codes.** With two-factor authentication on,
   `POST /api/v1/users/mfa/setup` replaced the authenticator secret in use —
@@ -26,6 +41,10 @@
   has the query.
 
 ### Fixed
+
+- **Every sign-in records the user's last sign-in time.** Only a sign-in
+  through an identity provider did; one with a password or an emailed link
+  left `last_login_at` as it was.
 
 - **A user can turn their second factor off.** `DELETE /api/v1/users/mfa` was
   answered by the admin route for `/api/v1/users/{id}` (401) and never reached

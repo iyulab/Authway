@@ -195,8 +195,13 @@ paths:
       description: |
         Not an API call: the browser navigates here. A provider the client
         does not offer ends the authorization request with an OAuth error.
+
+        When the provider has vouched for a user who has a second factor, the
+        browser comes back to the login UI's second factor step —
+        `{auth_ui}/mfa/verify?flow=…&mfa_challenge=…` — instead of going on
+        to the application: the provider's word is one factor.
       responses:
-        '302': { description: To the provider, or back to the application or the error screen }
+        '302': { description: "To the provider, or back to the application, the login UI's second factor step, or the error screen" }
 
   /api/v1/login-flows/{flow}/magic-link:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
@@ -239,10 +244,20 @@ paths:
   /api/v1/magic-links/redeem:
     post:
       operationId: redeemMagicLink
-      description: Uses the link up and completes its login flow. Must run in the browser that started the sign-in.
+      description: |
+        Uses the link up and continues its login flow: signed in, or — for a
+        user with a second factor — on to that step. Must run in the browser
+        that started the sign-in.
       requestBody: { $ref: '#/components/requestBodies/MagicLinkToken' }
       responses:
-        '200': { $ref: '#/components/responses/Redirect' }
+        '200':
+          description: Signed in, or a second factor is needed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Redirect'
+                  - $ref: '#/components/schemas/MFARequired'
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
@@ -1596,7 +1611,7 @@ components:
             type: object
             required: [mfa_challenge, code]
             properties:
-              mfa_challenge: { type: string, description: Issued by the password step; only valid for its own flow. }
+              mfa_challenge: { type: string, description: Issued when the first factor passed; only valid for its own flow. }
               code: { type: string }
     MagicLinkToken:
       required: true
@@ -1661,11 +1676,16 @@ components:
         redirect_to: { type: string, minLength: 1 }
 
     MFARequired:
+      description: |
+        The user proved who they are by one means and has a second factor: it
+        is owed whichever means that was — a password, an emailed link,
+        another identity provider. Answer it on the named flow.
       type: object
-      required: [next, mfa_challenge]
+      required: [next, mfa_challenge, flow]
       properties:
         next: { const: mfa }
         mfa_challenge: { type: string, minLength: 1 }
+        flow: { type: string, minLength: 1, description: The login flow the second factor belongs to. }
 
     EmailSent:
       type: object

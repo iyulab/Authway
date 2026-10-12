@@ -9,9 +9,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// pendingMFALogin is what the password stage of Login hands off to the MFA
-// verify stage: which Hydra login request to accept, as whom, and with what
-// "remember me" settings — plus a bounded retry counter so a stolen or
+// pendingMFALogin is what the first factor of a sign-in hands off to the MFA
+// verify stage: which Hydra login request to accept, as whom, how they proved
+// themselves first, and with what "remember me" settings — plus a bounded
+// retry counter so a stolen or
 // guessed mfa_challenge cannot be used to brute-force the 6-digit TOTP space
 // (the IP-based rate limiter also covers /mfa/verify and /mfa/recovery —
 // this per-challenge cap is a second, independent layer, since the two
@@ -19,6 +20,8 @@ import (
 type pendingMFALogin struct {
 	HydraChallenge string
 	UserID         uuid.UUID
+	First          string // audit name of the first factor (signInMethod.audit)
+	Provider       string // identity provider, when the first factor was one
 	Remember       bool
 	RememberFor    int
 	Attempts       int
@@ -29,7 +32,7 @@ type pendingMFALogin struct {
 // single mfa_challenge before it is discarded and the user must restart login.
 const maxMFAAttempts = 5
 
-// mfaChallengeTTL bounds how long a password-verified-but-MFA-pending login
+// mfaChallengeTTL bounds how long a login that passed its first factor
 // stays valid — the same window OAuthStateStore gives a social sign-in.
 const mfaChallengeTTL = 10 * time.Minute
 
@@ -51,7 +54,7 @@ end
 return 0
 `)
 
-// MFAChallengeStore holds password-verified, MFA-pending logins in Redis,
+// MFAChallengeStore holds logins that passed a first factor and owe a second,
 // keyed by an opaque challenge handed to the client (OAuthStateStore has the
 // same shape). It moved off in-memory storage because central-api's
 // Container App scales to maxReplicas=5, so a challenge created on one
@@ -77,6 +80,8 @@ func (s *MFAChallengeStore) Set(challenge string, data *pendingMFALogin) {
 	pipe.HSet(ctx, key, map[string]any{
 		"hydra_challenge": data.HydraChallenge,
 		"user_id":         data.UserID.String(),
+		"first":           data.First,
+		"provider":        data.Provider,
 		"remember":        data.Remember,
 		"remember_for":    data.RememberFor,
 		"attempts":        data.Attempts,
@@ -102,6 +107,8 @@ func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
 	return &pendingMFALogin{
 		HydraChallenge: vals["hydra_challenge"],
 		UserID:         userID,
+		First:          vals["first"],
+		Provider:       vals["provider"],
 		Remember:       vals["remember"] == "1",
 		RememberFor:    rememberFor,
 		Attempts:       attempts,

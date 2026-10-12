@@ -90,7 +90,8 @@ func (h *MagicLinkFlowHandler) Inspect(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"valid": true, "email": link.Email, "expires_at": link.ExpiresAt})
 }
 
-// Redeem uses the link up and completes its login flow.
+// Redeem uses the link up and continues its login flow: signed in, or — for
+// a user with a second factor — on to that step.
 // POST /api/v1/magic-links/redeem
 func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 	var req magicLinkTokenRequest
@@ -112,5 +113,5 @@ func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 			"code":  "invalid_link",
 		})
 	}
-	return h.auth.completeLogin(c, link.LoginFlow, u, false, 0, byEmailedLink)
+	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false, 0)
 }

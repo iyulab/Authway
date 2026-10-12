@@ -34,7 +34,7 @@ Every flow endpoint answers JSON with `next`, which tells the screen what to do:
 |---|---|
 | `form` | Show the screen's form (the answer carries what to show) |
 | `redirect` | Navigate the browser to `redirect_to` |
-| `mfa` | Ask for the second factor; pass `mfa_challenge` back |
+| `mfa` | Ask for the second factor; pass `mfa_challenge` back to the named `flow` |
 | `email_sent` | A sign-in link was emailed |
 
 Errors carry `error` (a message to show) and `code`. An unknown flow id is
@@ -69,7 +69,7 @@ When the browser already has a session in the client's tenant, the answer is
 ### `POST /api/v1/login-flows/{flow}/password`
 
 `{"email": "…", "password": "…", "remember": false}` → `next: redirect`, or
-`next: mfa` with `mfa_challenge` for a user with a second factor. A wrong
+`next: mfa` with `mfa_challenge` and `flow` for a user with a second factor. A wrong
 email or password is `401 invalid_credentials`; a client that does not allow
 password sign-in is `403 sign_in_method_not_allowed`.
 
@@ -79,12 +79,22 @@ password sign-in is `403 sign_in_method_not_allowed`.
 → `next: redirect`. The `mfa_challenge` only completes the flow it was issued
 for.
 
+A user who has a second factor owes it **however they proved who they are
+first** — a password, an emailed link, or another identity provider. Each of
+those ends in the same step: `next: mfa` naming the `flow`, or, for a provider
+sign-in (a page navigation), the browser arriving at
+`<login UI>/mfa/verify?flow=…&mfa_challenge=…`. A login UI needs one screen
+for the code and reaches it from all three. The ID token's `amr` then lists
+both factors (`["email", "otp", "mfa"]`, `["fed", "otp", "mfa"]`).
+
 ### `GET /api/v1/login-flows/{flow}/social/{provider}`
 
 A **page navigation**, not an API call: link to it or assign it to
 `window.location`. The browser continues to the provider and comes back
-through the API to the application. A provider the client does not offer ends
-the authorization request with an OAuth error.
+through the API to the application — or, for a user with a second factor, to
+the login UI's second factor step (above): what the provider asked of the user
+does not stand in for it. A provider the client does not offer ends the
+authorization request with an OAuth error.
 
 ### `POST /api/v1/login-flows/{flow}/magic-link`
 
@@ -96,7 +106,9 @@ in, so the answer reveals nothing about accounts. The email links to
    `valid` and `email` without using the link up (mail scanners open links
    too);
 2. on the user's confirmation, `POST /api/v1/magic-links/redeem` with the
-   same body → `next: redirect`.
+   same body → `next: redirect`, or `next: mfa` with `mfa_challenge` and
+   `flow` for a user with a second factor. The page has only the token, so it
+   takes the flow from the answer.
 
 The link has to be opened in the browser that started the sign-in: the
 authorization server ties the login to that browser.

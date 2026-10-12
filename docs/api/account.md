@@ -121,7 +121,8 @@ Content-Type: application/json
 ```
 
 `code` is the current 6-digit code from the authenticator. On `200` the second
-factor is on — a password sign-in now asks the user for a code (`next: mfa`
+factor is on — every sign-in now asks the user for a code, whether it starts
+with a password, an emailed link or another identity provider (`next: mfa`
 in the [login flow](login-flows.md#login)) — and the answer is
 `{ "recovery_codes": ["ABCD-EFGH-IJKL", …], "message" }`: eight single-use
 recovery codes. They are shown only here; have the user save them.

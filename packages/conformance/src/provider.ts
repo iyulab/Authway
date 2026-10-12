@@ -59,6 +59,12 @@ export type LoginOutcome =
       consent: 'asked' | 'skipped' | 'none'
     }
   | { kind: 'rejected'; status: number; body: string }
+  /**
+   * The first factor passed and the user has a second one: the login screen
+   * must ask for it before the flow goes on. `flow` is the flow the provider
+   * named in its answer.
+   */
+  | { kind: 'second_factor'; attempt: LoginAttempt; flow: string; challenge: string }
 
 /**
  * Drives one provider through its public surfaces. The login-UI backend calls
@@ -325,11 +331,42 @@ export class Provider {
   async continueLogin(attempt: LoginAttempt, user: TestUser): Promise<LoginOutcome> {
     const { browser, flow, remember } = attempt
     const loginRes = await this.submitPassword(browser, flow, user, remember)
-    const loginBody = await loginRes.text()
-    if (!loginRes.ok) return { kind: 'rejected', status: loginRes.status, body: loginBody }
-    const { next: step, redirect_to: afterLogin } = JSON.parse(loginBody) as { next?: string; redirect_to?: string }
-    if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: loginRes.status, body: loginBody }
-    return this.finishAuthorization(attempt, afterLogin, loginRes.status)
+    return this.afterFirstFactor(attempt, loginRes.status, await loginRes.text())
+  }
+
+  /** Reads the provider's answer to a first factor: rejected, a second factor owed, or on to the tokens. */
+  private async afterFirstFactor(attempt: LoginAttempt, status: number, body: string): Promise<LoginOutcome> {
+    if (status < 200 || status > 299) return { kind: 'rejected', status, body }
+    const step = JSON.parse(body) as { next?: string; redirect_to?: string; mfa_challenge?: string; flow?: string }
+    if (step.next === 'mfa' && step.mfa_challenge && step.flow) {
+      return { kind: 'second_factor', attempt, flow: step.flow, challenge: step.mfa_challenge }
+    }
+    if (step.next !== 'redirect' || !step.redirect_to) return { kind: 'rejected', status, body }
+    return this.finishAuthorization(attempt, step.redirect_to, status)
+  }
+
+  /**
+   * Gives the second factor a sign-in owes — a code from the user's
+   * authenticator, or one of their recovery codes — and, if it is accepted,
+   * finishes the flow.
+   */
+  async continueWithSecondFactor(
+    pending: Extract<LoginOutcome, { kind: 'second_factor' }>,
+    code: string,
+    kind: 'totp' | 'recovery' = 'totp',
+  ): Promise<LoginOutcome> {
+    const path = kind === 'totp' ? '/mfa' : '/mfa/recovery'
+    const res = await pending.attempt.browser.fetch(this.loginFlowUrl(pending.flow, path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfa_challenge: pending.challenge, code }),
+    })
+    await conform('POST', `/api/v1/login-flows/{flow}${path}`, res)
+    const body = await res.text()
+    if (!res.ok) return { kind: 'rejected', status: res.status, body }
+    const { next, redirect_to: afterLogin } = JSON.parse(body) as { next?: string; redirect_to?: string }
+    if (next !== 'redirect' || !afterLogin) return { kind: 'rejected', status: res.status, body }
+    return this.finishAuthorization(pending.attempt, afterLogin, res.status)
   }
 
   /**
@@ -358,11 +395,7 @@ export class Provider {
       body: JSON.stringify({ token }),
     })
     await conform('POST', '/api/v1/magic-links/redeem', redeemRes)
-    const redeemBody = await redeemRes.text()
-    if (!redeemRes.ok) return { kind: 'rejected', status: redeemRes.status, body: redeemBody }
-    const { next: step, redirect_to: afterLogin } = JSON.parse(redeemBody) as { next?: string; redirect_to?: string }
-    if (step !== 'redirect' || !afterLogin) return { kind: 'rejected', status: redeemRes.status, body: redeemBody }
-    return this.finishAuthorization(attempt, afterLogin, redeemRes.status)
+    return this.afterFirstFactor(attempt, redeemRes.status, await redeemRes.text())
   }
 
   /** From the authorization server's answer to an accepted login to tokens: consent if asked, then the code exchange. */
