@@ -174,6 +174,20 @@ func TestBackfillSecretHashes_HashesWhatWasStoredAsItIs(t *testing.T) {
 		t.Errorf("after the backfill the secret was refused: %v", err)
 	}
 
+	// A deleted client's row holds a secret all the same, and gets a hash too.
+	if err := db.Exec(`UPDATE clients SET client_secret_hash = '', deleted_at = now() WHERE id = ?`, created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := BackfillSecretHashes(svc, zap.NewNop()); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Raw(`SELECT client_secret, client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stored.ClientSecretHash, "$2") {
+		t.Errorf("a deleted client was left without a hash: %q", stored.ClientSecretHash)
+	}
+
 	// Running it again changes nothing.
 	before := stored.ClientSecretHash
 	if err := BackfillSecretHashes(svc, zap.NewNop()); err != nil {

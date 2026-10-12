@@ -49,7 +49,8 @@ func BackfillSecretHashes(svc Service, logger *zap.Logger) error {
 		return nil
 	}
 	var pending []Client
-	if err := s.db.Where("client_secret <> '' AND client_secret_hash = ''").Find(&pending).Error; err != nil {
+	// Deleted clients are included: their rows hold a secret all the same.
+	if err := s.db.Unscoped().Where("client_secret <> '' AND client_secret_hash = ''").Find(&pending).Error; err != nil {
 		return fmt.Errorf("failed to list clients without a secret hash: %w", err)
 	}
 	for i := range pending {
@@ -57,7 +58,7 @@ func BackfillSecretHashes(svc Service, logger *zap.Logger) error {
 		if err != nil {
 			return err
 		}
-		if err := s.db.Model(&Client{}).Where("id = ? AND client_secret_hash = ''", pending[i].ID).
+		if err := s.db.Unscoped().Model(&Client{}).Where("id = ? AND client_secret_hash = ''", pending[i].ID).
 			Update("client_secret_hash", hash).Error; err != nil {
 			return fmt.Errorf("failed to store a secret hash: %w", err)
 		}
