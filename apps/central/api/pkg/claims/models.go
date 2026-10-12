@@ -15,14 +15,6 @@ type UserClaim struct {
 	ClaimValue map[string]any `json:"claim_value" gorm:"type:jsonb;not null;serializer:json"`
 	CreatedAt  time.Time      `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt  time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
-
-	// ClaimType and IsPermanent told apart kinds of claims that no longer
-	// exist: every stored claim is written by a trusted party and kept until
-	// removed. Nothing writes or reads them (the columns take their
-	// defaults); they stay mapped, read-only, until a migration drops them.
-	// TODO: drop user_claims.claim_type and is_permanent, then these fields.
-	ClaimType   string `json:"-" gorm:"->;type:varchar(50);not null;default:system;index:idx_user_claims_type"`
-	IsPermanent bool   `json:"-" gorm:"->;default:false"`
 }
 
 // TableName overrides the table name

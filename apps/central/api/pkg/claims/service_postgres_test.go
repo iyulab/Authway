@@ -220,23 +220,3 @@ func TestList_NoClaimsIsAnEmptyMap(t *testing.T) {
 		t.Fatalf("want an empty map, got %#v", stored)
 	}
 }
-
-// TestWritesDoNotNameTheRetiredColumns: claim_type and is_permanent are
-// mapped read-only until a migration drops them. A write that named them
-// would fail on the instances still running while that migration is applied.
-func TestWritesDoNotNameTheRetiredColumns(t *testing.T) {
-	db := setupPostgres(t)
-	stmt := db.Session(&gorm.Session{DryRun: true}).Create(&UserClaim{
-		ID: uuid.New(), UserID: uuid.New(), TenantID: uuid.New(), ClaimKey: "plan",
-		ClaimValue: map[string]any{"value": "pro"},
-	}).Statement
-	sql := stmt.SQL.String()
-	if !strings.Contains(sql, "claim_key") {
-		t.Fatalf("not the insert this test means to read: %s", sql)
-	}
-	for _, column := range []string{"claim_type", "is_permanent"} {
-		if strings.Contains(sql, column) {
-			t.Fatalf("the insert names %s: %s", column, sql)
-		}
-	}
-}

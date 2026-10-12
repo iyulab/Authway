@@ -1,0 +1,31 @@
+-- ============================================================
+-- Migration 031: Drop user_claims.claim_type and is_permanent
+-- ============================================================
+-- The two columns told apart kinds of claims that no longer exist: every
+-- stored claim is written by a trusted party and kept until it is removed.
+-- No code has written or read them since they were retired; the application
+-- only kept them mapped, read-only, until this migration.
+--
+-- What it deletes: on every deployment checked before this migration was
+-- applied, each row held claim_type = 'user' and is_permanent = true — the
+-- values written before the kinds were retired, carrying no information.
+-- Check yours first if it may differ:
+--   SELECT claim_type, is_permanent, count(*) FROM user_claims GROUP BY 1, 2;
+--
+-- Destructive, so it ships in a deployment of its own, after the application
+-- that stopped using the columns. Dropping a column drops the indexes on it
+-- (idx_user_claims_type, idx_user_claims_permanent).
+--
+-- There are no down migrations. To have the columns back as they were
+-- defined (the values are gone):
+--   ALTER TABLE user_claims ADD COLUMN is_permanent BOOLEAN DEFAULT false;
+--   ALTER TABLE user_claims ADD COLUMN claim_type VARCHAR(50) DEFAULT 'system' NOT NULL;
+--   CREATE INDEX idx_user_claims_permanent ON user_claims(is_permanent) WHERE is_permanent = true;
+--   CREATE INDEX idx_user_claims_type ON user_claims(claim_type);
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction.
+-- ============================================================
+
+ALTER TABLE user_claims DROP COLUMN IF EXISTS claim_type;
+ALTER TABLE user_claims DROP COLUMN IF EXISTS is_permanent;

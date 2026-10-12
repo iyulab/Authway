@@ -31,6 +31,16 @@
   answered by the admin route for `/api/v1/users/{id}` (401) and never reached
   its handler.
 
+### Removed
+
+- **`user_claims.claim_type` and `user_claims.is_permanent` are dropped**
+  (migration 031). They told apart kinds of claims that no longer exist, and
+  nothing has written or read them since. The drop cannot be undone: if your
+  database may hold values there worth keeping, read them out first — the
+  migration's header has the query and the column definitions. Upgrade to this
+  version from one that already ignores the columns (0.7.0 or later), so the
+  instances still running while the migration is applied are not affected.
+
 ## [0.7.0] - 2026-10-12
 
 > Minor, with breaking changes for API consumers: a user can no longer write
