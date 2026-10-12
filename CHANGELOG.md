@@ -1,5 +1,18 @@
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-13
+
+> Minor, with breaking changes. Two-factor authentication now holds: a user's
+> second factor is asked for however they sign in — with a password, an
+> emailed link, or through another identity provider — and a token alone can
+> no longer replace it, switch it off or issue recovery codes. A sign-in
+> provider account belongs to one account per tenant, enforced by the
+> database. Breaking for a custom login UI (redeeming a link can answer
+> `next: mfa`, and that answer carries `flow`) and for callers of the
+> two-factor API (turning the factor off and regenerating recovery codes need
+> a code). Two retired `user_claims` columns are dropped. The conformance suite
+> now drives sign-in through another identity provider against a stand-in.
+
 ### Security
 
 - **A user's second factor is asked for however they sign in.** Only the
