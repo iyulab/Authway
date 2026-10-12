@@ -66,7 +66,8 @@ func main() {
 	}
 	defer zapLogger.Sync()
 
-	// Initialize the at-rest cipher for TOTP secrets. Fail-closed: a malformed
+	// Initialize the at-rest cipher — for TOTP secrets, and for the credentials
+	// clients hold at other identity providers. Fail-closed: a malformed
 	// key aborts startup. An empty key is permitted only in non-production (the
 	// config validator already rejects an empty key in production).
 	totpCipher, err := crypto.NewCipher(cfg.Security.TOTPEncryptionKey)
@@ -74,7 +75,7 @@ func main() {
 		zapLogger.Fatal("Failed to initialize TOTP cipher", zap.Error(err))
 	}
 	if !totpCipher.Enabled() {
-		zapLogger.Warn("TOTP encryption disabled — no AUTHWAY_TOTP_ENCRYPTION_KEY set (secrets stored as plaintext; development only)")
+		zapLogger.Warn("At-rest encryption disabled — no AUTHWAY_TOTP_ENCRYPTION_KEY set (TOTP secrets and provider credentials stored as plaintext; development only)")
 	}
 
 	// Initialize database
@@ -165,10 +166,16 @@ func main() {
 			Success:      true,
 		})
 	}))
+	// The credentials clients hold at other identity providers are sealed with
+	// the same at-rest key as the second-factor secrets.
+	client.SealSecretsWith(totpCipher)
 	clientService := client.NewService(db, zapLogger, hydraClient,
 		client.CallableAddresses(outbound.Policy{AllowPrivate: cfg.Security.AllowPrivateTargets}))
 	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
 		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
+	}
+	if err := client.SealStoredSecrets(clientService, zapLogger); err != nil {
+		zapLogger.Error("Sealing stored provider secrets failed (non-fatal; they still read, and it is retried on next start)", zap.Error(err))
 	}
 	// Social sign-in may only create an account for an invited address
 	// (invitation-only onboarding). The gate is a read-only view of the

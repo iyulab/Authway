@@ -164,8 +164,11 @@ type AdminConfig struct {
 
 type SecurityConfig struct {
 	// TOTPEncryptionKey is a base64-encoded 32-byte AES-256 key used to encrypt
-	// TOTP shared secrets at rest. Required in production (fail-closed); when
-	// empty in development the secrets are stored as plaintext.
+	// at rest what the server must be able to read back: TOTP shared secrets,
+	// and the credentials clients hold at other identity providers. (It keeps
+	// the name it had when it encrypted the first of these only.) Required in
+	// production (fail-closed); when empty in development they are stored as
+	// plaintext.
 	TOTPEncryptionKey string `mapstructure:"totp_encryption_key"`
 	// AllowPrivateTargets lets the calls the deployment makes to addresses it
 	// was given — webhook deliveries, a client's back-channel logout address —
@@ -440,10 +443,11 @@ func (c *Config) Validate() error {
 		if c.Admin.APIKey == "" {
 			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set outside development — required for /api/v1/clients/* and other admin endpoints")
 		}
-		// Fail-closed: TOTP secrets must be encrypted at rest. An absent or
-		// malformed key would silently fall back to plaintext storage.
+		// Fail-closed: TOTP secrets and provider credentials must be encrypted
+		// at rest. An absent or malformed key would silently fall back to
+		// plaintext storage.
 		if c.Security.TOTPEncryptionKey == "" {
-			errors = append(errors, "CRITICAL: security.totp_encryption_key (AUTHWAY_TOTP_ENCRYPTION_KEY) must be set outside development — a base64-encoded 32-byte key for TOTP secret encryption at rest")
+			errors = append(errors, "CRITICAL: security.totp_encryption_key (AUTHWAY_TOTP_ENCRYPTION_KEY) must be set outside development — a base64-encoded 32-byte key that encrypts TOTP secrets and provider credentials at rest")
 		} else if key, err := base64.StdEncoding.DecodeString(c.Security.TOTPEncryptionKey); err != nil {
 			errors = append(errors, "CRITICAL: security.totp_encryption_key must be valid base64")
 		} else if len(key) != 32 {

@@ -16,6 +16,19 @@
   survive a reload and end with the tab. The default is unchanged
   (`'localstorage'`).
 
+### Security
+
+- **The credentials a client holds at another identity provider are encrypted
+  at rest**: its Google, GitHub and Microsoft client secrets and its Apple
+  signing key, set per client through the admin API, were stored as given.
+  They are sealed with the deployment's at-rest key
+  (`AUTHWAY_TOTP_ENCRYPTION_KEY`, the one that seals TOTP secrets — its name
+  is older than this use), and values stored before are sealed when the API
+  next starts. Nothing changes for callers: these fields were never returned.
+  **For operators:** the key now protects these too — losing or rotating it
+  makes a client with a sealed provider credential fail to load until the
+  credential is entered again.
+
 ### Changed
 
 - **SDK: `checkSession()` resolves a boolean** — whether the browser is on its

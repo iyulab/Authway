@@ -34,13 +34,13 @@ type Client struct {
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`
 	GoogleClientID     *string `json:"-" gorm:"column:google_client_id;null"`
-	GoogleClientSecret *string `json:"-" gorm:"column:google_client_secret;null"`
+	GoogleClientSecret *string `json:"-" gorm:"column:google_client_secret;null;serializer:sealed"`
 	GoogleRedirectURI  *string `json:"google_redirect_uri" gorm:"column:google_redirect_uri;null"`
 
 	// Client-specific GitHub OAuth (optional)
 	GithubOAuthEnabled bool    `json:"github_oauth_enabled" gorm:"column:github_oauth_enabled;default:false"`
 	GithubClientID     *string `json:"-" gorm:"column:github_client_id;null"`
-	GithubClientSecret *string `json:"-" gorm:"column:github_client_secret;null"`
+	GithubClientSecret *string `json:"-" gorm:"column:github_client_secret;null;serializer:sealed"`
 
 	// CORS Allowed Origins for dynamic CORS validation by reverse proxy
 	// Used to validate browser requests to /oauth2/token endpoint
@@ -86,7 +86,7 @@ type Client struct {
 	// Microsoft OAuth settings (optional - client-specific credentials)
 	MicrosoftOAuthEnabled bool    `json:"microsoft_oauth_enabled" gorm:"column:microsoft_oauth_enabled;default:false"`
 	MicrosoftClientID     *string `json:"-" gorm:"column:microsoft_client_id;null"`
-	MicrosoftClientSecret *string `json:"-" gorm:"column:microsoft_client_secret;null"`
+	MicrosoftClientSecret *string `json:"-" gorm:"column:microsoft_client_secret;null;serializer:sealed"`
 	MicrosoftTenantID     *string `json:"microsoft_tenant_id" gorm:"column:microsoft_tenant_id;null"`
 
 	// Apple OAuth settings (optional - client-specific credentials)
@@ -94,7 +94,7 @@ type Client struct {
 	AppleClientID     *string `json:"-" gorm:"column:apple_client_id;null"`
 	AppleTeamID       *string `json:"-" gorm:"column:apple_team_id;null"`
 	AppleKeyID        *string `json:"-" gorm:"column:apple_key_id;null"`
-	ApplePrivateKey   *string `json:"-" gorm:"column:apple_private_key;null"`
+	ApplePrivateKey   *string `json:"-" gorm:"column:apple_private_key;null;serializer:sealed"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

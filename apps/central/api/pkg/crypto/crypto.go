@@ -1,6 +1,8 @@
 // Package crypto provides authenticated symmetric encryption for secrets that
-// must be recoverable at rest — currently TOTP shared secrets, which cannot be
-// hashed (the server must reproduce the exact secret to validate a code).
+// must be recoverable at rest and so cannot be hashed: TOTP shared secrets
+// (the server must reproduce the exact secret to validate a code) and the
+// credentials a client holds at another identity provider (the server must
+// present them there).
 //
 // The scheme is AES-256-GCM. Ciphertext is stored as:
 //
@@ -26,6 +28,10 @@ import (
 // gcmV1Prefix tags a value as AES-256-GCM (scheme v1) encrypted. A value
 // lacking this prefix is legacy plaintext.
 const gcmV1Prefix = "gcm1:"
+
+// SealedPrefix is what every value sealed by a Cipher starts with — for a
+// query that has to tell sealed rows from the rest.
+const SealedPrefix = gcmV1Prefix
 
 // keySize is the required AES-256 key length in bytes.
 const keySize = 32
