@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // newTestSendwayService points a SendwayEmailService at an httptest TLS server —
@@ -248,5 +249,41 @@ func TestSendwayEmailService_MarksTransientFailures(t *testing.T) {
 	ts.Close() // nothing answers
 	if err := svc.SendVerificationEmail("user@example.com", "tok"); !errors.Is(err, ErrTransient) {
 		t.Errorf("unreachable mail service: %v, want ErrTransient", err)
+	}
+}
+
+// How long an attempt took is the only record of what the path to the mail
+// service costs, so every outcome logs it: a message taken, a refusal, and no
+// answer at all.
+func TestSendwayEmailService_LogsHowLongEachAttemptTook(t *testing.T) {
+	outcomes := map[string]http.HandlerFunc{
+		"Email accepted by Sendway": func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			w.Write([]byte(`{"id":"msg-1"}`))
+		},
+		"Sendway returned an error": func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		},
+		"Failed to send email via Sendway": nil, // the server is gone before the attempt
+	}
+	for message, handler := range outcomes {
+		ts := httptest.NewTLSServer(handler)
+		core, logs := observer.New(zap.InfoLevel)
+		svc := newTestSendwayService(t, ts)
+		svc.logger = zap.New(core)
+		if handler == nil {
+			ts.Close()
+		}
+		_ = svc.SendVerificationEmail("user@example.com", "tok")
+		ts.Close()
+
+		entries := logs.FilterMessage(message).All()
+		if len(entries) != 1 {
+			t.Errorf("%q: logged %d times, want once", message, len(entries))
+			continue
+		}
+		if _, ok := entries[0].ContextMap()["took"]; !ok {
+			t.Errorf("%q: the entry does not say how long the attempt took", message)
+		}
 	}
 }

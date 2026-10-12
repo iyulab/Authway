@@ -174,10 +174,15 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		zap.String("to", to),
 		zap.String("subject", subject))
 
+	// took covers the whole attempt as the caller sees it — connecting included,
+	// which is most of it when the previous message went out too long ago for
+	// its connection to still be open.
+	start := time.Now()
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		s.logger.Error("Failed to send email via Sendway",
 			zap.Error(err),
+			zap.Duration("took", time.Since(start)),
 			zap.String("to", to))
 		return fmt.Errorf("%w: failed to send email via Sendway: %w", ErrTransient, err)
 	}
@@ -198,6 +203,7 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 		}
 		s.logger.Error("Sendway returned an error",
 			zap.Int("status", resp.StatusCode),
+			zap.Duration("took", time.Since(start)),
 			zap.String("reason", reason),
 			zap.String("messageId", errResp.MessageID))
 		err := fmt.Errorf("sendway returned status %d: %s (messageId=%s)", resp.StatusCode, reason, errResp.MessageID)
@@ -218,6 +224,7 @@ func (s *SendwayEmailService) sendEmail(to, subject, body, htmlBody string) erro
 	s.logger.Info("Email accepted by Sendway",
 		zap.String("to", to),
 		zap.Int("status", resp.StatusCode),
+		zap.Duration("took", time.Since(start)),
 		zap.String("messageId", okResp.ID))
 
 	return nil
