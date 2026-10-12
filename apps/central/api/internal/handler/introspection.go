@@ -14,6 +14,7 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/middleware"
 )
 
 // IntrospectionHandler answers whether a token is still good (RFC 7662), for
@@ -49,6 +50,8 @@ func (h *IntrospectionHandler) Introspect(c *fiber.Ctx) error {
 	}
 	tenantID, ok := h.callerTenant(id, secret)
 	if !ok {
+		// Counts against the caller's address, as a failed sign-in does.
+		middleware.IncrementRateLimitOnFailure(c)
 		return refuseCaller(c)
 	}
 

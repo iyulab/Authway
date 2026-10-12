@@ -347,7 +347,9 @@ func main() {
 
 	// A resource server asks whether a token is still good (RFC 7662). The
 	// caller is a confidential client, not a user and not an administrator.
-	v1.Post("/oauth2/introspect", handler.NewIntrospectionHandler(clientService, hydraClient, zapLogger).Introspect)
+	// Wrong credentials count against the caller's address like failed
+	// sign-ins do: each one costs a deliberately slow secret check.
+	v1.Post("/oauth2/introspect", ratelimitmw.LoginRateLimit(redisClient), handler.NewIntrospectionHandler(clientService, hydraClient, zapLogger).Introspect)
 
 	// What the sign-in screen should do with a login flow: show the form (and
 	// which sign-in methods the client allows) or redirect.
