@@ -107,7 +107,20 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 		return nil, fmt.Errorf("failed to look up the account: %w", err)
 	}
 
-	if err := users.LinkProvider(account.ID, id.Provider, id.Subject); err != nil {
+	err = users.LinkProvider(account.ID, id.Provider, id.Subject)
+	if errors.Is(err, user.ErrProviderSubjectTaken) {
+		// Another sign-in with the same provider account linked it between
+		// the lookup above and here. Rule 1 holds: the account it is linked
+		// to is this person's account.
+		logger.Warn("The provider account was linked by a concurrent sign-in; using that account",
+			zap.String("provider", id.Provider), zap.String("tenant_id", tenantID.String()))
+		linked, err := users.GetByProviderSubject(tenantID, id.Provider, id.Subject)
+		if err != nil {
+			return nil, fmt.Errorf("failed to look up the linked account: %w", err)
+		}
+		return linked, nil
+	}
+	if err != nil {
 		return nil, fmt.Errorf("failed to link the account: %w", err)
 	}
 	account.EmailVerified = true

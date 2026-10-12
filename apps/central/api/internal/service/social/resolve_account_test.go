@@ -112,6 +112,21 @@ func TestResolveAccount(t *testing.T) {
 		}
 	})
 
+	t.Run("a link made by a sign-in arriving together wins, and its account is used", func(t *testing.T) {
+		accounts := newFakeAccounts()
+		byAddress := accounts.add(tenantID, victimEmail)
+		racer := accounts.add(tenantID, "racer@example.com")
+		accounts.linkedMeanwhile = racer
+
+		got, err := resolveAccount(accounts, &stubGate{}, zap.NewNop(), tenantID, verified)
+		if err != nil || got.ID != racer.ID {
+			t.Fatalf("got %v, %v; want the account the provider account is linked to", got, err)
+		}
+		if linkedSubject(byAddress, "google") != "" || byAddress.EmailVerified {
+			t.Errorf("the account found by address was changed: linked=%q verified=%v", linkedSubject(byAddress, "google"), byAddress.EmailVerified)
+		}
+	})
+
 	t.Run("a link in another tenant does not count", func(t *testing.T) {
 		accounts := newFakeAccounts()
 		elsewhere := accounts.add(uuid.New(), victimEmail)

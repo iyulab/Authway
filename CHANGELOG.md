@@ -14,6 +14,17 @@
   recovery code (`403 mfa_code_required` without it, rate limited like failed
   sign-ins). To change authenticators, turn the factor off first.
 
+- **A sign-in provider account belongs to one account per tenant, and the
+  database enforces it.** The application looks a provider account's link up
+  before it links or creates an account, but two first sign-ins arriving
+  together could both find nothing and link the same provider account to two
+  accounts. Migration 030 adds a unique index per provider on
+  `(tenant_id, <provider>_id)` among accounts that are not deleted; a sign-in
+  that loses that race is signed in to the account the provider account is
+  linked to. A database where two live accounts in one tenant already share a
+  provider account must resolve that before upgrading — the migration's header
+  has the query.
+
 ### Fixed
 
 - **A user can turn their second factor off.** `DELETE /api/v1/users/mfa` was

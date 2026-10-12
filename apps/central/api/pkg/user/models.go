@@ -19,11 +19,14 @@ type User struct {
 	EmailVerified bool      `json:"email_verified" gorm:"default:false"`
 	Active        bool      `json:"active"`
 	Provider      string    `json:"provider" gorm:"default:local"` // local, google, github, microsoft, apple
-	GoogleID      *string   `json:"-" gorm:"index"`
-	GithubID      *string   `json:"-" gorm:"index"`
-	MicrosoftID   *string   `json:"-" gorm:"index"`
-	AppleID       *string   `json:"-" gorm:"index"`
-	Picture       *string   `json:"picture"`
+	// The account at each sign-in provider this account signs in with. Within
+	// a tenant a provider account belongs to one account that is not deleted
+	// (unique indexes uq_users_tenant_<provider>_id).
+	GoogleID    *string `json:"-"`
+	GithubID    *string `json:"-"`
+	MicrosoftID *string `json:"-"`
+	AppleID     *string `json:"-"`
+	Picture     *string `json:"picture"`
 
 	// MFA/TOTP fields
 	TOTPSecret     *string    `json:"-" gorm:"column:totp_secret"`

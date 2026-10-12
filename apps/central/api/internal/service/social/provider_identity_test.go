@@ -99,6 +99,10 @@ type fakeAccounts struct {
 	users     []*user.User
 	linked    int   // LinkProvider calls that changed an account
 	lookupErr error // returned by GetByProviderSubject when set
+	// linkedMeanwhile, when set, is linked to the provider account by
+	// "another sign-in" just before the next LinkProvider call, which is then
+	// refused as the database would refuse it.
+	linkedMeanwhile *user.User
 }
 
 func (f *fakeAccounts) GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*user.User, error) {
@@ -114,6 +118,11 @@ func (f *fakeAccounts) GetByProviderSubject(tenantID uuid.UUID, provider, subjec
 }
 
 func (f *fakeAccounts) LinkProvider(id uuid.UUID, provider, subject string) error {
+	if other := f.linkedMeanwhile; other != nil {
+		f.linkedMeanwhile = nil
+		setLinkedSubject(other, provider, subject)
+		return user.ErrProviderSubjectTaken
+	}
 	for _, u := range f.users {
 		if u.ID == id {
 			setLinkedSubject(u, provider, subject)

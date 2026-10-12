@@ -1,11 +1,13 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -47,6 +49,13 @@ type Service interface {
 // ErrUserNotFound reports that no account matches a lookup. Its text is safe
 // to show a caller.
 var ErrUserNotFound = apierror.NewPublic("user not found")
+
+// ErrProviderSubjectTaken refuses a link to a sign-in provider account that
+// another account in the same tenant already signs in with.
+var ErrProviderSubjectTaken = errors.New("another account in this tenant already signs in with this provider account")
+
+// uniqueViolation is the SQLSTATE of a row refused by a unique index.
+const uniqueViolation = "23505"
 
 // providerColumns names the column holding each sign-in provider's
 // identifier for the account a user signs in with.
@@ -311,6 +320,10 @@ func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error
 		return fmt.Errorf("cannot link sign-in provider %q", provider)
 	}
 	res := s.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{column: subject, "email_verified": true})
+	var refused *pgconn.PgError
+	if errors.As(res.Error, &refused) && refused.Code == uniqueViolation {
+		return ErrProviderSubjectTaken
+	}
 	if res.Error != nil {
 		return fmt.Errorf("failed to link sign-in provider: %w", res.Error)
 	}
