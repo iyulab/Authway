@@ -7,10 +7,11 @@ import { server } from '../test/mocks/server'
 import { http, HttpResponse } from 'msw/http'
 
 const mockSearchParams = new URLSearchParams()
+const mockNavigate = vi.fn()
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router')
-  return { ...actual, useSearchParams: () => [mockSearchParams], useNavigate: () => vi.fn() }
+  return { ...actual, useSearchParams: () => [mockSearchParams], useNavigate: () => mockNavigate }
 })
 
 describe('MagicLinkPage', () => {
@@ -18,6 +19,7 @@ describe('MagicLinkPage', () => {
 
   afterEach(() => {
     Array.from(mockSearchParams.keys()).forEach((k) => mockSearchParams.delete(k))
+    mockNavigate.mockReset()
   })
 
   it('sends a sign-in link for the login flow', async () => {
@@ -62,6 +64,29 @@ describe('MagicLinkPage', () => {
     await user.click(screen.getByRole('button', { name: /continue|계속/i }))
     await waitFor(() => expect(window.location.href).toBe('http://example.com/after-login'))
     expect(calls).toEqual(['inspect', 'redeem'])
+  })
+
+  // The link is one factor. A user who also has an authenticator is taken to
+  // the code step — not signed in, and not shown an error.
+  it('goes on to the second factor step when the user has one', async () => {
+    mockSearchParams.set('token', 'tok-1')
+    server.use(
+      http.post('http://localhost:8080/api/v1/magic-links/inspect', () =>
+        HttpResponse.json({ valid: true, email: 'user@example.com' })
+      ),
+      http.post('http://localhost:8080/api/v1/magic-links/redeem', () =>
+        HttpResponse.json({ next: 'mfa', mfa_challenge: 'chal-1', flow: 'flow-1=' })
+      )
+    )
+    delete (window as any).location
+    window.location = { ...window.location, href: '' }
+
+    render(<MagicLinkPage />)
+    await screen.findByText('user@example.com')
+    await user.click(screen.getByRole('button', { name: /continue|계속/i }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/mfa/verify?flow=flow-1%3D&mfa_challenge=chal-1'))
+    expect(window.location.href).toBe('')
   })
 
   it('explains a link that can no longer be used', async () => {

@@ -7,6 +7,8 @@ export interface FlowStep {
   next?: 'form' | 'redirect' | 'mfa' | 'email_sent'
   redirect_to?: string
   mfa_challenge?: string
+  /** The flow a second factor step belongs to. */
+  flow?: string
   error?: string
   code?: string
 }

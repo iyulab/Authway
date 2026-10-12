@@ -94,6 +94,12 @@ const MagicLinkPage: React.FC = () => {
         followRedirect(data.redirect_to)
         return
       }
+      // The link is one factor: a user who has a second one gives it next.
+      if (data.next === 'mfa' && data.mfa_challenge && data.flow) {
+        const params = new URLSearchParams({ flow: data.flow, mfa_challenge: data.mfa_challenge })
+        navigate(`/mfa/verify?${params}`)
+        return
+      }
       setError(data.error || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
     } catch {
       setError(t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
