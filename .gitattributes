@@ -1,0 +1,3 @@
+# Read by `docker run --env-file`, which takes a trailing carriage return as
+# part of the value. Keep these files LF on every platform.
+*.env text eol=lf
