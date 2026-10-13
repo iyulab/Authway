@@ -71,7 +71,7 @@ These settings have sensible defaults and can be customized as needed:
 | `AUTHWAY_APP_PORT` | Server port | `8080` |
 | `AUTHWAY_JWT_ACCESS_TOKEN_EXPIRY` | Access token lifetime | `15m` |
 | `AUTHWAY_JWT_REFRESH_TOKEN_EXPIRY` | Refresh token lifetime | `7d` |
-| `AUTHWAY_REDIS_HOST` | Redis host (optional) | `localhost` |
+| `AUTHWAY_REDIS_HOST` | Redis host — the API does not start without Redis | `localhost` |
 | `AUTHWAY_REDIS_PORT` | Redis port | `6379` |
 | `AUTHWAY_CORS_ALLOWED_ORIGINS` | CORS origins | `http://localhost:3000,...` |
 
@@ -118,15 +118,24 @@ AUTHWAY_DATABASE_NAME=authway               # Database name
 AUTHWAY_DATABASE_SSL_MODE=disable           # disable|require|verify-ca|verify-full
 ```
 
-### Redis Configuration (Optional)
+### Redis Configuration
+
+The API needs Redis and does not start without it. What it keeps there is
+short-lived — see [Redis](docs/DEPLOYMENT.md#redis).
 
 ```bash
-# Redis for session storage and caching
 AUTHWAY_REDIS_HOST=localhost                # Redis server host
 AUTHWAY_REDIS_PORT=6379                     # Redis port
 AUTHWAY_REDIS_PASSWORD=                     # Redis password (if auth enabled)
+AUTHWAY_REDIS_TLS_ENABLED=false             # true for a Redis that only speaks TLS
 AUTHWAY_REDIS_DB=0                          # Redis database number (0-15)
+AUTHWAY_REDIS_KEY_PREFIX=                   # this deployment's share of a Redis others use too
 ```
+
+`AUTHWAY_REDIS_KEY_PREFIX` puts every key the deployment reads or writes
+under `<prefix>:`. Set it when two deployments share one Redis — it works
+where only database 0 exists, as on a clustered or managed Redis. Up to 32
+letters, digits, `.`, `_` or `-`; the API refuses to start on anything else.
 
 ### JWT Configuration
 

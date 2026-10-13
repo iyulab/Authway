@@ -10,6 +10,11 @@ import (
 )
 
 func ConnectRedis(cfg config.RedisConfig) (*redis.Client, error) {
+	keyPrefix, err := NormalizeKeyPrefix(cfg.KeyPrefix)
+	if err != nil {
+		return nil, err
+	}
+
 	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password: cfg.Password,
@@ -24,6 +29,7 @@ func ConnectRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	}
 
 	client := redis.NewClient(opts)
+	UseKeyPrefix(client, keyPrefix)
 
 	// Test connection
 	ctx := context.Background()

@@ -17,6 +17,16 @@
 
 ### Added
 
+- **Deployments can share one Redis: `AUTHWAY_REDIS_KEY_PREFIX`.** Set to a
+  name, it puts every key the deployment reads or writes under `<name>:`.
+  Until now the only way to keep two deployments apart on one Redis was a
+  database number, which a clustered or managed Redis does not have. The
+  prefix belongs to the connection: a command the API has not been taught to
+  place under it is refused, so nothing is written outside a deployment's
+  share by oversight. Unset — the default — keys stay as they were.
+  **For operators:** turning it on makes earlier keys invisible, once; what
+  Redis holds, how large it needs to be and how to move it are in
+  [Redis](docs/DEPLOYMENT.md#redis).
 - **The screens that ask for a password know how long the tenant wants it.**
   `GET /api/v1/invitations/token/{token}` and
   `GET /api/v1/email/verify-reset-token` answer `password_min_length` — the

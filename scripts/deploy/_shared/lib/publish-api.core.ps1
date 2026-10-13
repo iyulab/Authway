@@ -126,6 +126,14 @@ try {
     Write-Host "✓ Google client secret 반영 완료" -ForegroundColor Green
     Write-Host ""
 
+    # Optional: a deployment that shares its Redis names its share. An empty
+    # array adds no argument.
+    $redisKeyPrefixEnv = @()
+    if ($envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
+        $redisKeyPrefixEnv = @("AUTHWAY_REDIS_KEY_PREFIX=$($envVars['AUTHWAY_REDIS_KEY_PREFIX'])")
+        Write-Host "🔑 Redis key prefix: $($envVars['AUTHWAY_REDIS_KEY_PREFIX'])" -ForegroundColor Gray
+    }
+
     Write-Host "🔄 이미지 및 환경 변수 업데이트 중..." -ForegroundColor Yellow
 
     az containerapp update `
@@ -149,6 +157,7 @@ try {
             "AUTHWAY_REDIS_PORT=$($envVars['AUTHWAY_REDIS_PORT'])" `
             "AUTHWAY_REDIS_PASSWORD=$($envVars['AUTHWAY_REDIS_PASSWORD'])" `
             "AUTHWAY_REDIS_DB=$($envVars['AUTHWAY_REDIS_DB'])" `
+            $redisKeyPrefixEnv `
             "AUTHWAY_REDIS_TLS_ENABLED=$($envVars['AUTHWAY_REDIS_TLS_ENABLED'])" `
             "AUTHWAY_JWT_ACCESS_TOKEN_SECRET=$($envVars['JWT_ACCESS_SECRET'])" `
             "AUTHWAY_JWT_REFRESH_TOKEN_SECRET=$($envVars['JWT_REFRESH_SECRET'])" `
@@ -176,6 +185,11 @@ try {
     # shared key it used to check is obsolete. Removed only after the new image
     # is in place: older images refuse to start without it.
     $staleEnv = @('AUTHWAY_ADMIN_INTERNAL_API_KEY')
+    # A prefix the target no longer sets must not stay on the app: an update
+    # only adds variables.
+    if (-not $envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
+        $staleEnv += 'AUTHWAY_REDIS_KEY_PREFIX'
+    }
     $presentEnv = az containerapp show `
         --name $CONTAINER_APP_API `
         --resource-group $RESOURCE_GROUP `

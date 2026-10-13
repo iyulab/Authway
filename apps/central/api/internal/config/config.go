@@ -87,6 +87,10 @@ type RedisConfig struct {
 	Password   string `mapstructure:"password"`
 	DB         int    `mapstructure:"db"`
 	TLSEnabled bool   `mapstructure:"tls_enabled"`
+	// KeyPrefix names this deployment's share of a Redis that others use
+	// too: every key it reads or writes starts with it. Empty for a Redis of
+	// the deployment's own.
+	KeyPrefix string `mapstructure:"key_prefix"`
 }
 
 type OAuthConfig struct {
@@ -158,8 +162,8 @@ type TenantConfig struct {
 }
 
 type AdminConfig struct {
-	APIKey         string `mapstructure:"api_key"`
-	Password       string `mapstructure:"password"`
+	APIKey   string `mapstructure:"api_key"`
+	Password string `mapstructure:"password"`
 }
 
 type SecurityConfig struct {
@@ -311,6 +315,9 @@ func Load() (*Config, error) {
 		if dbInt, err := strconv.Atoi(db); err == nil {
 			config.Redis.DB = dbInt
 		}
+	}
+	if keyPrefix := os.Getenv("AUTHWAY_REDIS_KEY_PREFIX"); keyPrefix != "" {
+		config.Redis.KeyPrefix = keyPrefix
 	}
 	if tlsEnabled := os.Getenv("AUTHWAY_REDIS_TLS_ENABLED"); tlsEnabled != "" {
 		config.Redis.TLSEnabled = (tlsEnabled == "true")
@@ -532,6 +539,7 @@ func setDefaults() {
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("redis.key_prefix", "")
 	viper.SetDefault("redis.tls_enabled", false)
 
 	// OAuth defaults

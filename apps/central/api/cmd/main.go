@@ -150,6 +150,9 @@ func main() {
 	if err != nil {
 		zapLogger.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
+	if cfg.Redis.KeyPrefix != "" {
+		zapLogger.Info("Redis keys carry this deployment's prefix", zap.String("key_prefix", cfg.Redis.KeyPrefix))
+	}
 
 	// Initialize Hydra client
 	hydraClient := hydra.NewClient(cfg.Hydra.AdminURL)

@@ -9,6 +9,7 @@ Complete guide for deploying Authway to production environments.
 - [Docker Deployment](#docker-deployment)
 - [CORS Configuration](#cors-configuration)
 - [Environment Variables](#environment-variables)
+- [Redis](#redis)
 - [Database Migrations](#database-migrations)
 - [Production Checklist](#production-checklist)
 
@@ -315,6 +316,61 @@ SERVE_COOKIES_SAME_SITE_MODE=Lax
 ```
 
 ---
+
+## Redis
+
+The API does not start without Redis. Nothing in it is a record: every key
+has a lifetime, and losing all of them costs users a retry, not data.
+
+| Keys | What | Kept for | If lost |
+|------|------|----------|---------|
+| `auth_time:<session>` | When and how the user of a browser session last signed in — the `auth_time` of access tokens and the `amr` of ID tokens issued on a reused session, and the check before deleting an account | 30 days | Until the user signs in again, access tokens issued on that session carry no `auth_time` and ID tokens no `amr`; an operation that needs a recent sign-in asks for one |
+| `mfa_challenge:<id>` | A sign-in that passed its first factor and owes the second | 10 minutes | The user starts the sign-in again |
+| `oauth:state:<state>` | A sign-in sent to a social provider and not yet back | 10 minutes | The user starts the sign-in again |
+| `ratelimit:…` | Attempt counters and blocks, per route and address | 1 minute to 1 hour | Counters start from zero |
+
+### Size
+
+Each key is a few hundred bytes and is written once per sign-in or per
+attempt. A deployment with thousands of sign-ins a day stays in the tens of
+megabytes; the smallest instance a provider offers is enough until measured
+otherwise. Choose for availability, not for memory: Redis is on the sign-in
+path, so an instance without a replica makes its restarts sign-in outages.
+
+### What the API asks of it
+
+One node, or a cluster in a mode that needs no cluster-aware client. Every
+command names a single key — transactions and the one script included — so
+nothing depends on keys sharing a slot. No keyspace notifications, no `KEYS`
+or `SCAN`.
+
+### Sharing one Redis between deployments
+
+Give each deployment a prefix: `AUTHWAY_REDIS_KEY_PREFIX=staging` puts all of
+its keys under `staging:`. A database number (`AUTHWAY_REDIS_DB`) separates
+deployments too, but only where numbered databases exist — a clustered or
+managed Redis has database 0 alone.
+
+The prefix is applied to the connection, not key by key: a command the API
+has not been taught to place under the prefix is refused rather than sent, so
+a deployment cannot write outside its share by oversight.
+
+Turning the prefix on, or changing it, makes the keys written before
+invisible: the effect is that of losing them (the table above), once.
+
+### Moving to another instance
+
+Nothing has to be copied. Point the API at the new instance and deploy; the
+effects are those of losing every key, once. To make the move unnoticed for
+signed-in users, do it when a restart is acceptable anyway — sign-ins in
+flight at that moment are started again.
+
+1. Create the instance; note host, port, password, whether it requires TLS.
+2. If deployments will share it, choose a prefix for each.
+3. Set `AUTHWAY_REDIS_*` for the deployment and deploy the API.
+4. Sign in once and check the new instance has keys under the expected
+   prefix (`redis-cli --scan --pattern '<prefix>:*'`).
+5. Remove the old instance when no deployment points at it.
 
 ## Database Migrations
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/internal/database"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,11 @@ func newTestRedisClient(t *testing.T) *redis.Client {
 		t.Fatalf("miniredis.Run: %v", err)
 	}
 	t.Cleanup(mr.Close)
-	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	// Under a prefix, as a deployment that shares its Redis runs: a command
+	// the prefix cannot place fails here rather than there.
+	database.UseKeyPrefix(client, "test:")
+	return client
 }
 
 const testClientID = "test-client"
