@@ -35,8 +35,9 @@
   is the tenant's `signup_mode` (with `allowed_domains`). It is no longer
   accepted or returned by the client endpoints, nor carried in the answer of
   `GET /api/v1/login-flows/{flow}` (`client.allow_email_signup`). **For a
-  caller:** stop sending it — it is ignored — and stop reading it. The column
-  itself is dropped in a later release.
+  caller:** stop sending it — it is ignored — and stop reading it. Migration
+  033 drops the column, in a deployment of its own after the one that stopped
+  using it; every row checked held the default.
 
 ### Fixed
 

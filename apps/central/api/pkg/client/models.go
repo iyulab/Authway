@@ -66,13 +66,6 @@ type Client struct {
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
 	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login"`
 
-	// AllowEmailSignup decided nothing: there is no password sign-up, and
-	// whether a first sign-in may create an account is the tenant's
-	// signup_mode. Nothing writes or reads it (the column takes its default);
-	// it stays mapped, read-only, until a migration drops the column.
-	// TODO: drop clients.allow_email_signup, then this field.
-	AllowEmailSignup bool `json:"-" gorm:"->;column:allow_email_signup"`
-
 	// Consent Flow Configuration
 	// SkipConsent bypasses the OAuth consent screen; SkipLogoutConsent bypasses
 	// the logout confirmation. Intended for first-party/trusted clients so users

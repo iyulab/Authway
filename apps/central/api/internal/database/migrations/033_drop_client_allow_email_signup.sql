@@ -1,0 +1,26 @@
+-- ============================================================
+-- Migration 033: Drop clients.allow_email_signup
+-- ============================================================
+-- The column was meant to say whether users may register with an email
+-- address and a password through a client. There is no password sign-up:
+-- whether a first sign-in may create an account is the tenant's signup_mode
+-- with allowed_domains. Nothing read the column; the application stopped
+-- writing it and only kept it mapped, read-only, until this migration.
+--
+-- What it deletes: on every deployment checked before this migration was
+-- applied, each row held allow_email_signup = true — the column default,
+-- carrying no information. Check yours first if it may differ:
+--   SELECT allow_email_signup, count(*) FROM clients GROUP BY 1;
+--
+-- Destructive, so it ships in a deployment of its own, after the application
+-- that stopped using the column.
+--
+-- There are no down migrations. To have the column back as it was defined
+-- (the values are gone):
+--   ALTER TABLE clients ADD COLUMN allow_email_signup BOOLEAN DEFAULT true;
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction.
+-- ============================================================
+
+ALTER TABLE clients DROP COLUMN IF EXISTS allow_email_signup;
