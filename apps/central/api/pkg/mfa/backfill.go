@@ -38,9 +38,10 @@ func BackfillTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error
 		return nil
 	}
 
+	// Deleted users are included: their rows hold the secret all the same.
 	var users []user.User
-	if err := db.Model(&user.User{}).
-		Where("totp_secret IS NOT NULL AND totp_secret <> ''").
+	if err := db.Unscoped().Model(&user.User{}).
+		Where("totp_secret IS NOT NULL AND totp_secret <> '' AND totp_secret NOT LIKE ?", crypto.SealedPrefix+"%").
 		Find(&users).Error; err != nil {
 		return fmt.Errorf("backfill: failed to load users with TOTP secrets: %w", err)
 	}
@@ -59,7 +60,7 @@ func BackfillTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error
 		}
 		// Optimistic write: only replace the row if the plaintext we read is
 		// still there. A concurrent SetupTOTP wins → RowsAffected == 0, skipped.
-		res := db.Model(&user.User{}).
+		res := db.Unscoped().Model(&user.User{}).
 			Where("id = ? AND totp_secret = ?", u.ID, *u.TOTPSecret).
 			Update("totp_secret", enc)
 		if res.Error != nil {

@@ -334,13 +334,20 @@ type CreateClientRequest struct {
 // tenant the credential is scoped to." GrantTypes additionally excludes
 // client_credentials/implicit: a scoped credential must never be able to
 // mint another M2M credential.
+//
+// BackChannelLogoutURI is among them: where an application's own backend is
+// told of a logout is the application's to say, and the address is held to
+// the same rule whoever registers it (a public https address — see
+// validateBackChannelLogoutURI). Audience is not: it names an API, and
+// whether a tenant may claim one is a question of its own.
 type ScopedCreateClientRequest struct {
-	Name           string   `json:"name" validate:"required"`
-	Public         bool     `json:"public"`
-	RedirectURIs   []string `json:"redirect_uris"`
-	GrantTypes     []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token"`
-	Scopes         []string `json:"scopes" validate:"required,min=1"`
-	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
+	Name                 string   `json:"name" validate:"required"`
+	Public               bool     `json:"public"`
+	RedirectURIs         []string `json:"redirect_uris"`
+	GrantTypes           []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token"`
+	Scopes               []string `json:"scopes" validate:"required,min=1"`
+	AllowedOrigins       []string `json:"allowed_origins" validate:"omitempty,dive,url"`
+	BackChannelLogoutURI string   `json:"backchannel_logout_uri"`
 }
 
 // ToCreateClientRequest maps the whitelisted fields into the full request
@@ -356,6 +363,8 @@ func (r *ScopedCreateClientRequest) ToCreateClientRequest(tenantID string) *Crea
 		GrantTypes:     r.GrantTypes,
 		Scopes:         r.Scopes,
 		AllowedOrigins: r.AllowedOrigins,
+
+		BackChannelLogoutURI: r.BackChannelLogoutURI,
 	}
 }
 

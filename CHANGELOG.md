@@ -12,6 +12,10 @@
   on load (`checkSessionOnLoad`, on by default) and puts the user back at the
   address they were at. No hidden frame is involved: a provider on another
   site does not get its session cookie there.
+- **A tenant's service credential can register its clients' back-channel
+  logout address** (`backchannel_logout_uri` on its `POST /api/v1/clients`).
+  The feature could only be turned on with the deployment's admin key; the
+  address is held to the same rule whoever registers it.
 - **Conformance: refresh tokens.** Four scenarios: one is issued for
   `offline_access` and not otherwise, renews the access token without
   changing `auth_time` or `amr`, is accepted once, and stops working when the
@@ -28,6 +32,22 @@
   to the requested scope; the default is now `false`, which is what the SDK
   did all along. A client has to be registered for the `refresh_token` grant
   and the `offline_access` scope before an application turns it on.
+- **A change to a client that the authorization server refuses is refused,
+  and not kept.** `PUT /api/v1/clients/{id}` stored the change and answered
+  `200` with `sync_status: failed` — the client's row then said one thing
+  while the authorization server went on doing another. A refusal of what the
+  change says (an address the server will not call) is now `400` with the
+  same `code` as on creation, and nothing is stored. A server that cannot be
+  reached still leaves the change in place and says so.
+- **`GET /api/v1/clients` lists the tenant named in `X-Tenant-ID`**, as the
+  rest of the admin API does. It looked only at the `tenant_id` query
+  parameter and listed every tenant's clients for a call that named its
+  tenant in the header.
+- **A tenant's `session_timeout` has to be one**: 0 (the default) to 43200
+  minutes. Anything else is `400` where the tenant is created or changed.
+- **TOTP secrets in the rows of deleted users are encrypted too.** The step
+  that encrypts secrets stored before encryption skipped users that had been
+  deleted, whose rows keep the secret.
 - **What an application asks of the sign-in screen reaches it again.**
   `connection` (start with this provider), `login_hint` (expect this address)
   and `ui_locales` (speak this language) on an authorization request were

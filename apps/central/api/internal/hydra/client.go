@@ -195,6 +195,10 @@ func (c *Client) UpdateOAuth2Client(clientID string, client *OAuth2Client) (*OAu
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		// As on registration: what the update says was refused.
+		if resp.StatusCode == http.StatusBadRequest {
+			return nil, clientRefused(body)
+		}
 		return nil, fmt.Errorf("failed to update client: %s", string(body))
 	}
 

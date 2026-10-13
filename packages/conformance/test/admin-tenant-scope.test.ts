@@ -63,6 +63,25 @@ describe('admin API: a resource is reached only through its own tenant', () => {
     expect(own.status).toBe(200)
   })
 
+  it('lists the clients of the tenant the call names, by header as by query', async () => {
+    const client = await provider.createPublicClient()
+    try {
+      const idsFrom = async (res: Response) => {
+        await conform('GET', '/api/v1/clients', res.clone())
+        expect(res.status).toBe(200)
+        return ((await res.json()) as { clients: { id: string }[] }).clients.map((c) => c.id)
+      }
+      // Its own tenant, named the way every other admin call names it.
+      expect(await idsFrom(await provider.admin('/api/v1/clients?limit=100'))).toContain(client.id)
+      // Another tenant: by header, and by the query parameter.
+      const other = randomUUID()
+      expect(await idsFrom(await asOtherTenant('/api/v1/clients?limit=100'))).not.toContain(client.id)
+      expect(await idsFrom(await provider.admin(`/api/v1/clients?limit=100&tenant_id=${other}`))).not.toContain(client.id)
+    } finally {
+      await provider.deleteClient(client)
+    }
+  })
+
   it('answers not_found for a client read under another tenant', async () => {
     const client = await provider.createPublicClient()
     const res = await asOtherTenant(`/api/v1/clients/${client.id}`)

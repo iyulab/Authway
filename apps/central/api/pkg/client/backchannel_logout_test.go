@@ -210,3 +210,104 @@ func TestCreate_AnAddressTheAuthorizationServerRefusesIsTheCallersError(t *testi
 		t.Errorf("%d client(s) left behind (%v), want none", left, err)
 	}
 }
+
+// The same on a change: what the authorization server refuses is the caller's
+// to correct, and the change is not kept — a client whose row says one thing
+// while the authorization server does another would be worse than either.
+func TestUpdate_AChangeTheAuthorizationServerRefusesIsNotKept(t *testing.T) {
+	db := setupPostgres(t)
+	refuseUpdates := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_client_metadata","error_description":"Client IP address is not allowed: key backchannel_logout_uri validation is failing: ip 10.0.0.5 is in the 10.0.0.0/8 range"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"stub"}`))
+	}))
+	t.Cleanup(refuseUpdates.Close)
+	svc := NewService(db, zap.NewNop(), hydra.NewClient(refuseUpdates.URL))
+
+	created, _, err := svc.Create(&CreateClientRequest{
+		TenantID:     seedTenant(t, db),
+		Name:         "bcl-update-refused-" + uuid.NewString()[:8],
+		RedirectURIs: []string{"https://app.example.com/callback"},
+		GrantTypes:   []string{"authorization_code"},
+		Scopes:       []string{"openid"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, created.ID) })
+
+	address := "https://app.example.com/backchannel-logout"
+	_, _, err = svc.Update(created.ID, &UpdateClientRequest{Name: created.Name + "-renamed", BackChannelLogoutURI: &address})
+	var cerr *ConfigError
+	if !errors.As(err, &cerr) || cerr.Code != "invalid_backchannel_logout_uri" {
+		t.Fatalf("got %v, want invalid_backchannel_logout_uri", err)
+	}
+
+	after, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if after.BackChannelLogoutURI != "" || after.Name != created.Name {
+		t.Errorf("the refused change was kept: name %q, backchannel_logout_uri %q", after.Name, after.BackChannelLogoutURI)
+	}
+}
+
+// A server that cannot be reached is not a refusal: the change stands, and the
+// answer says it has yet to be passed on.
+func TestUpdate_AnUnreachableAuthorizationServerDoesNotUndoTheChange(t *testing.T) {
+	db := setupPostgres(t)
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error":"upstream"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"stub"}`))
+	}))
+	t.Cleanup(failing.Close)
+	svc := NewService(db, zap.NewNop(), hydra.NewClient(failing.URL))
+
+	created, _, err := svc.Create(&CreateClientRequest{
+		TenantID:     seedTenant(t, db),
+		Name:         "sync-failed-" + uuid.NewString()[:8],
+		RedirectURIs: []string{"https://app.example.com/callback"},
+		GrantTypes:   []string{"authorization_code"},
+		Scopes:       []string{"openid"},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, created.ID) })
+
+	updated, status, err := svc.Update(created.ID, &UpdateClientRequest{Name: created.Name + "-renamed"})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if status.State != SyncStateFailed || updated.Name != created.Name+"-renamed" {
+		t.Errorf("state %q, name %q — want the change kept and reported as not passed on", status.State, updated.Name)
+	}
+}
+
+// A tenant's own credential may say where its clients' backends are told of a
+// logout; the address is held to the same rule as anyone's.
+func TestScopedCreate_CarriesTheBackChannelLogoutAddress(t *testing.T) {
+	scoped := ScopedCreateClientRequest{
+		Name: "app", RedirectURIs: []string{"https://app.example.com/callback"},
+		GrantTypes: []string{"authorization_code"}, Scopes: []string{"openid"},
+		BackChannelLogoutURI: "https://app.example.com/backchannel-logout",
+	}
+	req := scoped.ToCreateClientRequest(uuid.NewString())
+	if req.BackChannelLogoutURI != scoped.BackChannelLogoutURI {
+		t.Errorf("backchannel_logout_uri = %q, want it carried over", req.BackChannelLogoutURI)
+	}
+	if len(req.Audience) != 0 {
+		t.Errorf("audience = %v: a tenant credential names no API", req.Audience)
+	}
+}

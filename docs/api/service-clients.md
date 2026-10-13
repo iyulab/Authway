@@ -119,8 +119,10 @@ Authway detects that the bearer token belongs to a service client (via Hydra
 token introspection) and routes the request through a reduced code path.
 Compared to an admin-authenticated `POST /clients`, this path:
 
-- Accepts **exactly six** body fields: `name`, `public`, `redirect_uris`,
-  `grant_types`, `scopes`, `allowed_origins`. Every other admin-only field
+- Accepts **exactly seven** body fields: `name`, `public`, `redirect_uris`,
+  `grant_types`, `scopes`, `allowed_origins` and `backchannel_logout_uri`
+  (where the application's backend is told of a logout — a public `https`
+  address, by the same rule as for an administrator). Every other admin-only field
   (Google/GitHub/Microsoft/Apple provider secrets, MFA settings, logout
   redirect policy, a caller-supplied `client_id`/`client_secret`, …) is
   unavailable on this path — even if included in the body, it is ignored.

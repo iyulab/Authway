@@ -130,3 +130,28 @@ func TestBackfillTOTPSecrets_NoOpWhenCipherDisabled(t *testing.T) {
 		t.Fatalf("expected totp_secret to be left untouched when the cipher is disabled, got %q", stored)
 	}
 }
+
+// A deleted user's row holds the secret all the same: deleting an account
+// does not empty the column, so the row is sealed like any other.
+func TestBackfillTOTPSecrets_SealsTheRowsOfDeletedUsersToo(t *testing.T) {
+	db := setupPostgres(t)
+	_, us, ts := newTestService(t, db)
+	tn := freshTenant(t, ts)
+	u := newTestUser(t, db, us, tn.ID)
+
+	if err := db.Exec(`UPDATE users SET totp_secret = ?, deleted_at = now() WHERE id = ?`, "JBSWY3DPEHPK3PXP", u.ID).Error; err != nil {
+		t.Fatalf("seed a deleted user with a secret in the clear: %v", err)
+	}
+
+	if err := BackfillTOTPSecrets(db, testCipher(t), zap.NewNop()); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+
+	var stored string
+	if err := db.Raw(`SELECT totp_secret FROM users WHERE id = ?`, u.ID).Scan(&stored).Error; err != nil {
+		t.Fatalf("read back totp_secret: %v", err)
+	}
+	if !crypto.IsEncrypted(stored) {
+		t.Errorf("a deleted user's totp_secret is still stored as %q", stored)
+	}
+}

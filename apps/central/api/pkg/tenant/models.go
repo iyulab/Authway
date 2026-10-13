@@ -29,10 +29,13 @@ type Tenant struct {
 
 // TenantSettings contains tenant-specific configuration
 type TenantSettings struct {
-	RequireEmailVerification bool     `json:"require_email_verification"`
-	PasswordMinLength        int      `json:"password_min_length"`
-	SessionTimeout           int      `json:"session_timeout"` // in minutes
-	AllowedDomains           []string `json:"allowed_domains"`
+	RequireEmailVerification bool `json:"require_email_verification"`
+	PasswordMinLength        int  `json:"password_min_length"`
+	// SessionTimeout is how many minutes a sign-in session of the tenant's
+	// users lasts. Zero means the default; the most a session can last is 30
+	// days (43200 minutes).
+	SessionTimeout int      `json:"session_timeout" validate:"min=0,max=43200"`
+	AllowedDomains []string `json:"allowed_domains"`
 	// SignupMode governs whether a first-time social/magic-link sign-in may
 	// auto-provision an account for this tenant. Checked by
 	// invitation.Gate.MayProvision, whitelist-style: only the literal value

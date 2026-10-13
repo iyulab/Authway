@@ -707,12 +707,16 @@ paths:
       operationId: listClients
       security: [{ adminKey: [] }]
       parameters:
-        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - name: tenant_id
+          in: query
+          required: false
+          description: The tenant whose clients to list. The X-Tenant-ID header says the same; the query wins when both are given.
+          schema: { type: string }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         '200':
-          description: A page of clients, every tenant's unless tenant_id is given
+          description: A page of clients — of the tenant the call names (X-Tenant-ID, or tenant_id), every tenant's when it names none
           content:
             application/json:
               schema:
@@ -2204,6 +2208,8 @@ components:
             from the sign-in. 60 when absent or zero. A user who asks to stay
             signed in gets the deployment's longer session instead.
           type: integer
+          minimum: 0
+          maximum: 43200
         allowed_domains: { type: [array, 'null'], items: { type: string } }
         signup_mode:
           description: |

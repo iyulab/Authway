@@ -602,23 +602,40 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		client.ApplePrivateKey = req.ApplePrivateKey
 	}
 
-	if err := s.db.Save(&client).Error; err != nil {
+	// The change is stored and passed on to the authorization server as one
+	// step. If the server refuses what the change says — an address it will
+	// not call, say — the caller has something to correct, and nothing is
+	// kept: stored but not in force would be a client that says one thing and
+	// does another. A server that cannot be reached is a different matter:
+	// the change stands and the answer reports that it has yet to be passed on.
+	syncStatus := SyncStatus{State: SyncStateOK}
+	var refusal *ConfigError
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&client).Error; err != nil {
+			return err
+		}
+		// No secret is sent: the authorization server keeps the one it has
+		// when an update names none (measured against v26.2.0).
+		_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, client.hydraRegistration(""))
+		var refused *hydra.ClientRefusedError
+		if errors.As(errHydra, &refused) {
+			refusal = refusedByAuthorizationServer(refused)
+			return refusal
+		}
+		if errHydra != nil {
+			syncStatus = SyncStatus{State: SyncStateFailed, Error: errHydra.Error()}
+			s.logger.Warn("Failed to update client in Hydra (database updated)",
+				zap.Error(errHydra),
+				zap.String("client_id", client.ClientID))
+		}
+		return nil
+	})
+	if refusal != nil {
+		return nil, SyncStatus{}, refusal
+	}
+	if err != nil {
 		s.logger.Error("Failed to update client", zap.Error(err), zap.String("id", id.String()))
 		return nil, SyncStatus{}, fmt.Errorf("failed to update client: %w", err)
-	}
-
-	// Update client in Hydra
-	// No secret is sent: the authorization server keeps the one it has when an
-	// update names none (measured against v26.2.0).
-	hydraUpdate := client.hydraRegistration("")
-
-	syncStatus := SyncStatus{State: SyncStateOK}
-	_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate)
-	if errHydra != nil {
-		syncStatus = SyncStatus{State: SyncStateFailed, Error: errHydra.Error()}
-		s.logger.Warn("Failed to update client in Hydra (database updated)",
-			zap.Error(errHydra),
-			zap.String("client_id", client.ClientID))
 	}
 
 	s.logger.Info("Client updated in database",
