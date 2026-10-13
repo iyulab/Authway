@@ -45,13 +45,18 @@ func PasswordMinLength(fn func(tenantID uuid.UUID) int) Option {
 	return func(s *service) { s.passwordMinLength = fn }
 }
 
-func (s *service) checkPassword(tenantID uuid.UUID, password string) error {
+func (s *service) LeastPasswordLength(tenantID uuid.UUID) int {
 	least := MinPasswordLength
 	if s.passwordMinLength != nil {
 		if asked := s.passwordMinLength(tenantID); asked > least {
 			least = asked
 		}
 	}
+	return least
+}
+
+func (s *service) checkPassword(tenantID uuid.UUID, password string) error {
+	least := s.LeastPasswordLength(tenantID)
 	if utf8.RuneCountInString(password) < least {
 		return &PasswordError{MinLength: least}
 	}

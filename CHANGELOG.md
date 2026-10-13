@@ -15,6 +15,18 @@
   shown. **For an application:** nothing to do to follow the default; pass
   `cacheLocation: 'localstorage'` to keep the earlier behavior.
 
+### Added
+
+- **The screens that ask for a password know how long the tenant wants it.**
+  `GET /api/v1/invitations/token/{token}` and
+  `GET /api/v1/email/verify-reset-token` answer `password_min_length` — the
+  tenant's setting where it asks for more than 8, 8 otherwise. The login UI's
+  invitation and password-reset pages state that length and check it before
+  sending, where they said and checked 8 whatever the tenant asked; a refusal
+  for length is shown in the page's language with the length in force, where
+  it was the API's English sentence. **For an application with its own
+  screens:** read the field from the lookup you already make.
+
 ### Removed
 
 - **A client's `allow_email_signup` is gone (breaking).** It was stored,

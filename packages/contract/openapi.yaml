@@ -458,10 +458,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [valid]
+                required: [valid, password_min_length]
                 properties:
                   valid: { const: true }
                   message: { type: string }
+                  password_min_length: { $ref: '#/components/schemas/PasswordMinLengthInForce' }
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/email/reset-password:
@@ -496,9 +497,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [invitation]
+                required: [invitation, password_min_length]
                 properties:
                   invitation: { $ref: '#/components/schemas/Invitation' }
+                  password_min_length: { $ref: '#/components/schemas/PasswordMinLengthInForce' }
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
@@ -1923,6 +1925,17 @@ components:
         email: { type: string }
         expires_at: { type: string }
         error: { type: string }
+
+    PasswordMinLengthInForce:
+      description: |
+        The least length of the password the screen is about to ask for: the
+        tenant's password_min_length where it asks for more than every tenant
+        gets, 8 otherwise. A shorter password is refused with code
+        password_too_short when it is submitted; this lets the screen say so
+        before that.
+      type: integer
+      minimum: 8
+      maximum: 72
 
     Invitation:
       type: object

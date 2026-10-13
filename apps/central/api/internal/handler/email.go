@@ -299,9 +299,18 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 		})
 	}
 
+	// The length the new password has to have is the tenant's of the account
+	// being reset. An account that is gone leaves the reset to fail when it
+	// is submitted; the screen is told what every tenant asks.
+	least := user.MinPasswordLength
+	if account, err := h.userSvc.GetByID(reset.UserID); err == nil {
+		least = h.userSvc.LeastPasswordLength(account.TenantID)
+	}
+
 	return c.JSON(fiber.Map{
-		"valid":   true,
-		"message": "Reset token is valid",
+		"valid":               true,
+		"message":             "Reset token is valid",
+		"password_min_length": least,
 	})
 }
 

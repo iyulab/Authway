@@ -203,6 +203,7 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 			Message:     invitation.Message,
 			ExpiresAt:   invitation.ExpiresAt,
 		},
+		"password_min_length": h.service.PasswordMinLength(invitation.TenantID),
 	})
 }
 

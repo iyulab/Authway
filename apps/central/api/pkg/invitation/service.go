@@ -48,6 +48,9 @@ type Service interface {
 	// otherwise exist only in comments.
 	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 	GetByToken(token string) (*Invitation, error)
+	// PasswordMinLength is the least length of the password accepting an
+	// invitation into the tenant may set.
+	PasswordMinLength(tenantID uuid.UUID) int
 	GetByID(id uuid.UUID) (*Invitation, error)
 	// ListByTenant returns one page of a tenant's invitations, newest first,
 	// optionally only those in one status, and how many match in total.
@@ -200,6 +203,10 @@ func (s *service) HasValidInvitation(tenantID uuid.UUID, email string) (bool, er
 }
 
 // MayProvision delegates to Gate, same as HasValidInvitation above.
+func (s *service) PasswordMinLength(tenantID uuid.UUID) int {
+	return s.userService.LeastPasswordLength(tenantID)
+}
+
 func (s *service) MayProvision(tenantID uuid.UUID, email string) (bool, error) {
 	return NewGate(s.db).MayProvision(tenantID, email)
 }

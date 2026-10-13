@@ -204,7 +204,7 @@ settings (`settings` on `POST` / `PUT /api/v1/tenants`) decide:
 |---|---|
 | `signup_mode` | `open` lets a first sign-in create the account. Anything else — the default — is invitation only: the address has to hold a pending invitation. |
 | `allowed_domains` | When it names domains, accounts can be created only for addresses in them: an invitation to another address is refused (`email_domain_not_allowed`) and a first sign-in from one creates no account, open signup or not. A domain matches exactly; a subdomain is a different domain. Existing accounts are not affected. |
-| `password_min_length` | The least length of a password, when the tenant asks for more than the 8 characters every tenant gets (up to 72). A shorter password is refused with `password_too_short` and the length in force in `min_length`, wherever a password is set. |
+| `password_min_length` | The least length of a password, when the tenant asks for more than the 8 characters every tenant gets (up to 72). A shorter password is refused with `password_too_short` and the length in force in `min_length`, wherever a password is set. The two lookups a screen makes before asking for one — `GET /api/v1/invitations/token/{token}` and `GET /api/v1/email/verify-reset-token` — answer it as `password_min_length`, and the login UI states and checks that length. |
 
 A password reset is also done from a mailed link, so it marks the account's
 address verified if it was not.

@@ -94,6 +94,61 @@ describe('accounts: what an account is created with', () => {
     }
   })
 
+  it('tells the screen that is about to ask for a password how long it has to be', async () => {
+    const shownLength = async (token: string) => {
+      const shown = await fetch(`${provider.config.api}/api/v1/invitations/token/${encodeURIComponent(token)}`)
+      await conform('GET', '/api/v1/invitations/token/{token}', shown.clone())
+      return ((await shown.json()) as { password_min_length: number }).password_min_length
+    }
+    const resetLength = async (email: string) => {
+      const asked = await fetch(`${provider.config.api}/api/v1/email/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      expect(asked.status).toBe(200)
+      const link = await waitForLink(provider.config.mailApi, email, '/reset-password')
+      const checked = await fetch(`${provider.config.api}/api/v1/email/verify-reset-token?token=${encodeURIComponent(link.searchParams.get('token')!)}`)
+      await conform('GET', '/api/v1/email/verify-reset-token', checked.clone())
+      expect(checked.status).toBe(200)
+      return ((await checked.json()) as { password_min_length: number }).password_min_length
+    }
+
+    // A tenant that asks for nothing gets what every tenant gets.
+    const plainEmail = `conformance-${randomToken(6)}@example.test`
+    const plainToken = await invite(plainEmail)
+    expect(await shownLength(plainToken)).toBe(8)
+    const plain = await accept(plainToken, `Cf-${randomToken(12)}`)
+    expect(plain.status).toBe(200)
+    created.push(((await plain.json()) as { user: { id: string } }).user.id)
+    expect(await resetLength(plainEmail)).toBe(8)
+
+    // A tenant that asks for more is answered with what it asks.
+    const res = await provider.admin('/api/v1/tenants', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Conformance tenant',
+        slug: `conformance-${randomToken(4).toLowerCase()}`,
+        settings: { password_min_length: 12 },
+      }),
+    })
+    expect(res.status).toBe(201)
+    const tenant = (await res.json()) as { id: string }
+    tenants.push(tenant.id)
+
+    const email = `conformance-${randomToken(6)}@example.test`
+    const invited = await asTenant(tenant.id, '/api/v1/invitations', { method: 'POST', body: JSON.stringify({ email }) })
+    expect(invited.status).toBe(201)
+    const token = (await waitForLink(provider.config.mailApi, email, '/invitation/accept')).searchParams.get('token')!
+    expect(await shownLength(token)).toBe(12)
+
+    const accepted = await accept(token, 'twelve-chars')
+    expect(accepted.status).toBe(200)
+    const id = ((await accepted.json()) as { user: { id: string } }).user.id
+    expect(await resetLength(email)).toBe(12)
+    await asTenant(tenant.id, `/api/v1/users/${id}`, { method: 'DELETE' })
+  })
+
   it('takes invitations only for addresses in the domains a tenant names', async () => {
     const res = await provider.admin('/api/v1/tenants', {
       method: 'POST',

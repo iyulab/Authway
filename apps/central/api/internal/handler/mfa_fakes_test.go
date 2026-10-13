@@ -136,6 +136,7 @@ func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error {
 }
 func (f *fakeUserService) UpdateEmailVerified(uuid.UUID, bool) error { return nil }
 func (f *fakeUserService) UpdatePassword(uuid.UUID, string) error    { return nil }
+func (f *fakeUserService) LeastPasswordLength(uuid.UUID) int         { return user.MinPasswordLength }
 
 // fakeClientService is a minimal in-memory client.Service — only
 // GetByClientID is exercised by AuthHandler.Login.

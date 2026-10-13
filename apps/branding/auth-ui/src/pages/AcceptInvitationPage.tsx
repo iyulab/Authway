@@ -8,10 +8,13 @@ import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { getConfig } from '../config'
 
+/** What every tenant asks of a password; a tenant may ask for more. */
+const LEAST_PASSWORD_LENGTH = 8
+
 // Validation schema - will use i18n messages dynamically
-const createAcceptSchema = (t: (key: string) => string) => z.object({
-  password: z.string().min(8, t('auth:validation.passwordMin8')),
-  confirmPassword: z.string().min(8, t('auth:validation.confirmPasswordRequired')),
+const createAcceptSchema = (t: (key: string, options?: Record<string, unknown>) => string, passwordLength: number) => z.object({
+  password: z.string().min(passwordLength, t('auth:validation.passwordMin', { length: passwordLength })),
+  confirmPassword: z.string().min(1, t('auth:validation.confirmPasswordRequired')),
   firstName: z.string().min(1, t('auth:validation.firstNameRequired')),
   lastName: z.string().min(1, t('auth:validation.lastNameRequired')),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -28,6 +31,12 @@ interface InvitationDetails {
   role: string
 }
 
+/** The invitation, and the length the password it asks for has to have. */
+interface ShownInvitation {
+  invitation: InvitationDetails
+  passwordLength: number
+}
+
 const inputClass =
   'mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm'
 
@@ -42,20 +51,13 @@ const AcceptInvitationPage: React.FC = () => {
   const flow = searchParams.get('flow')
   const apiUrl = getConfig().apiUrl
 
-  const acceptSchema = createAcceptSchema(t)
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<AcceptFormData>({ resolver: zodResolver(acceptSchema) })
-
   // Validate the invitation token up front. The subject email is fixed by the
   // invitation and never chosen by the user.
   const {
-    data: invitation,
+    data: shown,
     isLoading,
     isError,
-  } = useQuery<InvitationDetails>({
+  } = useQuery<ShownInvitation>({
     queryKey: ['invitation', token],
     enabled: token !== '',
     retry: false,
@@ -65,9 +67,20 @@ const AcceptInvitationPage: React.FC = () => {
         throw new Error('invitation not acceptable')
       }
       const body = await res.json()
-      return body.invitation as InvitationDetails
+      return {
+        invitation: body.invitation as InvitationDetails,
+        passwordLength: Number(body.password_min_length) || LEAST_PASSWORD_LENGTH,
+      }
     },
   })
+  const invitation = shown?.invitation
+
+  const acceptSchema = createAcceptSchema(t, shown?.passwordLength ?? LEAST_PASSWORD_LENGTH)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<AcceptFormData>({ resolver: zodResolver(acceptSchema) })
 
   const acceptMutation = useMutation({
     mutationFn: async (data: AcceptFormData) => {
@@ -82,6 +95,11 @@ const AcceptInvitationPage: React.FC = () => {
       })
       const body = await res.json()
       if (!res.ok) {
+        // The lookup's length can be behind the tenant's by the time the
+        // form is sent; the refusal carries the one in force.
+        if (body.code === 'password_too_short') {
+          throw new Error(t('auth:validation.passwordMin', { length: body.min_length ?? LEAST_PASSWORD_LENGTH }))
+        }
         throw new Error(body.error || 'accept failed')
       }
       return body

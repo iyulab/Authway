@@ -44,6 +44,9 @@ type Service interface {
 	UpdateLastLogin(userID uuid.UUID) error
 	UpdateEmailVerified(userID uuid.UUID, verified bool) error
 	UpdatePassword(userID uuid.UUID, newPassword string) error
+	// LeastPasswordLength is the least length of a password an account of
+	// the tenant may be given — what a screen about to ask for one says.
+	LeastPasswordLength(tenantID uuid.UUID) int
 }
 
 // ErrUserNotFound reports that no account matches a lookup. Its text is safe

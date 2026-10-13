@@ -4,6 +4,9 @@ import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next';
 import { getConfig } from '../config'
 
+/** What every tenant asks of a password; a tenant may ask for more. */
+const LEAST_PASSWORD_LENGTH = 8
+
 export default function ResetPasswordPage() {
   const { t } = useTranslation(['password', 'common']);
   const [searchParams] = useSearchParams();
@@ -19,6 +22,7 @@ export default function ResetPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [passwordLength, setPasswordLength] = useState(LEAST_PASSWORD_LENGTH);
 
   // Validate token on mount
   useEffect(() => {
@@ -38,6 +42,7 @@ export default function ResetPasswordPage() {
 
         if (response.ok && data.valid) {
           setIsTokenValid(true);
+          setPasswordLength(Number(data.password_min_length) || LEAST_PASSWORD_LENGTH);
         } else {
           setError(data.error || t('password:reset.errors.tokenExpired'));
         }
@@ -56,8 +61,8 @@ export default function ResetPasswordPage() {
     setError('');
 
     // Validation
-    if (newPassword.length < 8) {
-      setError(t('password:validation.minLength'));
+    if (newPassword.length < passwordLength) {
+      setError(t('password:validation.minLength', { length: passwordLength }));
       return;
     }
 
@@ -90,6 +95,12 @@ export default function ResetPasswordPage() {
         setTimeout(() => {
           navigate('/login');
         }, 3000);
+      } else if (data.code === 'password_too_short') {
+        // The length can have been raised since the link was checked; the
+        // refusal carries the one in force.
+        const inForce = Number(data.min_length) || passwordLength;
+        setPasswordLength(inForce);
+        setError(t('password:validation.minLength', { length: inForce }));
       } else {
         setError(data.error || t('password:reset.errors.resetFailed'));
       }
@@ -190,8 +201,8 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-hidden transition"
-                  placeholder={t('password:reset.newPasswordPlaceholder')}
-                  minLength={8}
+                  placeholder={t('password:reset.newPasswordPlaceholder', { length: passwordLength })}
+                  minLength={passwordLength}
                 />
                 <button
                   type="button"
@@ -220,7 +231,6 @@ export default function ResetPasswordPage() {
                   required
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-hidden transition"
                   placeholder={t('password:reset.confirmPasswordPlaceholder')}
-                  minLength={8}
                 />
                 <button
                   type="button"
@@ -236,8 +246,8 @@ export default function ResetPasswordPage() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <p className="text-sm text-gray-700 font-medium mb-2">{t('password:reset.requirements.title')}</p>
               <ul className="text-sm text-gray-600 space-y-1">
-                <li className={newPassword.length >= 8 ? 'text-green-600' : ''}>
-                  {t('password:reset.requirements.minLength')}
+                <li className={newPassword.length >= passwordLength ? 'text-green-600' : ''}>
+                  {t('password:reset.requirements.minLength', { length: passwordLength })}
                 </li>
                 <li className={newPassword === confirmPassword && newPassword ? 'text-green-600' : ''}>
                   {t('password:reset.requirements.match')}
