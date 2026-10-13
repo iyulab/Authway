@@ -376,8 +376,15 @@ deletes their account.
 **What the application does with it**
 
 1. Validate the token like an ID token: signature against the issuer's JWKS,
-   `iss` is the issuer, `aud` contains the application's `client_id`, `iat` is
-   recent.
+   `iss` is the issuer, `aud` contains the application's `client_id`.
+   **How long it is good for:** by `exp` when the token has one; a token
+   without `exp` is good for 5 minutes after `iat` — refuse an older one.
+   The tokens of this deployment carry no `exp` (the authorization server
+   does not issue it, though the specification asks for it), so a JWT
+   validator that insists on `exp` has to be told not to for logout tokens,
+   and to apply the `iat` rule instead. The rule is part of the contract
+   (`LogoutToken`): an application that follows it need not know which engine
+   issued the token.
 2. Check it is a logout token: `events` has the member
    `http://schemas.openid.net/event/backchannel-logout`, and there is no
    `nonce`.

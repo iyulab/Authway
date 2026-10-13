@@ -1926,6 +1926,44 @@ components:
         expires_at: { type: string }
         error: { type: string }
 
+    LogoutToken:
+      description: |
+        The claims of the `logout_token` POSTed to a client's
+        `backchannel_logout_uri` when a session ends (OpenID Connect
+        Back-Channel Logout 1.0). A receiver validates it as it would an ID
+        token — signature against the issuer's keys, `iss`, `aud` — and then:
+
+        - **How long it is good for.** By `exp` when the token has one.
+          A token without `exp` is good for 5 minutes after `iat`; a receiver
+          refuses an older one. The specification makes `exp` required, and
+          an implementation whose engine issues it does so with a lifetime of
+          at most those 5 minutes; an implementation whose engine does not
+          issue it sends the token without, and this rule is what stands in
+          for it. A receiver that follows the rule behaves the same against
+          either.
+        - **What it is.** `events` has the back-channel logout member, and
+          there is no `nonce`: a logout token is never an ID token. The JOSE
+          header's `typ` is not to be relied on to tell them apart.
+        - **What it ends.** The session named by `sid` — the `sid` of the ID
+          tokens issued on it. There is no `sub`.
+      type: object
+      required: [iss, aud, iat, jti, events, sid]
+      not: { required: [nonce] }
+      properties:
+        iss: { type: string, description: The issuer. }
+        aud:
+          description: Contains the client the token is sent to.
+          type: array
+          items: { type: string }
+          minItems: 1
+        iat: { type: integer, description: When the token was issued, in seconds since the epoch. }
+        exp: { type: integer, description: Absent or no later than 5 minutes after `iat` — see above. }
+        jti: { type: string, description: Unique to the token. }
+        sid: { type: string, description: The session that ended. }
+        events:
+          type: object
+          required: ['http://schemas.openid.net/event/backchannel-logout']
+
     PasswordMinLengthInForce:
       description: |
         The least length of the password the screen is about to ask for: the

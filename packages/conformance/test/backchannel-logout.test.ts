@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Browser } from '../src/browser.js'
 import { loadConfig } from '../src/config.js'
-import { conform } from '../src/contract.js'
+import { conform, conformTo } from '../src/contract.js'
 import { randomToken } from '../src/pkce.js'
 import { Provider, POST_LOGOUT_REDIRECT_URI, REDIRECT_URI, type TestClient, type TestUser, type Tokens } from '../src/provider.js'
 
@@ -150,14 +150,28 @@ describe('back-channel logout', () => {
 
     const told = await bothTold(sid)
     expect(told.map((t) => t.app).sort()).toEqual(['a', 'b'])
+    const now = Math.floor(Date.now() / 1000)
     for (const { app, claims } of told) {
+      // What a receiver may rely on, whichever engine issued the token.
+      conformTo('LogoutToken', claims)
       expect(claims.iss, app).toBe(config.issuer)
       expect(claims.aud, app).toContain(apps[app as 'a' | 'b'].clientId)
       expect(claims.events, app).toHaveProperty([LOGOUT_EVENT])
       expect(claims.sid, app).toBe(sid)
       // A logout token must never be usable as an ID token.
       expect(claims.nonce, app).toBeUndefined()
+
+      // Good for 5 minutes: by `exp` where there is one, from `iat` where
+      // there is not. A receiver that applies that rule accepts this token.
+      const iat = claims.iat as number
+      expect(Math.abs(now - iat), app).toBeLessThanOrEqual(60)
+      if (claims.exp !== undefined) {
+        expect(claims.exp as number, app).toBeGreaterThan(now)
+        expect((claims.exp as number) - iat, app).toBeLessThanOrEqual(300)
+      }
     }
+    // One token per application, each its own.
+    expect(new Set(told.map((t) => t.claims.jti)).size).toBe(told.length)
   })
 
   // Ending the user's sessions from the API — signing out everywhere — is a

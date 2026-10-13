@@ -37,6 +37,19 @@
   it was the API's English sentence. **For an application with its own
   screens:** read the field from the lookup you already make.
 
+### Changed
+
+- **The contract says what a back-channel `logout_token` carries and how long
+  it is good for.** The token has `iss`, `aud`, `iat`, `jti`, `events` and
+  `sid` — and no `exp`, which OpenID Connect Back-Channel Logout 1.0 makes
+  required and the authorization server does not issue. A receiver written
+  to the specification refused the token; one that let it through had to
+  pick for itself how old a token it would take. The contract now gives the
+  rule (`LogoutToken`): by `exp` when there is one, otherwise 5 minutes from
+  `iat`. Nothing about the token changed. **For an application that receives
+  logout tokens:** apply the rule; a validator that requires `exp` must be
+  told not to for these.
+
 ### Removed
 
 - **A client's `allow_email_signup` is gone (breaking).** It was stored,
