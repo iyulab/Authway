@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-13
+
+> Minor, with changes an application will notice. Every sign-in opens a
+> session now, so single sign-on, `prompt=none` and back-channel logout work
+> on every path; consent is skipped only by a client's registration or the
+> user's remembered answer; an invited account's address is verified. The
+> tenant settings `password_min_length` and `allowed_domains` take effect and
+> `require_email_verification` is removed. The SDK changes listed here are in
+> the repository and not yet published.
+
+### Security
+
+- **The credentials a client holds at another identity provider are encrypted
+  at rest**: its Google, GitHub and Microsoft client secrets and its Apple
+  signing key, set per client through the admin API, were stored as given.
+  They are sealed with the deployment's at-rest key
+  (`AUTHWAY_TOTP_ENCRYPTION_KEY`, the one that seals TOTP secrets — its name
+  is older than this use), and values stored before are sealed when the API
+  next starts. Nothing changes for callers: these fields were never returned.
+  **For operators:** the key now protects these too — losing or rotating it
+  makes a client with a sealed provider credential fail to load until the
+  credential is entered again.
+
 ### Added
 
 - **SDK (`@authway/client`, `@authway/react`, not yet published):
@@ -33,6 +56,44 @@
 - **SDK: `cacheLocation: 'sessionstorage'`** keeps tokens in the tab — they
   survive a reload and end with the tab. The default is unchanged
   (`'localstorage'`).
+
+### Changed
+
+- **SDK: `checkSession()` resolves a boolean** — whether the browser is on its
+  way to the provider — instead of `AuthResult | null`, and
+  `handleRedirectCallback()` throws `LoginRequiredError` (it was
+  `AuthenticationError`, its base class) when the provider answers a request
+  of this page with `login_required`, `consent_required` or
+  `interaction_required`.
+
+- **Every sign-in opens a session.** A password sign-in without "keep me
+  signed in", and every sign-in by emailed link, used to leave no session at
+  the authorization server at all. Until the user ticked a box, their next
+  application asked them to sign in again, a logout had nothing to end, and
+  applications that registered a `backchannel_logout_uri` were not told when
+  the user signed out or was signed out. Now a sign-in opens a session
+  whatever the user chose, and the choice sets only how long it lasts: the
+  tenant's `session_timeout` (60 minutes unless set — the setting was stored
+  but had no effect until now), or 30 days with "keep me signed in" (it was
+  one hour). Reusing a session does not lengthen it.
+  **What an application sees:** users who sign in to one application of a
+  tenant are signed in to its others for the length of the session.
+- **A user who arrives on an existing session is asked for consent like anyone
+  else.** Arriving signed in used to skip the consent screen for any client.
+  The question is skipped only when the user's earlier answer is remembered
+  or the client is registered with `skip_consent`.
+- **A flow that needs nothing from the user no longer opens a screen.** A
+  sign-in in a browser that already has a session, and a consent that is not
+  asked for, went by way of the login UI: the page loaded, asked the API what
+  to show, and was told to go on. The API now settles such a flow where the
+  authorization server sends the browser, so single sign-on and a request
+  with `prompt=none` are a chain of redirects with no page load in it. A
+  login screen is unaffected: it is opened only when there is something to
+  show.
+- **Consent the user asks to be remembered is kept until it is revoked**, not
+  for an hour. `remember_for` is no longer part of
+  `POST /api/v1/consent-flows/{flow}/accept`; a login screen that still sends
+  it is not refused, the value is ignored.
 
 ### Fixed
 
@@ -81,6 +142,16 @@
 - **SDK: `LoginButton` and `LogoutButton` keep signing in and out when given
   an `onClick`.** The application's handler replaced the button's own. It now
   runs first, and can call `preventDefault()` to stop the button.
+- **A client registered with `skip_consent` no longer shows its users the
+  consent screen.** The registration was passed on to the authorization
+  server, but the server reports it in a field the consent step did not read,
+  so the screen was skipped only for a remembered answer.
+- **An authorization request with `prompt=none` is always answered at the
+  application.** With a session of another tenant in the browser, the user was
+  shown a sign-in form; the application now gets `login_required`. With a
+  session and a remembered consent it gets a code, for the application's own
+  clients (`skip_consent`) too — the consent given on the user's behalf is
+  remembered, which the authorization server requires of a silent request.
 
 ### Removed
 
@@ -100,70 +171,6 @@
   API that accepts access tokens (`samples/asp-api`, the back end of the old
   SPA sample, now validating the token's audience and scope). CI builds all
   three.
-
-### Security
-
-- **The credentials a client holds at another identity provider are encrypted
-  at rest**: its Google, GitHub and Microsoft client secrets and its Apple
-  signing key, set per client through the admin API, were stored as given.
-  They are sealed with the deployment's at-rest key
-  (`AUTHWAY_TOTP_ENCRYPTION_KEY`, the one that seals TOTP secrets — its name
-  is older than this use), and values stored before are sealed when the API
-  next starts. Nothing changes for callers: these fields were never returned.
-  **For operators:** the key now protects these too — losing or rotating it
-  makes a client with a sealed provider credential fail to load until the
-  credential is entered again.
-
-### Changed
-
-- **SDK: `checkSession()` resolves a boolean** — whether the browser is on its
-  way to the provider — instead of `AuthResult | null`, and
-  `handleRedirectCallback()` throws `LoginRequiredError` (it was
-  `AuthenticationError`, its base class) when the provider answers a request
-  of this page with `login_required`, `consent_required` or
-  `interaction_required`.
-
-- **Every sign-in opens a session.** A password sign-in without "keep me
-  signed in", and every sign-in by emailed link, used to leave no session at
-  the authorization server at all. Until the user ticked a box, their next
-  application asked them to sign in again, a logout had nothing to end, and
-  applications that registered a `backchannel_logout_uri` were not told when
-  the user signed out or was signed out. Now a sign-in opens a session
-  whatever the user chose, and the choice sets only how long it lasts: the
-  tenant's `session_timeout` (60 minutes unless set — the setting was stored
-  but had no effect until now), or 30 days with "keep me signed in" (it was
-  one hour). Reusing a session does not lengthen it.
-  **What an application sees:** users who sign in to one application of a
-  tenant are signed in to its others for the length of the session.
-- **A user who arrives on an existing session is asked for consent like anyone
-  else.** Arriving signed in used to skip the consent screen for any client.
-  The question is skipped only when the user's earlier answer is remembered
-  or the client is registered with `skip_consent`.
-- **A flow that needs nothing from the user no longer opens a screen.** A
-  sign-in in a browser that already has a session, and a consent that is not
-  asked for, went by way of the login UI: the page loaded, asked the API what
-  to show, and was told to go on. The API now settles such a flow where the
-  authorization server sends the browser, so single sign-on and a request
-  with `prompt=none` are a chain of redirects with no page load in it. A
-  login screen is unaffected: it is opened only when there is something to
-  show.
-- **Consent the user asks to be remembered is kept until it is revoked**, not
-  for an hour. `remember_for` is no longer part of
-  `POST /api/v1/consent-flows/{flow}/accept`; a login screen that still sends
-  it is not refused, the value is ignored.
-
-### Fixed
-
-- **A client registered with `skip_consent` no longer shows its users the
-  consent screen.** The registration was passed on to the authorization
-  server, but the server reports it in a field the consent step did not read,
-  so the screen was skipped only for a remembered answer.
-- **An authorization request with `prompt=none` is always answered at the
-  application.** With a session of another tenant in the browser, the user was
-  shown a sign-in form; the application now gets `login_required`. With a
-  session and a remembered consent it gets a code, for the application's own
-  clients (`skip_consent`) too — the consent given on the user's behalf is
-  remembered, which the authorization server requires of a silent request.
 
 ## [0.11.0] - 2026-10-13
 
