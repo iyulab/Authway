@@ -107,6 +107,12 @@ func main() {
 		zapLogger.Error("Invitation token backfill failed (non-fatal; retried on next boot)", zap.Error(err))
 	}
 
+	// Backfill: accounts created by accepting an invitation, from before
+	// acceptance marked the invited address verified. Idempotent, non-fatal.
+	if err := invitation.MarkAcceptedAddressesVerified(db, zapLogger); err != nil {
+		zapLogger.Error("Marking invited addresses verified failed (non-fatal; retried on next boot)", zap.Error(err))
+	}
+
 	// Initialize Tenant Service
 	tenantService := tenant.NewService(db)
 
@@ -155,7 +161,7 @@ func main() {
 	// The audit log records each account as it is created, whichever path
 	// created it.
 	auditService := audit.NewService(db, zapLogger)
-	userService := user.NewService(db, zapLogger, user.OnCreated(func(u *user.User) {
+	userService := user.NewService(db, zapLogger, user.PasswordMinLength(tenantService.PasswordMinLength), user.OnCreated(func(u *user.User) {
 		auditService.LogAsync(&audit.AuditEntry{
 			TenantID:     u.TenantID,
 			Action:       audit.ActionUserCreated,

@@ -1520,12 +1520,16 @@ paths:
       operationId: listUsers
       security: [{ adminKey: [] }]
       parameters:
-        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - name: tenant_id
+          in: query
+          required: false
+          description: The tenant whose users to list. The X-Tenant-ID header says the same; the query wins when both are given.
+          schema: { type: string }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         '200':
-          description: A page of users, every tenant's unless tenant_id is given
+          description: A page of users — of the tenant the call names (X-Tenant-ID, or tenant_id), every tenant's when it names none
           content:
             application/json:
               schema:
@@ -2200,8 +2204,18 @@ components:
     TenantSettings:
       type: object
       properties:
-        require_email_verification: { type: boolean }
-        password_min_length: { type: integer }
+        password_min_length:
+          description: |
+            The least length of a password a user of the tenant may set, when
+            the tenant asks for more than the 8 characters every tenant gets.
+            0 or absent asks for no more. It applies wherever a password is
+            set — accepting an invitation, resetting a password — and a
+            shorter one is refused with code password_too_short and the
+            length in force in min_length.
+          type: integer
+          anyOf:
+            - const: 0
+            - { minimum: 8, maximum: 72 }
         session_timeout:
           description: |
             Minutes a sign-in session of the tenant's users lasts, counted
@@ -2210,7 +2224,16 @@ components:
           type: integer
           minimum: 0
           maximum: 43200
-        allowed_domains: { type: [array, 'null'], items: { type: string } }
+        allowed_domains:
+          description: |
+            The email domains an account of the tenant can be created for.
+            Empty or absent allows any. When it names domains, an invitation
+            to an address outside them is refused (email_domain_not_allowed)
+            and a first sign-in from one creates no account, open signup or
+            not. A domain matches exactly — a subdomain is a different
+            domain. Accounts that already exist are not affected.
+          type: [array, 'null']
+          items: { type: string }
         signup_mode:
           description: |
             open lets a first sign-in through a social provider or a sign-in
@@ -2366,6 +2389,7 @@ components:
             tenant_slug_taken, default_tenant_protected, tenant_has_users,
             tenant_has_clients, tenant_has_service_clients, tenant_required,
             user_already_member, invitation_already_pending,
-            invitation_not_pending,
+            invitation_not_pending, email_domain_not_allowed,
+            password_too_short, password_too_long,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.

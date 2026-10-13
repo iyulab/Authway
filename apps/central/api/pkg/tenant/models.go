@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,13 +30,18 @@ type Tenant struct {
 
 // TenantSettings contains tenant-specific configuration
 type TenantSettings struct {
-	RequireEmailVerification bool `json:"require_email_verification"`
-	PasswordMinLength        int  `json:"password_min_length"`
+	// PasswordMinLength is the least length of a password a user of the
+	// tenant may set, when it asks for more than every tenant gets (8).
+	// Zero means no more than that.
+	PasswordMinLength int `json:"password_min_length" validate:"omitempty,min=8,max=72"`
 	// SessionTimeout is how many minutes a sign-in session of the tenant's
 	// users lasts. Zero means the default; the most a session can last is 30
 	// days (43200 minutes).
-	SessionTimeout int      `json:"session_timeout" validate:"min=0,max=43200"`
-	AllowedDomains []string `json:"allowed_domains"`
+	SessionTimeout int `json:"session_timeout" validate:"min=0,max=43200"`
+	// AllowedDomains, when it names any, are the only email domains an
+	// account of the tenant can be created for — by invitation or by a first
+	// sign-in. Accounts that already exist are not affected. See AllowsAddress.
+	AllowedDomains []string `json:"allowed_domains" validate:"omitempty,dive,fqdn"`
 	// SignupMode governs whether a first-time social/magic-link sign-in may
 	// auto-provision an account for this tenant. Checked by
 	// invitation.Gate.MayProvision, whitelist-style: only the literal value
@@ -79,6 +85,25 @@ func (s TenantSettings) Value() (driver.Value, error) {
 // TableName specifies the table name for Tenant model
 func (Tenant) TableName() string {
 	return "tenants"
+}
+
+// AllowsAddress reports whether an account may be created for email under
+// AllowedDomains: any address when no domain is named, otherwise one whose
+// domain is one of them exactly — a subdomain is a different domain.
+func (s TenantSettings) AllowsAddress(email string) bool {
+	restricted := false
+	at := strings.LastIndex(email, "@")
+	for _, allowed := range s.AllowedDomains {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		restricted = true
+		if at >= 0 && strings.EqualFold(email[at+1:], allowed) {
+			return true
+		}
+	}
+	return !restricted
 }
 
 // BeforeCreate sets UUID if not provided

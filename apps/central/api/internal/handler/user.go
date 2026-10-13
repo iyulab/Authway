@@ -53,7 +53,10 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	// Parse query parameters
 	limitStr := c.Query("limit", "20")
 	offsetStr := c.Query("offset", "0")
-	tenantIDStr := c.Query("tenant_id", "")
+	// The tenant a call names in X-Tenant-ID, as everywhere else in the admin
+	// API; tenant_id in the query is the older way of saying it. A call that
+	// names none lists every tenant's users.
+	tenantIDStr := c.Query("tenant_id", c.Get("X-Tenant-ID"))
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 || limit > 100 {

@@ -12,6 +12,16 @@
   on load (`checkSessionOnLoad`, on by default) and puts the user back at the
   address they were at. No hidden frame is involved: a provider on another
   site does not get its session cookie there.
+- **Two tenant settings do what they say.** `password_min_length` and
+  `allowed_domains` were stored and returned, and nothing read them.
+  `password_min_length` now raises the least password length for the
+  tenant's users (8 to 72; a shorter password is refused with
+  `password_too_short` and the length in force in `min_length`).
+  `allowed_domains`, when it names domains, limits the addresses an account
+  can be created for — an invitation to another address is refused
+  (`email_domain_not_allowed`), and a first sign-in from one creates no
+  account even with open signup. Values that could not be settings are
+  refused where the tenant is created or changed.
 - **A tenant's service credential can register its clients' back-channel
   logout address** (`backchannel_logout_uri` on its `POST /api/v1/clients`).
   The feature could only be turned on with the deployment's admin key; the
@@ -32,6 +42,18 @@
   to the requested scope; the default is now `false`, which is what the SDK
   did all along. A client has to be registered for the `refresh_token` grant
   and the `offline_access` scope before an application turns it on.
+- **An account created by accepting an invitation has a verified address.**
+  Accepting an invitation proves the address it was mailed to, but the account
+  was left with `email_verified: false` — which is what its tokens then told
+  every application. Acceptance now marks the address verified, as does a
+  password reset (also done from a mailed link), and accounts that an
+  accepted invitation created earlier are corrected when the service starts.
+- **A password set on accepting an invitation is held to the least length.**
+  That request was not checked at all: any password, of one character, was
+  stored. The rule now sits where passwords are stored, so every way of
+  setting one meets it.
+- **`GET /api/v1/users` lists the tenant named in `X-Tenant-ID`**, like the
+  client list above: it looked only at the `tenant_id` query parameter.
 - **A change to a client that the authorization server refuses is refused,
   and not kept.** `PUT /api/v1/clients/{id}` stored the change and answered
   `200` with `sync_status: failed` — the client's row then said one thing
@@ -62,6 +84,11 @@
 
 ### Removed
 
+- **The tenant setting `require_email_verification`.** It was stored, on by
+  default, and never read; and there is nothing for it to require — every way
+  an account is created proves its address (see Fixed). The field is no
+  longer part of a tenant's settings; a stored value is ignored and dropped
+  the next time the tenant is saved.
 - **Samples that taught what is no longer there.** The Go services, the
   Next.js sample and the two front ends of the ASP.NET SPA sample are gone:
   they pointed at a component that was folded into the API, called endpoints

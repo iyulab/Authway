@@ -6,6 +6,7 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/user"
+	"errors"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
@@ -354,6 +355,14 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 
 	// Update user password
 	if err := h.userSvc.UpdatePassword(reset.UserID, req.NewPassword); err != nil {
+		var refused *user.PasswordError
+		if errors.As(err, &refused) {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+				"error":      refused.Error(),
+				"code":       refused.Code(),
+				"min_length": refused.MinLength,
+			})
+		}
 		h.logger.Error("Failed to update password", zap.Error(err))
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update password",
@@ -361,6 +370,14 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	}
 
 	h.logUserAudit(c, resetUser, audit.ActionUserPasswordReset, nil)
+
+	// The reset link reached the account's address: using it proves the
+	// address as a verification mail would.
+	if resetUser != nil && !resetUser.EmailVerified {
+		if err := h.userSvc.UpdateEmailVerified(reset.UserID, true); err != nil {
+			h.logger.Error("Failed to mark the address verified after a password reset", zap.Error(err))
+		}
+	}
 
 	// Mark reset as used
 	if err := h.emailRepo.MarkPasswordResetAsUsed(reset.ID); err != nil {

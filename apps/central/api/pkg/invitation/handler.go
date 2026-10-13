@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -73,6 +74,8 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 			return apierror.Refuse(c, fiber.StatusConflict, "invitation_already_pending", err.Error())
 		case errors.Is(err, ErrTenantNotFound):
 			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", err.Error())
+		case errors.Is(err, ErrAddressNotAllowed):
+			return apierror.Refuse(c, fiber.StatusBadRequest, "email_domain_not_allowed", err.Error())
 		}
 		var pub *apierror.Public
 		if errors.As(err, &pub) {
@@ -223,18 +226,25 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 		}
 	}
 
-	user, err := h.service.Accept(req.Token, userID, req.Name, req.Password)
+	accepted, err := h.service.Accept(req.Token, userID, req.Name, req.Password)
 	if err != nil {
 		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.Int("token_length", len(req.Token)))
+		var refusedPassword *user.PasswordError
+		if errors.As(err, &refusedPassword) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": refusedPassword.Error(), "code": refusedPassword.Code(), "min_length": refusedPassword.MinLength})
+		}
+		if errors.Is(err, ErrAddressNotAllowed) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error(), "code": "email_domain_not_allowed"})
+		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation"), "code": "invitation_not_accepted"})
 	}
 
-	h.logger.Info("Invitation accepted", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
+	h.logger.Info("Invitation accepted", zap.String("user_id", accepted.ID.String()), zap.String("email", accepted.Email))
 	return c.JSON(fiber.Map{
 		"message": "invitation accepted successfully",
 		"user": fiber.Map{
-			"id":    user.ID.String(),
-			"email": user.Email,
+			"id":    accepted.ID.String(),
+			"email": accepted.Email,
 		},
 	})
 }

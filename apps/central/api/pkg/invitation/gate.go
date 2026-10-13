@@ -1,7 +1,6 @@
 package invitation
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -42,31 +41,35 @@ func (g *Gate) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error
 }
 
 // MayProvision reports whether a first-time sign-in for (tenantID, email) may
-// create a new account: either the tenant's signup_mode is "open" (any
-// address may auto-provision), or the address holds a valid invitation. This
+// create a new account: the address is in a domain the tenant allows accounts
+// for (allowed_domains — any, when it names none), and either the tenant's
+// signup_mode is "open" or the address holds a valid invitation. This
 // is the single policy decision every auto-provisioning path (social login,
 // magic link) must consult — previously each caller re-implemented it as a
 // direct HasValidInvitation check, which had no way to honor a per-tenant
 // open-signup setting without editing every call site.
 func (g *Gate) MayProvision(tenantID uuid.UUID, email string) (bool, error) {
-	open, err := g.signupIsOpen(tenantID)
+	settings, err := g.settings(tenantID)
 	if err != nil {
 		return false, err
 	}
-	if open {
+	if !settings.AllowsAddress(email) {
+		return false, nil
+	}
+	if settings.SignupMode == tenant.SignupModeOpen {
 		return true, nil
 	}
 	return g.HasValidInvitation(tenantID, email)
 }
 
-// signupIsOpen reads the tenant's settings.signup_mode directly (a scalar
-// JSONB extraction, not a full Settings decode) — Gate depends on nothing
-// but a database read (see the type doc above), and a tenant lookup by ID is
-// the same shape of dependency HasValidInvitation already has.
-func (g *Gate) signupIsOpen(tenantID uuid.UUID) (bool, error) {
-	var mode sql.NullString
-	if err := g.db.Raw(`SELECT settings->>'signup_mode' FROM tenants WHERE id = ?`, tenantID).Scan(&mode).Error; err != nil {
-		return false, fmt.Errorf("failed to check tenant signup mode: %w", err)
+// settings reads the tenant's settings directly — Gate depends on nothing but
+// a database read (see the type doc above), and a tenant lookup by ID is the
+// same shape of dependency HasValidInvitation already has. A tenant that is
+// not there has the settings of one that set nothing: invitation only.
+func (g *Gate) settings(tenantID uuid.UUID) (tenant.TenantSettings, error) {
+	var row struct{ Settings tenant.TenantSettings }
+	if err := g.db.Raw(`SELECT settings FROM tenants WHERE id = ?`, tenantID).Scan(&row).Error; err != nil {
+		return tenant.TenantSettings{}, fmt.Errorf("failed to read tenant sign-up settings: %w", err)
 	}
-	return mode.String == tenant.SignupModeOpen, nil
+	return row.Settings, nil
 }

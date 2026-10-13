@@ -63,3 +63,29 @@ func BackfillTokenHashes(db *gorm.DB, logger *zap.Logger) error {
 	}
 	return nil
 }
+
+// MarkAcceptedAddressesVerified marks as verified the address of every
+// account that was created by accepting an invitation sent to that address.
+// Acceptance proves the address — the invitation reached it — but accounts
+// created before acceptance recorded that were left unverified, and say so in
+// the email_verified claim of every token issued for them.
+//
+// Only an account whose address is still the invited one is touched, and the
+// statement is its own condition, so running it again changes nothing.
+func MarkAcceptedAddressesVerified(db *gorm.DB, logger *zap.Logger) error {
+	res := db.Exec(`
+		UPDATE users SET email_verified = true
+		FROM invitations
+		WHERE invitations.accepted_user_id = users.id
+		  AND invitations.status = ?
+		  AND invitations.tenant_id = users.tenant_id
+		  AND lower(invitations.email) = lower(users.email)
+		  AND users.email_verified = false`, StatusAccepted)
+	if res.Error != nil {
+		return fmt.Errorf("backfill: failed to mark invited addresses verified: %w", res.Error)
+	}
+	if res.RowsAffected > 0 {
+		logger.Info("Marked invited addresses verified", zap.Int64("accounts", res.RowsAffected))
+	}
+	return nil
+}

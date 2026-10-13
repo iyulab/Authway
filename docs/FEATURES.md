@@ -7,6 +7,7 @@ Comprehensive guide to Authway's key features: i18n, Custom Claims, Popup Login,
 - [Internationalization (i18n)](#internationalization-i18n)
 - [Custom Claims](#custom-claims)
 - [Popup Login](#popup-login)
+- [Who can have an account](#who-can-have-an-account)
 - [Signing in with a provider](#signing-in-with-a-provider)
 - [Logout & Redirect URIs](#logout--redirect-uris)
 - [OAuth & JWT Best Practices](#oauth--jwt-best-practices)
@@ -183,6 +184,30 @@ Access-Control-Allow-Credentials: true
 - Verify CORS configuration
 
 ---
+
+## Who can have an account
+
+There is no self-registration with a password. An account comes into being in
+one of three ways, and each of them proves the address it is created for — so
+an account starts with `email_verified: true`:
+
+| How | What proves the address |
+|---|---|
+| An administrator's invitation, accepted from the mailed link | the invitation reached it |
+| A first sign-in with an emailed link | the link reached it |
+| A first sign-in with a provider | the provider says it has verified it (see below) |
+
+The last two create an account only where the tenant lets them. Three tenant
+settings (`settings` on `POST` / `PUT /api/v1/tenants`) decide:
+
+| Setting | What it does |
+|---|---|
+| `signup_mode` | `open` lets a first sign-in create the account. Anything else — the default — is invitation only: the address has to hold a pending invitation. |
+| `allowed_domains` | When it names domains, accounts can be created only for addresses in them: an invitation to another address is refused (`email_domain_not_allowed`) and a first sign-in from one creates no account, open signup or not. A domain matches exactly; a subdomain is a different domain. Existing accounts are not affected. |
+| `password_min_length` | The least length of a password, when the tenant asks for more than the 8 characters every tenant gets (up to 72). A shorter password is refused with `password_too_short` and the length in force in `min_length`, wherever a password is set. |
+
+A password reset is also done from a mailed link, so it marks the account's
+address verified if it was not.
 
 ## Signing in with a provider
 

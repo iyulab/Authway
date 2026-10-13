@@ -70,6 +70,10 @@ type service struct {
 	db        *gorm.DB
 	logger    *zap.Logger
 	onCreated []func(*User)
+
+	// passwordMinLength answers a tenant's least password length; see
+	// PasswordMinLength.
+	passwordMinLength func(tenantID uuid.UUID) int
 }
 
 // Option configures a user service.
@@ -112,6 +116,9 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, err
 
 	// Hash password if provided (not required for social login)
 	if req.Password != "" {
+		if err := s.checkPassword(tenantID, req.Password); err != nil {
+			return nil, err
+		}
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -231,6 +238,10 @@ func (s *service) ChangePassword(userID uuid.UUID, req *ChangePasswordRequest) e
 		return fmt.Errorf("current password is incorrect")
 	}
 
+	if err := s.checkPassword(user.TenantID, req.NewPassword); err != nil {
+		return err
+	}
+
 	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -268,6 +279,14 @@ func (s *service) UpdateEmailVerified(userID uuid.UUID, verified bool) error {
 
 // UpdatePassword updates user password (for password reset)
 func (s *service) UpdatePassword(userID uuid.UUID, newPassword string) error {
+	account, err := s.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	if err := s.checkPassword(account.TenantID, newPassword); err != nil {
+		return err
+	}
+
 	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

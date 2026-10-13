@@ -105,6 +105,17 @@ func (s *Service) SessionTimeout(id uuid.UUID) time.Duration {
 	return time.Duration(tenant.Settings.SessionTimeout) * time.Minute
 }
 
+// PasswordMinLength is the least password length the tenant asks of its
+// users (its password_min_length setting), or zero when it asks for none or
+// cannot be read — the rule every tenant gets then stands alone.
+func (s *Service) PasswordMinLength(id uuid.UUID) int {
+	tenant, err := s.GetTenantByID(id)
+	if err != nil {
+		return 0
+	}
+	return tenant.Settings.PasswordMinLength
+}
+
 // ListTenants lists all active tenants
 func (s *Service) ListTenants() ([]Tenant, error) {
 	var tenants []Tenant
@@ -264,10 +275,9 @@ func (s *Service) EnsureDefaultTenant() error {
 		Slug:        "default",
 		Description: "Default tenant for backward compatibility and initial setup",
 		Settings: TenantSettings{
-			RequireEmailVerification: true,
-			PasswordMinLength:        8,
-			SessionTimeout:           60,
-			AllowedDomains:           []string{},
+			PasswordMinLength: 8,
+			SessionTimeout:    60,
+			AllowedDomains:    []string{},
 		},
 		Active: true,
 	}
@@ -294,10 +304,9 @@ func (s *Service) CreateSingleTenant(name, slug string) (*Tenant, error) {
 		Slug:        slug,
 		Description: fmt.Sprintf("Single tenant for %s", name),
 		Settings: TenantSettings{
-			RequireEmailVerification: true,
-			PasswordMinLength:        8,
-			SessionTimeout:           60,
-			AllowedDomains:           []string{},
+			PasswordMinLength: 8,
+			SessionTimeout:    60,
+			AllowedDomains:    []string{},
 		},
 		Active: true,
 	}

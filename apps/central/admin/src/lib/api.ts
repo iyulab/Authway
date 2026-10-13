@@ -112,9 +112,10 @@ export interface Client {
 }
 
 export interface TenantSettings {
-  require_email_verification?: boolean
+  // The least password length the tenant asks for, when more than 8.
   password_min_length?: number
   session_timeout?: number
+  // The only email domains accounts can be created for; empty allows any.
   allowed_domains?: string[]
   // signup_mode: 'invite_only' (default — a first-time sign-in needs a
   // pending invitation) or 'open' (any address auto-provisions). Absent,

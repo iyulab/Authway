@@ -82,6 +82,25 @@ describe('admin API: a resource is reached only through its own tenant', () => {
     }
   })
 
+  it('lists the users of the tenant the call names, by header as by query', async () => {
+    const user = await provider.inviteAndAccept()
+    const emailsFrom = async (res: Response) => {
+      await conform('GET', '/api/v1/users', res.clone())
+      expect(res.status).toBe(200)
+      return ((await res.json()) as { users: { id: string; email: string }[] }).users
+    }
+    const own = await emailsFrom(await provider.admin('/api/v1/users?limit=100'))
+    const account = own.find((u) => u.email === user.email)
+    expect(account).toBeDefined()
+    try {
+      const other = randomUUID()
+      expect(await emailsFrom(await asOtherTenant('/api/v1/users?limit=100'))).toEqual([])
+      expect(await emailsFrom(await provider.admin(`/api/v1/users?limit=100&tenant_id=${other}`))).toEqual([])
+    } finally {
+      await provider.deleteUser(account!.id)
+    }
+  })
+
   it('answers not_found for a client read under another tenant', async () => {
     const client = await provider.createPublicClient()
     const res = await asOtherTenant(`/api/v1/clients/${client.id}`)

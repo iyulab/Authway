@@ -23,6 +23,9 @@ var (
 	ErrTenantNotFound = apierror.NewPublic("tenant not found")
 	ErrAlreadyMember  = apierror.NewPublic("user already exists in this organization")
 	ErrAlreadyInvited = apierror.NewPublic("pending invitation already exists for this email")
+	// ErrAddressNotAllowed is an address outside the domains the tenant
+	// allows accounts for (its allowed_domains setting).
+	ErrAddressNotAllowed = apierror.NewPublic("this address is not in a domain the organization allows")
 )
 
 // EmailSender interface for sending emails
@@ -107,6 +110,9 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, req.Email)
 	if existingUser != nil {
 		return nil, ErrAlreadyMember
+	}
+	if !t.Settings.AllowsAddress(req.Email) {
+		return nil, ErrAddressNotAllowed
 	}
 	var existing Invitation
 	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, req.Email, StatusPending).First(&existing).Error; err == nil {
@@ -273,6 +279,10 @@ func (s *service) Accept(token string, userID *uuid.UUID, name, password string)
 		if password == "" {
 			return nil, apierror.NewPublic("password is required for new users")
 		}
+		// An invitation sent before the tenant narrowed its domains.
+		if t, err := s.tenantService.GetTenantByID(inv.TenantID); err == nil && !t.Settings.AllowsAddress(inv.Email) {
+			return nil, ErrAddressNotAllowed
+		}
 		userName := name
 		if userName == "" {
 			userName = inv.Email
@@ -286,6 +296,12 @@ func (s *service) Accept(token string, userID *uuid.UUID, name, password string)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create user: %w", err)
 		}
+		// The invitation reached the address it was sent to: accepting it is
+		// the proof of the address that a verification mail would ask for.
+		if err := s.userService.UpdateEmailVerified(u.ID, true); err != nil {
+			return nil, fmt.Errorf("failed to mark the invited address verified: %w", err)
+		}
+		u.EmailVerified = true
 		s.logger.Info("User created via invitation", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
 	}
 	now := time.Now()
