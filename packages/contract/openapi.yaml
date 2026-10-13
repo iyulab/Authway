@@ -88,7 +88,7 @@ paths:
               required: [token]
               properties:
                 token: { type: string }
-                token_type_hint: { type: string }
+                token_type_hint: { type: string, description: 'What kind of token the caller takes it for (RFC 7662). Accepted and not relied on: the answer is the same whatever it says.' }
                 client_id: { type: string, description: With client_secret, instead of HTTP Basic. }
                 client_secret: { type: string }
       responses:
@@ -603,8 +603,8 @@ paths:
                 slug: { type: string, minLength: 2, maxLength: 100 }
                 description: { type: string }
                 settings: { $ref: '#/components/schemas/TenantSettings' }
-                logo: { type: string }
-                primary_color: { type: string, description: A hex color, e.g. '#4F46E5'. }
+                logo: { type: string, description: 'An address of the tenant''s logo. Kept and returned as given: the provider''s own screens do not show it.' }
+                primary_color: { type: string, description: 'A hex color, e.g. ''#4F46E5''. Kept and returned as given: the provider''s own screens are not styled by it.' }
       responses:
         '201':
           description: Created
@@ -663,8 +663,8 @@ paths:
                 name: { type: string, minLength: 2, maxLength: 255 }
                 description: { type: string }
                 settings: { $ref: '#/components/schemas/TenantSettings' }
-                logo: { type: string }
-                primary_color: { type: string }
+                logo: { type: string, description: Kept and returned as given; left as it is when not named. }
+                primary_color: { type: string, description: 'A hex color. Kept and returned as given; left as it is when not named.' }
                 active: { type: boolean }
       responses:
         '200':

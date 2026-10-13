@@ -6,7 +6,7 @@ import { Provider } from '../src/provider.js'
 
 const provider = new Provider(loadConfig())
 
-type Entry = { id: string; action: string; success: boolean; resource_id: string }
+type Entry = { id: string; action: string; success: boolean; resource_id: string; resource_type: string; created_at: string }
 
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
 
@@ -40,6 +40,44 @@ describe('admin API: reading the audit log', () => {
     expect(((await one.json()) as { log: Entry }).log.id).toBe(entries[0].id)
 
     await provider.admin(`/api/v1/webhooks/${webhookId}`, { method: 'DELETE' })
+  })
+
+  it('narrows by the kind of resource and by when it happened', async () => {
+    const created = await provider.admin('/api/v1/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({ name: `${name}-filters`, url: 'https://conformance.invalid/webhook', events: ['user.created'], enabled: false }),
+    })
+    expect(created.status).toBe(201)
+    const id = ((await created.json()) as { webhook: { id: string } }).webhook.id
+    const find = async (query: string): Promise<Entry[]> => {
+      const res = await provider.admin(`/api/v1/audit/logs?resource_id=${id}&limit=5&${query}`)
+      await conform('GET', '/api/v1/audit/logs', res)
+      expect(res.status, query).toBe(200)
+      return ((await res.json()) as { logs: Entry[] }).logs
+    }
+    try {
+      let entries: Entry[] = []
+      for (let i = 0; i < 20 && entries.length === 0; i++) {
+        entries = await find('action=webhook.created')
+        if (entries.length === 0) await new Promise((r) => setTimeout(r, 250))
+      }
+      expect(entries).toHaveLength(1)
+      const [entry] = entries
+      expect(entry.resource_type).toBeTruthy()
+
+      // The kind of resource: the entry's own finds it, another does not.
+      expect(await find(`resource_type=${entry.resource_type}`)).toHaveLength(1)
+      expect(await find(`resource_type=${entry.resource_type === 'user' ? 'client' : 'user'}`)).toHaveLength(0)
+
+      // When: a window that ends before the entry, or starts after it, is empty.
+      const at = new Date(entry.created_at).getTime()
+      const iso = (ms: number) => encodeURIComponent(new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z'))
+      expect(await find(`end_time=${iso(at - 60_000)}`)).toHaveLength(0)
+      expect(await find(`start_time=${iso(at + 60_000)}`)).toHaveLength(0)
+      expect(await find(`start_time=${iso(at - 60_000)}&end_time=${iso(at + 60_000)}`)).toHaveLength(1)
+    } finally {
+      await provider.admin(`/api/v1/webhooks/${id}`, { method: 'DELETE' })
+    }
   })
 
   it('refuses a malformed filter instead of ignoring it', async () => {

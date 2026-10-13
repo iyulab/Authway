@@ -62,6 +62,28 @@ describe('token introspection', () => {
     expect(((await res.json()) as { token_introspection: boolean }).token_introspection).toBe(true)
   })
 
+  it('answers the same whatever kind of token the caller says it is', async () => {
+    // RFC 7662 lets a caller hint at the kind of token; a server may ignore
+    // the hint, but must not answer differently for a wrong one.
+    const hinted = (hint: string) =>
+      fetch(`${config.api}${PATH}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(`${encodeURIComponent(resourceServer.clientId)}:${encodeURIComponent(resourceServer.secret)}`).toString('base64')}`,
+        },
+        body: new URLSearchParams({ token: accessToken, token_type_hint: hint }),
+      })
+    for (const hint of ['access_token', 'refresh_token']) {
+      const res = await hinted(hint)
+      await conform('POST', PATH, res.clone())
+      expect(res.status, hint).toBe(200)
+      const body = (await res.json()) as { active: boolean; sub: string }
+      expect(body.active, hint).toBe(true)
+      expect(body.sub, hint).toBe(sub)
+    }
+  })
+
   it("tells a resource server of the tenant who a user's token belongs to", async () => {
     const res = await introspect(accessToken)
     await conform('POST', PATH, res.clone())

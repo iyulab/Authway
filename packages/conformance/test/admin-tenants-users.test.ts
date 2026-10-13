@@ -50,6 +50,26 @@ describe('admin API: managing tenants', () => {
     expect(stored.settings?.signup_mode).toBe('open')
   })
 
+  it('keeps a tenant\'s logo and color as given, and takes only a color for a color', async () => {
+    const branded = await provider.admin(`/api/v1/tenants/${tenant!.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ logo: 'https://cdn.example.test/logo.svg', primary_color: '#0A7F5A' }),
+    })
+    await conform('PUT', '/api/v1/tenants/{id}', branded)
+    expect(branded.status).toBe(200)
+
+    const read = await provider.admin(`/api/v1/tenants/${tenant!.id}`)
+    const stored = (await read.json()) as { logo: string; primary_color: string; name: string }
+    expect(stored.logo).toBe('https://cdn.example.test/logo.svg')
+    expect(stored.primary_color).toBe('#0A7F5A')
+    // An update that names neither leaves both.
+    expect(stored.name).toBe('Conformance tenant renamed')
+
+    const notAColor = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'PUT', body: JSON.stringify({ primary_color: 'greenish' }) })
+    await conform('PUT', '/api/v1/tenants/{id}', notAColor)
+    expect(notAColor.status).toBe(400)
+  })
+
   it('deletes an empty tenant, after which it is not found', async () => {
     const res = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'DELETE' })
     await conform('DELETE', '/api/v1/tenants/{id}', res)
@@ -110,6 +130,20 @@ describe('admin API: managing users', () => {
     const read = await provider.admin(`/api/v1/users/${userId}`)
     await conform('GET', '/api/v1/users/{id}', read)
     expect(((await read.json()) as { user: { name: string } }).user.name).toBe('Conformance Renamed')
+  })
+
+  it('keeps the picture address a user is given', async () => {
+    const res = await provider.admin(`/api/v1/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ avatar_url: 'https://cdn.example.test/avatars/conformance.png' }),
+    })
+    await conform('PUT', '/api/v1/users/{id}', res)
+    expect(res.status).toBe(200)
+
+    const read = await provider.admin(`/api/v1/users/${userId}`)
+    const stored = ((await read.json()) as { user: { name: string; avatar_url: string } }).user
+    expect(stored.avatar_url).toBe('https://cdn.example.test/avatars/conformance.png')
+    expect(stored.name).toBe('Conformance Renamed')
   })
 
   it('answers 404 with a code for a user that does not exist', async () => {
