@@ -5,9 +5,16 @@ import { User } from './user'
  */
 export interface RedirectLoginOptions {
   /**
-   * OAuth connection/provider (e.g., 'google')
+   * The way of signing in to start with, e.g. 'google': the sign-in screen
+   * goes straight on to that provider. Ignored unless the client offers it.
    */
   connection?: string
+
+  /**
+   * The address the application expects to sign in; the sign-in screen fills
+   * it in (OpenID Connect `login_hint`).
+   */
+  login_hint?: string
 
   /**
    * Screen hint ('login' or 'signup')
@@ -15,7 +22,8 @@ export interface RedirectLoginOptions {
   screen_hint?: 'login' | 'signup'
 
   /**
-   * UI locales
+   * The languages to show the sign-in screen in, most preferred first,
+   * separated by spaces — e.g. 'ko en' (OpenID Connect `ui_locales`).
    */
   ui_locales?: string
 

@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"net/url"
+	"slices"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -47,6 +49,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		return c.JSON(step)
 	}
 
+	methods := h.signInMethods.SignInMethodsFor(requestedClient)
 	return c.JSON(fiber.Map{
 		"next":            nextForm,
 		"flow":            flow,
@@ -55,10 +58,39 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		"tenant_id":       requestedClient.TenantID.String(),
 		"client": fiber.Map{
 			"client_id":          requestedClient.ClientID,
-			"sign_in_methods":    h.signInMethods.SignInMethodsFor(requestedClient),
+			"sign_in_methods":    methods,
 			"allow_email_signup": requestedClient.AllowEmailSignup,
 		},
+		"hints": requestHints(loginReq, methods),
 	})
+}
+
+// requestHints is what the application's authorization request asked of the
+// sign-in screen: which way of signing in to start with, whose address to
+// expect, which language to speak. The screen only ever sees a flow id, so
+// the request's own parameters reach it through here or not at all.
+//
+// They are hints. The way of signing in is passed on only when it is one the
+// screen is offering anyway (methods); the others are the application's word
+// about the user, for the screen's convenience, and decide nothing.
+func requestHints(loginReq *hydra.LoginRequest, methods []string) fiber.Map {
+	hints := fiber.Map{}
+	// "connection" is not an OpenID Connect parameter; the authorization
+	// server keeps it only as part of the request's address.
+	if request, err := url.Parse(loginReq.RequestURL); err == nil {
+		if connection := request.Query().Get("connection"); connection != "" && slices.Contains(methods, connection) {
+			hints["sign_in_method"] = connection
+		}
+	}
+	if oidc := loginReq.OIDCContext; oidc != nil {
+		if oidc.LoginHint != "" {
+			hints["login_hint"] = oidc.LoginHint
+		}
+		if len(oidc.UILocales) > 0 {
+			hints["ui_locales"] = oidc.UILocales
+		}
+	}
+	return hints
 }
 
 // LoginWithoutScreen settles a login flow at the moment the authorization

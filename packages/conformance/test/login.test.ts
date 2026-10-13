@@ -41,6 +41,26 @@ describe('password login through the authorization-code flow', () => {
     expect(outcome.sub).toBeTruthy()
   })
 
+  it('tells the login screen what the application asked of it: where to start, whom to expect, which language', async () => {
+    const ask = async (extra: Record<string, string>) => {
+      const attempt = await provider.startLogin(client, undefined, undefined, extra)
+      const res = await fetch(provider.loginFlowUrl(attempt.flow))
+      await conform('GET', '/api/v1/login-flows/{flow}', res.clone())
+      return (await res.json()) as { client: { sign_in_methods: string[] }; hints?: Record<string, unknown> }
+    }
+
+    const plain = await ask({})
+    expect(plain.hints ?? {}).toEqual({})
+
+    // A way of signing in is passed on only if the screen offers it anyway.
+    const offered = plain.client.sign_in_methods[0]
+    const hinted = await ask({ connection: offered, login_hint: user.email, ui_locales: 'ko en' })
+    expect(hinted.hints).toEqual({ sign_in_method: offered, login_hint: user.email, ui_locales: ['ko', 'en'] })
+
+    const notOffered = await ask({ connection: 'a-provider-nobody-offers' })
+    expect(notOffered.hints ?? {}).not.toHaveProperty('sign_in_method')
+  })
+
   it('rejects a wrong password without advancing the flow', async () => {
     const outcome = await provider.login(client, { ...user, password: `${user.password}-wrong` })
     expect(outcome.kind).toBe('rejected')

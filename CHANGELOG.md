@@ -28,6 +28,14 @@
   to the requested scope; the default is now `false`, which is what the SDK
   did all along. A client has to be registered for the `refresh_token` grant
   and the `offline_access` scope before an application turns it on.
+- **What an application asks of the sign-in screen reaches it again.**
+  `connection` (start with this provider), `login_hint` (expect this address)
+  and `ui_locales` (speak this language) on an authorization request were
+  dropped where the API opens the login screen with a flow id — an
+  application that sent its users "straight to Google" got the ordinary form.
+  The login flow's answer carries them as `hints`, and the bundled login UI
+  acts on them: it goes on to the provider, fills in the address, and switches
+  language — once, so the user can still change either.
 - **SDK: `LoginButton` and `LogoutButton` keep signing in and out when given
   an `onClick`.** The application's handler replaced the button's own. It now
   runs first, and can call `preventDefault()` to stop the button.

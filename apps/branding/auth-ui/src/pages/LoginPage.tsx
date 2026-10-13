@@ -7,7 +7,8 @@ import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { followRedirect, loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep } from '../utils/loginFlow'
+import { followRedirect, loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
+import i18n from '../i18n'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -34,12 +35,31 @@ interface ClientAuthConfig {
   allow_email_signup?: boolean
 }
 
+/**
+ * What the application's authorization request asked of this screen. The
+ * screen only has a flow id, so the request's own parameters arrive this way.
+ */
+interface RequestHints {
+  /** The way of signing in to start with; one of client.sign_in_methods. */
+  sign_in_method?: string
+  /** The address the application expects to sign in. */
+  login_hint?: string
+  /** The languages the application prefers, most preferred first. */
+  ui_locales?: string[]
+}
+
 interface LoginPageInfo {
   next: 'form'
   flow: string
   client_name: string
   requested_scope: string[]
   client?: ClientAuthConfig
+  hints?: RequestHints
+}
+
+/** The first of the preferred languages this screen has, by its primary tag ("ko-KR" → "ko"). */
+function supportedLanguage(preferred: string[] = []): string | undefined {
+  return preferred.map((tag) => tag.split('-')[0].toLowerCase()).find((lng) => i18n.hasResourceBundle(lng, 'common'))
 }
 
 const LoginPage: React.FC = () => {
@@ -49,19 +69,18 @@ const LoginPage: React.FC = () => {
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [autoGoogleLogin, setAutoGoogleLogin] = useState(false)
 
   // Ref to track which flow has been processed to prevent duplicates
   const processedFlowRef = useRef<string | null>(null)
 
   const flow = searchParams.get('flow')
-  const connection = searchParams.get('connection')
 
   const loginSchema = createLoginSchema(t)
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -118,17 +137,33 @@ const LoginPage: React.FC = () => {
       })
   }, [flow, t])
 
-  // Auto-start Google sign-in if connection=google
+  // What the application asked of this screen. Applied once per flow: the
+  // flow is asked about again whenever the language changes, and a user who
+  // switches the language, or types another address, must not be put back.
   useEffect(() => {
-    if (!loginInfo || !flow || autoGoogleLogin) return
-    if (connection !== 'google') return
-
-    // Strict Mode mounts twice; leave for the provider only once per flow.
+    const hints = loginInfo?.hints
+    if (!hints || !flow) return
+    // Strict Mode mounts twice, too; leave for a provider only once per flow.
     if (processedFlowRef.current === flow) return
     processedFlowRef.current = flow
-    setAutoGoogleLogin(true)
-    startSocialSignIn(flow, 'google')
-  }, [loginInfo, flow, connection, autoGoogleLogin])
+
+    // The language, unless the address names one itself (?lang=).
+    const language = supportedLanguage(hints.ui_locales)
+    if (language && !searchParams.get('lang') && language !== i18n.language) {
+      void i18n.changeLanguage(language)
+    }
+
+    // Whom to expect: the address is filled in, and stays the user's to change.
+    if (hints.login_hint) {
+      setValue('email', hints.login_hint)
+    }
+
+    // Where to start: straight on to the provider the application named.
+    const provider = hints.sign_in_method as SocialProvider | undefined
+    if (provider && SOCIAL_PROVIDERS.includes(provider)) {
+      startSocialSignIn(flow, provider)
+    }
+  }, [loginInfo, flow, searchParams, setValue])
 
   // Login mutation
   const loginMutation = useMutation({

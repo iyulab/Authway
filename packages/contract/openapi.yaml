@@ -1872,6 +1872,26 @@ components:
               type: array
               items: { type: string }
             allow_email_signup: { type: boolean }
+        hints:
+          description: |
+            What the application's authorization request asked of the sign-in
+            screen, which only has the flow id. Every field is optional, and
+            none decides anything: they are for the screen's convenience.
+          type: object
+          properties:
+            sign_in_method:
+              description: |
+                The way of signing in to start with — the request's
+                `connection` parameter, passed on only when it is one of
+                client.sign_in_methods.
+              type: string
+            login_hint:
+              description: The address the application expects to sign in (OpenID Connect `login_hint`).
+              type: string
+            ui_locales:
+              description: The languages the application prefers, most preferred first (OpenID Connect `ui_locales`).
+              type: array
+              items: { type: string }
 
     ConsentForm:
       type: object

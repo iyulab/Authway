@@ -66,6 +66,14 @@ Errors carry `error` (a message to show) and `code`. An unknown flow id is
 }
 ```
 
+`hints` is what the application's authorization request asked of the screen,
+which otherwise only has the flow id: `sign_in_method` (the request's
+`connection` — the way of signing in to start with, present only when it is
+one of `sign_in_methods`), `login_hint` (the address to expect) and
+`ui_locales` (the languages the application prefers, most preferred first).
+All are optional and decide nothing; a screen applies them once and lets the
+user change the language or the address.
+
 `sign_in_methods` lists what to offer, in order: `email` (the password form),
 `magic_link`, then social providers. It already takes into account what the
 client enables and what this deployment can run — show exactly this list.

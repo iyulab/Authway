@@ -212,6 +212,91 @@ describe('LoginPage', () => {
     })
   })
 
+  describe('What the application asked of the screen', () => {
+    const flowWith = (hints: Record<string, unknown>) =>
+      server.use(
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () =>
+          HttpResponse.json({
+            next: 'form',
+            flow: 'test-challenge',
+            client_name: 'Test Client',
+            requested_scope: ['openid'],
+            client: { client_id: 'c', sign_in_methods: ['email', 'google'] },
+            hints,
+          })
+        )
+      )
+
+    afterEach(async () => {
+      await i18n.changeLanguage('ko')
+    })
+
+    it('fills in the address the application expects', async () => {
+      flowWith({ login_hint: 'someone@example.com' })
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('이메일')).toHaveValue('someone@example.com')
+      })
+      expect(mockStartSocialSignIn).not.toHaveBeenCalled()
+    })
+
+    it('goes straight on to the provider the application named, once', async () => {
+      flowWith({ sign_in_method: 'google' })
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(mockStartSocialSignIn).toHaveBeenCalledWith('test-challenge', 'google')
+      })
+      expect(mockStartSocialSignIn).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not leave for a way of signing in that is not a provider', async () => {
+      flowWith({ sign_in_method: 'email' })
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('이메일')).toBeInTheDocument()
+      })
+      expect(mockStartSocialSignIn).not.toHaveBeenCalled()
+    })
+
+    it('speaks the first of the preferred languages it has', async () => {
+      flowWith({ ui_locales: ['fr', 'en-GB', 'ko'] })
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Email')).toBeInTheDocument()
+      })
+    })
+
+    it('lets the user switch the language away from the one the application asked for', async () => {
+      flowWith({ ui_locales: ['en'] })
+      render(<LoginPage />)
+      await waitFor(() => {
+        expect(screen.getByLabelText('Email')).toBeInTheDocument()
+      })
+
+      // Switching re-asks about the flow, and the answer carries the same hint.
+      await i18n.changeLanguage('ko')
+      await waitFor(() => {
+        expect(screen.getByLabelText('이메일')).toBeInTheDocument()
+      })
+      await new Promise((r) => setTimeout(r, 300))
+      expect(screen.getByLabelText('이메일')).toBeInTheDocument()
+    })
+
+    it('keeps the language the address asks for over the application\'s', async () => {
+      mockSearchParams.set('lang', 'ko')
+      flowWith({ ui_locales: ['en'] })
+      render(<LoginPage />)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('이메일')).toBeInTheDocument()
+      })
+    })
+  })
+
   describe('Form Validation', () => {
     beforeEach(async () => {
       server.use(

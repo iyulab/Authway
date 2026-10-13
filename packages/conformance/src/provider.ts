@@ -346,9 +346,15 @@ export class Provider {
    * Starts an authorization-code + PKCE request and stops at the login screen.
    * Pass the browser of an earlier login to start in its session.
    */
-  async startLogin(client: TestClient, scopes = ['openid', 'profile', 'email'], browser = new Browser()): Promise<LoginAttempt> {
+  async startLogin(
+    client: TestClient,
+    scopes = ['openid', 'profile', 'email'],
+    browser = new Browser(),
+    /** Further parameters of the authorization request. */
+    extra: Record<string, string> = {},
+  ): Promise<LoginAttempt> {
     const pkce = createPkce()
-    const loginScreen = await this.openLoginScreen(browser, await this.authorizeUrl(client, scopes, pkce))
+    const loginScreen = await this.openLoginScreen(browser, await this.authorizeUrl(client, scopes, pkce, extra))
     return { client, scopes, browser, pkce, flow: this.loginFlowFrom(loginScreen) }
   }
 

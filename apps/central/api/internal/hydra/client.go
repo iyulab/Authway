@@ -295,6 +295,16 @@ type LoginRequest struct {
 	RequestURL        string        `json:"request_url"`
 	SessionID         string        `json:"session_id"`
 	Skip              bool          `json:"skip"`
+	// OIDCContext is what the authorization request said about how the user
+	// should be signed in (OpenID Connect Core §3.1.2.1).
+	OIDCContext *OIDCContext `json:"oidc_context,omitempty"`
+}
+
+// OIDCContext carries the optional OpenID Connect parameters of an
+// authorization request that concern the sign-in screen.
+type OIDCContext struct {
+	LoginHint string   `json:"login_hint,omitempty"`
+	UILocales []string `json:"ui_locales,omitempty"`
 }
 
 type AcceptLoginRequest struct {

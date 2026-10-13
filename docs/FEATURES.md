@@ -42,8 +42,12 @@ https://auth.example.com/login?lang=ko
 https://auth.example.com/login?lang=en
 ```
 
-The SDK has no language option: the sign-in screen picks the language by the
-order above, and the user can switch it there.
+**From the application** — per sign-in, with the standard `ui_locales`
+parameter (the first language the screen has is used; an address with
+`?lang=` wins, and the user can still switch on the screen):
+```typescript
+await client.loginWithRedirect({ ui_locales: 'ko en' })
+```
 
 ### Translation Files
 

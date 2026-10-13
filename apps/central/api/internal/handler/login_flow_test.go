@@ -150,3 +150,45 @@ func TestGetLoginFlow_UnregisteredClientIsRejected(t *testing.T) {
 		t.Fatalf("status = 200 for a client Authway does not know, body = %v", body)
 	}
 }
+
+// What the application's request asked of the sign-in screen reaches the
+// screen, which otherwise only has a flow id.
+func TestRequestHints(t *testing.T) {
+	methods := []string{"email", "google"}
+	request := func(query string, oidc *hydra.OIDCContext) *hydra.LoginRequest {
+		return &hydra.LoginRequest{RequestURL: "https://issuer.example/oauth2/auth?client_id=a" + query, OIDCContext: oidc}
+	}
+	for _, tc := range []struct {
+		name string
+		req  *hydra.LoginRequest
+		want map[string]any
+	}{
+		{"a request that asks nothing", request("", nil), map[string]any{}},
+		{"a way of signing in the screen offers", request("&connection=google", nil), map[string]any{"sign_in_method": "google"}},
+		{"a way of signing in it does not offer", request("&connection=github", nil), map[string]any{}},
+		{"whose address to expect, and the language",
+			request("", &hydra.OIDCContext{LoginHint: "user@example.com", UILocales: []string{"ko", "en"}}),
+			map[string]any{"login_hint": "user@example.com", "ui_locales": []any{"ko", "en"}}},
+		{"an address that cannot be read", &hydra.LoginRequest{RequestURL: "%zz:/"}, map[string]any{}},
+	} {
+		raw, err := json.Marshal(requestHints(tc.req, methods))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		var got map[string]any
+		_ = json.Unmarshal(raw, &got)
+		want, _ := json.Marshal(tc.want)
+		if string(mustJSON(t, got)) != string(want) {
+			t.Errorf("%s: hints = %s, want %s", tc.name, raw, want)
+		}
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
