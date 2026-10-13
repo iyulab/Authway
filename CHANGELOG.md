@@ -1,19 +1,14 @@
 ## [Unreleased]
 
-> `@authway/client` and `@authway/react` **0.5.0** are published with this
-> entry. They carry the SDK changes listed under 0.12.0 (`checkSession()`,
-> the `'sessionstorage'` location, `useRefreshTokens`) and the two below.
+## [0.13.0] - 2026-10-14
 
-### Changed
-
-- **SDK 0.5.0 (breaking): tokens are kept for the tab unless the application
-  says otherwise.** The default `cacheLocation` is `'sessionstorage'`; it was
-  `'localstorage'`. Tokens no longer stay on a device after the tab is
-  closed, and a reload still finds them. A new tab starts without them and
-  gets them from the user's session (`checkSession()`, which the React
-  provider calls on load) — one trip to the provider and back, nothing
-  shown. **For an application:** nothing to do to follow the default; pass
-  `cacheLocation: 'localstorage'` to keep the earlier behavior.
+> Minor, with two breaking changes. `@authway/client` and `@authway/react`
+> **0.5.0** are published (2026-10-13): tokens are kept for the tab by
+> default, under keys that name the client. A client's `allow_email_signup`
+> is gone. New: clients that authenticate with a key (`private_key_jwt`), a
+> key prefix for deployments that share one Redis, and the password length a
+> tenant asks for in the screens that ask for a password. The contract now
+> says how long a back-channel `logout_token` is good for.
 
 ### Added
 
@@ -51,6 +46,14 @@
 
 ### Changed
 
+- **SDK 0.5.0 (breaking): tokens are kept for the tab unless the application
+  says otherwise.** The default `cacheLocation` is `'sessionstorage'`; it was
+  `'localstorage'`. Tokens no longer stay on a device after the tab is
+  closed, and a reload still finds them. A new tab starts without them and
+  gets them from the user's session (`checkSession()`, which the React
+  provider calls on load) — one trip to the provider and back, nothing
+  shown. **For an application:** nothing to do to follow the default; pass
+  `cacheLocation: 'localstorage'` to keep the earlier behavior.
 - **The contract says what a back-channel `logout_token` carries and how long
   it is good for.** The token has `iss`, `aud`, `iat`, `jti`, `events` and
   `sid` — and no `exp`, which OpenID Connect Back-Channel Logout 1.0 makes
@@ -61,18 +64,6 @@
   `iat`. Nothing about the token changed. **For an application that receives
   logout tokens:** apply the rule; a validator that requires `exp` must be
   told not to for these.
-
-### Removed
-
-- **A client's `allow_email_signup` is gone (breaking).** It was stored,
-  returned and shown as a checkbox in the console, and decided nothing: there
-  is no password sign-up, and whether a first sign-in may create an account
-  is the tenant's `signup_mode` (with `allowed_domains`). It is no longer
-  accepted or returned by the client endpoints, nor carried in the answer of
-  `GET /api/v1/login-flows/{flow}` (`client.allow_email_signup`). **For a
-  caller:** stop sending it — it is ignored — and stop reading it. Migration
-  033 drops the column, in a deployment of its own after the one that stopped
-  using it; every row checked held the default.
 
 ### Fixed
 
@@ -87,6 +78,18 @@
   session by `checkSession()` rather than from the old tokens. **For
   applications that share an origin:** move them to 0.5.0 together — one
   still on 0.4.x keeps its tokens under the keys the other removes.
+
+### Removed
+
+- **A client's `allow_email_signup` is gone (breaking).** It was stored,
+  returned and shown as a checkbox in the console, and decided nothing: there
+  is no password sign-up, and whether a first sign-in may create an account
+  is the tenant's `signup_mode` (with `allowed_domains`). It is no longer
+  accepted or returned by the client endpoints, nor carried in the answer of
+  `GET /api/v1/login-flows/{flow}` (`client.allow_email_signup`). **For a
+  caller:** stop sending it — it is ignored — and stop reading it. Migration
+  033 drops the column, in a deployment of its own after the one that stopped
+  using it; every row checked held the default.
 
 ## [0.12.0] - 2026-10-13
 
