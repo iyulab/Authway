@@ -35,7 +35,7 @@ export class MemoryStorage implements IStorage {
  * LocalStorage wrapper
  */
 export class LocalStorageCache implements IStorage {
-  private prefix = 'authway.'
+  constructor(private prefix: string) {}
 
   get(key: string): string | null {
     if (typeof window === 'undefined') return null
@@ -130,17 +130,44 @@ export class SessionStorageCache implements IStorage {
 }
 
 /**
- * Create storage based on cache location
+ * Create the token cache of one client.
+ *
+ * The keys carry the client id: applications served from one origin share
+ * its storage, and one must neither read nor clear what another keeps there.
+ * The prefix is also apart from that of a request in flight, so that clearing
+ * the tokens leaves the request alone.
  */
-export function createStorage(cacheLocation: 'memory' | 'sessionstorage' | 'localstorage'): IStorage {
+export function createStorage(cacheLocation: 'memory' | 'sessionstorage' | 'localstorage', clientId: string): IStorage {
+  const prefix = `authway.cache.${clientId}.`
   if (cacheLocation === 'localstorage') {
-    return new LocalStorageCache()
+    return new LocalStorageCache(prefix)
   }
   if (cacheLocation === 'sessionstorage') {
-    // A prefix of its own: clearing the tokens must not clear a request in flight.
-    return new SessionStorageCache('authway.cache.')
+    return new SessionStorageCache(prefix)
   }
   return new MemoryStorage()
+}
+
+/**
+ * Versions before 0.5.0 kept tokens in localStorage under keys that named no
+ * client. This removes them and returns the ID token that was among them, if
+ * any — nothing else about them is of use: whose they were is not known
+ * until that token is read.
+ *
+ * TODO: remove in 0.7.0, by when a browser that last ran 0.4.x has little
+ * left to clean up — what remains then has expired.
+ */
+export function removeUnscopedTokens(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const idToken = window.localStorage.getItem('authway.idToken')
+    for (const key of ['accessToken', 'idToken', 'refreshToken', 'expiresAt', 'authway_dpop_key']) {
+      window.localStorage.removeItem(`authway.${key}`)
+    }
+    return idToken
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -134,6 +134,96 @@ describe('where the tokens are kept', () => {
   })
 })
 
+describe('whose tokens they are', () => {
+  const configOf = (clientId: string, cacheLocation?: AuthwayConfig['cacheLocation']): AuthwayConfig => ({
+    domain: API,
+    clientId,
+    redirectUri: `${APP}/callback`,
+    cacheLocation,
+  })
+  const open = async (clientId: string, cacheLocation?: AuthwayConfig['cacheLocation']) => {
+    const client = new AuthwayClient(configOf(clientId, cacheLocation))
+    await client.waitForReady()
+    return client
+  }
+
+  it('keeps them for the tab when the application does not say where', async () => {
+    const browser = fakeBrowser()
+    vi.useFakeTimers()
+    const before = await open('client-1')
+    await before.loginWithRedirect()
+    const state = browser.location.sentTo!.searchParams.get('state')!
+    await (await open('client-1')).handleRedirectCallback(`${APP}/callback?code=the-code&state=${state}`)
+
+    expect(JSON.stringify(browser.sessionStorage)).toContain('access-token')
+    expect(JSON.stringify(browser.localStorage)).not.toContain('access-token')
+    expect(await (await open('client-1')).isAuthenticated()).toBe(true)
+  })
+
+  it.each(['sessionstorage', 'localstorage'] as const)(
+    "does not hand one application's tokens to another on the same origin (%s)",
+    async (cacheLocation) => {
+      const browser = fakeBrowser()
+      await signedIn(browser, cacheLocation)
+
+      const other = await open('client-2', cacheLocation)
+      expect(await other.isAuthenticated()).toBe(false)
+      // The other application has not been signed in to either.
+      expect(await other.checkSession()).toBe(false)
+    },
+  )
+
+  it.each(['sessionstorage', 'localstorage'] as const)(
+    "leaves another application's tokens alone when one signs out (%s)",
+    async (cacheLocation) => {
+      const browser = fakeBrowser()
+      await signedIn(browser, cacheLocation)
+
+      const other = await open('client-2', cacheLocation)
+      await other.logout({ localOnly: true })
+
+      const first = await load(cacheLocation)
+      expect(await first.isAuthenticated()).toBe(true)
+    },
+  )
+
+  describe('tokens an earlier version left in localStorage', () => {
+    const leave = (browser: ReturnType<typeof fakeBrowser>, audience: string) => {
+      browser.localStorage.setItem('authway.accessToken', 'old-access-token')
+      browser.localStorage.setItem('authway.idToken', jwt({ sub: 'user-1', aud: audience }))
+      browser.localStorage.setItem('authway.refreshToken', 'old-refresh-token')
+      browser.localStorage.setItem('authway.expiresAt', String(Date.now() + 3_600_000))
+    }
+
+    it('are removed, and are not a sign-in', async () => {
+      const browser = fakeBrowser()
+      leave(browser, 'client-1')
+
+      const client = await open('client-1')
+
+      expect(JSON.stringify(browser.localStorage)).not.toContain('old-')
+      expect(browser.localStorage.getItem('authway.idToken')).toBeNull()
+      expect(await client.isAuthenticated()).toBe(false)
+    })
+
+    it('send the application they were issued to to look for its session, once', async () => {
+      const browser = fakeBrowser()
+      leave(browser, 'client-1')
+
+      expect(await (await open('client-1')).checkSession()).toBe(true)
+      expect(browser.location.sentTo!.searchParams.get('prompt')).toBe('none')
+    })
+
+    it('do not send another application to look for a session', async () => {
+      const browser = fakeBrowser()
+      leave(browser, 'client-1')
+
+      expect(await (await open('client-2')).checkSession()).toBe(false)
+      expect(JSON.stringify(browser.localStorage)).not.toContain('old-')
+    })
+  })
+})
+
 describe('checkSession', () => {
   it('stays on the page for a browser nobody has signed in on', async () => {
     const browser = fakeBrowser()

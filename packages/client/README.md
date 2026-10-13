@@ -168,7 +168,7 @@ const client = new AuthwayClient({
   redirectUri: window.location.origin,
   scope: 'openid profile email',
   audience: 'https://api.example.com',
-  cacheLocation: 'localstorage',  // 'localstorage' (기본값) | 'sessionstorage' | 'memory'
+  cacheLocation: 'sessionstorage',  // 'sessionstorage' (기본값) | 'localstorage' | 'memory'
   useDPoP: false,  // DPoP (RFC 9449) 사용 여부
 
   // OIDC issuer 직접 지정 (authway-config 조회 생략, 엔드포인트는 여전히 discovery 로)
@@ -180,8 +180,8 @@ const client = new AuthwayClient({
 
 | `cacheLocation` | 새로고침 | 새 탭 |
 |---|---|---|
-| `'localstorage'` (기본값) | 로그인 유지 | 로그인 유지 |
-| `'sessionstorage'` | 로그인 유지 | 토큰 없음 |
+| `'sessionstorage'` (기본값) | 로그인 유지 | 토큰 없음 |
+| `'localstorage'` | 로그인 유지 | 로그인 유지 |
 | `'memory'` | 토큰 없음 | 토큰 없음 |
 
 토큰이 없는 페이지는 `checkSession()` 으로 되살린다 — 사용자가 Authway 에 로그인해 둔 세션이 살아 있으면

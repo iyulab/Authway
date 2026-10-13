@@ -69,7 +69,7 @@ interface AuthwayConfig {
   redirectUri?: string        // Redirect URI (default: window.location.origin)
   scope?: string              // OAuth scopes (default: 'openid profile email')
   audience?: string           // Token audience
-  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // Where tokens are kept (default: 'localstorage')
+  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // Where tokens are kept (default: 'sessionstorage')
   useRefreshTokens?: boolean  // Ask for a refresh token (default: false)
 }
 ```
@@ -78,9 +78,11 @@ interface AuthwayConfig {
 
 `cacheLocation` decides where the access, ID and refresh tokens are kept:
 
-- `'localstorage'` (the default) — in the browser's `localStorage`: the user stays signed in across page reloads, tabs and browser restarts.
-- `'sessionstorage'` — in the tab's `sessionStorage`: they survive a reload and end with the tab. A new tab starts without them.
+- `'sessionstorage'` (the default) — in the tab's `sessionStorage`: they survive a reload and end with the tab. A new tab starts without them.
+- `'localstorage'` — in the browser's `localStorage`: the user stays signed in across page reloads, tabs and browser restarts, and the tokens stay on the device until logout.
 - `'memory'` — in the client instance only. Nothing is persisted; a reload or a new tab starts without them.
+
+The keys carry the client id (`authway.cache.<clientId>.…`), so applications served from one origin do not read or clear each other's tokens.
 
 A page that starts without tokens gets them back from the user's session at the provider with [`checkSession()`](#checksession). No location keeps tokens from a script running on the page; see [Where the SDK keeps tokens](FEATURES.md#where-the-sdk-keeps-tokens).
 
@@ -507,7 +509,7 @@ interface AuthwayConfig {
   redirectUri?: string
   scope?: string
   audience?: string
-  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // default: 'localstorage'
+  cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'  // default: 'sessionstorage'
 }
 ```
 

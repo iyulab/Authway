@@ -436,9 +436,12 @@ place its `cacheLocation` option names:
 
 | `cacheLocation` | Where | On a page reload | In a new tab |
 |-----------------|-------|------------------|--------------|
-| `'localstorage'` (default) | The browser's `localStorage`, under keys starting with `authway.` | The user stays signed in | Signed in |
-| `'sessionstorage'` | The tab's `sessionStorage` | The user stays signed in | No tokens — see below |
+| `'sessionstorage'` (default) | The tab's `sessionStorage` | The user stays signed in | No tokens — see below |
+| `'localstorage'` | The browser's `localStorage`, until logout | The user stays signed in | Signed in |
 | `'memory'` | The client instance only — nothing is persisted | No tokens — see below | No tokens — see below |
+
+In either storage the keys start with `authway.cache.<clientId>.` — two
+applications on one origin keep their tokens apart.
 
 A page without tokens does not mean a user who has to sign in again. Signing
 in opens a session at Authway ([Sessions](api/login-flows.md#sessions)), and
@@ -572,8 +575,8 @@ fetch(tokenEndpoint, {
 #### Storage
 
 - ✅ Tokens out of storage altogether: `cacheLocation: 'memory'`, with `checkSession()` (the React provider calls it) bringing the user back after a reload
-- ✅ Tokens that end with the tab: `cacheLocation: 'sessionstorage'`
-- ✅ Signed in across tabs and browser restarts without a round trip: the SDK default (`'localstorage'`)
+- ✅ Tokens that end with the tab, and no round trip on a reload: the SDK default (`'sessionstorage'`)
+- ✅ Signed in across tabs and browser restarts without a round trip: `cacheLocation: 'localstorage'` — the tokens then stay on the device until logout
 - ✅ Whichever it is: a strict Content Security Policy and short token lifetimes — no location protects tokens from a script running in the page
 - ✅ Server-side app: tokens stay on the server, behind an HttpOnly session cookie (`Secure`, `SameSite`)
 - ❌ Don't keep your own copies of tokens outside the SDK

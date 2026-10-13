@@ -65,8 +65,9 @@ export interface AuthwayConfig {
    *
    * No location keeps tokens from a script running in the page — one that
    * cannot read them can still ask the provider for new ones. The choice is
-   * how long, and how widely, tokens lie around.
-   * @default 'localstorage'
+   * how long, and how widely, tokens lie around: the default leaves none
+   * behind when the tab is closed, and costs no round trip on a reload.
+   * @default 'sessionstorage'
    */
   cacheLocation?: 'memory' | 'sessionstorage' | 'localstorage'
 

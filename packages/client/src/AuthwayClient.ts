@@ -25,7 +25,9 @@ import {
   decodeToken,
   extractUser,
   getTokenExpiration,
+  verifyAudience,
   createStorage,
+  removeUnscopedTokens,
   IStorage,
   buildUrl,
   parseCallbackUrl,
@@ -157,9 +159,10 @@ export class AuthwayClient {
 
   constructor(config: AuthwayConfig) {
     this.config = this.normalizeConfig(config)
-    this.storage = createStorage(this.config.cacheLocation)
+    this.storage = createStorage(this.config.cacheLocation, this.config.clientId)
     this.sessionStorage = createSessionStorage()
     this.sessionHint = createSessionHint(this.config.clientId)
+    this.dropUnscopedTokens()
     this.loadFromStorage()
 
     // Initialize DPoP if enabled
@@ -230,7 +233,7 @@ export class AuthwayClient {
       audience: config.audience,
       scope: withRefreshScope(config.scope || DEFAULT_SCOPE, config.useRefreshTokens ?? false),
       useRefreshTokens: config.useRefreshTokens ?? false,
-      cacheLocation: config.cacheLocation || 'localstorage',
+      cacheLocation: config.cacheLocation || 'sessionstorage',
       tenantId: config.tenantId,
       leeway: config.leeway || 60,
       maxAge: config.maxAge || 86400,
@@ -892,6 +895,18 @@ export class AuthwayClient {
     this.storage.clear()
   }
 
+  /**
+   * Tokens kept by a version that did not say whose they were are not used:
+   * they are removed, and if they were this client's, the user's session is
+   * what brings them back (`checkSession`).
+   */
+  private dropUnscopedTokens(): void {
+    const idToken = removeUnscopedTokens()
+    if (idToken && verifyAudience(idToken, this.config.clientId)) {
+      this.sessionHint.set()
+    }
+  }
+
   private loadFromStorage(): void {
     if (this.config.cacheLocation !== 'memory') {
       const accessToken = this.storage.get('accessToken')
@@ -904,7 +919,7 @@ export class AuthwayClient {
         this.cache.idToken = idToken
         this.cache.refreshToken = refreshToken
         this.cache.user = extractUser(idToken)
-        // Tokens stored by an earlier version came without the hint.
+        // The hint goes with the tokens, whatever became of it meanwhile.
         this.sessionHint.set()
 
         // Load expiration time from storage (supports opaque tokens)

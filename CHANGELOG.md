@@ -1,5 +1,34 @@
 ## [Unreleased]
 
+> `@authway/client` and `@authway/react` **0.5.0** are published with this
+> entry. They carry the SDK changes listed under 0.12.0 (`checkSession()`,
+> the `'sessionstorage'` location, `useRefreshTokens`) and the two below.
+
+### Changed
+
+- **SDK 0.5.0 (breaking): tokens are kept for the tab unless the application
+  says otherwise.** The default `cacheLocation` is `'sessionstorage'`; it was
+  `'localstorage'`. Tokens no longer stay on a device after the tab is
+  closed, and a reload still finds them. A new tab starts without them and
+  gets them from the user's session (`checkSession()`, which the React
+  provider calls on load) — one trip to the provider and back, nothing
+  shown. **For an application:** nothing to do to follow the default; pass
+  `cacheLocation: 'localstorage'` to keep the earlier behavior.
+
+### Fixed
+
+- **SDK 0.5.0 (breaking — where tokens are stored): two applications on one
+  origin no longer share tokens.** The stored tokens were under keys that
+  named no client, so a second application served from the same origin
+  loaded the first one's tokens as its own, and its logout removed them —
+  along with every other `authway.` key. The keys now carry the client id
+  (`authway.cache.<clientId>.…`) and a client clears only its own. Tokens
+  that 0.4.x left in `localStorage` are removed when the client starts; if
+  they were issued to this client, the user is brought back from their
+  session by `checkSession()` rather than from the old tokens. **For
+  applications that share an origin:** move them to 0.5.0 together — one
+  still on 0.4.x keeps its tokens under the keys the other removes.
+
 ## [0.12.0] - 2026-10-13
 
 > Minor, with changes an application will notice. Every sign-in opens a
