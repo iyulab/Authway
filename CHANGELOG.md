@@ -17,6 +17,18 @@
 
 ### Added
 
+- **A client can authenticate with a key instead of a secret
+  (`private_key_jwt`).** The provider's discovery document has listed the
+  method all along, and no registration could ask for it. A confidential
+  client registered with `token_endpoint_auth_method: "private_key_jwt"` and
+  its public keys (`jwks`, or `jwks_uri` to fetch them from) is given no
+  secret, and proves who it is at the token endpoint by signing an assertion
+  (RFC 7523). `PUT /clients/{id}` replaces the keys. A private key sent by
+  mistake is refused, and a key address is held to what a logout address is:
+  public and https. Every client now says how it authenticates
+  (`token_endpoint_auth_method` in the client answers). The method is fixed
+  at registration. Migration 034 adds the three columns. See
+  [Clients that hold a key](docs/api/client-management.md#clients-that-hold-a-key-instead-of-a-secret-private_key_jwt).
 - **Deployments can share one Redis: `AUTHWAY_REDIS_KEY_PREFIX`.** Set to a
   name, it puts every key the deployment reads or writes under `<name>:`.
   Until now the only way to keep two deployments apart on one Redis was a

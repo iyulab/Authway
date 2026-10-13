@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +56,14 @@ type Client struct {
 	// are for. It becomes the token's aud claim, which an API checks to accept
 	// only tokens issued for it.
 	Audience pq.StringArray `json:"audience" gorm:"type:text[];column:audience;default:'{}'"`
+
+	// TokenEndpointAuthMethod is how the client authenticates at the token
+	// endpoint when that is not what its kind implies (see AuthMethod):
+	// empty, or private_key_jwt. JWKS and JWKSURI are where such a client's
+	// public keys are — one or the other.
+	TokenEndpointAuthMethod string `json:"-" gorm:"column:token_endpoint_auth_method;not null;default:''"`
+	JWKS                    string `json:"-" gorm:"column:jwks;not null;default:''"`
+	JWKSURI                 string `json:"-" gorm:"column:jwks_uri;not null;default:''"`
 
 	// BackChannelLogoutURI is where the authorization server tells this
 	// client's backend that a user's session has ended (OpenID Connect
@@ -137,6 +146,12 @@ type PublicClient struct {
 	// Resource servers the client's access tokens are for.
 	Audience []string `json:"audience"`
 
+	// How the client authenticates at the token endpoint, and — for one
+	// that does so with a key — its public keys or where they are fetched.
+	TokenEndpointAuthMethod string          `json:"token_endpoint_auth_method"`
+	JWKS                    json.RawMessage `json:"jwks,omitempty"`
+	JWKSURI                 string          `json:"jwks_uri,omitempty"`
+
 	// Where the client's backend is told that a user's session has ended.
 	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
 
@@ -217,6 +232,10 @@ func (c *Client) ToPublic() PublicClient {
 
 		Audience: nonNil(c.Audience),
 
+		TokenEndpointAuthMethod: c.AuthMethod(),
+		JWKS:                    c.registeredKeys(),
+		JWKSURI:                 c.JWKSURI,
+
 		BackChannelLogoutURI: c.BackChannelLogoutURI,
 
 		// Auth provider settings
@@ -285,6 +304,14 @@ type CreateClientRequest struct {
 	// Audience: the resource servers the client's access tokens are for.
 	// Validated in validateAudience.
 	Audience []string `json:"audience"`
+
+	// TokenEndpointAuthMethod: how the client authenticates at the token
+	// endpoint. Empty takes what the kind of client implies — a secret for
+	// a confidential client, none for a public one. private_key_jwt takes
+	// JWKS or JWKSURI and gives the client no secret.
+	TokenEndpointAuthMethod string          `json:"token_endpoint_auth_method"`
+	JWKS                    json.RawMessage `json:"jwks"`
+	JWKSURI                 string          `json:"jwks_uri"`
 
 	// BackChannelLogoutURI: where the client's backend receives a logout
 	// token when a user's session ends. Validated in
@@ -391,6 +418,13 @@ type UpdateClientRequest struct {
 
 	// Audience: empty array means "clear", nil means "not provided".
 	Audience []string `json:"audience"`
+
+	// TokenEndpointAuthMethod cannot be changed: naming a different one is
+	// refused. JWKS / JWKSURI replace the keys of a client that authenticates
+	// with one (giving one clears the other).
+	TokenEndpointAuthMethod *string         `json:"token_endpoint_auth_method"`
+	JWKS                    json.RawMessage `json:"jwks"`
+	JWKSURI                 *string         `json:"jwks_uri"`
 
 	// BackChannelLogoutURI: "" means "clear", nil means "not provided".
 	BackChannelLogoutURI *string `json:"backchannel_logout_uri"`

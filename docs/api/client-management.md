@@ -148,6 +148,11 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
 | `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address (as written, or by what its host name resolves to) | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
 | `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
+| `invalid_token_endpoint_auth_method` | `token_endpoint_auth_method` is not one of `client_secret_post`, `private_key_jwt`, `none`; or does not fit the kind of client (`none` for a confidential one, a secret or a key for a public one); or a `client_secret` is given to a client that authenticates with a key | Leave it out for the default, or see [below](#clients-that-hold-a-key-instead-of-a-secret-private_key_jwt) |
+| `invalid_jwks` | A client that authenticates with a key gives neither or both of `jwks` and `jwks_uri`; `jwks` is not a set of 1 to 10 RSA, EC or OKP public keys, or holds a private key; or keys are given to a client that does not authenticate with one | Register the public half only: `{"keys": [{"kty": "RSA", "kid": "…", "n": "…", "e": "AQAB"}]}` |
+| `invalid_jwks_uri` | `jwks_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address | Give the public address the key set is served at |
+| `token_endpoint_auth_method_is_fixed` | An update names a different `token_endpoint_auth_method`, or would make a client that authenticates with a key public | Register a new client and move the application to it |
+| `client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a client that authenticates with a key | Update `jwks` or `jwks_uri` to change its key |
 
 ### Application-type matrix
 
@@ -251,3 +256,40 @@ client:
 This applies to tokens issued to a user (authorization code). A
 machine-to-machine client (`client_credentials`) names the audience it wants in
 its token request (`audience` parameter).
+
+### Clients that hold a key instead of a secret: `private_key_jwt`
+
+A confidential client is given a secret, and sends it to the token endpoint.
+A client that can keep a key need not share anything secret with the
+provider: it registers the public half and proves who it is by signing a
+short-lived assertion with the private half (RFC 7523). Nothing that would
+let someone act as the client is stored by the provider, and the key never
+leaves where the client runs.
+
+```json
+{
+  "name": "Orders gateway",
+  "public": false,
+  "grant_types": ["client_credentials"],
+  "token_endpoint_auth_method": "private_key_jwt",
+  "jwks": { "keys": [ { "kty": "RSA", "kid": "2026-10", "use": "sig", "n": "…", "e": "AQAB" } ] }
+}
+```
+
+- Give `jwks` (the key set itself) or `jwks_uri` (a public https address the
+  provider fetches it from), not both. The answer carries no `client_secret`.
+- At the token endpoint the client sends, in place of a secret,
+  `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
+  and `client_assertion=<JWT>`. The JWT has `iss` and `sub` equal to the
+  `client_id`, `aud` equal to the token endpoint's URL, a `jti` used once and
+  an `exp` a few minutes ahead, and names its key in the `kid` header.
+- **Changing the key:** `PUT /clients/{id}` with a new `jwks` (or
+  `jwks_uri`) replaces the set. To change keys without a gap, register the
+  new key alongside the old one, move the client to it, then remove the old
+  one. An assertion signed with a key no longer registered is refused.
+- How a client authenticates is decided when it is registered. To move an
+  application from a secret to a key, register a new client.
+- The method is offered where the provider's discovery document lists
+  `private_key_jwt` under `token_endpoint_auth_methods_supported`.
+- `POST /api/v1/oauth2/introspect` authenticates its caller with a client
+  secret: a client that holds a key cannot call it.

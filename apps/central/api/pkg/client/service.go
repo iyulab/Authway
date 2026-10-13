@@ -87,6 +87,19 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := s.validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
 		return nil, nil, cerr
 	}
+	registeredKeys, cerr := s.validateAuthentication(req.Public, req.TokenEndpointAuthMethod, req.JWKS, req.JWKSURI)
+	if cerr != nil {
+		return nil, nil, cerr
+	}
+	keyAuth := req.TokenEndpointAuthMethod == AuthMethodPrivateKeyJWT
+	if keyAuth && req.ClientSecret != "" {
+		return nil, nil, &ConfigError{
+			Code:    "invalid_token_endpoint_auth_method",
+			Field:   "client_secret",
+			Message: "a client that authenticates with a key has no secret",
+			Hint:    "Leave client_secret out. The client proves who it is by signing an assertion with its key.",
+		}
+	}
 
 	// Validate tenant_id
 	tenantID, err := uuid.Parse(req.TenantID)
@@ -124,6 +137,13 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		}
 		clientSecret = "" // Public clients don't need secrets (use PKCE instead)
 
+	} else if keyAuth {
+		// A client that authenticates with a key: an id, and no secret.
+		clientID = req.ClientID
+		if clientID == "" {
+			clientID = s.generateClientID()
+		}
+		clientSecret = ""
 	} else {
 		// Confidential Client (Backend) - both required or both generated
 		if req.ClientID != "" && req.ClientSecret != "" {
@@ -318,6 +338,11 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 
 	client.Audience = req.Audience
 	client.BackChannelLogoutURI = req.BackChannelLogoutURI
+	if keyAuth {
+		client.TokenEndpointAuthMethod = AuthMethodPrivateKeyJWT
+		client.JWKS = registeredKeys
+		client.JWKSURI = req.JWKSURI
+	}
 
 	// Logout Redirect Policy Configuration (Smart Defaults)
 	// Philosophy: Minimize boilerplate - auto-populate from redirect_uris if not explicitly set
@@ -466,6 +491,43 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, SyncStatus{}, cerr
 	}
+	// How a client authenticates is decided when it is registered. A change
+	// would leave the authorization server holding whatever the other method
+	// used — a secret that was meant to be gone would work again.
+	if req.TokenEndpointAuthMethod != nil && *req.TokenEndpointAuthMethod != client.AuthMethod() {
+		return nil, SyncStatus{}, &ConfigError{
+			Code:    "token_endpoint_auth_method_is_fixed",
+			Field:   "token_endpoint_auth_method",
+			Message: "how a client authenticates cannot be changed",
+			Hint:    "Register a new client with the method wanted and move the application to it.",
+		}
+	}
+	replacesKeys := len(req.JWKS) > 0 || req.JWKSURI != nil
+	var replacedKeys, replacedKeysURI string
+	if replacesKeys {
+		if mergedPublic != client.Public || !client.AuthenticatesWithKey() {
+			return nil, SyncStatus{}, &ConfigError{
+				Code:    "invalid_jwks",
+				Field:   "jwks",
+				Message: "a key is registered only for a client that authenticates with one",
+				Hint:    jwksHint,
+			}
+		}
+		if req.JWKSURI != nil {
+			replacedKeysURI = *req.JWKSURI
+		}
+		var cerr *ConfigError
+		if replacedKeys, cerr = s.validateAuthentication(false, AuthMethodPrivateKeyJWT, req.JWKS, replacedKeysURI); cerr != nil {
+			return nil, SyncStatus{}, cerr
+		}
+	} else if client.AuthenticatesWithKey() && mergedPublic {
+		return nil, SyncStatus{}, &ConfigError{
+			Code:    "token_endpoint_auth_method_is_fixed",
+			Field:   "public",
+			Message: "a client that authenticates with a key cannot become a public client",
+			Hint:    "Register a new public client and move the application to it.",
+		}
+	}
 	if req.BackChannelLogoutURI != nil {
 		if cerr := s.validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
 			return nil, SyncStatus{}, cerr
@@ -531,6 +593,10 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// Audience: nil = not provided, empty = clear
 	if req.Audience != nil {
 		client.Audience = req.Audience
+	}
+	if replacesKeys {
+		client.JWKS = replacedKeys
+		client.JWKSURI = replacedKeysURI
 	}
 	if req.BackChannelLogoutURI != nil {
 		client.BackChannelLogoutURI = *req.BackChannelLogoutURI
@@ -721,6 +787,14 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 			Hint:    "A public client authenticates with PKCE instead of a secret. Register a confidential client if the application can keep a secret.",
 		}
 	}
+	if client.AuthenticatesWithKey() {
+		return nil, SyncStatus{}, &ConfigError{
+			Code:    "client_has_no_secret",
+			Field:   "token_endpoint_auth_method",
+			Message: "This client authenticates with a key and has no secret",
+			Hint:    "To change its key, update jwks or jwks_uri.",
+		}
+	}
 
 	// Generate new secret
 	newSecret := s.generateClientSecret()
@@ -813,10 +887,7 @@ func nonNilURIs(uris []string) []string {
 // update replaces the whole client there, so a field one of them left out
 // would be reset.
 func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
-	authMethod := "client_secret_post"
-	if c.Public {
-		authMethod = "none"
-	}
+	authMethod := c.AuthMethod()
 
 	// A client that names no post-logout address may return to its redirect
 	// addresses, so that signing out works without further configuration.
@@ -840,6 +911,8 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		ResponseTypes:                    []string{"code"},
 		Scope:                            strings.Join(c.Scopes, " "),
 		TokenEndpointAuthMethod:          authMethod,
+		JWKS:                             c.registeredKeys(),
+		JWKSURI:                          c.JWKSURI,
 		SkipConsent:                      c.SkipConsent,
 		SkipLogoutConsent:                c.SkipLogoutConsent,
 		AccessTokenStrategy:              derefStrategy(c.AccessTokenStrategy),

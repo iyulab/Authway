@@ -101,6 +101,11 @@ type OAuth2Client struct {
 	ResponseTypes                    []string `json:"response_types"`
 	Scope                            string   `json:"scope"`
 	TokenEndpointAuthMethod          string   `json:"token_endpoint_auth_method"`
+	// JWKS / JWKSURI are the public keys of a client that authenticates with
+	// a signed assertion (private_key_jwt). Omitted when empty, which on an
+	// update clears them.
+	JWKS    json.RawMessage `json:"jwks,omitempty"`
+	JWKSURI string          `json:"jwks_uri,omitempty"`
 
 	// Consent flow configuration (Hydra admin-API-only fields).
 	// Deliberately NOT omitempty: the Authway DB is the source of truth, so a
