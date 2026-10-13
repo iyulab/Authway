@@ -304,12 +304,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	} else {
 		client.EnabledAuthProviders = []string{"email", "google"}
 	}
-	// AllowEmailSignup: default to true
-	if req.AllowEmailSignup != nil {
-		client.AllowEmailSignup = *req.AllowEmailSignup
-	} else {
-		client.AllowEmailSignup = true
-	}
 	// AllowEmailLogin: default to true
 	if req.AllowEmailLogin != nil {
 		client.AllowEmailLogin = *req.AllowEmailLogin
@@ -563,9 +557,6 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// EnabledAuthProviders: nil = not provided, empty array = clear all
 	if req.EnabledAuthProviders != nil {
 		client.EnabledAuthProviders = req.EnabledAuthProviders
-	}
-	if req.AllowEmailSignup != nil {
-		client.AllowEmailSignup = *req.AllowEmailSignup
 	}
 	if req.AllowEmailLogin != nil {
 		client.AllowEmailLogin = *req.AllowEmailLogin

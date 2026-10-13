@@ -1879,7 +1879,6 @@ components:
               description: What to offer, in order — "email" for the password form, "magic_link", then social providers.
               type: array
               items: { type: string }
-            allow_email_signup: { type: boolean }
         hints:
           description: |
             What the application's authorization request asked of the sign-in

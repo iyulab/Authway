@@ -15,6 +15,17 @@
   shown. **For an application:** nothing to do to follow the default; pass
   `cacheLocation: 'localstorage'` to keep the earlier behavior.
 
+### Removed
+
+- **A client's `allow_email_signup` is gone (breaking).** It was stored,
+  returned and shown as a checkbox in the console, and decided nothing: there
+  is no password sign-up, and whether a first sign-in may create an account
+  is the tenant's `signup_mode` (with `allowed_domains`). It is no longer
+  accepted or returned by the client endpoints, nor carried in the answer of
+  `GET /api/v1/login-flows/{flow}` (`client.allow_email_signup`). **For a
+  caller:** stop sending it — it is ignored — and stop reading it. The column
+  itself is dropped in a later release.
+
 ### Fixed
 
 - **SDK 0.5.0 (breaking — where tokens are stored): two applications on one

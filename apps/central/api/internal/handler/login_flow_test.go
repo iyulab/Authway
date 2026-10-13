@@ -81,7 +81,6 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	c := &client.Client{
 		ID: uuid.New(), TenantID: tenantID, ClientID: testClientID,
 		EnabledAuthProviders: []string{"email", "github"},
-		AllowEmailSignup:     false,
 		AllowEmailLogin:      true,
 		GithubOAuthEnabled:   true,
 	}
@@ -113,8 +112,8 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	if len(methods) != 2 || methods[0] != "email" || methods[1] != "github" {
 		t.Errorf("client.sign_in_methods = %v, want [email github]", cl["sign_in_methods"])
 	}
-	if cl["allow_email_signup"] != false {
-		t.Errorf("client sign-in settings = %v", cl)
+	if _, ok := cl["allow_email_signup"]; ok {
+		t.Errorf("the flow still carries allow_email_signup, which decided nothing: %v", cl)
 	}
 	if h.acceptCount != 0 {
 		t.Errorf("a flow that needs the form must not be accepted (accepts = %d)", h.acceptCount)

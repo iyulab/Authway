@@ -32,7 +32,6 @@ interface ClientAuthConfig {
   client_id?: string
   /** What to offer, in order: "email" for the password form, then social providers. */
   sign_in_methods?: string[]
-  allow_email_signup?: boolean
 }
 
 /**

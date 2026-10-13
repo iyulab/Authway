@@ -64,8 +64,14 @@ type Client struct {
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
-	AllowEmailSignup     bool           `json:"allow_email_signup" gorm:"column:allow_email_signup"`
 	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login"`
+
+	// AllowEmailSignup decided nothing: there is no password sign-up, and
+	// whether a first sign-in may create an account is the tenant's
+	// signup_mode. Nothing writes or reads it (the column takes its default);
+	// it stays mapped, read-only, until a migration drops the column.
+	// TODO: drop clients.allow_email_signup, then this field.
+	AllowEmailSignup bool `json:"-" gorm:"->;column:allow_email_signup"`
 
 	// Consent Flow Configuration
 	// SkipConsent bypasses the OAuth consent screen; SkipLogoutConsent bypasses
@@ -143,7 +149,6 @@ type PublicClient struct {
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailSignup     bool     `json:"allow_email_signup"`
 	AllowEmailLogin      bool     `json:"allow_email_login"`
 
 	// Access Token Format (null = inherit the deployment-wide strategy)
@@ -223,7 +228,6 @@ func (c *Client) ToPublic() PublicClient {
 
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
-		AllowEmailSignup:     c.AllowEmailSignup,
 		AllowEmailLogin:      c.AllowEmailLogin,
 
 		AccessTokenStrategy: c.AccessTokenStrategy,
@@ -297,8 +301,7 @@ type CreateClientRequest struct {
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailSignup     *bool    `json:"allow_email_signup"` // Pointer to use default if not provided
-	AllowEmailLogin      *bool    `json:"allow_email_login"`  // Pointer to use default if not provided
+	AllowEmailLogin      *bool    `json:"allow_email_login"` // Pointer to use default if not provided
 
 	// Consent Flow Configuration (default: false — consent/logout screens shown)
 	SkipConsent       bool `json:"skip_consent"`
@@ -403,7 +406,6 @@ type UpdateClientRequest struct {
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	// Empty array means "clear all", nil means "not provided"
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailSignup     *bool    `json:"allow_email_signup"`
 	AllowEmailLogin      *bool    `json:"allow_email_login"`
 
 	// Consent Flow Configuration (pointer: nil = not provided, allows explicit false)

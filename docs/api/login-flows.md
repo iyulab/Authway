@@ -60,8 +60,7 @@ Errors carry `error` (a message to show) and `code`. An unknown flow id is
   "requested_scope": ["openid", "email"],
   "client": {
     "client_id": "…",
-    "sign_in_methods": ["email", "magic_link", "google"],
-    "allow_email_signup": false
+    "sign_in_methods": ["email", "magic_link", "google"]
   }
 }
 ```

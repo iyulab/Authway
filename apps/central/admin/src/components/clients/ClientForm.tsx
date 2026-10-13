@@ -53,7 +53,6 @@ export const clientFormSchema = z.object({
   public: z.boolean(),
   // Authentication Provider Settings
   enabled_auth_providers: z.array(z.string()).optional(),
-  allow_email_signup: z.boolean().optional(),
   allow_email_login: z.boolean().optional(),
   // Consent Flow Configuration
   skip_consent: z.boolean().optional(),
@@ -188,7 +187,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           scopes: initialData.scopes,
           public: initialData.public,
           enabled_auth_providers: initialData.enabled_auth_providers || ['email', 'google'],
-          allow_email_signup: initialData.allow_email_signup ?? true,
           allow_email_login: initialData.allow_email_login ?? true,
           access_token_strategy: initialData.access_token_strategy || '',
           skip_consent: initialData.skip_consent || false,
@@ -199,7 +197,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           scopes: ['openid'],
           public: false,
           enabled_auth_providers: ['email', 'google'],
-          allow_email_signup: true,
           allow_email_login: true,
           skip_consent: false,
           skip_logout_consent: false,
@@ -404,11 +401,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         />
 
         <div className="mt-4 space-y-3">
-          <Checkbox
-            {...register('allow_email_signup')}
-            label="Allow Email/Password Signup"
-            description="Allow new users to register with email and password. Disable to only allow social login."
-          />
           <Checkbox
             {...register('allow_email_login')}
             label="Allow Email/Password Login"
