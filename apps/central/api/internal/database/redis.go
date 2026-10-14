@@ -22,21 +22,7 @@ func ConnectRedis(cfg config.RedisConfig) (redis.UniversalClient, error) {
 		return nil, fmt.Errorf("redis: a cluster has database 0 only, not %d — keep deployments apart with a key prefix (AUTHWAY_REDIS_KEY_PREFIX)", cfg.DB)
 	}
 
-	opts := &redis.UniversalOptions{
-		Addrs:         []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)},
-		Password:      cfg.Password,
-		DB:            cfg.DB,
-		IsClusterMode: cfg.Cluster,
-	}
-
-	// Enable TLS for Azure Redis
-	if cfg.TLSEnabled {
-		opts.TLSConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		}
-	}
-
-	client := redis.NewUniversalClient(opts)
+	client := redis.NewUniversalClient(redisOptions(cfg))
 	UseKeyPrefix(client, keyPrefix)
 
 	// Test connection
@@ -46,4 +32,24 @@ func ConnectRedis(cfg config.RedisConfig) (redis.UniversalClient, error) {
 	}
 
 	return client, nil
+}
+
+func redisOptions(cfg config.RedisConfig) *redis.UniversalOptions {
+	opts := &redis.UniversalOptions{
+		Addrs:         []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)},
+		Password:      cfg.Password,
+		DB:            cfg.DB,
+		IsClusterMode: cfg.Cluster,
+	}
+
+	// The certificate is checked against the host the deployment names, not
+	// the address a node is reached at: a cluster announces its nodes by IP
+	// (CLUSTER SLOTS), and a managed Redis's certificate names hosts only.
+	if cfg.TLSEnabled {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: cfg.Host,
+		}
+	}
+	return opts
 }

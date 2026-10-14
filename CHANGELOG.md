@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Fixed
+
+- **`AUTHWAY_REDIS_CLUSTER=true` with TLS reaches a managed Redis.** A cluster
+  announces its nodes by IP address, and the API checked each node's
+  certificate against that address — a certificate that names hosts only, as a
+  managed Redis's does, failed every connection, so the API did not start. The
+  certificate is now checked against `AUTHWAY_REDIS_HOST` for every node.
+
 ## [0.14.0] - 2026-10-15
 
 > Minor. New: devices sign in with a code the user enters elsewhere

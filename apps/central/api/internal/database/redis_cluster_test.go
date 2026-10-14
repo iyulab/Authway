@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"os"
@@ -17,7 +18,8 @@ import (
 
 // clusterConfig points at a Redis Cluster for the length of a test, or skips
 // it. REDIS_CLUSTER_ADDR is host:port of any node (e.g. a three-node cluster
-// on 127.0.0.1:7000-7002).
+// on 127.0.0.1:7000-7002). REDIS_CLUSTER_PASSWORD and REDIS_CLUSTER_TLS=true
+// point it at a managed cluster instead, which takes both.
 func clusterConfig(t *testing.T) config.RedisConfig {
 	t.Helper()
 	addr := os.Getenv("REDIS_CLUSTER_ADDR")
@@ -29,7 +31,13 @@ func clusterConfig(t *testing.T) config.RedisConfig {
 	if !ok || err != nil {
 		t.Fatalf("REDIS_CLUSTER_ADDR %q is not host:port", addr)
 	}
-	return config.RedisConfig{Host: host, Port: p, Cluster: true}
+	return config.RedisConfig{
+		Host:       host,
+		Port:       p,
+		Password:   os.Getenv("REDIS_CLUSTER_PASSWORD"),
+		TLSEnabled: os.Getenv("REDIS_CLUSTER_TLS") == "true",
+		Cluster:    true,
+	}
 }
 
 // On a cluster the API reads and writes keys that live on different nodes,
@@ -83,7 +91,11 @@ func TestConnectRedis_ClusterServesEveryCommandUnderThePrefix(t *testing.T) {
 	}
 
 	// The keys are where the prefix says, on the nodes that own them.
-	raw := redis.NewClusterClient(&redis.ClusterOptions{Addrs: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)}})
+	rawOpts := &redis.ClusterOptions{Addrs: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)}, Password: cfg.Password}
+	if cfg.TLSEnabled {
+		rawOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: cfg.Host}
+	}
+	raw := redis.NewClusterClient(rawOpts)
 	defer raw.Close()
 	if n, err := raw.Exists(ctx, cfg.KeyPrefix+":k1").Result(); err != nil || n != 1 {
 		t.Fatalf("the prefixed key is not there: %d, %v", n, err)
@@ -101,6 +113,9 @@ func TestConnectRedis_ClusterServesEveryCommandUnderThePrefix(t *testing.T) {
 // for every key another node owns — the failure the setting exists for.
 func TestConnectRedis_ASingleNodeClientCannotUseACluster(t *testing.T) {
 	cfg := clusterConfig(t)
+	if primaries := clusterPrimaries(t, cfg); primaries < 2 {
+		t.Skipf("the cluster has %d primary; every key is on the node a single-node client reaches", primaries)
+	}
 	cfg.Cluster = false
 	client, err := ConnectRedis(cfg)
 	if err != nil {
@@ -119,6 +134,27 @@ func TestConnectRedis_ASingleNodeClientCannotUseACluster(t *testing.T) {
 	if moved == 0 {
 		t.Fatal("expected MOVED for keys other nodes own")
 	}
+}
+
+// clusterPrimaries counts the nodes that own slots.
+func clusterPrimaries(t *testing.T, cfg config.RedisConfig) int {
+	t.Helper()
+	client, err := ConnectRedis(cfg)
+	if err != nil {
+		t.Fatalf("ConnectRedis(cluster): %v", err)
+	}
+	defer client.Close()
+	slots, err := client.ClusterSlots(context.Background()).Result()
+	if err != nil {
+		t.Fatalf("CLUSTER SLOTS: %v", err)
+	}
+	primaries := map[string]bool{}
+	for _, s := range slots {
+		if len(s.Nodes) > 0 {
+			primaries[s.Nodes[0].Addr] = true
+		}
+	}
+	return len(primaries)
 }
 
 func TestConnectRedis_ClusterRefusesADatabaseNumber(t *testing.T) {
