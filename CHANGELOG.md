@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-15
+
+> Minor. New: devices sign in with a code the user enters elsewhere
+> (RFC 8628), the API can use a Redis Cluster, and the at-rest encryption key
+> can be changed. Fixed: the button in every message is readable, accepting
+> an invitation from its email no longer ends on an empty screen, and the
+> sign-in form no longer refuses short passwords. The Azure deploy passes
+> passwords and keys as Container App secrets. No breaking change for
+> applications; `capabilities` gains `device_authorization`.
+
 ### Added
 
 - **Device sign-in (RFC 8628).** A TV, a console or a command-line tool can
@@ -60,6 +70,18 @@
   instead of showing only a title, and an unusable invitation offers the way
   back to sign-in only when there is one.
 
+### Removed
+
+- **Settings the API no longer reads**: `AUTHWAY_JWT_ACCESS_TOKEN_SECRET`,
+  `AUTHWAY_JWT_REFRESH_TOKEN_SECRET` and the JWT lifetimes (tokens come from
+  the authorization server), and the retired Azure mail settings
+  (`AUTHWAY_EMAIL_USE_AZURE`, `AUTHWAY_EMAIL_AZURE_*`). The deploy scripts
+  stop setting them and remove them from the app; the configuration guide
+  and templates no longer list them. `CONFIGURATION.md` now lists the two
+  keys the API refuses to start without outside development
+  (`AUTHWAY_ADMIN_API_KEY`, `AUTHWAY_TOTP_ENCRYPTION_KEY`), and its key
+  generator for Windows draws from a cryptographic source.
+
 ### Security
 
 - **The Azure deploy scripts pass passwords and keys as Container App
@@ -72,18 +94,6 @@
   (`*_PASSWORD`, `*_KEY`, `*_SECRET`, `DSN`, `SECRETS_*`) carries its value in
   the clear. Values that were ever deployed in the clear
   stay readable in old revisions until they are changed.
-
-### Removed
-
-- **Settings the API no longer reads**: `AUTHWAY_JWT_ACCESS_TOKEN_SECRET`,
-  `AUTHWAY_JWT_REFRESH_TOKEN_SECRET` and the JWT lifetimes (tokens come from
-  the authorization server), and the retired Azure mail settings
-  (`AUTHWAY_EMAIL_USE_AZURE`, `AUTHWAY_EMAIL_AZURE_*`). The deploy scripts
-  stop setting them and remove them from the app; the configuration guide
-  and templates no longer list them. `CONFIGURATION.md` now lists the two
-  keys the API refuses to start without outside development
-  (`AUTHWAY_ADMIN_API_KEY`, `AUTHWAY_TOTP_ENCRYPTION_KEY`), and its key
-  generator for Windows draws from a cryptographic source.
 
 ## [0.13.0] - 2026-10-14
 
