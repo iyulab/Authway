@@ -22,10 +22,11 @@ $SharedDir = Split-Path -Parent $LibDir
 . (Join-Path $SharedDir "az-retry.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
 . (Join-Path $SharedDir "hydra-shared-env.ps1")
+. (Join-Path $SharedDir "app-secrets.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD')
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD')
     Set-AzureSubscription -EnvVars $envVars
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
@@ -82,6 +83,7 @@ try {
         } else {
             throw "환경 변수 업데이트 실패"
         }
+        Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP
     } else {
         Write-Host "📝 Hydra Container App 업데이트 중..." -ForegroundColor Yellow
         Write-Host "   이미지: iyulabimages.azurecr.io/hydra:v26.2.0" -ForegroundColor Gray
@@ -107,6 +109,17 @@ try {
         $dsnName = $envVars['AUTHWAY_DATABASE_NAME']
         $DSN = "postgres://${dsnUser}:${dsnPassword}@${dsnHost}:${dsnPort}/${dsnName}?sslmode=require"
 
+        # The DSN embeds the database password and SECRETS_SYSTEM encrypts
+        # what Hydra stores, so both go in as Container App secrets and the
+        # environment only names them (app-secrets.ps1). Each app holds its
+        # own copy: secrets belong to an app, not to the environment.
+        $hydraSecrets = [ordered]@{
+            'dsn'            = $DSN
+            'secrets-system' = $envVars['HYDRA_SECRETS_SYSTEM']
+        }
+        Write-Host "🔐 Container App 비밀 반영 중: $($hydraSecrets.Keys -join ', ')" -ForegroundColor Yellow
+        Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -Secrets $hydraSecrets
+
         # Hydra entrypoint를 매 배포마다 명시. args를 토큰 단위로 분리하여 az CLI parsing bug 회피
         # (--args "-c" 패턴은 az CLI가 -c를 자신의 옵션으로 파싱하여 실패함).
         # /bin/sh 래퍼 제거: hydra serve all 직접 토큰화. production에서 --dev 사용 불가.
@@ -117,8 +130,8 @@ try {
             --command "hydra" `
             --args "serve" "all" `
             --set-env-vars `
-                "DSN=$DSN" `
-                "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
+                "DSN=secretref:dsn" `
+                "SECRETS_SYSTEM=secretref:secrets-system" `
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
@@ -128,6 +141,7 @@ try {
                 $SharedEnv
 
         if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }
+        Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP
 
         if ($CONTAINER_APP_HYDRA_ADMIN) {
             Write-Host "🔄 Hydra Admin Container App 업데이트 중..." -ForegroundColor Yellow
@@ -141,6 +155,7 @@ try {
                     --username $envVars['ACR_USERNAME'] `
                     --password $envVars['ACR_PASSWORD'] | Out-Null
             }
+            Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP -Secrets $hydraSecrets
 
             az containerapp update `
                 --name $CONTAINER_APP_HYDRA_ADMIN `
@@ -149,12 +164,13 @@ try {
                 --command "hydra" `
                 --args "serve" "admin" `
                 --set-env-vars `
-                    "DSN=$DSN" `
-                    "SECRETS_SYSTEM=$($envVars['HYDRA_SECRETS_SYSTEM'])" `
+                    "DSN=secretref:dsn" `
+                    "SECRETS_SYSTEM=secretref:secrets-system" `
                     "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                     "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                     $SharedEnv | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Hydra admin 업데이트 실패" }
+            Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP
             Write-Host "   ✓ Hydra Admin 업데이트 완료" -ForegroundColor Green
             Write-Host ""
         }

@@ -10,6 +10,7 @@
 #     (OAUTH2_ALLOWED_TOP_LEVEL_CLAIMS 는 배포의 HYDRA_ALLOWED_TOP_LEVEL_CLAIMS 가
 #     더해진 값).
 #   - public: 흐름 URL 4 종.
+#   - public·admin 둘 다: 비밀(DSN·SECRETS_SYSTEM 등)이 평문 값이 아니라 secretref.
 #
 # 사용:
 #   verify/verify-hydra-env.ps1 -Target staging
@@ -29,6 +30,7 @@ $SharedDir = Join-Path (Split-Path -Parent $VerifyDir) "_shared"
 . (Join-Path $SharedDir "load-env.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
 . (Join-Path $SharedDir "hydra-shared-env.ps1")
+. (Join-Path $SharedDir "app-secrets.ps1")
 
 Write-Host ""
 Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
@@ -83,6 +85,12 @@ foreach ($app in $apps) {
         continue
     }
 
+    try {
+        Assert-NoPlaintextSecretEnv -App $app.Name -ResourceGroup $resourceGroup
+    } catch {
+        $failed = $true
+    }
+
     $actual = @{}
     foreach ($e in ($raw | ConvertFrom-Json)) { $actual[$e.name] = $e.value }
     foreach ($name in $shared.Keys) {
@@ -129,5 +137,5 @@ if ($failed) {
     exit 1
 }
 
-Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 공유 설정 전부, public 흐름 URL 4종)" -ForegroundColor Green
+Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 공유 설정 전부·비밀은 secretref, public 흐름 URL 4종)" -ForegroundColor Green
 exit 0

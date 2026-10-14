@@ -2,13 +2,15 @@
 
 ### Security
 
-- **The Azure deploy scripts pass passwords and keys to the API as Container
-  App secrets.** The admin API key, admin password, at-rest encryption key and
-  the database and Redis passwords went in as plain environment values, which
-  anyone who can read the app sees, and which every revision keeps. They are
-  now secrets the environment refers to with `secretref:`, and the deploy
-  fails if a variable named like a secret (`*_PASSWORD`, `*_KEY`, `*_SECRET`)
-  carries its value in the clear. Values that were ever deployed in the clear
+- **The Azure deploy scripts pass passwords and keys as Container App
+  secrets.** The API's admin API key, admin password, at-rest encryption key
+  and database and Redis passwords, and the authorization server's `DSN` and
+  `SECRETS_SYSTEM`, went in as plain environment values, which anyone who can
+  read the app sees, and which every revision keeps. They are now secrets the
+  environment refers to with `secretref:`. The deploy, and the authorization
+  server's environment check, fail if a variable named like a secret
+  (`*_PASSWORD`, `*_KEY`, `*_SECRET`, `DSN`, `SECRETS_*`) carries its value in
+  the clear. Values that were ever deployed in the clear
   stay readable in old revisions until they are changed.
 
 ### Removed
