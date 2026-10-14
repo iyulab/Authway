@@ -13,6 +13,23 @@
   what the current key sealed. See
   [Changing the at-rest key](CONFIGURATION.md#at-rest-encryption-key-32-bytes-base64).
 
+### Fixed
+
+- **The button in every message could not be read.** Its colours sat only in
+  a `<style>` block, which mail clients drop or apply in part, and the client
+  painted the link in its own colour — link blue on the button colour. The
+  verification, password reset, invitation and sign-in link messages now
+  style the button inline (on the cell, the link and the text), and ask for
+  the light colour scheme so dark mode does not invert it.
+- **Accepting an invitation from its email ended on an empty screen.** After
+  accepting, the page went on to the sign-in screen, which shows nothing
+  without the sign-in an app started — and an invitation opened from its
+  email has none. Such an acceptance now stays on the account-created screen
+  and says to sign in from the app; one made inside an app's sign-in still
+  goes on to it. The sign-in screen opened without a flow says the same
+  instead of showing only a title, and an unusable invitation offers the way
+  back to sign-in only when there is one.
+
 ### Security
 
 - **The Azure deploy scripts pass passwords and keys as Container App
