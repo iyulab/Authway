@@ -53,7 +53,10 @@ func (s *Service) SendVerificationEmail(toEmail, token string) error {
 	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
 	subject := "Authway - 이메일 인증"
-	body := s.renderVerificationTemplate(verificationLink)
+	body, err := renderEmailTemplate("verification", verificationLink)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body)
 }
@@ -63,7 +66,10 @@ func (s *Service) SendPasswordResetEmail(toEmail, token string) error {
 	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
 	subject := "Authway - 비밀번호 재설정"
-	body := s.renderPasswordResetTemplate(resetLink)
+	body, err := renderEmailTemplate("reset", resetLink)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body)
 }
@@ -71,7 +77,10 @@ func (s *Service) SendPasswordResetEmail(toEmail, token string) error {
 // SendInvitationEmail sends a tenant invitation link via SMTP
 func (s *Service) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
 	subject := fmt.Sprintf("Authway - %s 초대", tenantName)
-	body := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
+	body, err := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body)
 }
@@ -82,7 +91,10 @@ func (s *Service) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) er
 	if isNewUser {
 		subject = "Authway - 가입 및 로그인 링크"
 	}
-	body := renderMagicLinkTemplate(linkURL, isNewUser)
+	body, err := renderMagicLinkTemplate(linkURL, isNewUser)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body)
 }
@@ -155,20 +167,32 @@ func parseEmailTemplate(name, body string) (*template.Template, error) {
 	return t.Parse(body)
 }
 
-// renderEmailTemplate renders email HTML template (shared function)
-func renderEmailTemplate(templateType, link string) string {
+// renderEmailTemplate renders the verification or password reset message.
+func renderEmailTemplate(templateType, link string) (string, error) {
 	var tmpl string
-
-	if templateType == "verification" {
+	switch templateType {
+	case "verification":
 		tmpl = getVerificationTemplate()
-	} else if templateType == "reset" {
+	case "reset":
 		tmpl = getPasswordResetTemplate()
+	default:
+		return "", fmt.Errorf("email: no %q template", templateType)
 	}
+	return executeEmailTemplate(templateType, tmpl, map[string]string{"Link": link})
+}
 
-	t := template.Must(parseEmailTemplate(templateType, tmpl))
+// executeEmailTemplate renders a message. A message that fails to render is
+// an error, never a partial body: a partial body would still be sent.
+func executeEmailTemplate(name, body string, data any) (string, error) {
+	t, err := parseEmailTemplate(name, body)
+	if err != nil {
+		return "", fmt.Errorf("email: %s template: %w", name, err)
+	}
 	var buf bytes.Buffer
-	t.Execute(&buf, map[string]string{"Link": link})
-	return buf.String()
+	if err := t.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("email: rendering the %s message: %w", name, err)
+	}
+	return buf.String(), nil
 }
 
 // getVerificationTemplate returns verification email template
@@ -296,18 +320,8 @@ func getPasswordResetTemplate() string {
 `
 }
 
-// renderVerificationTemplate renders email verification HTML template
-func (s *Service) renderVerificationTemplate(verificationLink string) string {
-	return renderEmailTemplate("verification", verificationLink)
-}
-
-// renderPasswordResetTemplate renders password reset HTML template
-func (s *Service) renderPasswordResetTemplate(resetLink string) string {
-	return renderEmailTemplate("reset", resetLink)
-}
-
 // renderInvitationTemplate renders tenant invitation HTML template
-func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string) string {
+func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string) (string, error) {
 	tmpl := `
 <!DOCTYPE html>
 <html>
@@ -339,19 +353,16 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
 </body>
 </html>
 `
-	t := template.Must(parseEmailTemplate("invitation", tmpl))
-	var buf bytes.Buffer
-	t.Execute(&buf, map[string]string{
+	return executeEmailTemplate("invitation", tmpl, map[string]string{
 		"InviterName": inviterName,
 		"TenantName":  tenantName,
 		"Message":     message,
 		"InviteURL":   inviteURL,
 	})
-	return buf.String()
 }
 
 // renderMagicLinkTemplate renders passwordless magic link HTML template
-func renderMagicLinkTemplate(linkURL string, isNewUser bool) string {
+func renderMagicLinkTemplate(linkURL string, isNewUser bool) (string, error) {
 	headline := "🔗 로그인 링크"
 	intro := "아래 버튼을 클릭하여 Authway에 로그인하세요."
 	if isNewUser {
@@ -388,14 +399,11 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) string {
 </body>
 </html>
 `
-	t := template.Must(parseEmailTemplate("magiclink", tmpl))
-	var buf bytes.Buffer
-	t.Execute(&buf, map[string]string{
+	return executeEmailTemplate("magiclink", tmpl, map[string]string{
 		"Headline": headline,
 		"Intro":    intro,
 		"LinkURL":  linkURL,
 	})
-	return buf.String()
 }
 
 // ValidateEmail performs basic email validation

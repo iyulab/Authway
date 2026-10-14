@@ -41,8 +41,10 @@ func NewMFAHandler(mfaService mfa.Service, userService user.Service, logger *zap
 	}
 }
 
+// VerifyMFARequest carries the code from the authenticator being enrolled;
+// the service checks it.
 type VerifyMFARequest struct {
-	Code string `json:"code" validate:"required,len=6"`
+	Code string `json:"code"`
 }
 
 // tenantForUser resolves a user's tenant for audit entries. Unknown users fall

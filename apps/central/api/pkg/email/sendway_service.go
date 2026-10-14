@@ -93,7 +93,10 @@ func (s *SendwayEmailService) SendVerificationEmail(toEmail, token string) error
 	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
 	body := fmt.Sprintf("Authway 이메일 인증\n\n아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", verificationLink)
-	htmlBody := renderEmailTemplate("verification", verificationLink)
+	htmlBody, err := renderEmailTemplate("verification", verificationLink)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, "Authway - 이메일 인증", body, htmlBody)
 }
@@ -103,7 +106,10 @@ func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, token string) erro
 	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
 	body := fmt.Sprintf("Authway 비밀번호 재설정\n\n아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", resetLink)
-	htmlBody := renderEmailTemplate("reset", resetLink)
+	htmlBody, err := renderEmailTemplate("reset", resetLink)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, "Authway - 비밀번호 재설정", body, htmlBody)
 }
@@ -118,7 +124,10 @@ func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantNa
 		body += fmt.Sprintf("메시지:\n%s\n\n", message)
 	}
 	body += "본인이 알지 못하는 초대인 경우 이 이메일을 무시하셔도 됩니다."
-	htmlBody := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
+	htmlBody, err := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body, htmlBody)
 }
@@ -131,7 +140,10 @@ func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewU
 	}
 
 	body := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n이 링크는 일정 시간 후 만료됩니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL)
-	htmlBody := renderMagicLinkTemplate(linkURL, isNewUser)
+	htmlBody, err := renderMagicLinkTemplate(linkURL, isNewUser)
+	if err != nil {
+		return err
+	}
 
 	return s.sendEmail(toEmail, subject, body, htmlBody)
 }

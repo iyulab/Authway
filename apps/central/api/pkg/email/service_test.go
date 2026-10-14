@@ -44,7 +44,7 @@ func TestValidateEmail(t *testing.T) {
 func TestRenderEmailTemplate_EmbedsLinkForBothKnownTypes(t *testing.T) {
 	link := "https://auth.example.com/verify?token=abc123"
 
-	verification := renderEmailTemplate("verification", link)
+	verification := mustRender(t)(renderEmailTemplate("verification", link))
 	if !strings.Contains(verification, link) {
 		t.Error("expected the verification template to embed the link")
 	}
@@ -52,7 +52,7 @@ func TestRenderEmailTemplate_EmbedsLinkForBothKnownTypes(t *testing.T) {
 		t.Error("expected the verification template to use its own subject-matter heading")
 	}
 
-	reset := renderEmailTemplate("reset", link)
+	reset := mustRender(t)(renderEmailTemplate("reset", link))
 	if !strings.Contains(reset, link) {
 		t.Error("expected the reset template to embed the link")
 	}
@@ -68,7 +68,7 @@ func TestRenderEmailTemplate_EmbedsLinkForBothKnownTypes(t *testing.T) {
 // branch — an invitation sent with no personal message must not render an
 // empty message box, and one sent with a message must include it verbatim.
 func TestRenderInvitationTemplate_MessageIsConditional(t *testing.T) {
-	withoutMessage := renderInvitationTemplate("Alice", "Acme Corp", "", "https://app.example.com/invite/abc")
+	withoutMessage := mustRender(t)(renderInvitationTemplate("Alice", "Acme Corp", "", "https://app.example.com/invite/abc"))
 	if strings.Contains(withoutMessage, `class="message"`) {
 		t.Error("expected no message box when Message is empty")
 	}
@@ -76,7 +76,7 @@ func TestRenderInvitationTemplate_MessageIsConditional(t *testing.T) {
 		t.Error("expected inviter name and tenant name to appear regardless of Message")
 	}
 
-	withMessage := renderInvitationTemplate("Alice", "Acme Corp", "Welcome aboard!", "https://app.example.com/invite/abc")
+	withMessage := mustRender(t)(renderInvitationTemplate("Alice", "Acme Corp", "Welcome aboard!", "https://app.example.com/invite/abc"))
 	if !strings.Contains(withMessage, "Welcome aboard!") {
 		t.Error("expected the personal message to be embedded when provided")
 	}
@@ -88,12 +88,12 @@ func TestRenderInvitationTemplate_MessageIsConditional(t *testing.T) {
 func TestRenderMagicLinkTemplate_HeadlineDependsOnIsNewUser(t *testing.T) {
 	link := "https://auth.example.com/magic?token=xyz"
 
-	returning := renderMagicLinkTemplate(link, false)
+	returning := mustRender(t)(renderMagicLinkTemplate(link, false))
 	if strings.Contains(returning, "환영합니다") {
 		t.Error("expected the returning-user template to not use the welcome-new-user headline")
 	}
 
-	newUser := renderMagicLinkTemplate(link, true)
+	newUser := mustRender(t)(renderMagicLinkTemplate(link, true))
 	if !strings.Contains(newUser, "환영합니다") {
 		t.Error("expected the new-user template to use the welcome headline")
 	}
@@ -109,11 +109,12 @@ func TestRenderMagicLinkTemplate_HeadlineDependsOnIsNewUser(t *testing.T) {
 // class for it.
 func TestEveryMessageStylesItsButtonInline(t *testing.T) {
 	link := "https://auth.example.com/x?token=abc"
+	must := mustRender(t)
 	messages := map[string]string{
-		"verification": renderEmailTemplate("verification", link),
-		"reset":        renderEmailTemplate("reset", link),
-		"invitation":   renderInvitationTemplate("Alice", "Acme", "", link),
-		"magic link":   renderMagicLinkTemplate(link, false),
+		"verification": must(renderEmailTemplate("verification", link)),
+		"reset":        must(renderEmailTemplate("reset", link)),
+		"invitation":   must(renderInvitationTemplate("Alice", "Acme", "", link)),
+		"magic link":   must(renderMagicLinkTemplate(link, false)),
 	}
 	for name, html := range messages {
 		if strings.Contains(html, `class="button"`) || strings.Contains(html, ".button") {
@@ -136,5 +137,25 @@ func TestEveryMessageStylesItsButtonInline(t *testing.T) {
 	}
 	if !strings.Contains(messages["reset"], `bgcolor="#DC2626"`) {
 		t.Error("reset: expected its own (red) button colour")
+	}
+}
+
+// An unknown message type is an error, not an empty message that would
+// still be sent.
+func TestRenderEmailTemplate_RefusesAnUnknownType(t *testing.T) {
+	if html, err := renderEmailTemplate("welcome", "https://x.example"); err == nil || html != "" {
+		t.Fatalf("expected an error and no body, got %q, %v", html, err)
+	}
+}
+
+// mustRender unwraps a template render in a test: a message that fails to
+// render fails the test.
+func mustRender(t *testing.T) func(string, error) string {
+	return func(html string, err error) string {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return html
 	}
 }
