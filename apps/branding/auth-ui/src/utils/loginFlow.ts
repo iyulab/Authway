@@ -13,7 +13,7 @@ export interface FlowStep {
   code?: string
 }
 
-export type FlowKind = 'login-flows' | 'consent-flows' | 'logout-flows'
+export type FlowKind = 'login-flows' | 'consent-flows' | 'logout-flows' | 'device-flows'
 
 /** URL of a flow endpoint. The flow id is opaque; it is only ever passed back. */
 export function flowUrl(kind: FlowKind, flow: string, path = ''): string {

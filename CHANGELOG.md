@@ -2,6 +2,20 @@
 
 ### Added
 
+- **Device sign-in (RFC 8628).** A TV, a console or a command-line tool can
+  sign a user in with a code the user enters on another screen. Register a
+  client with the `urn:ietf:params:oauth:grant-type:device_code` grant
+  (public or confidential, no redirect URI needed); the device uses the
+  `device_authorization_endpoint` discovery has advertised all along. The
+  user's browser reaches the login UI's new device page, the code is checked
+  by `POST /api/v1/device-flows/{flow}`, and the sign-in then goes through the
+  usual login and consent screens to a page that sends the user back to the
+  device. Codes are eight capital letters, read without regard to case.
+  `capabilities.device_authorization` says it is offered. The authorization
+  server needs `URLS_DEVICE_VERIFICATION` (the API's `/device`) and
+  `URLS_DEVICE_SUCCESS` (the login UI's `/device/done`); the deploy scripts
+  set both. See [Device sign-in](docs/api/login-flows.md#device-sign-in).
+
 - **The API can use a Redis Cluster: `AUTHWAY_REDIS_CLUSTER=true`.** A Redis
   that shards keys over nodes — a managed Redis with the OSS cluster policy,
   or a self-run cluster — answers a key held on another node with `MOVED`,
