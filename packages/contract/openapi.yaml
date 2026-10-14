@@ -127,6 +127,7 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/LoginForm'
                   - $ref: '#/components/schemas/Redirect'
+                  - $ref: '#/components/schemas/TermsRequired'
         '400': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
@@ -151,13 +152,14 @@ paths:
                   type: boolean
       responses:
         '200':
-          description: Signed in, or a second factor is needed
+          description: Signed in, or a second factor or the tenant's terms are owed
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/Redirect'
                   - $ref: '#/components/schemas/MFARequired'
+                  - $ref: '#/components/schemas/TermsRequired'
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
@@ -170,7 +172,7 @@ paths:
       operationId: submitTOTP
       requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
       responses:
-        '200': { $ref: '#/components/responses/Redirect' }
+        '200': { $ref: '#/components/responses/SignedInOrTerms' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
@@ -181,7 +183,7 @@ paths:
       operationId: submitRecoveryCode
       requestBody: { $ref: '#/components/requestBodies/SecondFactor' }
       responses:
-        '200': { $ref: '#/components/responses/Redirect' }
+        '200': { $ref: '#/components/responses/SignedInOrTerms' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
@@ -204,8 +206,98 @@ paths:
         browser comes back to the login UI's second factor step —
         `{auth_ui}/mfa/verify?flow=…&mfa_challenge=…` — instead of going on
         to the application: the provider's word is one factor.
+
+        Likewise, when the user owes the tenant's terms (TermsRequired), the
+        browser comes back to `{auth_ui}/terms?flow=…&terms_challenge=…`; the
+        page reads what to show with GET /api/v1/login-flows/{flow}/terms.
       responses:
         '302': { description: "To the provider, or back to the application, the login UI's second factor step, or the error screen" }
+
+  /api/v1/login-flows/{flow}/terms:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    get:
+      operationId: getOwedTerms
+      summary: The terms a parked sign-in still has to accept
+      description: |
+        For a screen that arrives at the terms step by a page navigation (a
+        social sign-in) and has only the flow and the terms_challenge.
+        Offered when capabilities.terms_acceptance is true.
+      parameters:
+        - { name: terms_challenge, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: What to show
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TermsRequired' }
+        '400':
+          description: The terms_challenge is unknown, expired or of another flow (code invalid_terms_challenge)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    post:
+      operationId: acceptTerms
+      description: |
+        The user accepts every document the step showed. The acceptance is
+        recorded — document, version, time, and the application signed in to —
+        and the sign-in completes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terms_challenge, accepted]
+              properties:
+                terms_challenge: { type: string }
+                accepted:
+                  description: Each document shown, as kind and version. Must name exactly the documents owed now.
+                  type: array
+                  items:
+                    type: object
+                    required: [kind, version]
+                    properties:
+                      kind: { type: string }
+                      version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400':
+          description: |
+            `invalid_terms_challenge` — unknown, expired or of another flow.
+            `terms_mismatch` — the documents named are not the ones owed now
+            (a document was revised meanwhile): the answer carries `terms`, what
+            to show instead, and the same terms_challenge stays good. Do not
+            re-read the login flow for it — the flow has not been signed in to
+            yet and would offer the sign-in form again.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Error'
+                  - $ref: '#/components/schemas/TermsMismatch'
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/terms/decline:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: declineTerms
+      description: |
+        The user does not accept. The application gets `error=access_denied`;
+        nothing is recorded and the account, if any, is left as it is — the
+        next sign-in asks again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terms_challenge]
+              properties:
+                terms_challenge: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
 
   /api/v1/login-flows/{flow}/magic-link:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
@@ -255,13 +347,14 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/MagicLinkToken' }
       responses:
         '200':
-          description: Signed in, or a second factor is needed
+          description: Signed in, or a second factor or the tenant's terms are owed
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/Redirect'
                   - $ref: '#/components/schemas/MFARequired'
+                  - $ref: '#/components/schemas/TermsRequired'
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
@@ -743,6 +836,85 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /api/v1/tenants/{id}/terms:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: listTenantTerms
+      description: |
+        The documents the tenant's users accept when they sign in — one per
+        kind, the current version. None means nothing is asked. Offered when
+        capabilities.terms_acceptance is true. A provider may also accept a
+        credential scoped to the tenant (scope admin.terms:write).
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The current documents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [terms]
+                properties:
+                  terms: { type: array, items: { $ref: '#/components/schemas/TermsDocument' } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/tenants/{id}/terms/{kind}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - name: kind
+        in: path
+        required: true
+        description: Which document — any name the tenant chooses, such as terms_of_service or privacy_policy.
+        schema: { type: string, pattern: '^[a-z0-9_]{1,40}$' }
+    put:
+      tags: [admin]
+      operationId: publishTenantTerms
+      description: |
+        Makes this version the kind's current document. Users who have not
+        accepted it are asked at their next sign-in. Naming the version that
+        is already current changes only its address and title — nobody is
+        asked again.
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, url]
+              properties:
+                version: { type: string, minLength: 1, maxLength: 40 }
+                url: { type: string, description: 'Where the document is published — an https address the application hosts.' }
+                title: { type: string, maxLength: 200, description: What the sign-in screen calls it. }
+      responses:
+        '200':
+          description: The version was already current; its address and title are updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TermsDocument' }
+        '201':
+          description: The version is now current
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TermsDocument' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [admin]
+      operationId: retireTenantTerms
+      description: Stops asking for the kind. What users accepted stays recorded.
+      security: [{ adminKey: [] }]
+      responses:
+        '204': { description: Retired }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /api/v1/clients:
     get:
       tags: [admin]
@@ -1107,7 +1279,7 @@ paths:
       - { name: id, in: path, required: true, schema: { type: string } }
     get:
       tags: [admin]
-      operationId: getInvitation
+      operationId: getAdminInvitation
       security: [{ adminKey: [] }]
       responses:
         '200':
@@ -1740,6 +1912,34 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/{id}/terms-acceptances:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [admin]
+      operationId: listTermsAcceptances
+      description: |
+        What the user accepted and when, most recent first — for an
+        application that needs the record, not just the fact (a signed-in
+        user has accepted the current documents). Offered when
+        capabilities.terms_acceptance is true. A credential scoped to the
+        user's tenant (admin.terms:write) does not find users of other
+        tenants (404).
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The acceptances
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [acceptances]
+                properties:
+                  acceptances: { type: array, items: { $ref: '#/components/schemas/TermsAcceptance' } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     adminKey:
@@ -1843,6 +2043,14 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Redirect' }
+    SignedInOrTerms:
+      description: Signed in, or the tenant's terms are owed
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/Redirect'
+              - $ref: '#/components/schemas/TermsRequired'
     TooManyRequests:
       description: Rate limited; retry_after is in seconds
       content:
@@ -1931,6 +2139,56 @@ components:
         next: { const: mfa }
         mfa_challenge: { type: string, minLength: 1 }
         flow: { type: string, minLength: 1, description: The login flow the second factor belongs to. }
+
+    TermsDocument:
+      type: object
+      required: [kind, version, url]
+      properties:
+        kind: { type: string, description: 'Which document, e.g. terms_of_service or privacy_policy.' }
+        version: { type: string }
+        url: { type: string, description: Where the application publishes it. }
+        title: { type: string, description: What to call it on screen; absent means the screen names it from kind. }
+        published_at: { type: string, description: When this version became current (admin answers only). }
+
+    TermsRequired:
+      description: |
+        The user has proved who they are, second factor included, and has not
+        accepted the current version of every document the tenant asks for.
+        Show `terms` — each a link to the document — and answer with
+        POST /api/v1/login-flows/{flow}/terms or …/terms/decline, quoting
+        terms_challenge: it proves the earlier steps passed, as mfa_challenge
+        does. A sign-in that reuses the browser's session can owe it too.
+      type: object
+      required: [next, flow, terms_challenge, terms]
+      properties:
+        next: { const: terms }
+        flow: { type: string, minLength: 1 }
+        terms_challenge: { type: string, minLength: 1 }
+        terms:
+          description: Only the documents not yet accepted, ordered by kind.
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/TermsDocument' }
+
+    TermsMismatch:
+      type: object
+      required: [error, code, terms]
+      properties:
+        error: { type: string }
+        code: { const: terms_mismatch }
+        terms:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/TermsDocument' }
+
+    TermsAcceptance:
+      type: object
+      required: [kind, version, accepted_at]
+      properties:
+        kind: { type: string }
+        version: { type: string }
+        accepted_at: { type: string }
+        client_id: { type: string, description: The application the user was signing in to. }
 
     EmailSent:
       type: object
@@ -2459,7 +2717,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, device_authorization, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, device_authorization, terms_acceptance, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -2492,6 +2750,13 @@ components:
             registered with the `urn:ietf:params:oauth:grant-type:device_code`
             grant, and POST /api/v1/device-flows/{flow} behind the login UI's
             device page.
+          type: boolean
+        terms_acceptance:
+          description: |
+            A tenant can name documents its users accept at sign-in, version by
+            version (/api/v1/tenants/{id}/terms); a login flow then owes the
+            terms step (TermsRequired) until the user has accepted the current
+            versions.
           type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }
