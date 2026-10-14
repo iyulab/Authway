@@ -240,8 +240,6 @@ export const clientsApi = {
 }
 
 // Tenants API
-// Note: Admin API Key authentication is currently disabled in development mode
-// When AUTHWAY_ADMIN_API_KEY is set in backend, update VITE_ADMIN_API_KEY in .env.production
 export const tenantsApi = {
   list: (params?: { limit?: number; offset?: number }) =>
     api.get<Tenant[]>('/api/v1/tenants', { params }),
