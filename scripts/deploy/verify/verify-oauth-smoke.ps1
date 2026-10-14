@@ -20,6 +20,10 @@
 # 사용:
 #   verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 테넌트 UUID>
 #   verify/verify-oauth-smoke.ps1 -Target prod -Tenant <검증용 테넌트 UUID> -SkipAuditSmoke
+#   verify/verify-oauth-smoke.ps1 -Target staging -WithTerms
+#     — 약관 단계까지: 임시 테넌트를 만들어(실제 사용자가 있는 테넌트에 문서를 올리지
+#       않으려고) 문서 둘을 올리고, 로그인이 `next: terms` 로 멈추는지 → 동의 →
+#       동의 기록 → 나머지 전 구간. 끝나면 테넌트까지 지운다. -Tenant 는 무시된다.
 # ============================================================
 
 param(
@@ -27,8 +31,10 @@ param(
     [ValidateSet("prod", "staging")]
     [string]$Target,
 
-    [Parameter(Mandatory = $true)]
     [string]$Tenant,
+
+    # 약관 단계(docs/api/login-flows.md 「Terms」)까지 검증. 임시 테넌트를 쓴다.
+    [switch]$WithTerms,
 
     # audit_logs smoke(_shared/smoke-audit.ps1)를 이어서 실행하지 않으려면.
     [switch]$SkipAuditSmoke
@@ -99,7 +105,33 @@ if (-not (Initialize-PsqlPath)) {
     exit 1
 }
 
+if (-not $WithTerms -and -not $Tenant) {
+    Write-Host "❌ -Tenant 가 필요하다(또는 -WithTerms)" -ForegroundColor Red
+    exit 1
+}
+
+# 관리 API 호출(JSON 본문은 파일로 — Windows curl 의 따옴표 처리 회피).
+function Invoke-AdminJson {
+    param([string]$Method, [string]$Path, $Body)
+    $curlArgs = @('-s', '-w', "`n%{http_code}", '-X', $Method, "$apiUrl$Path", '-H', "Authorization: Bearer $adminKey")
+    $tmp = $null
+    if ($null -ne $Body) {
+        $tmp = [System.IO.Path]::GetTempFileName()
+        Set-Content -Path $tmp -Value ($Body | ConvertTo-Json -Compress -Depth 5) -NoNewline -Encoding UTF8
+        $curlArgs += @('-H', 'Content-Type: application/json', '--data', "@$tmp")
+    }
+    $out = & curl.exe @curlArgs
+    if ($tmp) { Remove-Item $tmp -ErrorAction SilentlyContinue }
+    $lines = ($out -join "`n") -split "`n"
+    $status = $lines[-1]
+    $text = ($lines[0..($lines.Count - 2)] -join "`n")
+    $json = $null
+    if ($text) { try { $json = $text | ConvertFrom-Json } catch { } }
+    return @{ Status = $status; Text = $text; Json = $json }
+}
+
 $suffix = New-VerifySuffix
+$termsTenantCreated = $false
 $verifyEmail = "verify-oauth-smoke-$suffix@authway.invalid"
 $cookieJar = [System.IO.Path]::GetTempFileName()
 $clientId = $null
@@ -114,6 +146,26 @@ try {
         $healthCode = & curl.exe -s -o NUL -w "%{http_code}" --max-time 10 "$apiUrl/health"
         if ($healthCode -eq '200') { break }
         Start-Sleep -Seconds 3
+    }
+
+    # --- 0. (-WithTerms) 임시 테넌트 + 문서 둘 ---
+    if ($WithTerms) {
+        Write-Host "0️⃣  임시 테넌트 + 약관 문서 둘" -ForegroundColor Yellow
+        $t = Invoke-AdminJson -Method POST -Path "/api/v1/tenants" -Body @{ name = "verify-terms-$suffix"; slug = "verify-terms-$suffix" }
+        if ($t.Status -ne '201' -or -not $t.Json.id) {
+            Write-Host "❌ 임시 테넌트 생성 실패(HTTP $($t.Status)): $($t.Text)" -ForegroundColor Red
+            exit 1
+        }
+        $Tenant = $t.Json.id
+        $termsTenantCreated = $true
+        foreach ($doc in @(@{ kind = 'terms_of_service'; version = "v-$suffix" }, @{ kind = 'privacy_policy'; version = "p-$suffix" })) {
+            $p = Invoke-AdminJson -Method PUT -Path "/api/v1/tenants/$Tenant/terms/$($doc.kind)" -Body @{ version = $doc.version; url = "https://example.com/$($doc.kind)" }
+            if ($p.Status -ne '201') {
+                Write-Host "❌ 문서 올리기 실패($($doc.kind), HTTP $($p.Status)): $($p.Text)" -ForegroundColor Red
+                exit 1
+            }
+        }
+        Write-Host "   ✅ tenant=$Tenant, 문서 2" -ForegroundColor Green
     }
 
     # --- 1. 검증용 client 생성 ---
@@ -190,6 +242,30 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         -H "Content-Type: application/json" --data "@$tmpBody"
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
     $loginJson = $loginResp | ConvertFrom-Json
+    if ($WithTerms) {
+        # 모든 요소 뒤, 수락 전에 약관 단계로 멈춰야 한다.
+        if ($loginJson.next -ne 'terms' -or -not $loginJson.terms_challenge -or @($loginJson.terms).Count -ne 2) {
+            Write-Host "❌ 약관 단계가 아님(문서 2 개를 기대): $loginResp" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ next=terms, 문서 $(@($loginJson.terms).Count) 개" -ForegroundColor Green
+        $accepted = @($loginJson.terms | ForEach-Object { @{ kind = $_.kind; version = $_.version } })
+        $acceptBody = @{ terms_challenge = $loginJson.terms_challenge; accepted = $accepted } | ConvertTo-Json -Compress -Depth 5
+        $tmpBody = [System.IO.Path]::GetTempFileName()
+        Set-Content -Path $tmpBody -Value $acceptBody -NoNewline -Encoding UTF8
+        $loginResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/api/v1/login-flows/$([uri]::EscapeDataString($loginFlow))/terms" `
+            -H "Content-Type: application/json" --data "@$tmpBody"
+        Remove-Item $tmpBody -ErrorAction SilentlyContinue
+        $loginJson = $loginResp | ConvertFrom-Json
+        $users = Invoke-AdminJson -Method GET -Path "/api/v1/users?tenant_id=$Tenant&limit=10"
+        $verifyUserId = @($users.Json.users | Where-Object { $_.email -eq $verifyEmail })[0].id
+        $acc = Invoke-AdminJson -Method GET -Path "/api/v1/users/$verifyUserId/terms-acceptances"
+        if ($acc.Status -ne '200' -or @($acc.Json.acceptances).Count -ne 2) {
+            Write-Host "❌ 동의 기록이 둘이 아님(HTTP $($acc.Status)): $($acc.Text)" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ 약관 동의 → 기록 2" -ForegroundColor Green
+    }
     if ($loginJson.next -ne 'redirect' -or -not $loginJson.redirect_to) {
         Write-Host "❌ 로그인 실패: $loginResp" -ForegroundColor Red
         exit 1
@@ -350,6 +426,12 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         $delCode = & curl.exe -s -o NUL -w "%{http_code}" -X DELETE "$apiUrl/api/v1/clients/$clientDbId" -H "Authorization: Bearer $adminKey"
         if ($delCode -notin @('200', '204')) {
             Write-Host "⚠️  검증용 client 삭제 실패(HTTP $delCode) — 수동 확인 필요: $clientId" -ForegroundColor Yellow
+        }
+    }
+    if ($termsTenantCreated) {
+        $delTenant = Invoke-AdminJson -Method DELETE -Path "/api/v1/tenants/$Tenant"
+        if ($delTenant.Status -notin @('200', '204')) {
+            Write-Host "⚠️  임시 테넌트 삭제 실패(HTTP $($delTenant.Status)) — 수동 확인 필요: $Tenant $($delTenant.Text)" -ForegroundColor Yellow
         }
     }
     Remove-Item $cookieJar -ErrorAction SilentlyContinue
