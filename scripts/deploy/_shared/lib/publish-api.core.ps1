@@ -141,6 +141,7 @@ try {
         Write-Host "🔑 이전 at-rest 키 포함 — 기동 시 재봉인" -ForegroundColor Gray
     }
     Write-Host "🔐 Container App 비밀 반영 중: $($appSecrets.Keys -join ', ')" -ForegroundColor Yellow
+    $revisionBefore = Get-LatestRevisionName -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP
     Set-ContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Secrets $appSecrets
     Write-Host "✓ 비밀 반영 완료" -ForegroundColor Green
     Write-Host ""
@@ -253,6 +254,7 @@ try {
     # referenced (the admin key lives in admin-api-key), and previous at-rest
     # keys once the .env no longer lists them.
     Remove-StaleContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Names $staleSecrets
+    Restart-IfNoNewRevision -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -RevisionBefore $revisionBefore
 
     Write-Host "🔐 환경 변수에 평문 비밀이 없는지 확인..." -ForegroundColor Yellow
     Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP

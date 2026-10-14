@@ -79,3 +79,51 @@ function Assert-NoPlaintextSecretEnv {
     }
     Write-Host "  ✓ $App — 비밀은 전부 secretref" -ForegroundColor Green
 }
+
+# A changed secret value reaches an app only when its replicas start: the
+# secret is read into the environment at container start. `az containerapp
+# update` makes a new revision only when the template changes, so a deploy
+# that changes a secret's value and nothing else leaves the running replicas
+# on the old value and still reports success. Take the latest revision name
+# before the update and pass it here after: when no new revision was made,
+# the active revisions are restarted. An app that may scale to zero counts as
+# done once it has: its next replica starts with the new values.
+function Get-LatestRevisionName {
+    param(
+        [Parameter(Mandatory = $true)][string]$App,
+        [Parameter(Mandatory = $true)][string]$ResourceGroup
+    )
+    $name = az containerapp show --name $App --resource-group $ResourceGroup --query "properties.latestRevisionName" -o tsv
+    if ($LASTEXITCODE -ne 0 -or -not $name) { throw "could not read the latest revision of $App" }
+    return "$name".Trim()
+}
+
+function Restart-IfNoNewRevision {
+    param(
+        [Parameter(Mandatory = $true)][string]$App,
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$RevisionBefore
+    )
+    $now = Get-LatestRevisionName -App $App -ResourceGroup $ResourceGroup
+    if ($now -ne $RevisionBefore) {
+        Write-Host "  ✓ $App — 새 리비전 $now (비밀 값은 새 복제본이 읽음)" -ForegroundColor Green
+        return
+    }
+    Write-Host "♻️  $App — 템플릿이 그대로라 새 리비전이 없음: 활성 리비전을 다시 시작해 비밀 값을 반영" -ForegroundColor Yellow
+    $active = @(az containerapp revision list --name $App --resource-group $ResourceGroup --query "[?properties.active].name" -o tsv)
+    if ($LASTEXITCODE -ne 0 -or $active.Count -eq 0) { throw "could not list the active revisions of $App" }
+    foreach ($rev in $active) {
+        Invoke-AzRetry -What "restart $rev" -Command {
+            az containerapp revision restart --name $App --resource-group $ResourceGroup --revision $rev -o none
+        }
+    }
+    foreach ($i in 1..24) {
+        Start-Sleep -Seconds 5
+        $states = @(az containerapp revision list --name $App --resource-group $ResourceGroup --query "[?properties.active].properties.runningState" -o tsv)
+        if ($states.Count -gt 0 -and -not ($states | Where-Object { $_ -notmatch '^(Running|ScaledToZero)' })) {
+            Write-Host "  ✓ $App — 재시작됨 ($($active -join ', '))" -ForegroundColor Green
+            return
+        }
+    }
+    throw "$App did not return to Running (or ScaledToZero) after the restart"
+}

@@ -118,6 +118,7 @@ try {
             'secrets-system' = $envVars['HYDRA_SECRETS_SYSTEM']
         }
         Write-Host "🔐 Container App 비밀 반영 중: $($hydraSecrets.Keys -join ', ')" -ForegroundColor Yellow
+        $revisionBefore = Get-LatestRevisionName -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP
         Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -Secrets $hydraSecrets
 
         # Hydra entrypoint를 매 배포마다 명시. args를 토큰 단위로 분리하여 az CLI parsing bug 회피
@@ -141,6 +142,7 @@ try {
                 $SharedEnv
 
         if ($LASTEXITCODE -ne 0) { throw "Hydra public 업데이트 실패" }
+        Restart-IfNoNewRevision -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -RevisionBefore $revisionBefore
         Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP
 
         if ($CONTAINER_APP_HYDRA_ADMIN) {
@@ -155,6 +157,7 @@ try {
                     --username $envVars['ACR_USERNAME'] `
                     --password $envVars['ACR_PASSWORD'] | Out-Null
             }
+            $adminRevisionBefore = Get-LatestRevisionName -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP
             Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP -Secrets $hydraSecrets
 
             az containerapp update `
@@ -170,6 +173,7 @@ try {
                     "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                     $SharedEnv | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Hydra admin 업데이트 실패" }
+            Restart-IfNoNewRevision -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP -RevisionBefore $adminRevisionBefore
             Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_HYDRA_ADMIN -ResourceGroup $RESOURCE_GROUP
             Write-Host "   ✓ Hydra Admin 업데이트 완료" -ForegroundColor Green
             Write-Host ""
