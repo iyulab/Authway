@@ -36,7 +36,7 @@ type DeviceCodeSubmission struct {
 
 // SubmitUserCode serves POST /api/v1/device-flows/:flow.
 func (h *DeviceFlowHandler) SubmitUserCode(c *fiber.Ctx) error {
-	flow := string([]byte(c.Params("flow")))
+	flow := flowParam(c)
 	var body DeviceCodeSubmission
 	if err := c.BodyParser(&body); err != nil {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
