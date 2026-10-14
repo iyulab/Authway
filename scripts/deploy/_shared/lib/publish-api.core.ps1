@@ -130,6 +130,16 @@ try {
         'redis-password'        = $envVars['AUTHWAY_REDIS_PASSWORD']
         'google-client-secret'  = $envVars['GOOGLE_CLIENT_SECRET']
     }
+    # While the at-rest key is being changed, the keys it replaced
+    # (comma-separated). The API reseals what they sealed at startup; once its
+    # log reports nothing unreadable they are removed from the .env, and the
+    # next deploy removes them from the app.
+    $optionalSecretEnv = @()
+    if ($envVars['AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS']) {
+        $appSecrets['totp-encryption-previous-keys'] = $envVars['AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS']
+        $optionalSecretEnv += 'AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS=secretref:totp-encryption-previous-keys'
+        Write-Host "🔑 이전 at-rest 키 포함 — 기동 시 재봉인" -ForegroundColor Gray
+    }
     Write-Host "🔐 Container App 비밀 반영 중: $($appSecrets.Keys -join ', ')" -ForegroundColor Yellow
     Set-ContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Secrets $appSecrets
     Write-Host "✓ 비밀 반영 완료" -ForegroundColor Green
@@ -173,6 +183,7 @@ try {
             "AUTHWAY_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
             "AUTHWAY_ADMIN_API_KEY=secretref:admin-api-key" `
             "AUTHWAY_TOTP_ENCRYPTION_KEY=secretref:totp-encryption-key" `
+            $optionalSecretEnv `
             "AUTHWAY_GOOGLE_ENABLED=true" `
             "AUTHWAY_GOOGLE_CLIENT_ID=$($envVars['GOOGLE_CLIENT_ID'])" `
             "AUTHWAY_GOOGLE_CLIENT_SECRET=secretref:google-client-secret" `
@@ -207,6 +218,11 @@ try {
     if (-not $envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
         $staleEnv += 'AUTHWAY_REDIS_KEY_PREFIX'
     }
+    $staleSecrets = @('authway-admin-api-key')
+    if (-not $envVars['AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS']) {
+        $staleEnv += 'AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS'
+        $staleSecrets += 'totp-encryption-previous-keys'
+    }
     $presentEnv = az containerapp show `
         --name $CONTAINER_APP_API `
         --resource-group $RESOURCE_GROUP `
@@ -225,9 +241,10 @@ try {
         }
     }
 
-    # A secret that was created by hand and never referenced; the admin key
-    # now lives in admin-api-key.
-    Remove-StaleContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Names @('authway-admin-api-key')
+    # Secrets nothing refers to any more: one created by hand and never
+    # referenced (the admin key lives in admin-api-key), and previous at-rest
+    # keys once the .env no longer lists them.
+    Remove-StaleContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Names $staleSecrets
 
     Write-Host "🔐 환경 변수에 평문 비밀이 없는지 확인..." -ForegroundColor Yellow
     Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP

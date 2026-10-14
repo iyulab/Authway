@@ -10,30 +10,27 @@ import (
 	"authway/apps/central/api/pkg/user"
 )
 
-// BackfillTOTPSecrets re-encrypts any legacy plaintext TOTP secrets in place.
+// ResealTOTPSecrets stores every TOTP secret sealed with the current at-rest
+// key: a secret stored in the clear (from before sealing, or while no key was
+// configured) is sealed, and one sealed with a previous key is opened and
+// sealed again. A secret already sealed with the current key is left alone,
+// so this runs on every startup alongside the schema migrations. Once it has
+// run with nothing left over, the previous keys can be removed.
 //
-// It is idempotent: rows already carrying the scheme prefix are skipped, so it
-// is safe to run on every startup alongside schema migrations. It is a no-op
-// when the cipher has no key configured (Enabled() == false) — without a key
-// there is nothing to encrypt to, and the lazy pass-through in Decrypt keeps
-// legacy plaintext working regardless.
+// It is a no-op when the cipher has no key configured (Enabled() == false) —
+// there is nothing to seal to, and Decrypt reads plaintext regardless.
 //
-// Because the lazy pass-through makes validation work whether or not this runs,
-// the backfill is a non-critical convergence step: a per-row failure is logged
-// and skipped rather than aborting, and the caller must NOT treat a returned
-// error as fatal (an unavailable IdP is worse than a still-plaintext secret).
+// It converges; it is not a precondition: Decrypt reads plaintext and opens
+// values sealed with any configured key, so validation works whether or not
+// this has run. A per-row failure is logged and skipped rather than aborting,
+// and the caller must NOT treat a returned error as fatal (an unavailable IdP
+// is worse than a secret not yet moved to the current key).
 //
-// Concurrency: the write is conditional on the plaintext still being present
-// (WHERE totp_secret = <read value>). If a user re-runs SetupTOTP mid-backfill
-// and stores a fresh secret, the stale write matches 0 rows and is skipped —
-// preventing a lost-update that would silently roll their secret back.
-//
-// NOTE: whether any plaintext rows actually exist in a given environment is not
-// known at build time (MFA setup is exposed but not enforced). This backfill is
-// written defensively so it converges correctly whether that count is zero or
-// not, without a separate SQL migration (the totp_secret column is already TEXT
-// and needs no schema change).
-func BackfillTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error {
+// Concurrency: the write is conditional on the stored value still being what
+// was read (WHERE totp_secret = <read value>). If a user re-runs SetupTOTP
+// meanwhile and stores a fresh secret, the stale write matches 0 rows and is
+// skipped — preventing a lost update that would roll their secret back.
+func ResealTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error {
 	if !c.Enabled() {
 		return nil
 	}
@@ -41,42 +38,45 @@ func BackfillTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error
 	// Deleted users are included: their rows hold the secret all the same.
 	var users []user.User
 	if err := db.Unscoped().Model(&user.User{}).
-		Where("totp_secret IS NOT NULL AND totp_secret <> '' AND totp_secret NOT LIKE ?", crypto.SealedPrefix+"%").
+		Where("totp_secret IS NOT NULL AND totp_secret <> ''").
 		Find(&users).Error; err != nil {
-		return fmt.Errorf("backfill: failed to load users with TOTP secrets: %w", err)
+		return fmt.Errorf("reseal: failed to load users with TOTP secrets: %w", err)
 	}
 
-	migrated, failed := 0, 0
+	resealed, unreadable, failed := 0, 0, 0
 	for _, u := range users {
-		if u.TOTPSecret == nil || crypto.IsEncrypted(*u.TOTPSecret) {
+		if u.TOTPSecret == nil {
 			continue
 		}
-		enc, err := c.Encrypt(*u.TOTPSecret)
+		value, changed, err := c.Reseal(*u.TOTPSecret)
 		if err != nil {
-			logger.Error("backfill: failed to encrypt TOTP secret",
+			// Sealed with a key that is not configured: it stays unreadable
+			// until that key is given back as a previous key.
+			logger.Error("reseal: a TOTP secret is not readable with any configured key",
 				zap.String("user_id", u.ID.String()), zap.Error(err))
-			failed++
+			unreadable++
 			continue
 		}
-		// Optimistic write: only replace the row if the plaintext we read is
-		// still there. A concurrent SetupTOTP wins → RowsAffected == 0, skipped.
+		if !changed {
+			continue
+		}
 		res := db.Unscoped().Model(&user.User{}).
 			Where("id = ? AND totp_secret = ?", u.ID, *u.TOTPSecret).
-			Update("totp_secret", enc)
+			Update("totp_secret", value)
 		if res.Error != nil {
-			logger.Error("backfill: failed to store encrypted TOTP secret",
+			logger.Error("reseal: failed to store a resealed TOTP secret",
 				zap.String("user_id", u.ID.String()), zap.Error(res.Error))
 			failed++
 			continue
 		}
 		if res.RowsAffected == 1 {
-			migrated++
+			resealed++
 		}
 	}
 
-	if migrated > 0 || failed > 0 {
-		logger.Info("Backfilled TOTP secret encryption",
-			zap.Int("migrated", migrated), zap.Int("failed", failed))
+	if resealed > 0 || unreadable > 0 || failed > 0 {
+		logger.Info("Resealed TOTP secrets with the current at-rest key",
+			zap.Int("resealed", resealed), zap.Int("unreadable", unreadable), zap.Int("failed", failed))
 	}
 	return nil
 }

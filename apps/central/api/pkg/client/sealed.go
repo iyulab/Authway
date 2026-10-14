@@ -95,44 +95,54 @@ func (sealedSerializer) Value(_ context.Context, field *schema.Field, _ reflect.
 	return atRest.Encrypt(*secret)
 }
 
-// SealStoredSecrets seals the provider secrets that were stored before sealing
-// was introduced, or while no key was configured. It does nothing without a
-// key, and nothing to a value that is already sealed.
-func SealStoredSecrets(svc Service, logger *zap.Logger) error {
+// ResealStoredSecrets stores every provider secret sealed with the current
+// at-rest key: one stored in the clear (from before sealing, or while no key
+// was configured) is sealed, and one sealed with a previous key is opened and
+// sealed again. It does nothing without a key, and nothing to a value already
+// sealed with the current key. A value no configured key opens is reported,
+// not fatal — the client stays unloadable until that key is given back.
+func ResealStoredSecrets(svc Service, logger *zap.Logger) error {
 	s, ok := svc.(*service)
 	if !ok || !atRest.Enabled() {
 		return nil
 	}
-	sealed := 0
+	resealed, unreadable := 0, 0
 	for _, column := range sealedColumns {
 		// The rows as they are stored, not as clients: what is read here is
-		// the value to seal. Deleted clients are included — their rows hold
+		// the value to reseal. Deleted clients are included — their rows hold
 		// the secret all the same.
-		var pending []struct {
+		var rows []struct {
 			ID    string
 			Value string
 		}
 		if err := s.db.Raw(
-			"SELECT id::text AS id, "+column+" AS value FROM clients WHERE "+column+" IS NOT NULL AND "+column+" <> '' AND "+column+" NOT LIKE ?",
-			crypto.SealedPrefix+"%").Scan(&pending).Error; err != nil {
-			return fmt.Errorf("failed to list clients with an unsealed %s: %w", column, err)
+			"SELECT id::text AS id, " + column + " AS value FROM clients WHERE " + column + " IS NOT NULL AND " + column + " <> ''").
+			Scan(&rows).Error; err != nil {
+			return fmt.Errorf("failed to list clients with a %s: %w", column, err)
 		}
-		for _, row := range pending {
-			value, err := atRest.Encrypt(row.Value)
+		for _, row := range rows {
+			value, changed, err := atRest.Reseal(row.Value)
 			if err != nil {
-				return fmt.Errorf("failed to seal %s: %w", column, err)
+				logger.Error("A provider secret is not readable with any configured key",
+					zap.String("client_id", row.ID), zap.String("column", column), zap.Error(err))
+				unreadable++
+				continue
+			}
+			if !changed {
+				continue
 			}
 			// Only the one column, and only if it still holds what was read:
 			// the client itself has not been edited, and an edit made
 			// meanwhile has already sealed its own value.
 			if err := s.db.Exec("UPDATE clients SET "+column+" = ? WHERE id = ? AND "+column+" = ?", value, row.ID, row.Value).Error; err != nil {
-				return fmt.Errorf("failed to seal %s: %w", column, err)
+				return fmt.Errorf("failed to reseal %s: %w", column, err)
 			}
-			sealed++
+			resealed++
 		}
 	}
-	if sealed > 0 {
-		logger.Info("Sealed provider secrets that were stored as they are", zap.Int("values", sealed))
+	if resealed > 0 || unreadable > 0 {
+		logger.Info("Resealed provider secrets with the current at-rest key",
+			zap.Int("resealed", resealed), zap.Int("unreadable", unreadable))
 	}
 	return nil
 }

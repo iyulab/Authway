@@ -1,5 +1,18 @@
 ## [Unreleased]
 
+### Added
+
+- **The at-rest encryption key can be changed.** `AUTHWAY_TOTP_ENCRYPTION_KEY`
+  seals two-factor secrets and the credentials clients hold at other identity
+  providers, and replacing it used to leave everything sealed under the old
+  key unreadable. `AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS` now names the keys
+  it replaced: the API opens values sealed with any of them, and at startup
+  seals everything again with the current key and logs how many values it
+  moved and how many no key could read. When that reaches zero the previous
+  keys can be removed. The stored form is unchanged, so an older binary reads
+  what the current key sealed. See
+  [Changing the at-rest key](CONFIGURATION.md#at-rest-encryption-key-32-bytes-base64).
+
 ### Security
 
 - **The Azure deploy scripts pass passwords and keys as Container App

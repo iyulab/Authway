@@ -70,7 +70,7 @@ func main() {
 	// clients hold at other identity providers. Fail-closed: a malformed
 	// key aborts startup. An empty key is permitted only in non-production (the
 	// config validator already rejects an empty key in production).
-	totpCipher, err := crypto.NewCipher(cfg.Security.TOTPEncryptionKey)
+	totpCipher, err := crypto.NewCipher(cfg.Security.TOTPEncryptionKey, cfg.Security.TOTPPreviousKeys...)
 	if err != nil {
 		zapLogger.Fatal("Failed to initialize TOTP cipher", zap.Error(err))
 	}
@@ -91,12 +91,13 @@ func main() {
 	}
 	zapLogger.Info("Database migrations completed successfully")
 
-	// Backfill: encrypt any legacy plaintext TOTP secrets. Idempotent and a
-	// no-op when no key is configured. Non-fatal by design — the lazy
-	// pass-through in Decrypt keeps validation working even if this never runs,
-	// so a transient DB error here must not block the whole IdP from starting.
-	if err := mfa.BackfillTOTPSecrets(db, totpCipher, zapLogger); err != nil {
-		zapLogger.Error("TOTP secret backfill failed (non-fatal; validation unaffected)", zap.Error(err))
+	// Store every TOTP secret sealed with the current key (sealing plaintext,
+	// resealing what a previous key sealed). Idempotent and a no-op when no
+	// key is configured. Non-fatal by design — Decrypt reads plaintext and
+	// opens values sealed with any configured key, so a transient DB error
+	// here must not block the whole IdP from starting.
+	if err := mfa.ResealTOTPSecrets(db, totpCipher, zapLogger); err != nil {
+		zapLogger.Error("Resealing TOTP secrets failed (non-fatal; validation unaffected)", zap.Error(err))
 	}
 
 	// Backfill: hash any legacy plaintext invitation tokens left over from
@@ -183,8 +184,8 @@ func main() {
 	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
 		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
 	}
-	if err := client.SealStoredSecrets(clientService, zapLogger); err != nil {
-		zapLogger.Error("Sealing stored provider secrets failed (non-fatal; they still read, and it is retried on next start)", zap.Error(err))
+	if err := client.ResealStoredSecrets(clientService, zapLogger); err != nil {
+		zapLogger.Error("Resealing stored provider secrets failed (non-fatal; they still read, and it is retried on next start)", zap.Error(err))
 	}
 	// Social sign-in may only create an account for an invited address
 	// (invitation-only onboarding). The gate is a read-only view of the

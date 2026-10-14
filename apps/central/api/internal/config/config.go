@@ -174,6 +174,12 @@ type SecurityConfig struct {
 	// production (fail-closed); when empty in development they are stored as
 	// plaintext.
 	TOTPEncryptionKey string `mapstructure:"totp_encryption_key"`
+	// TOTPPreviousKeys are the keys TOTPEncryptionKey replaced, while values
+	// sealed with them are moved to it (AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS,
+	// comma-separated, same format). They only open what they sealed; every
+	// startup reseals such values with the current key, and once it reports
+	// nothing left the previous keys can be removed.
+	TOTPPreviousKeys []string `mapstructure:"-"`
 	// AllowPrivateTargets lets the calls the deployment makes to addresses it
 	// was given — webhook deliveries, a client's back-channel logout address —
 	// reach this host and private networks, and lets those addresses be plain
@@ -352,6 +358,12 @@ func Load() (*Config, error) {
 	if totpKey := os.Getenv("AUTHWAY_TOTP_ENCRYPTION_KEY"); totpKey != "" {
 		config.Security.TOTPEncryptionKey = totpKey
 	}
+	config.Security.TOTPPreviousKeys = nil
+	for _, k := range strings.Split(os.Getenv("AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS"), ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			config.Security.TOTPPreviousKeys = append(config.Security.TOTPPreviousKeys, k)
+		}
+	}
 	if os.Getenv("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS") != "" {
 		// Starting without it would silently close what the operator opened.
 		return nil, fmt.Errorf("AUTHWAY_WEBHOOK_ALLOW_PRIVATE_TARGETS is now AUTHWAY_ALLOW_PRIVATE_TARGETS (it also covers back-channel logout addresses): rename it")
@@ -459,6 +471,18 @@ func (c *Config) Validate() error {
 			errors = append(errors, "CRITICAL: security.totp_encryption_key must be valid base64")
 		} else if len(key) != 32 {
 			errors = append(errors, fmt.Sprintf("CRITICAL: security.totp_encryption_key must decode to 32 bytes (AES-256), got %d", len(key)))
+		}
+	}
+	// A previous key is checked in every environment: a malformed one would
+	// only show when a value it sealed is read.
+	if len(c.Security.TOTPPreviousKeys) > 0 && c.Security.TOTPEncryptionKey == "" {
+		errors = append(errors, "AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS is set without AUTHWAY_TOTP_ENCRYPTION_KEY — previous keys are only read while values are moved to a current key")
+	}
+	for i, k := range c.Security.TOTPPreviousKeys {
+		if key, err := base64.StdEncoding.DecodeString(k); err != nil || len(key) != 32 {
+			errors = append(errors, fmt.Sprintf("AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS: key %d must be base64 of 32 bytes", i+1))
+		} else if k == c.Security.TOTPEncryptionKey {
+			errors = append(errors, fmt.Sprintf("AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS: key %d is the current key", i+1))
 		}
 	}
 

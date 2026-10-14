@@ -9,10 +9,16 @@
 //	"gcm1:" + base64(nonce ‖ ciphertext‖tag)
 //
 // The "gcm1:" prefix is a scheme tag. Decrypt treats any value WITHOUT the
-// prefix as legacy plaintext and returns it verbatim, so three things stay
-// non-fragile: a binary rollout that precedes the backfill, a backfill that is
-// idempotent (already-prefixed rows are skipped), and a future key rotation
-// (the tag can carry a new version).
+// prefix as legacy plaintext and returns it verbatim, so a binary rollout can
+// precede the pass that seals what is stored.
+//
+// The key can be changed. A cipher holds the current key and any previous
+// ones: it seals with the current key and opens a value with whichever key
+// sealed it (GCM's authentication tag rejects every other key, so trying them
+// in turn is exact). Reseal turns a stored value into one sealed with the
+// current key, so a startup pass can move everything over, after which the
+// previous keys can be dropped. The stored form names no key, so a binary
+// that predates key rotation reads whatever the current key sealed.
 package crypto
 
 import (
@@ -40,25 +46,56 @@ const keySize = 32
 type Cipher interface {
 	// Encrypt returns the storable representation of plaintext.
 	Encrypt(plaintext string) (string, error)
-	// Decrypt returns the plaintext for a stored value. A value without the
-	// scheme prefix is returned verbatim as legacy plaintext.
+	// Decrypt returns the plaintext for a stored value, opened with the
+	// current key or a previous one. A value without the scheme prefix is
+	// returned verbatim as legacy plaintext.
 	Decrypt(stored string) (string, error)
+	// Reseal returns stored as it should be stored now — sealed with the
+	// current key — and whether that differs from stored: legacy plaintext is
+	// sealed, a value sealed with a previous key is opened and sealed again,
+	// and a value already sealed with the current key comes back unchanged.
+	// A sealed value that no key opens is an error.
+	Reseal(stored string) (resealed string, changed bool, err error)
 	// Enabled reports whether real encryption is active (a key is configured).
 	// When false, Encrypt is a pass-through — used only in development where no
 	// key is provisioned.
 	Enabled() bool
 }
 
-// NewCipher builds a Cipher from a base64-encoded 32-byte key.
+// NewCipher builds a Cipher from a base64-encoded 32-byte key and, while the
+// key is being changed, the keys it replaces.
 //
 //   - keyB64 == ""  → a pass-through cipher (development only; no encryption).
-//   - keyB64 set    → AES-256-GCM, and the key MUST base64-decode to exactly
+//     Previous keys are refused with it: there is nothing to move them to.
+//   - keyB64 set    → AES-256-GCM. Every key MUST base64-decode to exactly
 //     32 bytes, else an error is returned (fail-closed at startup).
-func NewCipher(keyB64 string) (Cipher, error) {
+func NewCipher(keyB64 string, previousB64 ...string) (Cipher, error) {
 	if keyB64 == "" {
+		if len(previousB64) > 0 {
+			return nil, fmt.Errorf("crypto: previous keys given without a current key")
+		}
 		return passthrough{}, nil
 	}
 
+	current, err := newAEAD(keyB64)
+	if err != nil {
+		return nil, err
+	}
+	c := &aesGCM{current: current}
+	for i, k := range previousB64 {
+		if k == keyB64 {
+			return nil, fmt.Errorf("crypto: previous key %d is the current key", i+1)
+		}
+		aead, err := newAEAD(k)
+		if err != nil {
+			return nil, fmt.Errorf("crypto: previous key %d: %w", i+1, err)
+		}
+		c.previous = append(c.previous, aead)
+	}
+	return c, nil
+}
+
+func newAEAD(keyB64 string) (cipher.AEAD, error) {
 	key, err := base64.StdEncoding.DecodeString(keyB64)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: key is not valid base64: %w", err)
@@ -66,7 +103,6 @@ func NewCipher(keyB64 string) (Cipher, error) {
 	if len(key) != keySize {
 		return nil, fmt.Errorf("crypto: key must decode to %d bytes (AES-256), got %d", keySize, len(key))
 	}
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: failed to create AES block: %w", err)
@@ -75,45 +111,72 @@ func NewCipher(keyB64 string) (Cipher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("crypto: failed to create GCM: %w", err)
 	}
-	return &aesGCM{gcm: gcm}, nil
+	return gcm, nil
 }
 
-// aesGCM is the real AES-256-GCM implementation.
+// aesGCM is the real AES-256-GCM implementation: it seals with the current
+// key and opens with the current key or a previous one.
 type aesGCM struct {
-	gcm cipher.AEAD
+	current  cipher.AEAD
+	previous []cipher.AEAD
 }
 
 func (a *aesGCM) Enabled() bool { return true }
 
 func (a *aesGCM) Encrypt(plaintext string) (string, error) {
-	nonce := make([]byte, a.gcm.NonceSize())
+	nonce := make([]byte, a.current.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("crypto: failed to read nonce: %w", err)
 	}
-	sealed := a.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	sealed := a.current.Seal(nonce, nonce, []byte(plaintext), nil)
 	return gcmV1Prefix + base64.StdEncoding.EncodeToString(sealed), nil
 }
 
 func (a *aesGCM) Decrypt(stored string) (string, error) {
-	// Legacy plaintext (pre-encryption rows, or a backfill not yet run) has no
-	// prefix — return it verbatim so validation keeps working.
+	plaintext, _, err := a.open(stored)
+	return plaintext, err
+}
+
+func (a *aesGCM) Reseal(stored string) (string, bool, error) {
+	plaintext, withCurrent, err := a.open(stored)
+	if err != nil {
+		return "", false, err
+	}
+	if withCurrent {
+		return stored, false, nil
+	}
+	resealed, err := a.Encrypt(plaintext)
+	if err != nil {
+		return "", false, err
+	}
+	return resealed, true, nil
+}
+
+// open returns the plaintext of a stored value and whether the current key
+// sealed it. Legacy plaintext (no prefix) comes back verbatim, not sealed
+// with the current key.
+func (a *aesGCM) open(stored string) (string, bool, error) {
 	if !strings.HasPrefix(stored, gcmV1Prefix) {
-		return stored, nil
+		return stored, false, nil
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored, gcmV1Prefix))
 	if err != nil {
-		return "", fmt.Errorf("crypto: ciphertext is not valid base64: %w", err)
+		return "", false, fmt.Errorf("crypto: ciphertext is not valid base64: %w", err)
 	}
-	nonceSize := a.gcm.NonceSize()
+	nonceSize := a.current.NonceSize()
 	if len(raw) < nonceSize {
-		return "", fmt.Errorf("crypto: ciphertext too short")
+		return "", false, fmt.Errorf("crypto: ciphertext too short")
 	}
 	nonce, ct := raw[:nonceSize], raw[nonceSize:]
-	plaintext, err := a.gcm.Open(nil, nonce, ct, nil)
-	if err != nil {
-		return "", fmt.Errorf("crypto: decryption failed (wrong key or corrupt data): %w", err)
+	if plaintext, err := a.current.Open(nil, nonce, ct, nil); err == nil {
+		return string(plaintext), true, nil
 	}
-	return string(plaintext), nil
+	for _, aead := range a.previous {
+		if plaintext, err := aead.Open(nil, nonce, ct, nil); err == nil {
+			return string(plaintext), false, nil
+		}
+	}
+	return "", false, fmt.Errorf("crypto: decryption failed (sealed with a key that is not configured, or corrupt data)")
 }
 
 // passthrough is the no-key development fallback: values are stored as-is.
@@ -132,8 +195,14 @@ func (passthrough) Decrypt(stored string) (string, error) {
 	return stored, nil
 }
 
-// IsEncrypted reports whether a stored value carries the scheme prefix. Used by
-// the backfill to skip already-encrypted rows (idempotency).
+func (p passthrough) Reseal(stored string) (string, bool, error) {
+	if _, err := p.Decrypt(stored); err != nil {
+		return "", false, err
+	}
+	return stored, false, nil
+}
+
+// IsEncrypted reports whether a stored value carries the scheme prefix.
 func IsEncrypted(stored string) bool {
 	return strings.HasPrefix(stored, gcmV1Prefix)
 }

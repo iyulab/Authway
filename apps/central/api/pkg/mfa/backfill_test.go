@@ -1,6 +1,8 @@
 package mfa
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"testing"
 
 	"go.uber.org/zap"
@@ -8,12 +10,12 @@ import (
 	"authway/apps/central/api/pkg/crypto"
 )
 
-// TestBackfillTOTPSecrets_EncryptsLegacyPlaintextInPlace is the key regression
+// TestResealTOTPSecrets_EncryptsLegacyPlaintextInPlace is the key regression
 // guard for the design pkg/crypto documents: a legacy plaintext secret must
 // still validate TOTP codes correctly after the backfill re-encrypts it —
 // mirrors pkg/invitation's TestBackfillTokenHashes_PreservesRedeemability for
 // the same reason (in-place convergence must not break the value it converts).
-func TestBackfillTOTPSecrets_EncryptsLegacyPlaintextInPlace(t *testing.T) {
+func TestResealTOTPSecrets_EncryptsLegacyPlaintextInPlace(t *testing.T) {
 	db := setupPostgres(t)
 	svc, us, ts := newTestService(t, db)
 	tn := freshTenant(t, ts)
@@ -38,7 +40,7 @@ func TestBackfillTOTPSecrets_EncryptsLegacyPlaintextInPlace(t *testing.T) {
 	}
 
 	cipher := testCipher(t)
-	if err := BackfillTOTPSecrets(db, cipher, zap.NewNop()); err != nil {
+	if err := ResealTOTPSecrets(db, cipher, zap.NewNop()); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 
@@ -62,11 +64,11 @@ func TestBackfillTOTPSecrets_EncryptsLegacyPlaintextInPlace(t *testing.T) {
 	}
 }
 
-// TestBackfillTOTPSecrets_IdempotentOnAlreadyEncryptedRows guards against the
+// TestResealTOTPSecrets_IdempotentOnAlreadyEncryptedRows guards against the
 // backfill re-encrypting a value that already carries the scheme prefix,
 // which would double-wrap it and make every subsequent Decrypt fail (Decrypt
 // only ever strips one prefix layer).
-func TestBackfillTOTPSecrets_IdempotentOnAlreadyEncryptedRows(t *testing.T) {
+func TestResealTOTPSecrets_IdempotentOnAlreadyEncryptedRows(t *testing.T) {
 	db := setupPostgres(t)
 	svc, us, ts := newTestService(t, db)
 	tn := freshTenant(t, ts)
@@ -80,7 +82,7 @@ func TestBackfillTOTPSecrets_IdempotentOnAlreadyEncryptedRows(t *testing.T) {
 		t.Fatalf("VerifyAndEnable: %v", err)
 	}
 
-	if err := BackfillTOTPSecrets(db, testCipher(t), zap.NewNop()); err != nil {
+	if err := ResealTOTPSecrets(db, testCipher(t), zap.NewNop()); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 
@@ -95,11 +97,11 @@ func TestBackfillTOTPSecrets_IdempotentOnAlreadyEncryptedRows(t *testing.T) {
 	}
 }
 
-// TestBackfillTOTPSecrets_NoOpWhenCipherDisabled guards the documented
+// TestResealTOTPSecrets_NoOpWhenCipherDisabled guards the documented
 // behavior in backfill.go: with no encryption key configured there is
 // nothing to encrypt to, so the backfill must leave rows untouched rather
 // than erroring or blocking startup.
-func TestBackfillTOTPSecrets_NoOpWhenCipherDisabled(t *testing.T) {
+func TestResealTOTPSecrets_NoOpWhenCipherDisabled(t *testing.T) {
 	db := setupPostgres(t)
 	_, us, ts := newTestService(t, db)
 	tn := freshTenant(t, ts)
@@ -118,7 +120,7 @@ func TestBackfillTOTPSecrets_NoOpWhenCipherDisabled(t *testing.T) {
 		t.Fatal("expected an empty key to produce a disabled (passthrough) cipher")
 	}
 
-	if err := BackfillTOTPSecrets(db, passthroughCipher, zap.NewNop()); err != nil {
+	if err := ResealTOTPSecrets(db, passthroughCipher, zap.NewNop()); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 
@@ -133,7 +135,7 @@ func TestBackfillTOTPSecrets_NoOpWhenCipherDisabled(t *testing.T) {
 
 // A deleted user's row holds the secret all the same: deleting an account
 // does not empty the column, so the row is sealed like any other.
-func TestBackfillTOTPSecrets_SealsTheRowsOfDeletedUsersToo(t *testing.T) {
+func TestResealTOTPSecrets_SealsTheRowsOfDeletedUsersToo(t *testing.T) {
 	db := setupPostgres(t)
 	_, us, ts := newTestService(t, db)
 	tn := freshTenant(t, ts)
@@ -143,7 +145,7 @@ func TestBackfillTOTPSecrets_SealsTheRowsOfDeletedUsersToo(t *testing.T) {
 		t.Fatalf("seed a deleted user with a secret in the clear: %v", err)
 	}
 
-	if err := BackfillTOTPSecrets(db, testCipher(t), zap.NewNop()); err != nil {
+	if err := ResealTOTPSecrets(db, testCipher(t), zap.NewNop()); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 
@@ -154,4 +156,56 @@ func TestBackfillTOTPSecrets_SealsTheRowsOfDeletedUsersToo(t *testing.T) {
 	if !crypto.IsEncrypted(stored) {
 		t.Errorf("a deleted user's totp_secret is still stored as %q", stored)
 	}
+}
+
+// Changing the at-rest key: a secret sealed with the old key is resealed with
+// the new one, and afterwards a service holding only the new key still
+// verifies the user's codes — the user notices nothing.
+func TestResealTOTPSecrets_MovesSecretsFromAPreviousKey(t *testing.T) {
+	db := setupPostgres(t)
+	_, us, ts := newTestService(t, db)
+	tn := freshTenant(t, ts)
+	u := newTestUser(t, db, us, tn.ID)
+
+	oldKey, newKey := newKeyB64(t), newKeyB64(t)
+	oldCipher, _ := crypto.NewCipher(oldKey)
+	withOld := onTestClock(NewService(db, us, zap.NewNop(), "Authway Test", oldCipher))
+	setup, err := withOld.SetupTOTP(u.ID)
+	if err != nil {
+		t.Fatalf("SetupTOTP: %v", err)
+	}
+	if _, err := withOld.VerifyAndEnable(u.ID, currentCode(t, setup.Secret)); err != nil {
+		t.Fatalf("VerifyAndEnable: %v", err)
+	}
+	var sealedWithOld string
+	db.Raw(`SELECT totp_secret FROM users WHERE id = ?`, u.ID).Scan(&sealedWithOld)
+
+	ring, err := crypto.NewCipher(newKey, oldKey)
+	if err != nil {
+		t.Fatalf("cipher with a previous key: %v", err)
+	}
+	if err := ResealTOTPSecrets(db, ring, zap.NewNop()); err != nil {
+		t.Fatalf("reseal: %v", err)
+	}
+	var resealed string
+	db.Raw(`SELECT totp_secret FROM users WHERE id = ?`, u.ID).Scan(&resealed)
+	if resealed == sealedWithOld || !crypto.IsEncrypted(resealed) {
+		t.Fatalf("expected the secret to be resealed, stored value unchanged=%v sealed=%v", resealed == sealedWithOld, crypto.IsEncrypted(resealed))
+	}
+
+	newOnly, _ := crypto.NewCipher(newKey)
+	withNew := onTestClock(NewService(db, us, zap.NewNop(), "Authway Test", newOnly))
+	ok, err := withNew.Verify(u.ID, currentCode(t, setup.Secret))
+	if err != nil || !ok {
+		t.Fatalf("a service with only the new key does not verify the user's code: ok=%v err=%v", ok, err)
+	}
+}
+
+func newKeyB64(t *testing.T) string {
+	t.Helper()
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(key)
 }

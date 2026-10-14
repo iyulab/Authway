@@ -22,7 +22,7 @@ import (
 )
 
 // setupPostgres mirrors pkg/invitation's helper of the same name — a real
-// Postgres is required because BackfillTOTPSecrets and the encryption scheme
+// Postgres is required because ResealTOTPSecrets and the encryption scheme
 // it converges (pkg/crypto's "gcm1:" prefix) are exercised against the real
 // users table brought up by the migrator, not an in-memory substitute.
 func setupPostgres(t *testing.T) *gorm.DB {

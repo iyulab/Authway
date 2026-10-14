@@ -157,6 +157,7 @@ AUTHWAY_EMAIL_FROM_NAME=Authway             # From display name
 AUTHWAY_ADMIN_PASSWORD=admin123             # Admin console password
 AUTHWAY_ADMIN_API_KEY=                      # Management API key (required outside development)
 AUTHWAY_TOTP_ENCRYPTION_KEY=                # At-rest encryption key (required outside development)
+AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS=      # Keys it replaced, only while changing it (see below)
 ```
 
 ## Configuration Validation
@@ -189,8 +190,20 @@ openssl rand -base64 32
 [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
 ```
 
-Changing this key makes everything encrypted under the old one unreadable —
-two-factor enrollments and stored provider credentials.
+Replacing this key outright makes everything encrypted under the old one
+unreadable — two-factor enrollments and stored provider credentials. Change it
+in two steps instead:
+
+1. Set the new key as `AUTHWAY_TOTP_ENCRYPTION_KEY` and the old one as
+   `AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS` (comma-separated if there is more
+   than one), and restart. The API reads values sealed with either key, and
+   at startup seals everything again with the new key. Its log says how many
+   values it resealed and how many no configured key could read.
+2. Once a startup logs nothing resealed and nothing unreadable, remove
+   `AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS` and restart.
+
+After step 2 the old key opens nothing the database holds. Backups taken
+before step 1 are still sealed with it.
 
 ### Where secrets live in a deployment
 

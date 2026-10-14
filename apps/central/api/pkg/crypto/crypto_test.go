@@ -119,3 +119,78 @@ func TestNewCipherRejectsBadKeys(t *testing.T) {
 		t.Fatal("expected error for 16-byte key (not AES-256)")
 	}
 }
+
+// Changing the key: a cipher given the old key as a previous key opens what
+// the old key sealed, reseals it with the new key, and leaves alone what the
+// new key already sealed. After that, the new key alone reads everything.
+func TestPreviousKeyOpensWhatItSealedAndResealMovesItToTheCurrentKey(t *testing.T) {
+	oldKey, newKey := newTestKey(t), newTestKey(t)
+	before, _ := NewCipher(oldKey)
+	sealedWithOld, _ := before.Encrypt("secret")
+
+	ring, err := NewCipher(newKey, oldKey)
+	if err != nil {
+		t.Fatalf("NewCipher with a previous key: %v", err)
+	}
+	if got, err := ring.Decrypt(sealedWithOld); err != nil || got != "secret" {
+		t.Fatalf("Decrypt of a value the previous key sealed: got %q err %v", got, err)
+	}
+
+	resealed, changed, err := ring.Reseal(sealedWithOld)
+	if err != nil || !changed {
+		t.Fatalf("Reseal of a value the previous key sealed: changed=%v err=%v", changed, err)
+	}
+	again, changed, err := ring.Reseal(resealed)
+	if err != nil || changed || again != resealed {
+		t.Fatalf("Reseal of a value the current key sealed: changed=%v err=%v", changed, err)
+	}
+
+	after, _ := NewCipher(newKey)
+	if got, err := after.Decrypt(resealed); err != nil || got != "secret" {
+		t.Fatalf("the current key alone does not read the resealed value: got %q err %v", got, err)
+	}
+	// And the old key no longer reads it — what it guarded is now under the
+	// new key only.
+	if _, err := before.Decrypt(resealed); err == nil {
+		t.Fatal("the old key still opens the resealed value")
+	}
+}
+
+func TestResealSealsPlaintext(t *testing.T) {
+	c, _ := NewCipher(newTestKey(t))
+	resealed, changed, err := c.Reseal("JBSWY3DPEHPK3PXP")
+	if err != nil || !changed || !IsEncrypted(resealed) {
+		t.Fatalf("Reseal of plaintext: %q changed=%v err=%v", resealed, changed, err)
+	}
+	if got, _ := c.Decrypt(resealed); got != "JBSWY3DPEHPK3PXP" {
+		t.Fatalf("resealed plaintext reads %q", got)
+	}
+}
+
+// A value sealed with a key that is neither current nor previous is an
+// error, not something to pass on: dropping a previous key too early shows
+// here.
+func TestResealFailsForAKeyThatIsNotConfigured(t *testing.T) {
+	other, _ := NewCipher(newTestKey(t))
+	sealed, _ := other.Encrypt("secret")
+	ring, _ := NewCipher(newTestKey(t), newTestKey(t))
+	if _, _, err := ring.Reseal(sealed); err == nil {
+		t.Fatal("expected Reseal to fail for a value no configured key sealed")
+	}
+	if _, err := ring.Decrypt(sealed); err == nil {
+		t.Fatal("expected Decrypt to fail for a value no configured key sealed")
+	}
+}
+
+func TestNewCipherRejectsBadPreviousKeys(t *testing.T) {
+	current := newTestKey(t)
+	if _, err := NewCipher("", newTestKey(t)); err == nil {
+		t.Fatal("expected previous keys without a current key to be refused")
+	}
+	if _, err := NewCipher(current, current); err == nil {
+		t.Fatal("expected the current key repeated as a previous key to be refused")
+	}
+	if _, err := NewCipher(current, base64.StdEncoding.EncodeToString(make([]byte, 16))); err == nil {
+		t.Fatal("expected a 16-byte previous key to be refused")
+	}
+}

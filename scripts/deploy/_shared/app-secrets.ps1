@@ -12,10 +12,10 @@
 # carries its value in the clear.
 # ============================================================
 
-# Names that hold a secret: *_PASSWORD, *_KEY, *_SECRET, and the
+# Names that hold a secret: *_PASSWORD, *_KEY(S), *_SECRET, and the
 # authorization server's DSN (it embeds the database password) and
 # SECRETS_* (its system and cookie secrets).
-$script:SecretEnvNamePattern = '(_PASSWORD|_KEY|_SECRET)$|^DSN$|^SECRETS_'
+$script:SecretEnvNamePattern = '(_PASSWORD|_KEYS?|_SECRET)$|^DSN$|^SECRETS_'
 
 function Set-ContainerAppSecrets {
     param(

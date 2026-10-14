@@ -221,8 +221,8 @@ func TestProviderSecrets_StoredInTheClearAreReadAndThenSealed(t *testing.T) {
 		t.Fatalf("an unsealed row reads %q, want the secret", got)
 	}
 
-	if err := SealStoredSecrets(svc, zap.NewNop()); err != nil {
-		t.Fatalf("SealStoredSecrets: %v", err)
+	if err := ResealStoredSecrets(svc, zap.NewNop()); err != nil {
+		t.Fatalf("ResealStoredSecrets: %v", err)
 	}
 	sealedRows := map[string]string{}
 	for column, secret := range providerSecrets {
@@ -243,8 +243,8 @@ func TestProviderSecrets_StoredInTheClearAreReadAndThenSealed(t *testing.T) {
 	}
 
 	// A second start finds nothing to do.
-	if err := SealStoredSecrets(svc, zap.NewNop()); err != nil {
-		t.Fatalf("SealStoredSecrets again: %v", err)
+	if err := ResealStoredSecrets(svc, zap.NewNop()); err != nil {
+		t.Fatalf("ResealStoredSecrets again: %v", err)
 	}
 	for column, before := range sealedRows {
 		if row := stored(t, db, created.ID, column); row != before {
@@ -264,5 +264,54 @@ func TestProviderSecrets_SealedRowsDoNotLoadWithoutTheKey(t *testing.T) {
 	atRest = mustCipher("") // the key is gone
 	if _, err := svc.GetByID(created.ID); err == nil {
 		t.Fatal("a client with sealed secrets loaded without the key")
+	}
+}
+
+// Changing the at-rest key: secrets sealed with the old key are resealed with
+// the new one at startup, after which the new key alone loads the client.
+func TestProviderSecrets_ResealedFromAPreviousKey(t *testing.T) {
+	db := setupPostgres(t)
+	svc := NewService(db, zap.NewNop(), stubHydra(t))
+	before := atRest
+	t.Cleanup(func() { atRest = before })
+
+	key := func() string {
+		k := make([]byte, 32)
+		if _, err := rand.Read(k); err != nil {
+			t.Fatal(err)
+		}
+		return base64.StdEncoding.EncodeToString(k)
+	}
+	oldKey, newKey := key(), key()
+	SealSecretsWith(mustCipher(oldKey))
+	created := newClientWithProviderSecrets(t, db, svc)
+	sealedWithOld := map[string]string{}
+	for column := range providerSecrets {
+		sealedWithOld[column] = stored(t, db, created.ID, column)
+	}
+
+	ring, err := crypto.NewCipher(newKey, oldKey)
+	if err != nil {
+		t.Fatalf("cipher with a previous key: %v", err)
+	}
+	SealSecretsWith(ring)
+	if err := ResealStoredSecrets(svc, zap.NewNop()); err != nil {
+		t.Fatalf("ResealStoredSecrets: %v", err)
+	}
+	for column, old := range sealedWithOld {
+		if row := stored(t, db, created.ID, column); row == old || !strings.HasPrefix(row, crypto.SealedPrefix) {
+			t.Errorf("%s was not resealed", column)
+		}
+	}
+
+	SealSecretsWith(mustCipher(newKey))
+	loaded, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID with only the new key: %v", err)
+	}
+	for column, secret := range providerSecrets {
+		if got := secretsOf(loaded)[column]; got != secret {
+			t.Errorf("with only the new key %s reads %q, want the secret", column, got)
+		}
 	}
 }
