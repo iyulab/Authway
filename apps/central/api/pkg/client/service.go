@@ -84,6 +84,12 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateApplicationURI("initiate_login_uri", req.InitiateLoginURI); cerr != nil {
+		return nil, nil, cerr
+	}
+	if cerr := validateApplicationURI("client_uri", req.ClientURI); cerr != nil {
+		return nil, nil, cerr
+	}
 	if cerr := s.validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
 		return nil, nil, cerr
 	}
@@ -338,6 +344,8 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 
 	client.Audience = req.Audience
 	client.BackChannelLogoutURI = req.BackChannelLogoutURI
+	client.InitiateLoginURI = req.InitiateLoginURI
+	client.ClientURI = req.ClientURI
 	if keyAuth {
 		client.TokenEndpointAuthMethod = AuthMethodPrivateKeyJWT
 		client.JWKS = registeredKeys
@@ -528,6 +536,16 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 			Hint:    "Register a new public client and move the application to it.",
 		}
 	}
+	for _, f := range []struct {
+		field string
+		value *string
+	}{{"initiate_login_uri", req.InitiateLoginURI}, {"client_uri", req.ClientURI}} {
+		if f.value != nil {
+			if cerr := validateApplicationURI(f.field, *f.value); cerr != nil {
+				return nil, SyncStatus{}, cerr
+			}
+		}
+	}
 	if req.BackChannelLogoutURI != nil {
 		if cerr := s.validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
 			return nil, SyncStatus{}, cerr
@@ -597,6 +615,12 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if replacesKeys {
 		client.JWKS = replacedKeys
 		client.JWKSURI = replacedKeysURI
+	}
+	if req.InitiateLoginURI != nil {
+		client.InitiateLoginURI = *req.InitiateLoginURI
+	}
+	if req.ClientURI != nil {
+		client.ClientURI = *req.ClientURI
 	}
 	if req.BackChannelLogoutURI != nil {
 		client.BackChannelLogoutURI = *req.BackChannelLogoutURI
@@ -907,6 +931,7 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		// application has from the ID token to match it against.
 		BackChannelLogoutURI:             c.BackChannelLogoutURI,
 		BackChannelLogoutSessionRequired: c.BackChannelLogoutURI != "",
+		ClientURI:                        c.ClientURI,
 		GrantTypes:                       c.GrantTypes,
 		ResponseTypes:                    []string{"code"},
 		Scope:                            strings.Join(c.Scopes, " "),

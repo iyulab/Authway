@@ -24,11 +24,44 @@ const createAcceptSchema = (t: (key: string, options?: Record<string, unknown>) 
 
 type AcceptFormData = z.infer<ReturnType<typeof createAcceptSchema>>
 
+/** The application an invitation is for, when it names one. */
+interface InvitationApp {
+  client_id: string
+  name: string
+  initiate_login_uri?: string
+  client_uri?: string
+}
+
 interface InvitationDetails {
   email: string
   tenant_name: string
   inviter_name: string
   role: string
+  client?: InvitationApp
+}
+
+/**
+ * Where a person who accepted an invitation for an application goes next:
+ * the address where the application starts a sign-in, told the issuer and
+ * whom to expect (OpenID Connect Core 1.0 section 4) — or, without one, the
+ * application's home page. Only an https address is followed.
+ */
+export function continueTo(app: InvitationApp, issuer: string | undefined, email: string): string | undefined {
+  const https = (raw?: string) => {
+    try {
+      const u = raw ? new URL(raw) : undefined
+      return u && u.protocol === 'https:' ? u : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const start = https(app.initiate_login_uri)
+  if (start && issuer) {
+    start.searchParams.set('iss', issuer)
+    start.searchParams.set('login_hint', email)
+    return start.toString()
+  }
+  return https(app.client_uri)?.toString()
 }
 
 /** The invitation, and the length the password it asks for has to have. */
@@ -74,6 +107,20 @@ const AcceptInvitationPage: React.FC = () => {
     },
   })
   const invitation = shown?.invitation
+
+  // The issuer, for sending the person on to the application the invitation
+  // is for (OpenID Connect Core 1.0 section 4).
+  const { data: issuer } = useQuery<string>({
+    queryKey: ['bootstrap-issuer'],
+    enabled: Boolean(invitation?.client?.initiate_login_uri),
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/.well-known/authway-config`)
+      if (!res.ok) throw new Error('bootstrap document unavailable')
+      return ((await res.json()) as { issuer: string }).issuer
+    },
+  })
+  const next = invitation?.client ? continueTo(invitation.client, issuer, invitation.email) : undefined
 
   const acceptSchema = createAcceptSchema(t, shown?.passwordLength ?? LEAST_PASSWORD_LENGTH)
   const {
@@ -175,9 +222,18 @@ const AcceptInvitationPage: React.FC = () => {
         </div>
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:invitation.success.title')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.success.message')}</p>
-        <p className="mt-1 text-sm text-gray-500">
-          {flow ? t('auth:invitation.success.redirect') : t('auth:invitation.success.signInFromApp')}
-        </p>
+        {!flow && next && invitation?.client ? (
+          <a
+            href={next}
+            className="mt-6 inline-flex justify-center py-2 px-4 rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            {t('auth:invitation.success.continueTo', { name: invitation.client.name })}
+          </a>
+        ) : (
+          <p className="mt-1 text-sm text-gray-500">
+            {flow ? t('auth:invitation.success.redirect') : t('auth:invitation.success.signInFromApp')}
+          </p>
+        )}
       </div>
     )
   }

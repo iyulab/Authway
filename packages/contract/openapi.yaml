@@ -1001,6 +1001,17 @@ paths:
                     of `jwks`: a public https address (a local or private one
                     is refused, `invalid_jwks_uri`).
                   type: string
+                initiate_login_uri:
+                  description: |
+                    Where the application starts a sign-in when a third party
+                    asks it to (OpenID Connect Core 1.0 section 4): a user who
+                    accepted an invitation for this application is sent here
+                    with `iss` and `login_hint`. An absolute https URL; an empty
+                    string clears it.
+                  type: string
+                client_uri:
+                  description: The application's home page — where such a user goes when there is no `initiate_login_uri`. An absolute https URL; an empty string clears it.
+                  type: string
                 backchannel_logout_uri:
                   description: |
                     Where the client's backend is told that a user's session
@@ -1105,6 +1116,17 @@ paths:
                     Replaces the keys of a client that authenticates with one
                     by an address to fetch them from; giving `jwks` or
                     `jwks_uri` clears the other.
+                  type: string
+                initiate_login_uri:
+                  description: |
+                    Where the application starts a sign-in when a third party
+                    asks it to (OpenID Connect Core 1.0 section 4): a user who
+                    accepted an invitation for this application is sent here
+                    with `iss` and `login_hint`. An absolute https URL; an empty
+                    string clears it.
+                  type: string
+                client_uri:
+                  description: The application's home page — where such a user goes when there is no `initiate_login_uri`. An absolute https URL; an empty string clears it.
                   type: string
                 backchannel_logout_uri:
                   description: |
@@ -1243,6 +1265,14 @@ paths:
                 email: { type: string }
                 role: { type: string }
                 message: { type: string }
+                client_id:
+                  description: |
+                    The application the invitation is for, by its OAuth
+                    `client_id` — one of the tenant's clients. Whoever accepts
+                    it is sent on to that application (InvitationApp). A
+                    client_id that names none of the tenant's clients is `400
+                    unknown_client`.
+                  type: string
       responses:
         '201':
           description: Created and emailed
@@ -2320,6 +2350,23 @@ components:
         role: { type: string }
         message: { type: string }
         expires_at: { type: string }
+        client:
+          $ref: '#/components/schemas/InvitationApp'
+
+    InvitationApp:
+      description: |
+        The application an invitation is for. Once the invitation is accepted,
+        a screen sends the user to `initiate_login_uri` with `iss` (the
+        issuer) and `login_hint` (the address), where the application starts
+        a sign-in (OpenID Connect Core 1.0 section 4) — or, without one, to
+        `client_uri`.
+      type: object
+      required: [client_id, name]
+      properties:
+        client_id: { type: string }
+        name: { type: string }
+        initiate_login_uri: { type: string }
+        client_uri: { type: string }
 
     AdminInvitation:
       type: object
@@ -2336,6 +2383,8 @@ components:
         tenant_name: { type: string }
         accepted_at: { type: ['null', string] }
         accepted_by: { type: ['null', string] }
+        client:
+          $ref: '#/components/schemas/InvitationApp'
         expires_at: { type: string }
         created_at: { type: string }
         updated_at: { type: string }
@@ -2686,6 +2735,12 @@ components:
           description: The resource servers this client's access tokens are for (their `aud` claim).
           type: array
           items: { type: string }
+        initiate_login_uri:
+          description: Where the application starts a sign-in when asked to (OpenID Connect Core 1.0 section 4). Empty when none is registered.
+          type: string
+        client_uri:
+          description: The application's home page. Empty when none is registered.
+          type: string
         backchannel_logout_uri:
           description: |
             Where the client's backend is told that a user's session has ended.

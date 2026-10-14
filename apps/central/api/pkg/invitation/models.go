@@ -53,6 +53,11 @@ type Invitation struct {
 	// Derived, never persisted — hydrated by the service on read.
 	TenantName  string `json:"tenant_name" gorm:"-"`
 	InviterName string `json:"inviter_name" gorm:"-"`
+
+	// ClientID, when set, is the application the invitation is for (the
+	// clients row). The accepted user is sent on to it (App).
+	ClientID *uuid.UUID     `json:"-" gorm:"column:client_id;type:uuid"`
+	App      *InvitationApp `json:"client,omitempty" gorm:"-"`
 }
 
 // IsExpired checks if the invitation has expired
@@ -70,6 +75,19 @@ type CreateInvitationRequest struct {
 	Email   string `json:"email" validate:"required,email"`
 	Role    string `json:"role"`
 	Message string `json:"message"`
+	// ClientID optionally names the application the invitation is for, by
+	// its OAuth client_id — one of the tenant's clients.
+	ClientID string `json:"client_id"`
+}
+
+// InvitationApp is the application an invitation is for, as the screen that
+// accepts it needs it: what to call it, and where to send the user next
+// (OpenID Connect Core 1.0 section 4 — the application starts the sign-in).
+type InvitationApp struct {
+	ClientID         string `json:"client_id"`
+	Name             string `json:"name"`
+	InitiateLoginURI string `json:"initiate_login_uri,omitempty"`
+	ClientURI        string `json:"client_uri,omitempty"`
 }
 
 // AcceptInvitationRequest represents the request to accept an invitation
@@ -88,4 +106,6 @@ type InvitationResponse struct {
 	Role        string    `json:"role"`
 	Message     string    `json:"message"`
 	ExpiresAt   time.Time `json:"expires_at"`
+	// Client is the application the invitation is for, when it names one.
+	Client *InvitationApp `json:"client,omitempty"`
 }

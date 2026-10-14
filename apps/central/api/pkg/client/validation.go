@@ -262,6 +262,21 @@ func refusedByAuthorizationServer(refused *hydra.ClientRefusedError) *ConfigErro
 	}
 }
 
+// validateApplicationURI checks an address the application publishes for
+// users — where it starts a sign-in, its home page: empty, or an absolute
+// https URL without a fragment. Users are sent there, so a scheme other
+// than https (javascript:, a custom one) is refused.
+func validateApplicationURI(field, uri string) *ConfigError {
+	if uri == "" {
+		return nil
+	}
+	u, err := url.Parse(uri)
+	if err != nil || len(uri) > maxBackChannelLogoutURILength || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
+		return &ConfigError{Code: "invalid_" + field, Field: field, Message: field + " must be an absolute https URL without a fragment"}
+	}
+	return nil
+}
+
 // maxBackChannelLogoutURILength bounds the logout address.
 const maxBackChannelLogoutURILength = 2048
 

@@ -23,6 +23,9 @@ var (
 	ErrTenantNotFound = apierror.NewPublic("tenant not found")
 	ErrAlreadyMember  = apierror.NewPublic("user already exists in this organization")
 	ErrAlreadyInvited = apierror.NewPublic("pending invitation already exists for this email")
+	// ErrUnknownClient is a client_id that names no application of the
+	// invitation's tenant — whether it exists elsewhere is not said.
+	ErrUnknownClient = apierror.NewPublic("client_id names no application of this organization")
 	// ErrAddressNotAllowed is an address outside the domains the tenant
 	// allows accounts for (its allowed_domains setting).
 	ErrAddressNotAllowed = apierror.NewPublic("this address is not in a domain the organization allows")
@@ -121,6 +124,18 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, req.Email, StatusPending).First(&existing).Error; err == nil {
 		return nil, ErrAlreadyInvited
 	}
+	var app *InvitationApp
+	var clientRow *uuid.UUID
+	if req.ClientID != "" {
+		id, found, err := s.tenantApp(tenantID, req.ClientID)
+		if err != nil {
+			return nil, err
+		}
+		if found == nil {
+			return nil, ErrUnknownClient
+		}
+		clientRow, app = &id, found
+	}
 	token, err := generateToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
@@ -138,12 +153,14 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 		Status:    StatusPending,
 		Message:   req.Message,
 		ExpiresAt: time.Now().Add(s.expiry),
+		ClientID:  clientRow,
 	}
 	if err := s.db.Create(invitation).Error; err != nil {
 		return nil, fmt.Errorf("failed to create invitation: %w", err)
 	}
 	invitation.TenantName = t.Name
 	invitation.InviterName = inviterName
+	invitation.App = app
 	if s.emailSender != nil {
 		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
 		if err := s.emailSender.SendInvitationEmail(req.Email, inviterName, t.Name, req.Message, inviteURL); err != nil {
@@ -168,10 +185,44 @@ func displayName(u *user.User) string {
 // must not turn a readable invitation into an error, so the field is simply
 // left at its zero value (inviter falls back to "system", matching a NULL
 // inviter_id).
+// tenantApp finds the tenant's application whose OAuth client_id is
+// clientID: its row id and what an invitation shows of it. nil when the
+// tenant has no such (live) client. The clients table is read directly, as
+// Gate reads tenants: an invitation needs four columns, not the client
+// service.
+func (s *service) tenantApp(tenantID uuid.UUID, clientID string) (uuid.UUID, *InvitationApp, error) {
+	return s.findApp(s.db.Where("tenant_id = ? AND client_id = ?", tenantID, clientID))
+}
+
+func (s *service) findApp(scope *gorm.DB) (uuid.UUID, *InvitationApp, error) {
+	var row struct {
+		ID               uuid.UUID
+		ClientID         string
+		Name             string
+		InitiateLoginURI string
+		ClientURI        string
+	}
+	err := scope.Table("clients").Where("deleted_at IS NULL").
+		Select("id, client_id, name, initiate_login_uri, client_uri").Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, nil, nil
+	}
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("failed to look up the application: %w", err)
+	}
+	return row.ID, &InvitationApp{ClientID: row.ClientID, Name: row.Name, InitiateLoginURI: row.InitiateLoginURI, ClientURI: row.ClientURI}, nil
+}
+
 func (s *service) hydrate(invs ...*Invitation) {
 	tenantNames := map[uuid.UUID]string{}
 	inviterNames := map[uuid.UUID]string{}
 	for _, inv := range invs {
+		if inv.ClientID != nil {
+			// A client deleted since leaves the invitation without one.
+			if _, app, err := s.findApp(s.db.Where("id = ?", *inv.ClientID)); err == nil {
+				inv.App = app
+			}
+		}
 		if _, ok := tenantNames[inv.TenantID]; !ok {
 			if t, err := s.tenantService.GetTenantByID(inv.TenantID); err == nil {
 				tenantNames[inv.TenantID] = t.Name

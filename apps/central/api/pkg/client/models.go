@@ -70,6 +70,14 @@ type Client struct {
 	// Back-Channel Logout 1.0). Empty = the client is not told.
 	BackChannelLogoutURI string `json:"backchannel_logout_uri" gorm:"column:backchannel_logout_uri;not null;default:''"`
 
+	// InitiateLoginURI is where the application starts a sign-in when asked
+	// to by a third party (OpenID Connect Core 1.0 section 4): a user who
+	// arrives from outside a login flow — an emailed invitation — is sent
+	// there with iss and login_hint. ClientURI is the application's home
+	// page, where such a user goes when there is no InitiateLoginURI.
+	InitiateLoginURI string `json:"initiate_login_uri" gorm:"column:initiate_login_uri;not null;default:''"`
+	ClientURI        string `json:"client_uri" gorm:"column:client_uri;not null;default:''"`
+
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
@@ -155,6 +163,10 @@ type PublicClient struct {
 	// Where the client's backend is told that a user's session has ended.
 	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
 
+	// Where the application starts a sign-in, and its home page.
+	InitiateLoginURI string `json:"initiate_login_uri"`
+	ClientURI        string `json:"client_uri"`
+
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
 	AllowEmailLogin      bool     `json:"allow_email_login"`
@@ -238,6 +250,9 @@ func (c *Client) ToPublic() PublicClient {
 
 		BackChannelLogoutURI: c.BackChannelLogoutURI,
 
+		InitiateLoginURI: c.InitiateLoginURI,
+		ClientURI:        c.ClientURI,
+
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
 		AllowEmailLogin:      c.AllowEmailLogin,
@@ -318,6 +333,11 @@ type CreateClientRequest struct {
 	// validateBackChannelLogoutURI.
 	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
 
+	// InitiateLoginURI and ClientURI: where the application starts a
+	// sign-in, and its home page (validateApplicationURI).
+	InitiateLoginURI string `json:"initiate_login_uri"`
+	ClientURI        string `json:"client_uri"`
+
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
@@ -371,6 +391,8 @@ type ScopedCreateClientRequest struct {
 	Scopes               []string `json:"scopes" validate:"required,min=1"`
 	AllowedOrigins       []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 	BackChannelLogoutURI string   `json:"backchannel_logout_uri"`
+	InitiateLoginURI     string   `json:"initiate_login_uri"`
+	ClientURI            string   `json:"client_uri"`
 }
 
 // ToCreateClientRequest maps the whitelisted fields into the full request
@@ -388,6 +410,8 @@ func (r *ScopedCreateClientRequest) ToCreateClientRequest(tenantID string) *Crea
 		AllowedOrigins: r.AllowedOrigins,
 
 		BackChannelLogoutURI: r.BackChannelLogoutURI,
+		InitiateLoginURI:     r.InitiateLoginURI,
+		ClientURI:            r.ClientURI,
 	}
 }
 
@@ -428,6 +452,9 @@ type UpdateClientRequest struct {
 
 	// BackChannelLogoutURI: "" means "clear", nil means "not provided".
 	BackChannelLogoutURI *string `json:"backchannel_logout_uri"`
+	// InitiateLoginURI and ClientURI: "" clears, nil leaves as is.
+	InitiateLoginURI *string `json:"initiate_login_uri"`
+	ClientURI        *string `json:"client_uri"`
 
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)

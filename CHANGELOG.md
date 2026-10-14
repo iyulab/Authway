@@ -17,6 +17,15 @@
   A tenant that names no documents asks nothing, as before.
   `capabilities.terms_acceptance`.
 
+- **An invitation can name the application it is for**, and the person who
+  accepts it is sent on there. Clients can register `initiate_login_uri`
+  (where the application starts a sign-in when asked to — OpenID Connect Core
+  1.0 section 4) and `client_uri` (its home page); `POST /api/v1/invitations`
+  takes an optional `client_id`, and `GET /api/v1/invitations/token/{token}`
+  answers the application as `client`. The login UI's account-created screen
+  then offers to continue to the application — at `initiate_login_uri` with
+  `iss` and `login_hint`, or at `client_uri`.
+
 ### Fixed
 
 - **Mail sent through SMTP works with any mail server, as well as the

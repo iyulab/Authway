@@ -146,6 +146,7 @@ the offending `field`, a human `message`, and an actionable `hint`.
 | `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
 | `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
+| `invalid_initiate_login_uri`, `invalid_client_uri` | The address is not an absolute `https` URL, or has a fragment | Give the application's own https address |
 | `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address (as written, or by what its host name resolves to) | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
 | `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
 | `invalid_token_endpoint_auth_method` | `token_endpoint_auth_method` is not one of `client_secret_post`, `private_key_jwt`, `none`; or does not fit the kind of client (`none` for a confidential one, a secret or a key for a public one); or a `client_secret` is given to a client that authenticates with a key | Leave it out for the default, or see [below](#clients-that-hold-a-key-instead-of-a-secret-private_key_jwt) |
@@ -219,6 +220,26 @@ with a receiver on their machine, sets `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`;
 link-local addresses (cloud metadata endpoints among them) stay refused even
 then. What the application does with the token is in
 [FEATURES.md](../FEATURES.md#telling-other-applications-about-a-logout).
+
+### Sending people on to the application: `initiate_login_uri`, `client_uri`
+
+A person who accepts an emailed invitation arrives outside any sign-in the
+application started. Register where the application starts a sign-in when a
+third party asks it to (OpenID Connect Core 1.0 section 4), and its home page:
+
+```json
+{ "initiate_login_uri": "https://app.example.com/login", "client_uri": "https://app.example.com/" }
+```
+
+Then name the application on the invitation — `POST /api/v1/invitations`
+with `"client_id": "<the application's client_id>"`, one of the tenant's
+clients (another is `400 unknown_client`). Once the person has accepted it,
+the login UI sends them to `initiate_login_uri` with `iss` (the issuer) and
+`login_hint` (their address); the application starts an authorization request
+there, and the session the acceptance opened usually signs them in without a
+form. Without `initiate_login_uri` they go to `client_uri`; without either,
+they are told to sign in from the application. Both are absolute `https`
+URLs; an empty string clears one.
 
 ### Clients whose tokens go to an API: `audience`
 

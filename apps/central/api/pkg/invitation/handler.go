@@ -76,6 +76,8 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", err.Error())
 		case errors.Is(err, ErrAddressNotAllowed):
 			return apierror.Refuse(c, fiber.StatusBadRequest, "email_domain_not_allowed", err.Error())
+		case errors.Is(err, ErrUnknownClient):
+			return apierror.Refuse(c, fiber.StatusBadRequest, "unknown_client", err.Error())
 		}
 		var pub *apierror.Public
 		if errors.As(err, &pub) {
@@ -202,6 +204,7 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 			Role:        invitation.Role,
 			Message:     invitation.Message,
 			ExpiresAt:   invitation.ExpiresAt,
+			Client:      invitation.App,
 		},
 		"password_min_length": h.service.PasswordMinLength(invitation.TenantID),
 	})
