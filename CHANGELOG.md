@@ -8,6 +8,12 @@
   managed Redis's does, failed every connection, so the API did not start. The
   certificate is now checked against `AUTHWAY_REDIS_HOST` for every node.
 
+- **The Azure deploy applies a changed password or key when nothing else
+  changed.** A Container App reads its secrets when a replica starts, and an
+  update with an unchanged template starts none, so such a deploy reported
+  success while the app kept the old value. The API and authorization server
+  deploys now restart the app in that case.
+
 ## [0.14.0] - 2026-10-15
 
 > Minor. New: devices sign in with a code the user enters elsewhere

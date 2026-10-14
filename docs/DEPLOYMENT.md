@@ -451,8 +451,9 @@ So a change takes four steps, the last two after a wait:
 1. **New value first**: `SECRETS_SYSTEM=<new>,<old>`, restart. Tokens already
    issued stay valid.
 2. **New signing keys**: add a key to each signing key set
-   (`hydra create jwk hydra.jwt.access-token <kid>` and
-   `hydra.openid.id-token`, against the admin endpoint). They are encrypted
+   (`hydra create jwk hydra.jwt.access-token <kid> --public` and the same for
+   `hydra.openid.id-token`, against the admin endpoint — `--public` keeps the
+   private key out of the command's output and logs). They are encrypted
    with the new value and the server signs with them at once; the old keys
    stay published, so tokens signed with them still verify.
 3. **Remove the old keys**, once every token signed with them has expired
