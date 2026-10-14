@@ -69,6 +69,12 @@ func cleanupWebhook(t *testing.T, db *gorm.DB, id uuid.UUID) {
 // timeout elapses — Trigger dispatches delivery over a goroutine by design
 // (fire-and-forget from the caller's perspective), so a test observing its
 // effect must wait for it rather than assuming synchronous completion.
+// deliveryWait bounds how long a test waits for a delivery to be recorded. It
+// is a deadline, not a delay: a recorded delivery returns at once. Under a full
+// parallel test run on a loaded machine the background sender has taken more
+// than 5 seconds to record one.
+const deliveryWait = 30 * time.Second
+
 func waitForDeliveries(t *testing.T, svc Service, webhookID uuid.UUID, timeout time.Duration) []WebhookDelivery {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -301,7 +307,7 @@ func TestTrigger_DeliversOnlyToSubscribedEnabledWebhooksAndSignsThePayload(t *te
 		t.Fatalf("Trigger: %v", err)
 	}
 
-	deliveries := waitForDeliveries(t, svc, subscribed.ID, 3*time.Second)
+	deliveries := waitForDeliveries(t, svc, subscribed.ID, deliveryWait)
 	if len(deliveries) != 1 {
 		t.Fatalf("expected exactly 1 delivery for the subscribed webhook, got %d", len(deliveries))
 	}
@@ -359,7 +365,7 @@ func TestTrigger_RecordsFailedDeliveryOnServerError(t *testing.T) {
 		t.Fatalf("Trigger: %v", err)
 	}
 
-	deliveries := waitForDeliveries(t, svc, wh.ID, 5*time.Second)
+	deliveries := waitForDeliveries(t, svc, wh.ID, deliveryWait)
 	if deliveries[0].Success {
 		t.Fatal("expected the delivery to be recorded as unsuccessful")
 	}
