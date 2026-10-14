@@ -60,11 +60,11 @@ return 0
 // replica must be readable by whichever replica serves the follow-up
 // /mfa/verify request.
 type MFAChallengeStore struct {
-	redis  *redis.Client
+	redis  redis.UniversalClient
 	prefix string
 }
 
-func NewMFAChallengeStore(redisClient *redis.Client) *MFAChallengeStore {
+func NewMFAChallengeStore(redisClient redis.UniversalClient) *MFAChallengeStore {
 	return &MFAChallengeStore{redis: redisClient, prefix: "mfa_challenge:"}
 }
 

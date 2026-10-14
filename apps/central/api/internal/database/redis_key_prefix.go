@@ -39,7 +39,10 @@ func NormalizeKeyPrefix(configured string) (string, error) {
 // command that could name a key: one it does not know would write outside
 // the prefix, or answer with the keys of every deployment. A command that is
 // needed and missing here is added to the list, not worked around.
-func UseKeyPrefix(client *redis.Client, prefix string) {
+//
+// On a cluster client the keys are rewritten before the command is routed,
+// so it goes to the node that holds the prefixed key.
+func UseKeyPrefix(client redis.UniversalClient, prefix string) {
 	if prefix == "" {
 		return
 	}

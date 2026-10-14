@@ -27,11 +27,11 @@ const oauthStateTTL = 10 * time.Minute
 // different replica than the one that started the sign-in, so the state cannot
 // live in process memory. Same shape as MFAChallengeStore.
 type OAuthStateStore struct {
-	redis  *redis.Client
+	redis  redis.UniversalClient
 	prefix string
 }
 
-func NewOAuthStateStore(redisClient *redis.Client) *OAuthStateStore {
+func NewOAuthStateStore(redisClient redis.UniversalClient) *OAuthStateStore {
 	return &OAuthStateStore{redis: redisClient, prefix: "oauth:state:"}
 }
 

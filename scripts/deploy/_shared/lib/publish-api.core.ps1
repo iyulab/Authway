@@ -152,6 +152,11 @@ try {
         $redisKeyPrefixEnv = @("AUTHWAY_REDIS_KEY_PREFIX=$($envVars['AUTHWAY_REDIS_KEY_PREFIX'])")
         Write-Host "🔑 Redis key prefix: $($envVars['AUTHWAY_REDIS_KEY_PREFIX'])" -ForegroundColor Gray
     }
+    # Optional: a Redis that shards keys over nodes needs the cluster client.
+    if ($envVars['AUTHWAY_REDIS_CLUSTER'] -eq 'true') {
+        $redisKeyPrefixEnv += 'AUTHWAY_REDIS_CLUSTER=true'
+        Write-Host "🔑 Redis cluster client" -ForegroundColor Gray
+    }
 
     Write-Host "🔄 이미지 및 환경 변수 업데이트 중..." -ForegroundColor Yellow
 
@@ -217,6 +222,9 @@ try {
     # only adds variables.
     if (-not $envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
         $staleEnv += 'AUTHWAY_REDIS_KEY_PREFIX'
+    }
+    if ($envVars['AUTHWAY_REDIS_CLUSTER'] -ne 'true') {
+        $staleEnv += 'AUTHWAY_REDIS_CLUSTER'
     }
     $staleSecrets = @('authway-admin-api-key')
     if (-not $envVars['AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS']) {

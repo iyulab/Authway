@@ -12,7 +12,7 @@ import (
 
 // RateLimitConfig holds rate limiter configuration
 type RateLimitConfig struct {
-	RedisClient    *redis.Client
+	RedisClient    redis.UniversalClient
 	MaxAttempts    int
 	WindowDuration time.Duration
 	BlockDuration  time.Duration
@@ -21,7 +21,7 @@ type RateLimitConfig struct {
 }
 
 // DefaultRateLimitConfig returns default rate limit settings
-func DefaultRateLimitConfig(redisClient *redis.Client) RateLimitConfig {
+func DefaultRateLimitConfig(redisClient redis.UniversalClient) RateLimitConfig {
 	return RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    5,
@@ -128,7 +128,7 @@ func ResetRateLimitOnSuccess(c *fiber.Ctx) {
 }
 
 // LoginRateLimit creates rate limiting specifically for login endpoints
-func LoginRateLimit(redisClient *redis.Client) fiber.Handler {
+func LoginRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 	cfg := RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    5,
@@ -142,7 +142,7 @@ func LoginRateLimit(redisClient *redis.Client) fiber.Handler {
 
 // MagicLinkRateLimit limits sign-in link emails. The handler counts every
 // request (each one may send an email), not just failures.
-func MagicLinkRateLimit(redisClient *redis.Client) fiber.Handler {
+func MagicLinkRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 	return RateLimit(RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    5,
@@ -154,7 +154,7 @@ func MagicLinkRateLimit(redisClient *redis.Client) fiber.Handler {
 }
 
 // RegisterRateLimit creates rate limiting for registration endpoints
-func RegisterRateLimit(redisClient *redis.Client) fiber.Handler {
+func RegisterRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 	cfg := RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    3,
@@ -167,7 +167,7 @@ func RegisterRateLimit(redisClient *redis.Client) fiber.Handler {
 }
 
 // PasswordResetRateLimit creates rate limiting for password reset
-func PasswordResetRateLimit(redisClient *redis.Client) fiber.Handler {
+func PasswordResetRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 	cfg := RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    3,
@@ -180,7 +180,7 @@ func PasswordResetRateLimit(redisClient *redis.Client) fiber.Handler {
 }
 
 // APIRateLimit creates general API rate limiting
-func APIRateLimit(redisClient *redis.Client, maxRequests int, window time.Duration) fiber.Handler {
+func APIRateLimit(redisClient redis.UniversalClient, maxRequests int, window time.Duration) fiber.Handler {
 	cfg := RateLimitConfig{
 		RedisClient:    redisClient,
 		MaxAttempts:    maxRequests,

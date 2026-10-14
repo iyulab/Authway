@@ -2,6 +2,15 @@
 
 ### Added
 
+- **The API can use a Redis Cluster: `AUTHWAY_REDIS_CLUSTER=true`.** A Redis
+  that shards keys over nodes — a managed Redis with the OSS cluster policy,
+  or a self-run cluster — answers a key held on another node with `MOVED`,
+  which a single-node client cannot follow. With the setting the API speaks
+  the cluster protocol and finds the nodes from the one it is given; the key
+  prefix applies before a command is routed. Every command the API sends
+  names one key, so nothing needs keys to share a slot. A database number is
+  refused with it (a cluster has database 0 only).
+
 - **The at-rest encryption key can be changed.** `AUTHWAY_TOTP_ENCRYPTION_KEY`
   seals two-factor secrets and the credentials clients hold at other identity
   providers, and replacing it used to leave everything sealed under the old

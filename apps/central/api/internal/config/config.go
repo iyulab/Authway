@@ -91,6 +91,12 @@ type RedisConfig struct {
 	// too: every key it reads or writes starts with it. Empty for a Redis of
 	// the deployment's own.
 	KeyPrefix string `mapstructure:"key_prefix"`
+	// Cluster connects with the Redis Cluster protocol, for a Redis that
+	// shards keys over nodes and answers a key on the wrong node with MOVED
+	// (a managed Redis with the OSS cluster policy, or a self-run cluster).
+	// Host and Port name any node; the rest are discovered. A cluster has
+	// database 0 only — separate deployments on one with KeyPrefix.
+	Cluster bool `mapstructure:"cluster"`
 }
 
 type OAuthConfig struct {
@@ -327,6 +333,9 @@ func Load() (*Config, error) {
 	}
 	if tlsEnabled := os.Getenv("AUTHWAY_REDIS_TLS_ENABLED"); tlsEnabled != "" {
 		config.Redis.TLSEnabled = (tlsEnabled == "true")
+	}
+	if cluster := os.Getenv("AUTHWAY_REDIS_CLUSTER"); cluster != "" {
+		config.Redis.Cluster = (cluster == "true")
 	}
 
 	// Manual override for Admin config
@@ -565,6 +574,7 @@ func setDefaults() {
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("redis.key_prefix", "")
 	viper.SetDefault("redis.tls_enabled", false)
+	viper.SetDefault("redis.cluster", false)
 
 	// OAuth defaults
 	viper.SetDefault("oauth.authorize_code_expiry", "10m")

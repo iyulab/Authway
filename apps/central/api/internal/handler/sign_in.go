@@ -26,7 +26,7 @@ type signIn struct {
 	sessions        SessionPolicy
 }
 
-func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient *redis.Client, sessions SessionPolicy) *signIn {
+func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient redis.UniversalClient, sessions SessionPolicy) *signIn {
 	return &signIn{
 		hydra:           hc,
 		users:           users,

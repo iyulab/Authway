@@ -42,7 +42,7 @@ type SignInMethodSource interface {
 	SignInMethodsFor(cl *client.Client) []string
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient *redis.Client, signInMethods SignInMethodSource, sessions SessionPolicy) *AuthHandler {
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient redis.UniversalClient, signInMethods SignInMethodSource, sessions SessionPolicy) *AuthHandler {
 	flows := newSignIn(hydraClient, userService, logger, redisClient, sessions)
 	return &AuthHandler{
 		flows:           flows,

@@ -128,6 +128,7 @@ AUTHWAY_REDIS_PASSWORD=                     # Redis password (if auth enabled)
 AUTHWAY_REDIS_TLS_ENABLED=false             # true for a Redis that only speaks TLS
 AUTHWAY_REDIS_DB=0                          # Redis database number (0-15)
 AUTHWAY_REDIS_KEY_PREFIX=                   # this deployment's share of a Redis others use too
+AUTHWAY_REDIS_CLUSTER=false                 # true for a Redis Cluster (keys sharded over nodes, MOVED)
 ```
 
 `AUTHWAY_REDIS_KEY_PREFIX` puts every key the deployment reads or writes

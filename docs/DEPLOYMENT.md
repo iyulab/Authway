@@ -363,10 +363,18 @@ path, so an instance without a replica makes its restarts sign-in outages.
 
 ### What the API asks of it
 
-One node, or a cluster in a mode that needs no cluster-aware client. Every
-command names a single key — transactions and the one script included — so
-nothing depends on keys sharing a slot. No keyspace notifications, no `KEYS`
-or `SCAN`.
+One node, or a Redis Cluster. Every command names a single key —
+transactions and the one script included — so nothing depends on keys
+sharing a slot. No keyspace notifications, no `KEYS` or `SCAN`.
+
+A Redis that shards keys over nodes and answers a key held elsewhere with
+`MOVED` — a managed Redis with the OSS cluster policy, or a self-run cluster —
+needs `AUTHWAY_REDIS_CLUSTER=true`: the API then speaks the cluster protocol,
+learns the nodes from the one in `AUTHWAY_REDIS_HOST`/`PORT`, and sends each
+command to the node that holds its key. A clustered Redis that hides its
+nodes behind one endpoint (an enterprise or proxy policy) is a single node to
+the API and needs nothing. A cluster has database 0 only: the API refuses to
+start with `AUTHWAY_REDIS_CLUSTER=true` and a database number.
 
 ### Sharing one Redis between deployments
 
@@ -389,7 +397,8 @@ effects are those of losing every key, once. To make the move unnoticed for
 signed-in users, do it when a restart is acceptable anyway — sign-ins in
 flight at that moment are started again.
 
-1. Create the instance; note host, port, password, whether it requires TLS.
+1. Create the instance; note host, port, password, whether it requires TLS,
+   and whether its clustering needs a cluster client (above).
 2. If deployments will share it, choose a prefix for each.
 3. Set `AUTHWAY_REDIS_*` for the deployment and deploy the API.
 4. Sign in once and check the new instance has keys under the expected

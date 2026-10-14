@@ -34,11 +34,11 @@ type Authentication struct {
 // — checks the time. The authorization server keeps both but hands neither to
 // the steps where Authway sets a token's claims; hence this store.
 type AuthenticationStore struct {
-	redis  *redis.Client
+	redis  redis.UniversalClient
 	prefix string
 }
 
-func NewAuthenticationStore(redisClient *redis.Client) *AuthenticationStore {
+func NewAuthenticationStore(redisClient redis.UniversalClient) *AuthenticationStore {
 	// The prefix predates the methods; it stays so that sessions recorded
 	// before keep their authentication time.
 	return &AuthenticationStore{redis: redisClient, prefix: "auth_time:"}
