@@ -185,6 +185,8 @@ jobs:
             -e URLS_LOGIN=http://localhost:8080/login \
             -e URLS_CONSENT=http://localhost:8080/consent \
             -e URLS_LOGOUT=http://localhost:8080/logout \
+            -e URLS_DEVICE_VERIFICATION=http://localhost:8080/device \
+            -e URLS_DEVICE_SUCCESS=http://localhost:3001/device/done \
             -e CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false \
             oryd/hydra:v26.2.0 serve all --dev
           for _ in $(seq 1 60); do

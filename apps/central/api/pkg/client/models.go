@@ -367,7 +367,7 @@ type ScopedCreateClientRequest struct {
 	Name                 string   `json:"name" validate:"required"`
 	Public               bool     `json:"public"`
 	RedirectURIs         []string `json:"redirect_uris"`
-	GrantTypes           []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token"`
+	GrantTypes           []string `json:"grant_types" validate:"required,min=1,dive,oneof=authorization_code refresh_token urn:ietf:params:oauth:grant-type:device_code"`
 	Scopes               []string `json:"scopes" validate:"required,min=1"`
 	AllowedOrigins       []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 	BackChannelLogoutURI string   `json:"backchannel_logout_uri"`

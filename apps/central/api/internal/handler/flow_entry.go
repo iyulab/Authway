@@ -51,6 +51,24 @@ func (h *FlowEntryHandler) Consent(c *fiber.Ctx) error {
 	return h.enter(c, "consent_challenge", "/consent", settle)
 }
 
+// Device serves GET /device?device_challenge=…[&user_code=…] (Hydra's
+// URLS_DEVICE_VERIFICATION): a user signing in a device (RFC 8628) is handed
+// to the login UI's code page. A user code the device's complete
+// verification URI carried goes along — it is the code the user is about to
+// type, shown to them, not a secret.
+func (h *FlowEntryHandler) Device(c *fiber.Ctx) error {
+	flow := string([]byte(c.Query("device_challenge")))
+	if flow == "" {
+		q := url.Values{"error": {"invalid_request"}, "error_description": {msgInvalidSignIn}}
+		return c.Redirect(h.frontendURL+"/error?"+q.Encode(), fiber.StatusFound)
+	}
+	q := url.Values{"flow": {flow}}
+	if code := c.Query("user_code"); code != "" {
+		q.Set("user_code", code)
+	}
+	return c.Redirect(h.frontendURL+"/device?"+q.Encode(), fiber.StatusFound)
+}
+
 // Logout serves GET /logout?logout_challenge=… (Hydra's URLS_LOGOUT).
 func (h *FlowEntryHandler) Logout(c *fiber.Ctx) error {
 	return h.enter(c, "logout_challenge", "/logout", nil)

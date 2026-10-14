@@ -47,6 +47,11 @@ var ErrFlowNotFound = errors.New("login or consent flow not found")
 // longer be acted on — it was already accepted or rejected, or it timed out.
 var ErrFlowExpired = errors.New("login or consent flow expired or already handled")
 
+// ErrUserCodeRejected is returned when the authorization server does not
+// accept the code a user typed for a device sign-in: it is not the code the
+// device was shown, or the device's request has expired.
+var ErrUserCodeRejected = errors.New("user code not accepted")
+
 // flowError classifies a non-200 response to a call on a login, consent or
 // logout challenge. The id comes from the caller, so calls fail for reasons
 // the caller caused (unknown, used, expired), which must surface as client
@@ -836,6 +841,39 @@ func (c *Client) GetLogoutRequest(challenge string) (*LogoutRequest, error) {
 		return nil, fmt.Errorf("failed to decode logout request: %w", err)
 	}
 	return &req, nil
+}
+
+// AcceptUserCodeRequest confirms the code a user typed on the device sign-in
+// page (RFC 8628) and returns where the browser goes next — on to the
+// ordinary login and consent requests for the device's client.
+func (c *Client) AcceptUserCodeRequest(challenge, userCode string) (*LoginResponse, error) {
+	data, err := json.Marshal(map[string]string{"user_code": userCode})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/admin/oauth2/auth/requests/device/accept?device_challenge=%s",
+		c.AdminURL, url.QueryEscape(challenge)), bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to accept user code: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusBadRequest {
+		return nil, fmt.Errorf("%w: hydra returned %d", ErrUserCodeRejected, resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, flowError(resp.StatusCode, respBody)
+	}
+	var out LoginResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, fmt.Errorf("failed to decode user code accept response: %w", err)
+	}
+	return &out, nil
 }
 
 // AcceptLogoutRequest accepts a logout request and returns where Hydra wants

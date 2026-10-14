@@ -88,12 +88,12 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 	// Confidential clients (server-side web apps, M2M, backend services).
 	// At least one credential-bearing grant must be present, otherwise the
 	// secret is meaningless and the client is mis-typed.
-	if len(gt) > 0 && !containsAny(gt, "authorization_code", "client_credentials", "refresh_token", "password") {
+	if len(gt) > 0 && !containsAny(gt, "authorization_code", "client_credentials", "refresh_token", "password", deviceCodeGrant) {
 		return &ConfigError{
 			Code:    "confidential_client_unsupported_grants",
 			Field:   "grant_types",
 			Message: "Confidential clients must use a credential-bearing grant",
-			Hint:    "Use one of: authorization_code, client_credentials, refresh_token, password.",
+			Hint:    "Use one of: authorization_code, client_credentials, refresh_token, password, " + deviceCodeGrant + ".",
 		}
 	}
 
@@ -192,6 +192,12 @@ func usesBrowserRedirect(redirectURIs []string) bool {
 	}
 	return false
 }
+
+// deviceCodeGrant is the device authorization grant (RFC 8628): a device
+// without a usable browser or keyboard shows a code, the user approves it on
+// another screen, and the device polls for its tokens. It needs no redirect
+// URI, and a public client may use it — it is meant for exactly those.
+const deviceCodeGrant = "urn:ietf:params:oauth:grant-type:device_code"
 
 func normalizeGrantTypes(grantTypes []string) []string {
 	out := make([]string, 0, len(grantTypes))

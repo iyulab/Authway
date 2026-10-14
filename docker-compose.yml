@@ -110,6 +110,8 @@ services:
       URLS_LOGIN: http://localhost:8080/login
       URLS_CONSENT: http://localhost:8080/consent
       URLS_LOGOUT: http://localhost:8080/logout
+      URLS_DEVICE_VERIFICATION: http://localhost:8080/device
+      URLS_DEVICE_SUCCESS: http://localhost:3001/device/done
       URLS_ERROR: http://localhost:3001/error
       SECRETS_SYSTEM: youReallyNeedToChangeThis
       # Receivers of back-channel logout calls run on this machine here; every

@@ -19,6 +19,7 @@ of the login UI with an opaque **flow id**:
 | `GET /login?login_challenge=…` | `<login UI>/login?flow=<id>` |
 | `GET /consent?consent_challenge=…` | `<login UI>/consent?flow=<id>` |
 | `GET /logout?logout_challenge=…` | `<login UI>/logout?flow=<id>` |
+| `GET /device?device_challenge=…` | `<login UI>/device?flow=<id>` (and `user_code`, when the device's link carried it) |
 
 A flow that needs nothing from the user never opens a screen: when the browser
 already has a session the client can use, or there is no consent to ask for,
@@ -30,8 +31,9 @@ still asks first (`GET …-flows/{flow}`), because the answer may have become
 A screen treats the flow id as opaque: it only ever passes it back, URL-encoded
 in a path segment. Point the authorization server's login, consent and logout
 URLs at the API (`URLS_LOGIN=<API>/login`, `URLS_CONSENT=<API>/consent`,
-`URLS_LOGOUT=<API>/logout`); its error URL stays on the login UI
-(`<login UI>/error`).
+`URLS_LOGOUT=<API>/logout`, `URLS_DEVICE_VERIFICATION=<API>/device`); its error
+URL and the page that ends a device sign-in stay on the login UI
+(`<login UI>/error`, `URLS_DEVICE_SUCCESS=<login UI>/device/done`).
 
 ## Answers
 
@@ -157,6 +159,34 @@ and revokes the user's tokens. The destination is decided by the
 authorization server: the application's `post_logout_redirect_uri`, which must
 be one of the client's registered `post_logout_redirect_uris`.
 
+## Device sign-in
+
+A device without a usable browser or keyboard — a TV, a console, a
+command-line tool — signs in with a code the user enters on another screen
+(RFC 8628):
+
+1. The device asks the authorization server's `device_authorization_endpoint`
+   (discovery) for a code, with a client registered with the
+   `urn:ietf:params:oauth:grant-type:device_code` grant. It shows the user the
+   `user_code` and the `verification_uri` (or a QR code of
+   `verification_uri_complete`, which carries the code).
+2. The user opens the address; the browser reaches the login UI's device page
+   with a flow id.
+3. `POST /api/v1/device-flows/{flow}` `{"user_code": "…"}` → `next: redirect`.
+   The code is read without regard to case, spaces or dashes; a code that is
+   not the device's, or whose device request expired, is
+   `400 user_code_invalid`.
+4. The sign-in goes on like any other: the login screen, then the consent
+   screen — which shows the application — and finally the login UI's
+   `/device/done` page, which tells the user to go back to the device.
+5. Meanwhile the device polls the token endpoint
+   (`grant_type=urn:ietf:params:oauth:grant-type:device_code`), answered
+   `authorization_pending` until the user approves, then with its tokens
+   (with a refresh token when it asked for `offline_access`).
+
+Codes are eight capital letters and live ten minutes. A browser can finish
+only the device page it opened last.
+
 ## Sessions
 
 Every sign-in — by password, an emailed link or another identity provider —
@@ -212,6 +242,7 @@ authorization request.
   "custom_claims": true,
   "backchannel_logout": true,
   "token_introspection": true,
+  "device_authorization": true,
   "token_exchange": false,
   "ciba": false
 }

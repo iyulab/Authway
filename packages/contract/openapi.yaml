@@ -410,6 +410,46 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
+  /api/v1/device-flows/{flow}:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: submitDeviceUserCode
+      description: |
+        A device sign-in (RFC 8628). A device without a usable browser or
+        keyboard asks the authorization server's
+        `device_authorization_endpoint` (discovery) for a code and shows the
+        user where to enter it. The authorization server sends the user's
+        browser to the login UI's device page with a flow id — and the code,
+        when the user opened the verification URI that carries it. The page
+        sends the code the user typed here. Accepted, the sign-in goes on
+        like any other: the login screen and the consent screen (which shows
+        the application) follow, and the device then receives its tokens by
+        polling the token endpoint.
+
+        The code is read without regard to case, spaces or dashes. Offered
+        when capabilities.device_authorization is true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_code]
+              properties:
+                user_code: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Redirect' }
+        '400':
+          description: |
+            `user_code_invalid` — not the code the device shows, or the
+            device's request has expired (start again on the device);
+            `user_code_required`; or the flow is not valid (`invalid_flow`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /api/v1/logout-flows/{flow}:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
     post:
@@ -2419,7 +2459,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, device_authorization, token_exchange, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -2444,6 +2484,14 @@ components:
           type: boolean
         token_introspection:
           description: A confidential client can ask whether a token of its tenant is still good (POST /api/v1/oauth2/introspect).
+          type: boolean
+        device_authorization:
+          description: |
+            A device signs in with a code the user enters on another screen
+            (RFC 8628): discovery's `device_authorization_endpoint`, clients
+            registered with the `urn:ietf:params:oauth:grant-type:device_code`
+            grant, and POST /api/v1/device-flows/{flow} behind the login UI's
+            device page.
           type: boolean
         token_exchange: { type: boolean }
         ciba: { type: boolean }

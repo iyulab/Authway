@@ -340,6 +340,7 @@ func main() {
 	app.Get("/login", flowEntryHandler.Login)
 	app.Get("/consent", flowEntryHandler.Consent)
 	app.Get("/logout", flowEntryHandler.Logout)
+	app.Get("/device", flowEntryHandler.Device)
 
 	// Popup callback for popup-based authentication (@authway/client, @authway/react)
 	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
@@ -398,6 +399,9 @@ func main() {
 	v1.Post("/consent-flows/:flow/accept", authHandler.AcceptConsent)
 	v1.Post("/consent-flows/:flow/reject", authHandler.RejectConsent)
 	v1.Post("/logout-flows/:flow", logoutFlowHandler.CompleteLogout)
+	// A device sign-in (RFC 8628): the code the user typed on the device page.
+	deviceFlowHandler := handler.NewDeviceFlowHandler(hydraClient, zapLogger)
+	v1.Post("/device-flows/:flow", loginRateLimit, deviceFlowHandler.SubmitUserCode)
 
 	// JWT middleware for authenticated routes (supports both JWT and opaque tokens)
 	jwtAuth := middleware.JWTAuth(zapLogger, hydraClient, db)
