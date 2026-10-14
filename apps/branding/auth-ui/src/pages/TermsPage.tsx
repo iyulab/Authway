@@ -7,6 +7,20 @@ import { followRedirect, loginFlowUrl, submitLoginStep, type FlowStep, type Term
 const versionKey = (d: TermsDocument) => `${d.kind}\u0000${d.version}`
 
 /**
+ * The document's address, if it is one to link to. The backend only stores
+ * https addresses; a screen does not rely on that to keep a javascript: or
+ * data: address out of an href.
+ */
+function documentLink(url: string): string | undefined {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' ? parsed.href : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * The documents the user's tenant asks them to accept before the sign-in
  * completes — after every factor, or when a session is reused and a document
  * was revised. Each opens where the application publishes it; the user ticks
@@ -125,10 +139,15 @@ const TermsPage: React.FC = () => {
                   onChange={() => toggle(d)}
                 />
                 <label htmlFor={`terms-${d.kind}`} className="text-sm text-gray-800">
-                  {t('auth:terms.agree', { name: name(d) })}{' '}
-                  <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-500 underline">
-                    {t('auth:terms.read')}
-                  </a>
+                  {t('auth:terms.agree', { name: name(d) })}
+                  {documentLink(d.url) && (
+                    <>
+                      {' '}
+                      <a href={documentLink(d.url)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-500 underline">
+                        {t('auth:terms.read')}
+                      </a>
+                    </>
+                  )}
                 </label>
               </li>
             ))}

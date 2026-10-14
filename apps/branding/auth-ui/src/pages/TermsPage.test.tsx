@@ -71,6 +71,18 @@ describe('TermsPage', () => {
     expect(await screen.findByLabelText(/I agree to the location_terms/)).toBeInTheDocument()
   })
 
+  it('links only to an https address', async () => {
+    mockSearchParams.set('flow', 'f-1=')
+    mockSearchParams.set('terms_challenge', 'c-1')
+    owing([
+      { kind: 'terms_of_service', version: '1', url: 'javascript:alert(1)' },
+      { kind: 'privacy_policy', version: 'a', url: 'https://example.test/privacy' },
+    ])
+    render(<TermsPage />)
+    expect(await screen.findByLabelText(/Terms of Service/)).toBeInTheDocument()
+    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['https://example.test/privacy'])
+  })
+
   it('continues only once every document is ticked, sending exactly what was shown', async () => {
     mockSearchParams.set('flow', 'f-1=')
     mockSearchParams.set('terms_challenge', 'c-1')
