@@ -272,7 +272,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
+                anyOf:
                   - $ref: '#/components/schemas/Error'
                   - $ref: '#/components/schemas/TermsMismatch'
         '410': { $ref: '#/components/responses/Error' }
@@ -2165,9 +2165,11 @@ components:
         flow: { type: string, minLength: 1 }
         terms_challenge: { type: string, minLength: 1 }
         terms:
-          description: Only the documents not yet accepted, ordered by kind.
+          description: |
+            Only the documents not yet accepted, ordered by kind. Empty only
+            when what was owed was retired after the step began: accepting the
+            empty list completes the sign-in.
           type: array
-          minItems: 1
           items: { $ref: '#/components/schemas/TermsDocument' }
 
     TermsMismatch:

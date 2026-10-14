@@ -121,7 +121,7 @@ func TestSignIn_OpensASessionWhateverTheUserChose(t *testing.T) {
 		{"another identity provider", byProvider("google"), false, 2 * time.Hour},
 	} {
 		h := &sessionHydra{login: hydra.LoginRequest{Challenge: "flow-1", Client: &hydra.OAuth2Client{ClientID: testClientID}}}
-		flows := newSignIn(h.client(t), newFakeUserService(u), zap.NewNop(), newTestRedisClient(t), policy)
+		flows := newSignIn(h.client(t), newFakeUserService(u), zap.NewNop(), newTestRedisClient(t), SignInPolicy{Sessions: policy})
 
 		step, err := flows.afterFirstFactor("flow-1", u, tc.method, tc.keepSignedIn)
 		if err != nil || step.RedirectTo == "" {
@@ -141,7 +141,7 @@ func TestSignIn_OpensASessionWhateverTheUserChose(t *testing.T) {
 func TestSignIn_KeepsTheChoiceAcrossTheSecondFactor(t *testing.T) {
 	u := buildTestUser(t, "unused", true)
 	h := &sessionHydra{}
-	flows := newSignIn(h.client(t), newFakeUserService(u), zap.NewNop(), newTestRedisClient(t), SessionPolicy{})
+	flows := newSignIn(h.client(t), newFakeUserService(u), zap.NewNop(), newTestRedisClient(t), SignInPolicy{})
 
 	step, err := flows.afterFirstFactor("flow-1", u, byPassword, true)
 	if err != nil || step.MFAChallenge == "" {
@@ -158,7 +158,7 @@ func TestSignIn_KeepsTheChoiceAcrossTheSecondFactor(t *testing.T) {
 
 func newSessionFlowApp(t *testing.T, h *sessionHydra, u *user.User, clients ...*client.Client) *fiber.App {
 	t.Helper()
-	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(clients...), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
+	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(clients...), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 	app := fiber.New()
 	app.Get("/api/v1/login-flows/:flow", handler.GetLoginFlow)
 	app.Get("/consent-flows/:flow", handler.GetConsentFlow)
@@ -306,7 +306,7 @@ func TestFlowSettler_SettlesWhatNeedsNoScreen(t *testing.T) {
 	silent := "https://issuer.example/oauth2/auth?prompt=none"
 
 	settle := func(h *sessionHydra, c *client.Client, method string) (string, bool) {
-		handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
+		handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 		entry := NewFlowEntryHandler(testFrontendURL, handler)
 		app := fiber.New()
 		app.Get("/login", entry.Login)

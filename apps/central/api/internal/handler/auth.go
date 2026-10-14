@@ -42,8 +42,8 @@ type SignInMethodSource interface {
 	SignInMethodsFor(cl *client.Client) []string
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient redis.UniversalClient, signInMethods SignInMethodSource, sessions SessionPolicy) *AuthHandler {
-	flows := newSignIn(hydraClient, userService, logger, redisClient, sessions)
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient redis.UniversalClient, signInMethods SignInMethodSource, policy SignInPolicy) *AuthHandler {
+	flows := newSignIn(hydraClient, userService, logger, redisClient, policy)
 	return &AuthHandler{
 		flows:           flows,
 		signInMethods:   signInMethods,
@@ -171,13 +171,16 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 // emailed link does not otherwise know.
 func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User, first signInMethod, keepSignedIn bool) error {
 	step, err := h.flows.afterFirstFactor(flow, u, first, keepSignedIn)
-	if errors.Is(err, errSecondFactorNotStarted) {
-		h.logger.Error("Failed to start the second factor step", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to start MFA challenge", "code": "internal_error"})
+	if errors.Is(err, errSecondFactorNotStarted) || errors.Is(err, errTermsStep) {
+		h.logger.Error("Failed to start the next sign-in step", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to continue the sign-in", "code": "internal_error"})
 	}
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
+	}
+	if step.TermsChallenge != "" {
+		return c.JSON(termsStep(flow, step))
 	}
 	if step.MFAChallenge != "" {
 		h.logger.Info("First factor verified, second factor required",
@@ -255,12 +258,19 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	if phase == "recovery_code" {
 		method = firstFactor(pending.First, pending.Provider).withRecoveryCode()
 	}
-	redirectTo, err := h.flows.accept(pending.HydraChallenge, u, method, pending.KeepSignedIn)
+	step, err := h.flows.proved(pending.HydraChallenge, u, method, pending.KeepSignedIn)
+	if errors.Is(err, errTermsStep) {
+		h.logger.Error("Failed to read the documents a user owes", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to continue the sign-in", "code": "internal_error"})
+	}
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
 		return respondFlowLookupError(c, err)
 	}
-	return h.signedIn(c, pending.HydraChallenge, u, method, pending.KeepSignedIn, redirectTo)
+	if step.TermsChallenge != "" {
+		return c.JSON(termsStep(pending.HydraChallenge, step))
+	}
+	return h.signedIn(c, pending.HydraChallenge, u, method, pending.KeepSignedIn, step.RedirectTo)
 }
 
 func respondInvalidMFAChallenge(c *fiber.Ctx) error {

@@ -27,6 +27,14 @@ export interface TestUser {
   password: string
 }
 
+/** A document the tenant asks its users to accept, as a sign-in shows it. */
+export interface TermsDocument {
+  kind: string
+  version: string
+  url: string
+  title?: string
+}
+
 export interface Tokens {
   access_token: string
   id_token?: string
@@ -76,6 +84,12 @@ export type LoginOutcome =
    * named in its answer.
    */
   | { kind: 'second_factor'; attempt: LoginAttempt; flow: string; challenge: string }
+  /**
+   * Every factor passed and the user owes the tenant's documents: the login
+   * screen shows `terms` and the user accepts or declines them, quoting
+   * `challenge`.
+   */
+  | { kind: 'terms'; attempt: LoginAttempt; flow: string; challenge: string; terms: TermsDocument[] }
 
 /**
  * Drives one provider through its public surfaces. The login-UI backend calls
@@ -390,6 +404,8 @@ export class Provider {
     if (step.next === 'mfa' && step.mfa_challenge && step.flow) {
       return { kind: 'second_factor', attempt, flow: step.flow, challenge: step.mfa_challenge }
     }
+    const owed = this.termsOwed(attempt, body)
+    if (owed) return owed
     if (step.next !== 'redirect' || !step.redirect_to) return { kind: 'rejected', status, body }
     return this.finishAuthorization(attempt, step.redirect_to, status)
   }
@@ -413,8 +429,61 @@ export class Provider {
     await conform('POST', `/api/v1/login-flows/{flow}${path}`, res)
     const body = await res.text()
     if (!res.ok) return { kind: 'rejected', status: res.status, body }
+    const owed = this.termsOwed(pending.attempt, body)
+    if (owed) return owed
     const { next, redirect_to: afterLogin } = JSON.parse(body) as { next?: string; redirect_to?: string }
     if (next !== 'redirect' || !afterLogin) return { kind: 'rejected', status: res.status, body }
+    return this.finishAuthorization(pending.attempt, afterLogin, res.status)
+  }
+
+  /** The terms step, when `body` is a login-flow answer that asks for it. */
+  termsOwed(attempt: LoginAttempt, body: string): Extract<LoginOutcome, { kind: 'terms' }> | undefined {
+    const step = JSON.parse(body) as { next?: string; flow?: string; terms_challenge?: string; terms?: TermsDocument[] }
+    if (step.next !== 'terms') return undefined
+    if (!step.flow || !step.terms_challenge || !step.terms) throw new Error(`A terms step without flow, challenge or terms: ${body}`)
+    return { kind: 'terms', attempt, flow: step.flow, challenge: step.terms_challenge, terms: step.terms }
+  }
+
+  /** Reads the documents a parked sign-in owes, as a screen reached by navigation does. */
+  async owedTerms(attempt: LoginAttempt, flow: string, challenge: string): Promise<Response> {
+    const res = await attempt.browser.fetch(`${this.loginFlowUrl(flow, '/terms')}?${new URLSearchParams({ terms_challenge: challenge })}`)
+    await conform('GET', '/api/v1/login-flows/{flow}/terms', res.clone())
+    return res
+  }
+
+  /**
+   * Accepts the documents a sign-in owes — those it was shown, unless
+   * `accepted` names others — and, if the acceptance holds, finishes the flow.
+   */
+  async acceptTerms(
+    pending: Extract<LoginOutcome, { kind: 'terms' }>,
+    accepted: { kind: string; version: string }[] = pending.terms.map(({ kind, version }) => ({ kind, version })),
+  ): Promise<LoginOutcome> {
+    const res = await pending.attempt.browser.fetch(this.loginFlowUrl(pending.flow, '/terms'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terms_challenge: pending.challenge, accepted }),
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/terms', res.clone())
+    const body = await res.text()
+    if (!res.ok) return { kind: 'rejected', status: res.status, body }
+    const { next, redirect_to: afterLogin } = JSON.parse(body) as { next?: string; redirect_to?: string }
+    if (next !== 'redirect' || !afterLogin) return { kind: 'rejected', status: res.status, body }
+    return this.finishAuthorization(pending.attempt, afterLogin, res.status)
+  }
+
+  /** Declines the documents a sign-in owes; the application is told how that ended. */
+  async declineTerms(pending: Extract<LoginOutcome, { kind: 'terms' }>): Promise<LoginOutcome> {
+    const res = await pending.attempt.browser.fetch(this.loginFlowUrl(pending.flow, '/terms/decline'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terms_challenge: pending.challenge }),
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/terms/decline', res.clone())
+    const body = await res.text()
+    if (!res.ok) return { kind: 'rejected', status: res.status, body }
+    const { redirect_to: afterLogin } = JSON.parse(body) as { redirect_to?: string }
+    if (!afterLogin) return { kind: 'rejected', status: res.status, body }
     return this.finishAuthorization(pending.attempt, afterLogin, res.status)
   }
 
@@ -480,6 +549,15 @@ export class Provider {
       const { auth_ui: loginUi } = (await (await fetch(`${this.config.api}/.well-known/authway-config`)).json()) as { auth_ui: string }
       if (next.origin !== new URL(loginUi).origin) throw new Error(`The second factor step is not on the login UI (${loginUi}): ${next}`)
       return { kind: 'second_factor', attempt, flow: owedFlow, challenge }
+    }
+    if (next.pathname.endsWith('/terms')) {
+      const owedFlow = next.searchParams.get('flow')
+      const challenge = next.searchParams.get('terms_challenge')
+      if (!owedFlow || !challenge) throw new Error(`The terms step was opened without a flow or challenge: ${next}`)
+      const res = await this.owedTerms(attempt, owedFlow, challenge)
+      const body = await res.text()
+      if (!res.ok) return { kind: 'rejected', status: res.status, body }
+      return this.termsOwed(attempt, body) ?? { kind: 'rejected', status: res.status, body }
     }
     // Straight to an error screen: no one was signed in and the request could not be handed back.
     if (next.searchParams.has('error')) return { kind: 'rejected', status: res.status, body: next.toString() }

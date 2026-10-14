@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/terms"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 )
@@ -23,26 +24,43 @@ type signIn struct {
 	logger          *zap.Logger
 	authentications *AuthenticationStore
 	pending         *MFAChallengeStore
+	owing           *TermsChallengeStore
 	sessions        SessionPolicy
+	terms           TermsLedger
 }
 
-func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient redis.UniversalClient, sessions SessionPolicy) *signIn {
+// SignInPolicy is what a deployment decides about the sign-ins it completes:
+// how long the session lasts, and which documents the user must have
+// accepted first. A nil Terms asks for none.
+type SignInPolicy struct {
+	Sessions SessionPolicy
+	Terms    TermsLedger
+}
+
+func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient redis.UniversalClient, policy SignInPolicy) *signIn {
 	return &signIn{
 		hydra:           hc,
 		users:           users,
 		logger:          logger,
-		sessions:        sessions,
+		sessions:        policy.Sessions,
+		terms:           policy.Terms,
 		authentications: NewAuthenticationStore(redisClient),
 		pending:         NewMFAChallengeStore(redisClient),
+		owing:           NewTermsChallengeStore(redisClient),
 	}
 }
 
-// signInStep is what a login flow needs next: exactly one field is set.
+// signInStep is what a login flow needs next: exactly one of MFAChallenge,
+// TermsChallenge and RedirectTo is set.
 type signInStep struct {
 	// MFAChallenge is set while the user still owes a second factor. It
 	// proves the first one passed — the flow id alone must not open the
 	// second step.
 	MFAChallenge string
+	// TermsChallenge is set while the user still owes the tenant's documents,
+	// Terms. It proves every factor passed, as MFAChallenge proves the first.
+	TermsChallenge string
+	Terms          []terms.Document
 	// RedirectTo is set once the flow has been accepted.
 	RedirectTo string
 }
@@ -57,8 +75,7 @@ var errSecondFactorNotStarted = errors.New("could not start the second factor st
 // this browser (see SessionPolicy).
 func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod, keepSignedIn bool) (signInStep, error) {
 	if !u.TOTPEnabled {
-		redirectTo, err := s.accept(flow, u, first, keepSignedIn)
-		return signInStep{RedirectTo: redirectTo}, err
+		return s.proved(flow, u, first, keepSignedIn)
 	}
 	challenge, err := tokenhash.Generate()
 	if err != nil {

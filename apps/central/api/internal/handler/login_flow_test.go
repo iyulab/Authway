@@ -56,7 +56,7 @@ func (f *loginFlowHydra) client(t *testing.T) *hydra.Client {
 
 func newLoginFlowApp(t *testing.T, h *loginFlowHydra, u *user.User, c *client.Client) *fiber.App {
 	t.Helper()
-	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
+	handler := NewAuthHandler(newFakeUserService(u), newFakeClientService(c), fakeClaimsService{}, &fakeMFAService{}, h.client(t), zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 	app := fiber.New()
 	app.Get("/api/v1/login-flows/:flow", handler.GetLoginFlow)
 	return app

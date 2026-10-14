@@ -40,9 +40,11 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - device_authorization: a device without a usable browser or keyboard
 //     signs in with a code the user types elsewhere (RFC 8628, discovery's
 //     device_authorization_endpoint; clients register the device_code grant)
-//   - terms_acceptance, token_exchange, ciba: documents a tenant's users
-//     accept at sign-in, delegated tokens (RFC 8693) and decoupled approval
-//     (OpenID CIBA) — not offered
+//   - terms_acceptance: a tenant names documents its users accept at
+//     sign-in; a login flow owes the terms step until they have accepted the
+//     current versions (/api/v1/tenants/{id}/terms)
+//   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
+//     approval (OpenID CIBA) — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"multi_tenant":         true,
@@ -55,7 +57,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"backchannel_logout":   true,
 		"token_introspection":  true,
 		"device_authorization": true,
-		"terms_acceptance":     false,
+		"terms_acceptance":     true,
 		"token_exchange":       false,
 		"ciba":                 false,
 	})

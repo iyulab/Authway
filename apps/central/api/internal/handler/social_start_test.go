@@ -47,7 +47,7 @@ func newSocialStartTestApp(t *testing.T, cl *client.Client) (*fiber.App, *[]stri
 	google := social.NewGoogleService(&config.GoogleOAuthConfig{ClientID: "google-app", RedirectURL: "https://api.example.com/auth/google/callback"},
 		nil, nil, clients, zap.NewNop())
 	h := NewSocialHandlerWithAllProviders(google, nil, nil, nil, nil, clients, hydra.NewClient(hydraSrv.URL), zap.NewNop(), nil,
-		NewOAuthStateStore(newTestRedisClient(t)), testFrontendURL, SessionPolicy{})
+		NewOAuthStateStore(newTestRedisClient(t)), testFrontendURL, SignInPolicy{})
 	app := fiber.New()
 	app.Get("/login-flows/:flow/social/:provider", h.StartSocialLogin)
 	return app, &rejected
@@ -123,7 +123,7 @@ func TestCapabilities_ListsOnlyConfiguredProviders(t *testing.T) {
 	clients := newFakeClientService()
 	google := social.NewGoogleService(&config.GoogleOAuthConfig{ClientID: "google-app"}, nil, nil, clients, zap.NewNop())
 	github := social.NewGitHubService(&config.GitHubOAuthConfig{}, nil, nil, clients, zap.NewNop())
-	h := NewSocialHandlerWithAllProviders(google, github, nil, nil, nil, clients, nil, zap.NewNop(), nil, nil, testFrontendURL, SessionPolicy{})
+	h := NewSocialHandlerWithAllProviders(google, github, nil, nil, nil, clients, nil, zap.NewNop(), nil, nil, testFrontendURL, SignInPolicy{})
 	app := fiber.New()
 	app.Get("/capabilities", NewCapabilitiesHandler(h).Get)
 

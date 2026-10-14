@@ -52,7 +52,7 @@ func newMagicLinkTestApp(t *testing.T, allowed []string) (*fiber.App, *fakeLinks
 	u := buildTestUser(t, "unused", false)
 	cl := &client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, EnabledAuthProviders: allowed}
 	hydraClient, acceptCount := newTestHydraServer(t)
-	auth := NewAuthHandler(newFakeUserService(u), newFakeClientService(cl), fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SessionPolicy{})
+	auth := NewAuthHandler(newFakeUserService(u), newFakeClientService(cl), fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 	links := &fakeLinks{
 		link: &passwordless.MagicLink{Email: u.Email, TenantID: u.TenantID, LoginFlow: "flow-1=", ExpiresAt: time.Now().Add(time.Minute)},
 		user: u,

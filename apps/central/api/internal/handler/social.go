@@ -43,11 +43,11 @@ func NewSocialHandlerWithAllProviders(
 	auditService audit.Service,
 	stateStore *OAuthStateStore,
 	frontendURL string,
-	sessions SessionPolicy,
+	policy SignInPolicy,
 ) *SocialHandler {
 	var flows *signIn
 	if stateStore != nil {
-		flows = newSignIn(hydraClient, userService, logger, stateStore.redis, sessions)
+		flows = newSignIn(hydraClient, userService, logger, stateStore.redis, policy)
 	}
 	return &SocialHandler{
 		stateStore:       stateStore,
@@ -401,6 +401,10 @@ func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow stri
 		s.logger.Error("Failed to continue the login flow after a social sign-in",
 			zap.String("provider", provider), zap.Error(err))
 		return s.endSignIn(c, flow, "server_error", msgSignInFailed)
+	}
+	if step.TermsChallenge != "" {
+		q := url.Values{"flow": {flow}, "terms_challenge": {step.TermsChallenge}}
+		return c.Redirect(strings.TrimRight(s.frontendURL, "/")+"/terms?"+q.Encode(), fiber.StatusFound)
 	}
 	if step.MFAChallenge != "" {
 		s.logger.Info("Provider sign-in verified, second factor required",

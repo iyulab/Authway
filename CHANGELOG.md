@@ -1,5 +1,22 @@
 ## [Unreleased]
 
+### Added
+
+- **Terms a tenant's users accept at sign-in.** A tenant names its documents —
+  terms of service, a privacy policy, any kind — one current version per kind
+  (`PUT /api/v1/tenants/{id}/terms/{kind}` with the version and the address
+  where the application publishes it). A sign-in then owes the current version
+  of every document the user has not accepted: after every factor, and when a
+  browser's session is reused, the login flow answers `next: terms` with a
+  `terms_challenge`; the user accepts (`POST …/login-flows/{flow}/terms`) or
+  declines (`…/terms/decline` — the application gets `access_denied`). A
+  request with `prompt=none` gets `interaction_required`. What each user
+  accepted, when and signing in to which client is kept
+  (`GET /api/v1/users/{id}/terms-acceptances`). A tenant service credential
+  can keep its own tenant's documents with the new scope `admin.terms:write`.
+  A tenant that names no documents asks nothing, as before.
+  `capabilities.terms_acceptance`.
+
 ### Fixed
 
 - **`AUTHWAY_REDIS_CLUSTER=true` with TLS reaches a managed Redis.** A cluster

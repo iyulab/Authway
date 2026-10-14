@@ -325,9 +325,14 @@ func main() {
 	mfaService := mfa.NewService(db, userService, zapLogger, cfg.App.Name, totpCipher)
 
 	// Initialize handlers
-	sessionPolicy := handler.SessionPolicy{Timeout: tenantService.SessionTimeout}
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, sessionPolicy)
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, sessionPolicy)
+	// Every sign-in opens a session as long as its tenant says, and owes the
+	// documents its tenant asks its users to accept.
+	signInPolicy := handler.SignInPolicy{
+		Sessions: handler.SessionPolicy{Timeout: tenantService.SessionTimeout},
+		Terms:    termsService,
+	}
+	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
@@ -386,6 +391,11 @@ func main() {
 	v1.Post("/login-flows/:flow/password", loginRateLimit, authHandler.SubmitPassword)
 	v1.Post("/login-flows/:flow/mfa", loginRateLimit, authHandler.VerifyMFALogin)
 	v1.Post("/login-flows/:flow/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin)
+	// The documents the user's tenant asks them to accept, once every factor
+	// has passed. The terms_challenge is the credential, as mfa_challenge is.
+	v1.Get("/login-flows/:flow/terms", authHandler.GetOwedTerms)
+	v1.Post("/login-flows/:flow/terms", authHandler.AcceptTerms)
+	v1.Post("/login-flows/:flow/terms/decline", authHandler.DeclineTerms)
 	// A page navigation (not fetch): the browser goes on to the provider.
 	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
 

@@ -181,20 +181,19 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 		amr = earlier.Methods
 	}
 
-	// Reusing a session does not lengthen it: how long it lasts was decided
-	// when the user signed in (the authorization server ignores a lifetime
-	// given here).
-	resp, err := h.hydraClient.AcceptLoginRequest(flow, &hydra.AcceptLoginRequest{
-		Subject: loginReq.Subject,
-		AMR:     amr,
-		Context: map[string]any{
-			"email":     sessionUser.Email,
-			"name":      sessionUser.Name,
-			"tenant_id": sessionUser.TenantID.String(),
-		},
-	})
+	// The session answers who the user is, not that they have accepted what
+	// their tenant asks of them now: a document may have been revised since.
+	due, err := h.flows.owed(sessionUser)
 	if err != nil {
 		return nil, false, err
 	}
-	return fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo, "sso": true}, true, nil
+	if len(due) > 0 {
+		return h.sessionOwesTerms(flow, loginReq, sessionUser, amr, due)
+	}
+
+	redirectTo, err := h.flows.reuse(flow, sessionUser, amr)
+	if err != nil {
+		return nil, false, err
+	}
+	return fiber.Map{"next": nextRedirect, "redirect_to": redirectTo, "sso": true}, true, nil
 }
