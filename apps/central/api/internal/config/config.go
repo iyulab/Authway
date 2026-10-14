@@ -616,6 +616,11 @@ func setDefaults() {
 	viper.SetDefault("email.sendway_api_key", "")
 	viper.SetDefault("email.smtp_host", "localhost")
 	viper.SetDefault("email.smtp_port", 587)
+	// Every key the struct maps needs a default here: Unmarshal fills only the
+	// keys viper knows, so an AUTHWAY_EMAIL_* variable without one is ignored.
+	viper.SetDefault("email.smtp_user", "")
+	viper.SetDefault("email.smtp_password", "")
+	viper.SetDefault("email.smtp_security", "")
 	viper.SetDefault("email.from_email", "noreply@authway.in")
 	viper.SetDefault("email.from_name", "Authway")
 

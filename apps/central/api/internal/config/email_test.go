@@ -63,3 +63,24 @@ func TestValidateRejectsAnUnknownSMTPSecurity(t *testing.T) {
 		}
 	}
 }
+
+// The settings are read from the environment the way a deployment gives them.
+// Unmarshal fills only keys viper knows, so a key without a default would be
+// silently ignored — as the SMTP username and password were.
+func TestLoadReadsTheSMTPSettingsFromTheEnvironment(t *testing.T) {
+	t.Setenv("AUTHWAY_APP_ENVIRONMENT", "development")
+	t.Setenv("AUTHWAY_ADMIN_PASSWORD", "x")
+	t.Setenv("AUTHWAY_EMAIL_SMTP_HOST", "smtp.example.com")
+	t.Setenv("AUTHWAY_EMAIL_SMTP_PORT", "465")
+	t.Setenv("AUTHWAY_EMAIL_SMTP_USER", "mailer")
+	t.Setenv("AUTHWAY_EMAIL_SMTP_PASSWORD", "secret")
+	t.Setenv("AUTHWAY_EMAIL_SMTP_SECURITY", "tls")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e := c.Email
+	if e.SMTPHost != "smtp.example.com" || e.SMTPPort != 465 || e.SMTPUser != "mailer" || e.SMTPPassword != "secret" || e.SMTPSecurity != "tls" {
+		t.Fatalf("email settings = host %q port %d user %q password set %v security %q", e.SMTPHost, e.SMTPPort, e.SMTPUser, e.SMTPPassword != "", e.SMTPSecurity)
+	}
+}

@@ -28,7 +28,9 @@
   go to a remote server in the clear. Each message has a plain-text part
   besides the HTML one, a subject encoded for any language (RFC 2047), and
   `Date` and `Message-ID` headers. Outside development the API refuses to
-  start with the mail server left at `localhost`.
+  start with the mail server left at `localhost`. `AUTHWAY_EMAIL_SMTP_USER` and
+  `AUTHWAY_EMAIL_SMTP_PASSWORD` are read again — given only as environment
+  variables, they were ignored.
 
 - **`AUTHWAY_REDIS_CLUSTER=true` with TLS reaches a managed Redis.** A cluster
   announces its nodes by IP address, and the API checked each node's
