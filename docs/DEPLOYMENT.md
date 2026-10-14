@@ -71,14 +71,22 @@ az containerapp create \
   --image oryd/hydra:v26.2.0 \
   --target-port 4444 \
   --ingress external \
+  --secrets \
+    dsn="postgres://user:password@authway-db.postgres.database.azure.com/hydra?sslmode=require" \
+    secrets-system="<random-32-char-string>" \
   --env-vars \
-    DSN="postgres://user:password@authway-db.postgres.database.azure.com/hydra?sslmode=require" \
-    SECRETS_SYSTEM="<random-32-char-string>" \
+    DSN=secretref:dsn \
+    SECRETS_SYSTEM=secretref:secrets-system \
     URLS_SELF_ISSUER="https://oauth.authway.in" \
     URLS_LOGIN="https://api.authway.in/login" \
     URLS_CONSENT="https://api.authway.in/consent" \
     URLS_LOGOUT="https://api.authway.in/logout"
 ```
+
+Pass passwords, keys and connection strings with `--secrets` and refer to
+them with `secretref:`. A plain `--env-vars` value is part of the app
+definition: anyone who can read the app can read it, and every revision keeps
+a copy that cannot be deleted.
 
 ### 3. Deploy Central API
 
@@ -96,11 +104,27 @@ az containerapp create \
   --image <registry>/authway-api:latest \
   --target-port 8080 \
   --ingress external \
+  --secrets \
+    database-password="<database-password>" \
+    admin-password="<admin-password>" \
+    admin-api-key="<admin-api-key>" \
+    totp-encryption-key="<base64 of 32 random bytes>" \
   --env-vars \
-    DATABASE_URL="postgres://user:password@authway-db.postgres.database.azure.com/authway?sslmode=require" \
-    HYDRA_ADMIN_URL="http://authway-hydra:4445" \
-    HYDRA_PUBLIC_URL="https://oauth.authway.in"
+    AUTHWAY_APP_ENVIRONMENT=production \
+    AUTHWAY_DATABASE_HOST=authway-db.postgres.database.azure.com \
+    AUTHWAY_DATABASE_USER=<database-user> \
+    AUTHWAY_DATABASE_NAME=authway \
+    AUTHWAY_DATABASE_PASSWORD=secretref:database-password \
+    AUTHWAY_DATABASE_SSL_MODE=require \
+    AUTHWAY_ADMIN_PASSWORD=secretref:admin-password \
+    AUTHWAY_ADMIN_API_KEY=secretref:admin-api-key \
+    AUTHWAY_TOTP_ENCRYPTION_KEY=secretref:totp-encryption-key \
+    AUTHWAY_HYDRA_ADMIN_URL="http://authway-hydra:4445" \
+    AUTHWAY_HYDRA_PUBLIC_URL="https://oauth.authway.in"
 ```
+
+Redis and the auth UI address are required as well — the full list, and what
+the API refuses to start without, is in [CONFIGURATION.md](../CONFIGURATION.md).
 
 The central API is the login screens' backend too, so it takes external
 traffic: the authorization server sends browsers to its `/login`, `/consent`
