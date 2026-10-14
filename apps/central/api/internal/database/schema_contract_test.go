@@ -19,6 +19,7 @@ import (
 	"authway/apps/central/api/pkg/passwordless"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/terms"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
 	"authway/apps/central/api/pkg/webhook"
@@ -84,6 +85,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 	db := setup(t)
 	tenantID, userID := fixtures(t, db)
 	future := time.Now().Add(time.Hour)
+	contractTitle := "contract"
 
 	// WebhookDelivery's FK needs a real webhook row (its own model is already
 	// covered below via the "webhook" case, seeded separately here so this
@@ -96,6 +98,15 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		t.Fatalf("seed webhook for delivery contract case: %v", err)
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM webhooks WHERE id = ?`, wh.ID) })
+
+	// An acceptance points at a document version.
+	doc := &terms.Document{
+		ID: uuid.New(), TenantID: tenantID, Kind: "contract_acceptance", Version: "1",
+		URL: "https://example.com/terms", PublishedAt: time.Now(),
+	}
+	if err := db.Create(doc).Error; err != nil {
+		t.Fatalf("seed document for acceptance contract case: %v", err)
+	}
 
 	cases := []struct {
 		name  string
@@ -126,6 +137,13 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			TenantID: tenantID, HydraClientID: "authway_svc_" + uuid.New().String()[:8],
 			Name: "contract", GrantedScopes: []string{"admin.clients:write"},
 		}, "service_clients"},
+		{"tenant_terms", &terms.Document{
+			ID: uuid.New(), TenantID: tenantID, Kind: "contract", Version: "1",
+			URL: "https://example.com/terms", Title: &contractTitle, PublishedAt: time.Now(), RetiredAt: &future,
+		}, "tenant_terms"},
+		{"user_terms_acceptance", &terms.Acceptance{
+			ID: uuid.New(), UserID: userID, TermsID: doc.ID, ClientID: &contractTitle, AcceptedAt: time.Now(),
+		}, "user_terms_acceptances"},
 		{"user_claim", &claims.UserClaim{
 			UserID: userID, TenantID: tenantID,
 			ClaimKey: "contract-" + uuid.New().String()[:8], ClaimValue: map[string]any{"v": true},
@@ -205,6 +223,7 @@ func mappedModels() []any {
 		&passwordless.MagicLink{}, &serviceclient.ServiceClient{},
 		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
+		&terms.Document{}, &terms.Acceptance{},
 	}
 }
 

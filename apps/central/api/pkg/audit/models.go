@@ -28,6 +28,8 @@ const (
 	ActionTenantCreated        AuditAction = "tenant.created"
 	ActionTenantUpdated        AuditAction = "tenant.updated"
 	ActionTenantDeleted        AuditAction = "tenant.deleted"
+	ActionTenantTermsPublished AuditAction = "tenant.terms_published"
+	ActionTenantTermsRetired   AuditAction = "tenant.terms_retired"
 	ActionConsentGranted       AuditAction = "consent.granted"
 	ActionConsentRevoked       AuditAction = "consent.revoked"
 	ActionWebhookCreated       AuditAction = "webhook.created"
@@ -74,6 +76,8 @@ var Actions = []struct {
 	{ActionTenantCreated, "Tenant created"},
 	{ActionTenantUpdated, "Tenant updated"},
 	{ActionTenantDeleted, "Tenant deleted"},
+	{ActionTenantTermsPublished, "A version of a document the tenant's users accept made current"},
+	{ActionTenantTermsRetired, "A document the tenant's users accept no longer asked for"},
 	{ActionConsentGranted, "Consent granted"},
 	{ActionConsentRevoked, "Consent revoked"},
 	{ActionWebhookCreated, "Webhook created"},

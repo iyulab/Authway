@@ -29,6 +29,7 @@ import (
 	"authway/apps/central/api/pkg/outbound"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/terms"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -199,6 +200,7 @@ func main() {
 	// Initialize Claims Service
 	claimsRepo := claims.NewRepository(db)
 	claimsService := claims.NewService(claimsRepo, zapLogger)
+	termsService := terms.NewService(db)
 
 	// Initialize email services
 	var emailService email.EmailService
@@ -451,6 +453,16 @@ func main() {
 	claimsAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.claims:write")
 	v1.Get("/users/:id/claims", claimsAuth, claimsHandler.List)
 	v1.Patch("/users/:id/claims", claimsAuth, claimsHandler.Patch)
+
+	// The documents a tenant's users accept at sign-in: the tenant's own
+	// business, so its service credential may keep them (admin.terms:write),
+	// as may the admin API.
+	termsHandler := terms.NewHandler(termsService, tenantService, userService, auditService, zapLogger)
+	termsAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.terms:write")
+	v1.Get("/tenants/:id/terms", termsAuth, termsHandler.List)
+	v1.Put("/tenants/:id/terms/:kind", termsAuth, termsHandler.Publish)
+	v1.Delete("/tenants/:id/terms/:kind", termsAuth, termsHandler.Retire)
+	v1.Get("/users/:id/terms-acceptances", termsAuth, termsHandler.Acceptances)
 
 	// Documentation API routes (public read, admin write)
 	v1.Get("/docs", docsHandler.ListDocs)
