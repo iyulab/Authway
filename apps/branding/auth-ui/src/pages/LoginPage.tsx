@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { followRedirect, loginFlowUrl, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
+import { followRedirect, loginFlowUrl, nextScreen, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
 import i18n from '../i18n'
 
 // Validation schema - will use i18n messages dynamically
@@ -121,6 +121,12 @@ const LoginPage: React.FC = () => {
           followRedirect(data.redirect_to)
           return
         }
+        // A reused session whose user owes the tenant's documents.
+        const owed = nextScreen(data, flow)
+        if (owed) {
+          navigate(owed)
+          return
+        }
 
         if (data.error) {
           const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
@@ -136,7 +142,7 @@ const LoginPage: React.FC = () => {
       .finally(() => {
         setIsLoading(false)
       })
-  }, [flow, t])
+  }, [flow, t, navigate])
 
   // What the application asked of this screen. Applied once per flow: the
   // flow is asked about again whenever the language changes, and a user who
@@ -175,9 +181,9 @@ const LoginPage: React.FC = () => {
         remember: data.remember,
       }),
     onSuccess: (data) => {
-      if (data.next === 'mfa' && data.mfa_challenge && flow) {
-        const params = new URLSearchParams({ flow, mfa_challenge: data.mfa_challenge })
-        navigate(`/mfa/verify?${params}`)
+      const next = nextScreen(data, flow)
+      if (next) {
+        navigate(next)
       } else if (data.next === 'redirect' && data.redirect_to) {
         followRedirect(data.redirect_to)
       } else if (data.error) {

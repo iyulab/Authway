@@ -2,15 +2,42 @@ import { getConfig } from '../config'
 
 export type SocialProvider = 'google' | 'github' | 'microsoft' | 'apple'
 
+/** A document the user's tenant asks them to accept at sign-in. */
+export interface TermsDocument {
+  kind: string
+  version: string
+  url: string
+  title?: string
+}
+
 /** What a login-flow endpoint tells the screen to do next. */
 export interface FlowStep {
-  next?: 'form' | 'redirect' | 'mfa' | 'email_sent'
+  next?: 'form' | 'redirect' | 'mfa' | 'terms' | 'email_sent'
   redirect_to?: string
   mfa_challenge?: string
-  /** The flow a second factor step belongs to. */
+  terms_challenge?: string
+  terms?: TermsDocument[]
+  /** The flow a second factor or terms step belongs to. */
   flow?: string
   error?: string
   code?: string
+}
+
+/**
+ * The screen a step that is not finished goes on to — the second factor, or
+ * the documents the user's tenant asks them to accept — or undefined when the
+ * step is something else. `flow` is used when the step does not name its own.
+ */
+export function nextScreen(step: FlowStep, flow?: string | null): string | undefined {
+  const owner = step.flow ?? flow
+  if (!owner) return undefined
+  if (step.next === 'mfa' && step.mfa_challenge) {
+    return `/mfa/verify?${new URLSearchParams({ flow: owner, mfa_challenge: step.mfa_challenge })}`
+  }
+  if (step.next === 'terms' && step.terms_challenge) {
+    return `/terms?${new URLSearchParams({ flow: owner, terms_challenge: step.terms_challenge })}`
+  }
+  return undefined
 }
 
 export type FlowKind = 'login-flows' | 'consent-flows' | 'logout-flows' | 'device-flows'

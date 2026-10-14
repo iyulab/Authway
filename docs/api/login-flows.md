@@ -44,6 +44,7 @@ Every flow endpoint answers JSON with `next`, which tells the screen what to do:
 | `form` | Show the screen's form (the answer carries what to show) |
 | `redirect` | Navigate the browser to `redirect_to` |
 | `mfa` | Ask for the second factor; pass `mfa_challenge` back to the named `flow` |
+| `terms` | Ask the user to accept the documents in `terms`; pass `terms_challenge` back to the named `flow` ([Terms](#terms)) |
 | `email_sent` | A sign-in link was emailed |
 
 Errors carry `error` (a message to show) and `code`. An unknown flow id is
@@ -89,7 +90,8 @@ answer sends the browser back to it with `login_required`. See
 ### `POST /api/v1/login-flows/{flow}/password`
 
 `{"email": "…", "password": "…", "remember": false}` → `next: redirect`, or
-`next: mfa` with `mfa_challenge` and `flow` for a user with a second factor.
+`next: mfa` with `mfa_challenge` and `flow` for a user with a second factor,
+or `next: terms` for a user who owes the tenant's documents ([Terms](#terms)).
 `remember` is the user's "keep me signed in": it makes the session a longer
 one, nothing else ([Sessions](#sessions)). A wrong
 email or password is `401 invalid_credentials`; a client that does not allow
@@ -135,6 +137,57 @@ in, so the answer reveals nothing about accounts. The email links to
 
 The link has to be opened in the browser that started the sign-in: the
 authorization server ties the login to that browser.
+
+### Terms
+
+A tenant can name documents its users accept at sign-in — terms of service, a
+privacy policy — one current version of each (`PUT /api/v1/tenants/{id}/terms/{kind}`
+with `version`, `url` and an optional `title`; the application publishes the
+documents, Authway records who accepted which version). When the user has not
+accepted every current version, the sign-in stops **after every factor** —
+whichever way they signed in — and also when a browser session is reused,
+since a document may have been revised since:
+
+```json
+{
+  "next": "terms",
+  "flow": "…",
+  "terms_challenge": "…",
+  "terms": [
+    { "kind": "privacy_policy", "version": "3", "url": "https://example.com/privacy" },
+    { "kind": "terms_of_service", "version": "2026-10", "url": "https://example.com/terms", "title": "Terms of Service" }
+  ]
+}
+```
+
+`terms` lists only what the user has not accepted, by kind. A screen shows
+each document as a link, asks for each to be accepted, and then:
+
+- `POST /api/v1/login-flows/{flow}/terms` with
+  `{"terms_challenge": "…", "accepted": [{"kind": "…", "version": "…"}, …]}`
+  — exactly the documents shown → `next: redirect`. If a document was revised
+  while it was on screen the answer is `400 terms_mismatch` with `terms`, what
+  to show instead; the same `terms_challenge` stays good. (Do not read the
+  login flow again for it: the user has not been signed in yet, and the flow
+  would offer the sign-in form.)
+- `POST /api/v1/login-flows/{flow}/terms/decline` with `{"terms_challenge": "…"}`
+  → `next: redirect` back to the application with `error=access_denied`.
+  Nothing is recorded and the account is left as it is; the next sign-in asks
+  again.
+
+A sign-in through another identity provider is a page navigation: the browser
+arrives at `<login UI>/terms?flow=…&terms_challenge=…`, and the page reads what
+to show with `GET /api/v1/login-flows/{flow}/terms?terms_challenge=…`. An
+unknown or expired `terms_challenge` is `400 invalid_terms_challenge`.
+
+What a user accepted, when and signing in to which client:
+`GET /api/v1/users/{id}/terms-acceptances` (admin key, or a tenant service
+credential granted `admin.terms:write` — [service-clients.md](service-clients.md)).
+Tokens carry no claim for it: a completed sign-in means the current documents
+were accepted.
+
+An application that only refreshes tokens does not see a new version until
+its next authorization request.
 
 ## Consent
 
@@ -222,6 +275,7 @@ with an error at the application's redirect URI:
 |---|---|
 | a session, and a remembered consent for this client (or the client is registered with `skip_consent`) | `code` |
 | a session, but the user would have to be asked for consent | `error=consent_required` |
+| a session, but the user owes a document of the tenant ([Terms](#terms)) | `error=interaction_required` |
 | no session, one older than the request's `max_age`, or one of another tenant | `error=login_required` |
 
 On either error the application sends the user through an ordinary
@@ -243,6 +297,7 @@ authorization request.
   "backchannel_logout": true,
   "token_introspection": true,
   "device_authorization": true,
+  "terms_acceptance": true,
   "token_exchange": false,
   "ciba": false
 }

@@ -11,6 +11,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import ErrorPage from './pages/ErrorPage'
 import PopupCallbackPage from './pages/PopupCallbackPage'
 import MFAVerifyPage from './pages/MFAVerifyPage'
+import TermsPage from './pages/TermsPage'
 import MagicLinkPage from './pages/MagicLinkPage'
 import DevicePage from './pages/DevicePage'
 import DeviceDonePage from './pages/DeviceDonePage'
@@ -34,6 +35,7 @@ function App() {
         <Route path="/error" element={<ErrorPage />} />
         <Route path="/popup-callback" element={<PopupCallbackPage />} />
         <Route path="/mfa/verify" element={<MFAVerifyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/magic-link" element={<MagicLinkPage />} />
         <Route path="/device" element={<DevicePage />} />
         <Route path="/device/done" element={<DeviceDonePage />} />

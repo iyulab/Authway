@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
-import { followRedirect, submitLoginStep } from '../utils/loginFlow'
+import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
 
 const MFAVerifyPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
@@ -34,8 +34,11 @@ const MFAVerifyPage: React.FC = () => {
         code: code.replace(/\s/g, ''),
       })
 
+      const next = nextScreen(data, flow)
       if (data.next === 'redirect' && data.redirect_to) {
         followRedirect(data.redirect_to)
+      } else if (next) {
+        navigate(next)
       } else if (data.error) {
         throw new Error(data.error)
       } else {

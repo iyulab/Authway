@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { getConfig } from '../config'
-import { followRedirect, submitLoginStep } from '../utils/loginFlow'
+import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
 
 interface LinkInfo {
   valid: boolean
@@ -94,10 +94,11 @@ const MagicLinkPage: React.FC = () => {
         followRedirect(data.redirect_to)
         return
       }
-      // The link is one factor: a user who has a second one gives it next.
-      if (data.next === 'mfa' && data.mfa_challenge && data.flow) {
-        const params = new URLSearchParams({ flow: data.flow, mfa_challenge: data.mfa_challenge })
-        navigate(`/mfa/verify?${params}`)
+      // The link is one factor: a user who has a second one gives it next,
+      // and a user who owes the tenant's documents accepts them.
+      const next = nextScreen(data)
+      if (next) {
+        navigate(next)
         return
       }
       setError(data.error || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
