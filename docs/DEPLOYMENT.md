@@ -10,6 +10,7 @@ Complete guide for deploying Authway to production environments.
 - [CORS Configuration](#cors-configuration)
 - [Environment Variables](#environment-variables)
 - [Redis](#redis)
+- [Changing secrets](#changing-secrets)
 - [Database Migrations](#database-migrations)
 - [Production Checklist](#production-checklist)
 
@@ -404,6 +405,62 @@ flight at that moment are started again.
 4. Sign in once and check the new instance has keys under the expected
    prefix (`redis-cli --scan --pattern '<prefix>:*'`).
 5. Remove the old instance when no deployment points at it.
+
+## Changing secrets
+
+Each secret can be changed on its own. What a change costs differs:
+
+| Secret | Who else holds it | How |
+|--------|-------------------|-----|
+| `AUTHWAY_ADMIN_API_KEY` | Every script or service that calls the management API with it | Set the new value and redeploy; give the callers the new value. Calls with the old one get 401 from then on. |
+| `AUTHWAY_ADMIN_PASSWORD` | The people who sign in to the admin console | Set and redeploy. |
+| `AUTHWAY_TOTP_ENCRYPTION_KEY` | Nobody — it seals values at rest | Change it with the previous key listed, then remove that ([CONFIGURATION.md](../CONFIGURATION.md)). Nothing sealed is lost. |
+| Database password | The API and both authorization server processes (their `DSN`) | Below. |
+| Redis password | The API | Set and redeploy; or move to a new instance ([Moving to another instance](#moving-to-another-instance)). |
+| Authorization server `SECRETS_SYSTEM` | The authorization server's own stored keys and issued tokens | Below — in stages. |
+
+On Azure Container Apps a secret's value reaches a replica when the replica
+starts. The deploy scripts restart the app when a deploy changes a secret and
+nothing else; when changing a secret by hand, restart the active revision.
+
+### Database password
+
+Connections already open stay open when the password changes; new ones need
+the new value. To keep the window short, give every process the new value
+first, then change the password, then restart them:
+
+1. Set the new password in the API's configuration and in the `DSN` of both
+   authorization server processes, without restarting.
+2. Change the password in the database.
+3. Restart the API and both authorization server processes at once.
+
+Until step 3, a process that starts — a scale-out, a crash — fails to
+connect, so do steps 2 and 3 together.
+
+### Authorization server system secret
+
+`SECRETS_SYSTEM` takes a comma-separated list. The first value encrypts and
+signs what the server writes from then on; every value in the list is tried
+when reading. The server's signing keys are stored encrypted with the value
+in use when they were made, and adding a value does not re-encrypt them —
+remove the old value while keys made under it remain, and the server cannot
+publish its keys or issue tokens.
+
+So a change takes four steps, the last two after a wait:
+
+1. **New value first**: `SECRETS_SYSTEM=<new>,<old>`, restart. Tokens already
+   issued stay valid.
+2. **New signing keys**: add a key to each signing key set
+   (`hydra create jwk hydra.jwt.access-token <kid>` and
+   `hydra.openid.id-token`, against the admin endpoint). They are encrypted
+   with the new value and the server signs with them at once; the old keys
+   stay published, so tokens signed with them still verify.
+3. **Remove the old keys**, once every token signed with them has expired
+   (the longest of the access token and ID token lifetimes). From then on
+   nothing the old value can decrypt is a key the server publishes.
+4. **Remove the old value** from the list, once the refresh token lifetime has
+   passed since step 1. A refresh token issued before step 1 is checked
+   against the old value; removing it earlier makes those users sign in again.
 
 ## Database Migrations
 
