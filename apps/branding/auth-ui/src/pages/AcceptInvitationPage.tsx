@@ -107,9 +107,15 @@ const AcceptInvitationPage: React.FC = () => {
     onSuccess: () => {
       setSuccess(true)
       setError(null)
-      setTimeout(() => {
-        navigate(flow ? `/login?flow=${encodeURIComponent(flow)}` : '/login')
-      }, 3000)
+      // Only a sign-in an app started has somewhere to go on to. An invitation
+      // opened from its email — the usual way — has none: the sign-in screen
+      // means nothing without the app's flow, so the person stays here and is
+      // told to sign in from the app.
+      if (flow) {
+        setTimeout(() => {
+          navigate(`/login?flow=${encodeURIComponent(flow)}`)
+        }, 3000)
+      }
     },
     onError: (err: Error) => {
       setError(err.message)
@@ -137,13 +143,15 @@ const AcceptInvitationPage: React.FC = () => {
       <div className="text-center">
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:invitation.invalidTitle')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.invalidMessage')}</p>
-        <button
-          type="button"
-          onClick={() => navigate(flow ? `/login?flow=${encodeURIComponent(flow)}` : '/login')}
-          className="mt-6 text-sm text-indigo-600 hover:text-indigo-500"
-        >
-          {t('auth:invitation.backToLogin')}
-        </button>
+        {flow && (
+          <button
+            type="button"
+            onClick={() => navigate(`/login?flow=${encodeURIComponent(flow)}`)}
+            className="mt-6 text-sm text-indigo-600 hover:text-indigo-500"
+          >
+            {t('auth:invitation.backToLogin')}
+          </button>
+        )}
       </div>
     )
   }
@@ -167,7 +175,9 @@ const AcceptInvitationPage: React.FC = () => {
         </div>
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:invitation.success.title')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.success.message')}</p>
-        <p className="mt-1 text-sm text-gray-500">{t('auth:invitation.success.redirect')}</p>
+        <p className="mt-1 text-sm text-gray-500">
+          {flow ? t('auth:invitation.success.redirect') : t('auth:invitation.success.signInFromApp')}
+        </p>
       </div>
     )
   }

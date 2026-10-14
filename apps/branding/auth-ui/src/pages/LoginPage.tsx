@@ -200,12 +200,16 @@ const LoginPage: React.FC = () => {
   const isEmailLoginEnabled = (): boolean => isProviderEnabled('email')
   const hasSocialProviders = (): boolean => SOCIAL_PROVIDERS.some(isProviderEnabled)
 
-  // No flow - direct access (should not happen in normal OAuth flow)
+  // No flow: opened directly — a bookmark, a reload after the flow ended, a
+  // link from outside an app. The sign-in this screen does belongs to an app's
+  // request, so the way on is back through the app.
   if (!flow) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-md text-center">
           <h1 className="text-4xl font-bold text-gray-900">Authway</h1>
+          <h2 className="mt-6 text-xl font-semibold text-gray-900">{t('auth:login.noFlow.title')}</h2>
+          <p className="mt-2 text-sm text-gray-600">{t('auth:login.noFlow.message')}</p>
         </div>
       </div>
     )

@@ -50,9 +50,10 @@ describe('LoginPage', () => {
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
 
-    it('shows the Authway home fallback when the flow is missing', async () => {
-      // Direct access without a login flow is not part of the normal flow;
-      // the page renders a plain Authway landing instead of a form.
+    it('tells someone who opened it without a flow to sign in from their app', async () => {
+      // A bookmark, a reload after the flow ended, or a link from outside an
+      // app: there is no sign-in to do here, so the page says where to go
+      // instead of showing a bare title.
       mockSearchParams.delete('flow')
 
       render(<LoginPage />)
@@ -60,6 +61,9 @@ describe('LoginPage', () => {
       await waitFor(() => {
         expect(screen.getByText('Authway')).toBeInTheDocument()
       })
+      expect(screen.getByText(i18n.t('auth:login.noFlow.title'))).toBeInTheDocument()
+      expect(screen.getByText(i18n.t('auth:login.noFlow.message'))).toBeInTheDocument()
+      expect(document.querySelector('form')).toBeNull()
     })
 
     it('shows error when login challenge fetch fails', async () => {
