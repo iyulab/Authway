@@ -101,3 +101,40 @@ func TestRenderMagicLinkTemplate_HeadlineDependsOnIsNewUser(t *testing.T) {
 		t.Error("expected both variants to embed the link")
 	}
 }
+
+// Mail clients drop or partly apply <style> blocks and paint links in their
+// own colour, so a button styled only by a class came out as link-blue text
+// on the button colour. Every message's call to action carries its colours
+// inline, on the cell, the link and the text, and no message relies on a
+// class for it.
+func TestEveryMessageStylesItsButtonInline(t *testing.T) {
+	link := "https://auth.example.com/x?token=abc"
+	messages := map[string]string{
+		"verification": renderEmailTemplate("verification", link),
+		"reset":        renderEmailTemplate("reset", link),
+		"invitation":   renderInvitationTemplate("Alice", "Acme", "", link),
+		"magic link":   renderMagicLinkTemplate(link, false),
+	}
+	for name, html := range messages {
+		if strings.Contains(html, `class="button"`) || strings.Contains(html, ".button") {
+			t.Errorf("%s: the button still relies on a class", name)
+		}
+		for _, want := range []string{
+			`href="` + link + `"`,
+			`bgcolor="#`,
+			`color:#ffffff;text-decoration:none`,
+			`<span style="color:#ffffff;">`,
+			`<meta name="color-scheme" content="light">`,
+		} {
+			if !strings.Contains(html, want) {
+				t.Errorf("%s: missing %s", name, want)
+			}
+		}
+		if strings.Contains(html, "ZgotmplZ") {
+			t.Errorf("%s: the template escaper rejected a value", name)
+		}
+	}
+	if !strings.Contains(messages["reset"], `bgcolor="#DC2626"`) {
+		t.Error("reset: expected its own (red) button colour")
+	}
+}

@@ -127,6 +127,34 @@ func (s *Service) sendEmail(to, subject, body string) error {
 	return nil
 }
 
+// The call-to-action link every message carries is styled inline. Mail
+// clients drop a <style> block or apply only part of it, and paint links in
+// their own colour, so a button styled only by a class came out as link-blue
+// text on the button colour — unreadable. The colour is on the table cell
+// (bgcolor survives without any CSS), on the link and on a span inside it,
+// which is the usual way to make a link look like a button in mail.
+const emailButtonTemplate = `{{define "button"}}<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;border-collapse:separate;"><tr><td bgcolor="{{.Color}}" style="background-color:{{.Color}};border-radius:6px;"><a href="{{.Link}}" target="_blank" style="display:inline-block;padding:12px 30px;font-size:16px;font-weight:600;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:6px;background-color:{{.Color}};"><span style="color:#ffffff;">{{.Label}}</span></a></td></tr></table>{{end}}`
+
+type emailButton struct {
+	Link  string
+	Label string
+	Color template.CSS
+}
+
+// parseEmailTemplate parses a message template together with the shared
+// button: {{template "button" (button <link> <label> <colour>)}}.
+func parseEmailTemplate(name, body string) (*template.Template, error) {
+	t := template.New(name).Funcs(template.FuncMap{
+		"button": func(link, label, color string) emailButton {
+			return emailButton{Link: link, Label: label, Color: template.CSS(color)}
+		},
+	})
+	if _, err := t.Parse(emailButtonTemplate); err != nil {
+		return nil, err
+	}
+	return t.Parse(body)
+}
+
 // renderEmailTemplate renders email HTML template (shared function)
 func renderEmailTemplate(templateType, link string) string {
 	var tmpl string
@@ -137,7 +165,7 @@ func renderEmailTemplate(templateType, link string) string {
 		tmpl = getPasswordResetTemplate()
 	}
 
-	t := template.Must(template.New(templateType).Parse(tmpl))
+	t := template.Must(parseEmailTemplate(templateType, tmpl))
 	var buf bytes.Buffer
 	t.Execute(&buf, map[string]string{"Link": link})
 	return buf.String()
@@ -150,6 +178,8 @@ func getVerificationTemplate() string {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -169,15 +199,6 @@ func getVerificationTemplate() string {
             color: #4F46E5;
             margin-bottom: 20px;
         }
-        .button {
-            display: inline-block;
-            padding: 12px 30px;
-            background-color: #4F46E5;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
-        }
         .footer {
             margin-top: 30px;
             padding-top: 20px;
@@ -192,7 +213,7 @@ func getVerificationTemplate() string {
         <h1>🔐 Authway 이메일 인증</h1>
         <p>안녕하세요!</p>
         <p>Authway 회원가입을 환영합니다. 아래 버튼을 클릭하여 이메일 주소를 인증해주세요.</p>
-        <a href="{{.Link}}" class="button">이메일 인증하기</a>
+        {{template "button" (button .Link "이메일 인증하기" "#4F46E5")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
         <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
             {{.Link}}
@@ -214,6 +235,8 @@ func getPasswordResetTemplate() string {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -232,15 +255,6 @@ func getPasswordResetTemplate() string {
         h1 {
             color: #DC2626;
             margin-bottom: 20px;
-        }
-        .button {
-            display: inline-block;
-            padding: 12px 30px;
-            background-color: #DC2626;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
         }
         .warning {
             background: #FEF3C7;
@@ -263,7 +277,7 @@ func getPasswordResetTemplate() string {
         <p>안녕하세요!</p>
         <p>Authway 계정의 비밀번호 재설정을 요청하셨습니다.</p>
         <p>아래 버튼을 클릭하여 새로운 비밀번호를 설정하세요.</p>
-        <a href="{{.Link}}" class="button">비밀번호 재설정하기</a>
+        {{template "button" (button .Link "비밀번호 재설정하기" "#DC2626")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
         <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
             {{.Link}}
@@ -299,11 +313,12 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
         .container { background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h1 { color: #4F46E5; margin-bottom: 20px; }
-        .button { display: inline-block; padding: 12px 30px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
         .message { background: #F9FAFB; border-left: 4px solid #4F46E5; padding: 12px; margin: 20px 0; white-space: pre-wrap; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
     </style>
@@ -314,7 +329,7 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
         <p><strong>{{.InviterName}}</strong> 님이 <strong>{{.TenantName}}</strong> 워크스페이스에 초대했습니다.</p>
         {{if .Message}}<div class="message">{{.Message}}</div>{{end}}
         <p>아래 버튼을 클릭하여 초대를 수락하세요.</p>
-        <a href="{{.InviteURL}}" class="button">초대 수락</a>
+        {{template "button" (button .InviteURL "초대 수락" "#4F46E5")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
         <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">{{.InviteURL}}</p>
         <div class="footer">
@@ -324,7 +339,7 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
 </body>
 </html>
 `
-	t := template.Must(template.New("invitation").Parse(tmpl))
+	t := template.Must(parseEmailTemplate("invitation", tmpl))
 	var buf bytes.Buffer
 	t.Execute(&buf, map[string]string{
 		"InviterName": inviterName,
@@ -349,11 +364,12 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) string {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
         .container { background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h1 { color: #4F46E5; margin-bottom: 20px; }
-        .button { display: inline-block; padding: 12px 30px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
     </style>
 </head>
@@ -361,7 +377,7 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) string {
     <div class="container">
         <h1>{{.Headline}}</h1>
         <p>{{.Intro}}</p>
-        <a href="{{.LinkURL}}" class="button">로그인하기</a>
+        {{template "button" (button .LinkURL "로그인하기" "#4F46E5")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
         <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">{{.LinkURL}}</p>
         <div class="footer">
@@ -372,7 +388,7 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) string {
 </body>
 </html>
 `
-	t := template.Must(template.New("magiclink").Parse(tmpl))
+	t := template.Must(parseEmailTemplate("magiclink", tmpl))
 	var buf bytes.Buffer
 	t.Execute(&buf, map[string]string{
 		"Headline": headline,
