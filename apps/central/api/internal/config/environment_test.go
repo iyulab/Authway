@@ -46,7 +46,7 @@ func TestIsProduction(t *testing.T) {
 
 // stagingConfig mirrors what the staging deploy script actually injects today
 // (scripts/deploy/staging/.env: ADMIN_API_KEY, AUTHWAY_TOTP_ENCRYPTION_KEY,
-// AUTHWAY_ADMIN_PASSWORD, and a public
+// AUTHWAY_ADMIN_PASSWORD, EMAIL_USE_SENDWAY, and a public
 // AUTH_UI_URL/API_URL pair) so this test fails first if a future deploy drops
 // one of the values staging's fail-closed check now depends on.
 func stagingConfig() *Config {
@@ -57,6 +57,9 @@ func stagingConfig() *Config {
 	c.Admin.Password = "a-strong-staging-password"
 	c.Admin.APIKey = "staging-admin-key"
 	c.Security.TOTPEncryptionKey = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+	// The deploy sends mail through Sendway (EMAIL_USE_SENDWAY=true).
+	c.Email.UseSendway = true
+	c.Email.SendwayBaseURL = "https://mail.example.com"
 	return c
 }
 

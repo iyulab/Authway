@@ -141,15 +141,34 @@ the API has no token secrets or lifetimes to configure.
 
 ### Email Configuration
 
+Mail — invitations, sign-in links, verification and password reset — goes
+out through any SMTP server:
+
 ```bash
-# SMTP settings for email delivery
-AUTHWAY_EMAIL_SMTP_HOST=localhost           # SMTP server
-AUTHWAY_EMAIL_SMTP_PORT=1025                # SMTP port (587 for TLS, 465 for SSL)
-AUTHWAY_EMAIL_SMTP_USER=                    # SMTP username
-AUTHWAY_EMAIL_SMTP_PASSWORD=                # SMTP password
+AUTHWAY_EMAIL_SMTP_HOST=smtp.example.com    # SMTP server (required outside development)
+AUTHWAY_EMAIL_SMTP_PORT=587                 # 587 (submission), 465 (implicit TLS), 25, …
+AUTHWAY_EMAIL_SMTP_SECURITY=                # empty: TLS on 465, STARTTLS elsewhere when offered
+                                            # tls | starttls (required) | none
+AUTHWAY_EMAIL_SMTP_USER=                    # empty: the server is not asked to authenticate
+AUTHWAY_EMAIL_SMTP_PASSWORD=
 AUTHWAY_EMAIL_FROM_EMAIL=noreply@authway.in # From address
 AUTHWAY_EMAIL_FROM_NAME=Authway             # From display name
 ```
+
+- Each message has a plain-text and an HTML part, and a subject encoded for
+  any language (RFC 2047).
+- Credentials are only sent over TLS, or to a server on the same host.
+- A send the server defers (4xx) or that cannot reach the server is tried
+  again after 5 seconds, 30 seconds and 2 minutes; a refusal (5xx) is not.
+- Outside development the API does not start with the mail server left at
+  `localhost`: every emailed link would fail at its first send.
+- For local development, point it at a mail capture such as MailHog
+  (`localhost:1025`, which offers no TLS — auto mode sends in the clear).
+
+Optionally, a [Sendway](https://github.com/iyulab/Sendway) deployment can
+send the mail instead (`AUTHWAY_EMAIL_USE_SENDWAY=true`,
+`AUTHWAY_EMAIL_SENDWAY_BASE_URL`, `AUTHWAY_EMAIL_SENDWAY_API_KEY`) — it adds
+idempotent, asynchronous acceptance on top of what SMTP gives.
 
 ### Admin Console
 

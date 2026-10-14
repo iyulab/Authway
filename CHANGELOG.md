@@ -19,6 +19,17 @@
 
 ### Fixed
 
+- **Mail sent through SMTP works with any mail server, as well as the
+  optional Sendway path does.** A send the server defers (4xx) or that cannot
+  reach it is now tried again, as Sendway sends were; credentials are only
+  given when a username is set, so a relay that asks for none is no longer
+  refused; port 465 connects over TLS (`AUTHWAY_EMAIL_SMTP_SECURITY` also
+  takes `tls`, `starttls` to require STARTTLS, or `none`); credentials never
+  go to a remote server in the clear. Each message has a plain-text part
+  besides the HTML one, a subject encoded for any language (RFC 2047), and
+  `Date` and `Message-ID` headers. Outside development the API refuses to
+  start with the mail server left at `localhost`.
+
 - **`AUTHWAY_REDIS_CLUSTER=true` with TLS reaches a managed Redis.** A cluster
   announces its nodes by IP address, and the API checked each node's
   certificate against that address — a certificate that names hosts only, as a

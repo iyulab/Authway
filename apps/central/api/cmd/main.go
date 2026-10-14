@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -218,15 +217,16 @@ func main() {
 		}
 		emailService = email.NewSendwayEmailService(sendwayConfig, zapLogger)
 	} else {
-		// Use traditional SMTP (Development/Fallback)
-		zapLogger.Info("Using traditional SMTP Email Service",
-			zap.String("smtpHost", cfg.Email.SMTPHost))
+		zapLogger.Info("Sending mail through SMTP",
+			zap.String("smtpHost", cfg.Email.SMTPHost), zap.Int("smtpPort", cfg.Email.SMTPPort),
+			zap.String("security", cfg.Email.SMTPSecurity), zap.Bool("authenticates", cfg.Email.SMTPUser != ""))
 
 		smtpConfig := email.Config{
 			SMTPHost:     cfg.Email.SMTPHost,
-			SMTPPort:     fmt.Sprintf("%d", cfg.Email.SMTPPort),
+			SMTPPort:     cfg.Email.SMTPPort,
 			SMTPUsername: cfg.Email.SMTPUser,
 			SMTPPassword: cfg.Email.SMTPPassword,
+			SMTPSecurity: cfg.Email.SMTPSecurity,
 			FromEmail:    cfg.Email.FromEmail,
 			FromName:     cfg.Email.FromName,
 			FrontendURL:  cfg.App.FrontendURL,

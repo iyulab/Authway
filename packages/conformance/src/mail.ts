@@ -33,8 +33,15 @@ function decodePart(part: MailHogPart): string {
   return part.Body
 }
 
+/**
+ * The message's text as a mail client shows it: each part decoded, or the
+ * single body when the message has no parts. A multipart message's whole
+ * content is the parts still encoded — reading links from it would take a
+ * quoted-printable `=3D` for part of a token.
+ */
 function bodies(message: MailHogMessage): string[] {
-  return [message.Content, ...(message.MIME?.Parts ?? [])].map(decodePart)
+  const parts = message.MIME?.Parts ?? []
+  return (parts.length > 0 ? parts : [message.Content]).map(decodePart)
 }
 
 /**

@@ -4,31 +4,32 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"net/smtp"
 	"strings"
+	"time"
 
 	"authway/apps/central/api/pkg/maillink"
 	"go.uber.org/zap"
 )
 
-// Service handles email operations
+// Service sends Authway's mail through any SMTP server — the standard way a
+// deployment hands mail over, with no particular mail service assumed.
 type Service struct {
-	smtpHost     string
-	smtpPort     string
-	smtpUsername string
-	smtpPassword string
-	fromEmail    string
-	fromName     string
-	frontendURL  string
-	logger       *zap.Logger
+	transport   smtpTransport
+	fromEmail   string
+	fromName    string
+	frontendURL string
+	logger      *zap.Logger
 }
 
-// Config represents email service configuration
+// Config is how to reach the SMTP server and whom the mail is from.
 type Config struct {
 	SMTPHost     string
-	SMTPPort     string
-	SMTPUsername string
+	SMTPPort     int
+	SMTPUsername string // empty: the server is not asked to authenticate
 	SMTPPassword string
+	// SMTPSecurity is one of SMTPSecurityAuto, SMTPSecurityTLS,
+	// SMTPSecurityStartTLS and SMTPSecurityNone.
+	SMTPSecurity string
 	FromEmail    string
 	FromName     string
 	FrontendURL  string
@@ -37,14 +38,17 @@ type Config struct {
 // NewService creates a new email service
 func NewService(config Config, logger *zap.Logger) *Service {
 	return &Service{
-		smtpHost:     config.SMTPHost,
-		smtpPort:     config.SMTPPort,
-		smtpUsername: config.SMTPUsername,
-		smtpPassword: config.SMTPPassword,
-		fromEmail:    config.FromEmail,
-		fromName:     config.FromName,
-		frontendURL:  config.FrontendURL,
-		logger:       logger,
+		transport: smtpTransport{
+			host:     config.SMTPHost,
+			port:     config.SMTPPort,
+			username: config.SMTPUsername,
+			password: config.SMTPPassword,
+			security: config.SMTPSecurity,
+		},
+		fromEmail:   config.FromEmail,
+		fromName:    config.FromName,
+		frontendURL: config.FrontendURL,
+		logger:      logger,
 	}
 }
 
@@ -99,43 +103,17 @@ func (s *Service) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) er
 	return s.sendEmail(toEmail, subject, body)
 }
 
-// sendEmail sends an email via SMTP
+// sendEmail sends an email via SMTP. A failure worth trying again wraps
+// ErrTransient (Async retries it).
 func (s *Service) sendEmail(to, subject, body string) error {
-	// Build email message
-	from := fmt.Sprintf("%s <%s>", s.fromName, s.fromEmail)
-	headers := make(map[string]string)
-	headers["From"] = from
-	headers["To"] = to
-	headers["Subject"] = subject
-	headers["MIME-Version"] = "1.0"
-	headers["Content-Type"] = "text/html; charset=UTF-8"
-
-	message := ""
-	for k, v := range headers {
-		message += fmt.Sprintf("%s: %s\r\n", k, v)
-	}
-	message += "\r\n" + body
-
-	// SMTP authentication
-	auth := smtp.PlainAuth("", s.smtpUsername, s.smtpPassword, s.smtpHost)
-
-	// Send email
-	addr := fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort)
-	err := smtp.SendMail(addr, auth, s.fromEmail, []string{to}, []byte(message))
+	message, err := smtpMessage(s.fromName, s.fromEmail, to, subject, body, time.Now())
 	if err != nil {
-		s.logger.Error("Failed to send email",
-			zap.String("to", to),
-			zap.String("subject", subject),
-			zap.Error(err),
-		)
+		return err
+	}
+	if err := s.transport.send(s.fromEmail, to, message); err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
-
-	s.logger.Info("Email sent successfully",
-		zap.String("to", to),
-		zap.String("subject", subject),
-	)
-
+	s.logger.Info("Email sent", zap.String("to", to), zap.String("subject", subject))
 	return nil
 }
 

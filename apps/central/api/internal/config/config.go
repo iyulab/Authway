@@ -122,11 +122,15 @@ type EmailConfig struct {
 	SendwayBaseURL string `mapstructure:"sendway_base_url"`
 	SendwayAPIKey  string `mapstructure:"sendway_api_key"`
 
-	// Traditional SMTP (Development/Fallback)
+	// SMTP — the standard path, with any mail server. SMTPUser empty: the
+	// server is not asked to authenticate. SMTPSecurity: "" (implicit TLS on
+	// port 465, STARTTLS elsewhere when offered), "tls", "starttls" (required)
+	// or "none".
 	SMTPHost     string `mapstructure:"smtp_host"`
 	SMTPPort     int    `mapstructure:"smtp_port"`
 	SMTPUser     string `mapstructure:"smtp_user"`
 	SMTPPassword string `mapstructure:"smtp_password"`
+	SMTPSecurity string `mapstructure:"smtp_security"`
 
 	// Common settings
 	FromEmail string `mapstructure:"from_email"`
@@ -518,6 +522,18 @@ func (c *Config) Validate() error {
 	if c.Email.UseSendway && strings.TrimSpace(c.Email.SendwayBaseURL) == "" {
 		errors = append(errors, "email.sendway_base_url (AUTHWAY_EMAIL_SENDWAY_BASE_URL) is required when email.use_sendway is true")
 	}
+	switch c.Email.SMTPSecurity {
+	case "", "tls", "starttls", "none":
+	default:
+		errors = append(errors, fmt.Sprintf("email.smtp_security (AUTHWAY_EMAIL_SMTP_SECURITY) must be empty, tls, starttls or none, got %q", c.Email.SMTPSecurity))
+	}
+	// Mail goes out through SMTP unless Sendway is chosen. Outside development
+	// a mail server on the container's own loopback is the default left in
+	// place, not a choice: every invitation and sign-in link would fail at its
+	// first send, long after the deployment looked healthy.
+	if !c.Email.UseSendway && IsProduction(c.App.Environment) && isLoopbackHost(c.Email.SMTPHost) {
+		errors = append(errors, fmt.Sprintf("email.smtp_host (AUTHWAY_EMAIL_SMTP_HOST) must name a mail server outside development, got %q — set it, or set AUTHWAY_EMAIL_USE_SENDWAY", c.Email.SMTPHost))
+	}
 
 	// Warn about missing admin password in all environments
 	if c.Admin.Password == "" {
@@ -539,8 +555,13 @@ func isLoopbackURL(u string) bool {
 	if err != nil {
 		return false
 	}
-	host := parsed.Hostname()
-	if host == "localhost" {
+	return isLoopbackHost(parsed.Hostname())
+}
+
+// isLoopbackHost reports whether host names this machine: localhost, a
+// loopback address, or none at all.
+func isLoopbackHost(host string) bool {
+	if host == "" || host == "localhost" {
 		return true
 	}
 	if ip := net.ParseIP(host); ip != nil {
