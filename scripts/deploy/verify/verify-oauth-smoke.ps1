@@ -264,6 +264,18 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     }
     Write-Host "   ✅ 액세스 토큰 최상위 클레임 확인 (tenant_id, email, auth_time)" -ForegroundColor Green
 
+    # 서명 키가 발급자의 JWKS 에 공개돼 있어야 리소스 서버가 검증한다. 키를 교체한 뒤에는
+    # 새 키로 서명하는지(kid), 옛 키를 지운 뒤에는 쓰는 키를 지우지 않았는지를 여기서 본다.
+    $hb64 = $jwtParts[0].Replace('-', '+').Replace('_', '/')
+    $hb64 += '=' * ((4 - $hb64.Length % 4) % 4)
+    $tokenKid = ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($hb64)) | ConvertFrom-Json).kid
+    $publishedKids = @((& curl.exe -s "$issuer/.well-known/jwks.json" | ConvertFrom-Json).keys | ForEach-Object { $_.kid })
+    if ($publishedKids -notcontains $tokenKid) {
+        Write-Host "❌ 액세스 토큰의 서명 키 kid=$tokenKid 가 JWKS 에 없음 (공개된 kid: $($publishedKids -join ', '))" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ 서명 키 kid=$tokenKid — JWKS 에 공개됨 (공개된 kid $($publishedKids.Count) 개)" -ForegroundColor Green
+
     # --- 8-2. 로그인이 세션을 열었는가 ---
     # 「로그인 상태 유지」 없이 로그인했어도 세션이 있어야 한다: 같은 브라우저(쿠키)의
     # prompt=none 인가 요청이 화면 없이 code 로 끝난다. 세션이 없으면 login_required,
