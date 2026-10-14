@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+### Security
+
+- **The Azure deploy scripts pass passwords and keys to the API as Container
+  App secrets.** The admin API key, admin password, at-rest encryption key and
+  the database and Redis passwords went in as plain environment values, which
+  anyone who can read the app sees, and which every revision keeps. They are
+  now secrets the environment refers to with `secretref:`, and the deploy
+  fails if a variable named like a secret (`*_PASSWORD`, `*_KEY`, `*_SECRET`)
+  carries its value in the clear. Values that were ever deployed in the clear
+  stay readable in old revisions until they are changed.
+
+### Removed
+
+- **Settings the API no longer reads**: `AUTHWAY_JWT_ACCESS_TOKEN_SECRET`,
+  `AUTHWAY_JWT_REFRESH_TOKEN_SECRET` and the JWT lifetimes (tokens come from
+  the authorization server), and the retired Azure mail settings
+  (`AUTHWAY_EMAIL_USE_AZURE`, `AUTHWAY_EMAIL_AZURE_*`). The deploy scripts
+  stop setting them and remove them from the app; the configuration guide
+  and templates no longer list them. `CONFIGURATION.md` now lists the two
+  keys the API refuses to start without outside development
+  (`AUTHWAY_ADMIN_API_KEY`, `AUTHWAY_TOTP_ENCRYPTION_KEY`), and its key
+  generator for Windows draws from a cryptographic source.
+
 ## [0.13.0] - 2026-10-14
 
 > Minor, with two breaking changes. `@authway/client` and `@authway/react`

@@ -29,6 +29,7 @@ $ProjectRoot = Split-Path -Parent $ScriptsDir
 
 . (Join-Path $SharedDir "load-env.ps1")
 . (Join-Path $SharedDir "az-retry.ps1")
+. (Join-Path $SharedDir "app-secrets.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
@@ -38,7 +39,9 @@ try {
     # (AUTHWAY_TOTP_ENCRYPTION_KEY 는 TOTP secret at-rest 암호화용 — 필수)
     # Google 자격증명은 기동을 막지 않지만, 비어 있으면 Google 로그인만 조용히
     # 실패하므로 여기서 함께 막는다.
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET')
+    # 아래 비밀로 넣는 값(데이터베이스·Redis 비밀번호, 관리자 비밀번호)도 비어 있으면
+    # 비밀을 쓸 수 없으므로 함께 막는다.
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTHWAY_ADMIN_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD', 'AUTHWAY_REDIS_PASSWORD')
 
     Set-AzureSubscription -EnvVars $envVars
 } catch {
@@ -114,16 +117,22 @@ try {
     Write-Host "✓ 레지스트리 인증 설정 완료" -ForegroundColor Green
     Write-Host ""
 
-    # Google client secret 은 평문 env 가 아니라 Container App secret 으로 둔다
-    # (sendway-api-key 와 같은 방식). update 가 secretref 로 참조하므로 먼저 써야 한다.
-    Write-Host "🔐 Google client secret 반영 중..." -ForegroundColor Yellow
-    Invoke-AzRetry -What "Google client secret 설정" -Command {
-        az containerapp secret set `
-            --name $CONTAINER_APP_API `
-            --resource-group $RESOURCE_GROUP `
-            --secrets "google-client-secret=$($envVars['GOOGLE_CLIENT_SECRET'])" | Out-Null
+    # Passwords and keys go in as Container App secrets, never as plain
+    # environment values (app-secrets.ps1 says why). The update below refers to
+    # them by name, so they are written first. sendway-api-key is the one
+    # secret this script does not write: it is set on the app directly and
+    # only referenced here.
+    $appSecrets = [ordered]@{
+        'admin-api-key'         = $envVars['ADMIN_API_KEY']
+        'admin-password'        = $envVars['AUTHWAY_ADMIN_PASSWORD']
+        'totp-encryption-key'   = $envVars['AUTHWAY_TOTP_ENCRYPTION_KEY']
+        'database-password'     = $envVars['AUTHWAY_DATABASE_PASSWORD']
+        'redis-password'        = $envVars['AUTHWAY_REDIS_PASSWORD']
+        'google-client-secret'  = $envVars['GOOGLE_CLIENT_SECRET']
     }
-    Write-Host "✓ Google client secret 반영 완료" -ForegroundColor Green
+    Write-Host "🔐 Container App 비밀 반영 중: $($appSecrets.Keys -join ', ')" -ForegroundColor Yellow
+    Set-ContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Secrets $appSecrets
+    Write-Host "✓ 비밀 반영 완료" -ForegroundColor Green
     Write-Host ""
 
     # Optional: a deployment that shares its Redis names its share. An empty
@@ -146,26 +155,24 @@ try {
             "AUTHWAY_APP_PORT=8080" `
             "AUTHWAY_APP_BASE_URL=$($envVars['API_URL'])" `
             "AUTHWAY_APP_FRONTEND_URL=$($envVars['AUTH_UI_URL'])" `
-            "AUTHWAY_ADMIN_PASSWORD=$($envVars['AUTHWAY_ADMIN_PASSWORD'])" `
+            "AUTHWAY_ADMIN_PASSWORD=secretref:admin-password" `
             "AUTHWAY_DATABASE_HOST=$($envVars['AUTHWAY_DATABASE_HOST'])" `
             "AUTHWAY_DATABASE_PORT=$($envVars['AUTHWAY_DATABASE_PORT'])" `
             "AUTHWAY_DATABASE_NAME=$($envVars['AUTHWAY_DATABASE_NAME'])" `
             "AUTHWAY_DATABASE_USER=$($envVars['AUTHWAY_DATABASE_USER'])" `
-            "AUTHWAY_DATABASE_PASSWORD=$($envVars['AUTHWAY_DATABASE_PASSWORD'])" `
+            "AUTHWAY_DATABASE_PASSWORD=secretref:database-password" `
             "AUTHWAY_DATABASE_SSL_MODE=require" `
             "AUTHWAY_REDIS_HOST=$($envVars['AUTHWAY_REDIS_HOST'])" `
             "AUTHWAY_REDIS_PORT=$($envVars['AUTHWAY_REDIS_PORT'])" `
-            "AUTHWAY_REDIS_PASSWORD=$($envVars['AUTHWAY_REDIS_PASSWORD'])" `
+            "AUTHWAY_REDIS_PASSWORD=secretref:redis-password" `
             "AUTHWAY_REDIS_DB=$($envVars['AUTHWAY_REDIS_DB'])" `
             $redisKeyPrefixEnv `
             "AUTHWAY_REDIS_TLS_ENABLED=$($envVars['AUTHWAY_REDIS_TLS_ENABLED'])" `
-            "AUTHWAY_JWT_ACCESS_TOKEN_SECRET=$($envVars['JWT_ACCESS_SECRET'])" `
-            "AUTHWAY_JWT_REFRESH_TOKEN_SECRET=$($envVars['JWT_REFRESH_SECRET'])" `
             "AUTHWAY_HYDRA_ADMIN_URL=$($envVars['HYDRA_ADMIN_INTERNAL_URL'])" `
             "AUTHWAY_HYDRA_PUBLIC_URL=$($envVars['HYDRA_ISSUER'])" `
             "AUTHWAY_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
-            "AUTHWAY_ADMIN_API_KEY=$($envVars['ADMIN_API_KEY'])" `
-            "AUTHWAY_TOTP_ENCRYPTION_KEY=$($envVars['AUTHWAY_TOTP_ENCRYPTION_KEY'])" `
+            "AUTHWAY_ADMIN_API_KEY=secretref:admin-api-key" `
+            "AUTHWAY_TOTP_ENCRYPTION_KEY=secretref:totp-encryption-key" `
             "AUTHWAY_GOOGLE_ENABLED=true" `
             "AUTHWAY_GOOGLE_CLIENT_ID=$($envVars['GOOGLE_CLIENT_ID'])" `
             "AUTHWAY_GOOGLE_CLIENT_SECRET=secretref:google-client-secret" `
@@ -183,8 +190,18 @@ try {
 
     # The login backend no longer accepts calls from a separate service, so the
     # shared key it used to check is obsolete. Removed only after the new image
-    # is in place: older images refuse to start without it.
-    $staleEnv = @('AUTHWAY_ADMIN_INTERNAL_API_KEY')
+    # is in place: older images refuse to start without it. The rest are
+    # settings the API no longer reads at all: JWT secrets from before tokens
+    # came from the authorization server, and the retired Azure mail path.
+    $staleEnv = @(
+        'AUTHWAY_ADMIN_INTERNAL_API_KEY',
+        'AUTHWAY_JWT_ACCESS_TOKEN_SECRET',
+        'AUTHWAY_JWT_REFRESH_TOKEN_SECRET',
+        'AUTHWAY_EMAIL_USE_AZURE',
+        'AUTHWAY_EMAIL_AZURE_BASE_URL',
+        'AUTHWAY_EMAIL_AZURE_FUNCTION_KEY',
+        'AUTHWAY_EMAIL_AZURE_PROFILE'
+    )
     # A prefix the target no longer sets must not stay on the app: an update
     # only adds variables.
     if (-not $envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
@@ -207,6 +224,13 @@ try {
             throw "환경 변수 제거 실패"
         }
     }
+
+    # A secret that was created by hand and never referenced; the admin key
+    # now lives in admin-api-key.
+    Remove-StaleContainerAppSecrets -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP -Names @('authway-admin-api-key')
+
+    Write-Host "🔐 환경 변수에 평문 비밀이 없는지 확인..." -ForegroundColor Yellow
+    Assert-NoPlaintextSecretEnv -App $CONTAINER_APP_API -ResourceGroup $RESOURCE_GROUP
 
     # ============================================================
     # Post-deploy verification (version parity + admin-auth smoke + mail links + migrations)

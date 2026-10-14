@@ -13,7 +13,6 @@ Fichier de configuration simplifié pour le déploiement en production. Copier c
 - App configuration (nom, version, port, URL de base)
 - Database (PostgreSQL)
 - Redis (cache et sessions)
-- JWT (tokens d'accès et de rafraîchissement)
 - OAuth 2.0
 - Hydra (serveur OAuth externe)
 - CORS
@@ -69,8 +68,6 @@ Les fichiers de configuration utilisent des variables d'environnement pour les v
 
 - `${POSTGRES_PASSWORD}` - Mot de passe PostgreSQL
 - `${REDIS_PASSWORD}` - Mot de passe Redis (optionnel)
-- `${JWT_ACCESS_SECRET}` - Secret JWT pour les tokens d'accès
-- `${JWT_REFRESH_SECRET}` - Secret JWT pour les tokens de rafraîchissement
 - `${SMTP_HOST}`, `${SMTP_USER}`, `${SMTP_PASSWORD}` - Configuration SMTP
 - `${GOOGLE_CLIENT_ID}`, `${GOOGLE_CLIENT_SECRET}` - Google OAuth
 
@@ -89,7 +86,6 @@ Le serveur charge la configuration dans cet ordre (du plus haut au plus bas):
 - Toujours utiliser des variables d'environnement pour les secrets
 - Activer SSL/TLS en production (`ssl_mode: require`)
 - Utiliser des secrets forts (minimum 32 caractères aléatoires)
-- Régulièrement faire tourner les secrets JWT
 
 ## Exemples
 

@@ -55,9 +55,9 @@ These have development defaults but **MUST** be changed for production:
 
 | Variable | Description | Default | Production Requirement |
 |----------|-------------|---------|----------------------|
-| `AUTHWAY_JWT_ACCESS_TOKEN_SECRET` | JWT signing secret | Dev placeholder | **64+ character random string** |
-| `AUTHWAY_JWT_REFRESH_TOKEN_SECRET` | Refresh token secret | Dev placeholder | **64+ character random string** |
 | `AUTHWAY_ADMIN_PASSWORD` | Admin console password | `admin123` | **20+ character strong password** |
+| `AUTHWAY_ADMIN_API_KEY` | Key for the management API | Generated in development | **Random key** — the API refuses to start without it |
+| `AUTHWAY_TOTP_ENCRYPTION_KEY` | Encrypts stored two-factor secrets and provider credentials (AES-256-GCM) | None (plaintext, development only) | **Base64 of exactly 32 random bytes** — the API refuses to start without it |
 | `AUTHWAY_APP_ENVIRONMENT` | Environment name | `development` | **Must be `production`** |
 | `AUTHWAY_DATABASE_SSL_MODE` | DB SSL mode | `disable` | **Must be `require`** |
 
@@ -69,8 +69,6 @@ These settings have sensible defaults and can be customized as needed:
 |----------|-------------|---------|
 | `AUTHWAY_APP_NAME` | Application name | `Authway` |
 | `AUTHWAY_APP_PORT` | Server port | `8080` |
-| `AUTHWAY_JWT_ACCESS_TOKEN_EXPIRY` | Access token lifetime | `15m` |
-| `AUTHWAY_JWT_REFRESH_TOKEN_EXPIRY` | Refresh token lifetime | `7d` |
 | `AUTHWAY_REDIS_HOST` | Redis host — the API does not start without Redis | `localhost` |
 | `AUTHWAY_REDIS_PORT` | Redis port | `6379` |
 | `AUTHWAY_CORS_ALLOWED_ORIGINS` | CORS origins | `http://localhost:3000,...` |
@@ -137,16 +135,8 @@ under `<prefix>:`. Set it when two deployments share one Redis — it works
 where only database 0 exists, as on a clustered or managed Redis. Up to 32
 letters, digits, `.`, `_` or `-`; the API refuses to start on anything else.
 
-### JWT Configuration
-
-```bash
-# JSON Web Token settings
-AUTHWAY_JWT_ACCESS_TOKEN_SECRET=...         # Signing secret (64+ chars in prod)
-AUTHWAY_JWT_REFRESH_TOKEN_SECRET=...        # Refresh secret (64+ chars in prod)
-AUTHWAY_JWT_ACCESS_TOKEN_EXPIRY=15m         # Access token lifetime
-AUTHWAY_JWT_REFRESH_TOKEN_EXPIRY=7d         # Refresh token lifetime
-AUTHWAY_JWT_ISSUER=authway                  # JWT issuer claim
-```
+Tokens are issued and signed by the authorization server, not by the API, so
+the API has no token secrets or lifetimes to configure.
 
 ### Email Configuration
 
@@ -165,7 +155,8 @@ AUTHWAY_EMAIL_FROM_NAME=Authway             # From display name
 ```bash
 # Admin access credentials
 AUTHWAY_ADMIN_PASSWORD=admin123             # Admin console password
-AUTHWAY_ADMIN_API_KEY=                      # Optional API key
+AUTHWAY_ADMIN_API_KEY=                      # Management API key (required outside development)
+AUTHWAY_TOTP_ENCRYPTION_KEY=                # At-rest encryption key (required outside development)
 ```
 
 ## Configuration Validation
@@ -178,27 +169,36 @@ Authway validates configuration on startup and will **fail to start** if:
 
 ## Generating Secrets
 
-### JWT Secrets (64 characters)
-
-```bash
-# Linux/Mac
-openssl rand -base64 64
-
-# Windows (PowerShell)
-$bytes = [System.Byte[]]::new(64)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-[Convert]::ToBase64String($bytes)
-```
-
 ### Admin API Key (32 bytes hex)
 
 ```bash
 # Linux/Mac
 openssl rand -hex 32
 
-# Windows (PowerShell)
--join ((48..57) + (97..102) | Get-Random -Count 64 | ForEach-Object {[char]$_})
+# Windows (PowerShell 7+)
+[Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLower()
 ```
+
+### At-Rest Encryption Key (32 bytes, base64)
+
+```bash
+# Linux/Mac
+openssl rand -base64 32
+
+# Windows (PowerShell 7+)
+[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+Changing this key makes everything encrypted under the old one unreadable —
+two-factor enrollments and stored provider credentials.
+
+### Where secrets live in a deployment
+
+Pass passwords and keys to the container as secrets of your platform (for
+example Container Apps secrets referenced with `secretref:`, or a Kubernetes
+Secret), not as plain environment values. A plain value is part of the app
+definition: anyone who can read the app can read it, and its revision history
+keeps every past value.
 
 ## Docker Compose Configuration
 
@@ -229,7 +229,8 @@ AUTHWAY_ADMIN_PASSWORD=mypassword go run ./cmd/
 ### Security Checklist
 
 - [ ] **Secrets**: Changed ALL default passwords and secrets
-- [ ] **JWT**: Generated unique secrets (64+ characters)
+- [ ] **Keys**: Generated a unique admin API key and at-rest encryption key
+- [ ] **Secret storage**: Passwords and keys passed as platform secrets, not plain environment values
 - [ ] **Admin**: Set strong password (20+ characters)
 - [ ] **Database**: Enabled SSL (`ssl_mode=require`)
 - [ ] **HTTPS**: Using HTTPS for all URLs
@@ -274,16 +275,6 @@ AUTHWAY_ADMIN_PASSWORD=mypassword go run ./cmd/
 2. Restart backend after changing password
 3. Default development password is `admin123`
 4. In production, password must be explicitly set
-
-### JWT Token Issues
-
-**Problem**: Tokens invalid or not recognized
-
-**Solution**:
-1. Ensure `AUTHWAY_JWT_ACCESS_TOKEN_SECRET` is set and consistent
-2. Verify tokens haven't expired (check expiry settings)
-3. In production, ensure secrets are sufficiently long (64+ chars)
-4. Don't change secrets after tokens are issued (invalidates all tokens)
 
 ## Support
 

@@ -22,15 +22,6 @@ redis:
   password: "${REDIS_PASSWORD}"  # Use environment variable if needed
   db: 0
 
-jwt:
-  access_token_secret: "${JWT_ACCESS_SECRET}"  # Must be strong random string
-  refresh_token_secret: "${JWT_REFRESH_SECRET}"  # Must be strong random string
-  access_token_expiry: "15m"
-  refresh_token_expiry: "7d"
-  issuer: "https://auth.yourdomain.com"  # Replace with your domain
-  private_key_path: "/app/certs/jwt-private.pem"  # RSA private key
-  public_key_path: "/app/certs/jwt-public.pem"   # RSA public key
-
 oauth:
   authorize_code_expiry: "10m"
   allowed_grant_types: ["authorization_code", "refresh_token"]
