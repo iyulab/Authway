@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-15
+
+> Minor. New: a tenant can name documents — terms of service, a privacy
+> policy — that its users accept at sign-in, version by version; an
+> invitation can name the application it is for, and the person who accepts
+> it is sent on there. Fixed: mail through any SMTP server works as well as
+> the optional Sendway path (retries, servers without authentication,
+> implicit TLS, a plain-text part, encoded subjects), and the SMTP username
+> and password are read from the environment again. No breaking change for
+> applications; a login flow can answer `next: terms` once a tenant names a
+> document, and `capabilities` gains `terms_acceptance`.
+
 ### Added
 
 - **Terms a tenant's users accept at sign-in.** A tenant names its documents —
