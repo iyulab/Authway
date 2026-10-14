@@ -13,7 +13,9 @@ import i18n from '../i18n'
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
   email: z.string().email(t('auth:validation.emailInvalid')),
-  password: z.string().min(6, t('auth:validation.passwordMin6')),
+  // Signing in only needs a password to send; how long it must be is the
+  // tenant's rule when it is set, and an account's password may predate it.
+  password: z.string().min(1, t('auth:validation.passwordRequired')),
   remember: z.boolean().optional(),
 })
 

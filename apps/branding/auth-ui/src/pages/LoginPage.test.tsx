@@ -334,18 +334,19 @@ describe('LoginPage', () => {
       })
     })
 
-    it('validates password field', async () => {
+    it('asks for a password, and leaves judging it to the server', async () => {
+      // How long a password must be is the tenant's rule, and an account's
+      // password may predate it — the sign-in form only needs one to send.
       const emailInput = screen.getByLabelText('이메일')
-      const passwordInput = screen.getByLabelText('비밀번호')
       const submitButton = screen.getByRole('button', { name: '로그인' })
 
       await user.type(emailInput, 'test@example.com')
-      await user.type(passwordInput, '123')
       await user.click(submitButton)
 
       await waitFor(() => {
-        expect(screen.getByText('비밀번호는 최소 6자 이상이어야 합니다')).toBeInTheDocument()
+        expect(screen.getByText('비밀번호를 입력해주세요')).toBeInTheDocument()
       })
+      expect(screen.queryByText(/최소 \d+자/)).toBeNull()
     })
   })
 

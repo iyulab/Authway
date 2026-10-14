@@ -38,6 +38,13 @@
 
 ### Fixed
 
+- **The sign-in form refused passwords shorter than six characters** before
+  sending them. How long a password must be is the tenant's rule, applied
+  when a password is set; an account's password may predate it, and the
+  sign-in form now only asks that one is entered.
+- **A mail message that failed to render would have been sent anyway**, with
+  an empty or cut-off body: rendering errors were ignored. Sending now fails
+  instead.
 - **The button in every message could not be read.** Its colours sat only in
   a `<style>` block, which mail clients drop or apply in part, and the client
   painted the link in its own colour — link blue on the button colour. The
