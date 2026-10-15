@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-15
+
+> Minor, no breaking change for applications. Users get a hosted account
+> screen for two-step verification, the admin console sets where users are
+> sent, and the emailed sign-in link works when it is read on another device
+> (a code alongside the link). Database migrations 038–041; 040 drops the
+> retired `clients.website` column.
+
 ### Added
 
 - **The account screen** — `{login screens}/account?client_id=<an
