@@ -763,9 +763,10 @@ async function navigationFrom(res: Response, from: URL): Promise<URL> {
   const location = res.headers.get('location')
   if (res.status >= 300 && res.status < 400 && location) return new URL(location, from)
   const page = await res.text()
-  const scripted = /window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/.exec(page)
+  // The address is a script string literal: read it as the browser does, escapes and all.
+  const scripted = /window\.location(?:\.href)?\s*=\s*("(?:[^"\\]|\\.)*")/.exec(page)
   const refreshed = /http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"']+)["']/i.exec(page)
-  const target = scripted?.[1] ?? refreshed?.[1]
+  const target = (scripted ? (JSON.parse(scripted[1]) as string) : undefined) ?? refreshed?.[1]
   if (!target) throw new Error(`Expected a redirect or a page that navigates onward from ${from}, got ${res.status}: ${page.slice(0, 300)}`)
   return new URL(target, from)
 }
