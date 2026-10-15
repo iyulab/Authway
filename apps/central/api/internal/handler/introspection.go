@@ -75,8 +75,10 @@ func (h *IntrospectionHandler) Introspect(c *fiber.Ctx) error {
 	if !found.Active || found.ClientID == "" {
 		return c.JSON(inactive)
 	}
+	// A token of a client turned off is not answered for, whatever the
+	// engine still holds.
 	issuedTo, err := h.clients.GetByClientID(found.ClientID)
-	if err != nil || issuedTo.TenantID != tenantID {
+	if err != nil || issuedTo.TenantID != tenantID || !issuedTo.Active {
 		return c.JSON(inactive)
 	}
 

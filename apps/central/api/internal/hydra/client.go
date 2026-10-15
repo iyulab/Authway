@@ -305,6 +305,25 @@ func (c *Client) DeleteOAuth2Client(clientID string) error {
 	return nil
 }
 
+// DeleteClientTokens ends the access tokens issued to a client: they are no
+// longer active when introspected, and Authway's own endpoints refuse them.
+func (c *Client) DeleteClientTokens(clientID string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.AdminURL+"/admin/oauth2/tokens?client_id="+url.QueryEscape(clientID), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete the client's tokens: %s", string(body))
+	}
+	return nil
+}
+
 // Login and Consent Flow Management
 type LoginRequest struct {
 	Challenge         string        `json:"challenge"`
@@ -671,6 +690,14 @@ func (c *Client) RevokeOtherSessions(subject, keep string) error {
 		}
 	}
 	return firstErr
+}
+
+// RevokeClientConsent revokes what a subject granted one client, and with it
+// the client's refresh tokens for them. The authorization server revokes a
+// client's consents only subject by subject (measured against v26.2.0: the
+// client alone is refused).
+func (c *Client) RevokeClientConsent(subject, clientID string) error {
+	return c.deleteSessions("consent?subject=" + url.QueryEscape(subject) + "&client=" + url.QueryEscape(clientID))
 }
 
 // consentSession is a consent a user granted: its own id and the login

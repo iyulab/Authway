@@ -88,6 +88,13 @@
 
 ### Fixed
 
+- **A client turned off (`active: false`) is off.** It was stored and shown,
+  and nothing read it: users still signed in to the client and it still got
+  tokens. Now no one signs in to it (the application is handed
+  `unauthorized_client`), it gets no token by any grant — refresh, client
+  credentials and device code included — and the tokens it holds end
+  (introspection answers them inactive; its users' refresh tokens are
+  revoked). Turned on again it works as before, without the sessions it had.
 - **Registering a client under a `client_id` that is taken is refused** with
   `409 client_id_taken` (`field: client_id`). It answered `201` with the
   client already registered under it — ignoring the request, and with a

@@ -30,7 +30,7 @@ func newSecondFactorTestApp(t *testing.T, totpEnabled bool) (*fiber.App, *int, *
 	t.Helper()
 	u := buildTestUser(t, "unused", totpEnabled)
 	users := newFakeUserService(u)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID})
+	clients := newFakeClientService(&client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID})
 	hydraClient, acceptCount := newTestHydraServer(t)
 	redisClient := newTestRedisClient(t)
 

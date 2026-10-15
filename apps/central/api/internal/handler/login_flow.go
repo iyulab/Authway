@@ -37,6 +37,13 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusBadRequest, "client_not_registered", "This application is not registered with Authway.")
 	}
+	if !requestedClient.Active {
+		resp, err := h.hydraClient.RejectLoginRequest(flow, "unauthorized_client", clientTurnedOff)
+		if err != nil {
+			return respondFlowLookupError(c, err)
+		}
+		return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo})
+	}
 
 	if step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID); err != nil {
 		return respondFlowLookupError(c, err)
@@ -58,6 +65,29 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		},
 		"hints": requestHints(loginReq, methods),
 	})
+}
+
+// clientTurnedOff is what an application is told when a sign-in to it is
+// ended because an administrator turned it off. The authorization server
+// refuses a new request for it by itself (it is registered with no grants);
+// a flow already under way is ended here, at the login or the consent step.
+const clientTurnedOff = "This application is turned off."
+
+// consentForClientTurnedOff ends a consent flow whose client is turned off,
+// answering the address the browser goes to. ended=false when it is on.
+func (h *AuthHandler) consentForClientTurnedOff(challenge string, consentReq *hydra.ConsentRequest) (redirectTo string, ended bool, err error) {
+	if consentReq.Client == nil {
+		return "", false, nil
+	}
+	client, err := h.clientService.GetByClientID(consentReq.Client.ClientID)
+	if err != nil || client.Active {
+		return "", false, nil
+	}
+	resp, err := h.hydraClient.RejectConsentRequest(challenge, "unauthorized_client", clientTurnedOff)
+	if err != nil {
+		return "", false, err
+	}
+	return resp.RedirectTo, true, nil
 }
 
 // requestHints is what the application's authorization request asked of the
@@ -100,6 +130,13 @@ func (h *AuthHandler) LoginWithoutScreen(c *fiber.Ctx, flow string) (string, boo
 	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
 	if err != nil {
 		return "", false
+	}
+	if !requestedClient.Active {
+		resp, err := h.hydraClient.RejectLoginRequest(flow, "unauthorized_client", clientTurnedOff)
+		if err != nil {
+			return "", false
+		}
+		return resp.RedirectTo, true
 	}
 	step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID)
 	if err != nil || !settled {

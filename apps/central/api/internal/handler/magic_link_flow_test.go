@@ -58,7 +58,7 @@ func (f *fakeLinks) CleanupExpired() (int64, error) { return 0, nil }
 func newMagicLinkTestApp(t *testing.T, allowed []string) (*fiber.App, *fakeLinks, *client.Client, *int) {
 	t.Helper()
 	u := buildTestUser(t, "unused", false)
-	cl := &client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, EnabledAuthProviders: allowed}
+	cl := &client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, EnabledAuthProviders: allowed}
 	hydraClient, acceptCount := newTestHydraServer(t)
 	auth := NewAuthHandler(newFakeUserService(u), newFakeClientService(cl), fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 	links := &fakeLinks{

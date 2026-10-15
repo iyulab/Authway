@@ -104,7 +104,7 @@ func newAuthTestApp(t *testing.T, password string, totpEnabled bool, totpCode, r
 	t.Helper()
 	u := buildTestUser(t, password, totpEnabled)
 	users := newFakeUserService(u)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, AllowEmailLogin: true})
+	clients := newFakeClientService(&client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 
 	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{validTOTPCode: totpCode, validRecoveryCode: recoveryCode}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
@@ -292,7 +292,7 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	}
 
 	users := newFakeUserService(rightUser, wrongTenantUser)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID, AllowEmailLogin: true})
+	clients := newFakeClientService(&client.Client{Active: true, ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 	h := NewAuthHandler(users, clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})
 	app := fiber.New()
@@ -347,7 +347,7 @@ func TestVerifyMFALogin_ChallengeIsBoundToItsFlow(t *testing.T) {
 
 func TestSubmitPassword_RefusedWhenClientDisablesPasswordSignIn(t *testing.T) {
 	u := buildTestUser(t, "correct-horse", false)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID,
+	clients := newFakeClientService(&client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID,
 		EnabledAuthProviders: []string{"google"}, AllowEmailLogin: true})
 	hydraClient, acceptCount := newTestHydraServer(t)
 	h := NewAuthHandler(newFakeUserService(u), clients, fakeClaimsService{}, &fakeMFAService{}, hydraClient, zap.NewNop(), nil, newTestRedisClient(t), allowedSignInMethods{}, SignInPolicy{})

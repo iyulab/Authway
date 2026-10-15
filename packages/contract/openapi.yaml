@@ -1451,7 +1451,17 @@ paths:
                 name: { type: string }
                 description: { type: string }
                 public: { type: boolean }
-                active: { type: boolean }
+                active:
+                  type: boolean
+                  description: |
+                    false turns the client off: no one signs in to it — a new
+                    authorization request is answered unauthorized_client, and
+                    a sign-in under way is ended at its login or consent step —
+                    it gets no token by any grant, and the tokens it holds end
+                    (introspection answers them inactive; a resource server
+                    that verifies a JWT access token itself keeps accepting it
+                    until it expires). true turns it on again; the sessions it
+                    had stay ended.
                 redirect_uris: { type: array, items: { type: string } }
                 post_logout_redirect_uris: { type: array, items: { type: string } }
                 audience:
@@ -3285,7 +3295,7 @@ components:
         grant_types: { type: array, items: { type: string, enum: [authorization_code, refresh_token, client_credentials, 'urn:ietf:params:oauth:grant-type:device_code'] } }
         scopes: { type: array, items: { type: string } }
         enabled_auth_providers: { type: [array, 'null'], items: { type: string } }
-        active: { type: boolean }
+        active: { type: boolean, description: false while an administrator has turned the client off (see updateClient). }
         skip_consent: { type: boolean }
         skip_logout_consent: { type: boolean }
         access_token_strategy:

@@ -19,7 +19,7 @@ func TestResolveUserByEmail_ScopesByClientTenant(t *testing.T) {
 	rightUser := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
 	wrongTenantUser := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
 	users := newFakeUserService(rightUser, wrongTenantUser)
-	clients := newFakeClientService(&client.Client{ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID})
+	clients := newFakeClientService(&client.Client{Active: true, ID: uuid.New(), TenantID: rightUser.TenantID, ClientID: testClientID})
 	h := &EmailHandler{userSvc: users, clientSvc: clients, logger: zap.NewNop()}
 
 	got, err := h.resolveUserByEmail(testClientID, "shared@example.com")

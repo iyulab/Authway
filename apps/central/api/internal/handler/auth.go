@@ -362,6 +362,11 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	if err != nil {
 		return respondFlowLookupError(c, err)
 	}
+	if redirectTo, ended, err := h.consentForClientTurnedOff(challenge, consentReq); err != nil {
+		return respondFlowLookupError(c, err)
+	} else if ended {
+		return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": redirectTo})
+	}
 
 	// Get user information first
 	userID, err := uuid.Parse(consentReq.Subject)
@@ -407,6 +412,9 @@ func (h *AuthHandler) ConsentWithoutScreen(c *fiber.Ctx, flow string) (string, b
 	consentReq, err := h.hydraClient.GetConsentRequest(flow)
 	if err != nil {
 		return "", false
+	}
+	if redirectTo, ended, err := h.consentForClientTurnedOff(flow, consentReq); err != nil || ended {
+		return redirectTo, ended
 	}
 	userID, err := uuid.Parse(consentReq.Subject)
 	if err != nil {
@@ -484,6 +492,11 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
 	if err != nil {
 		return respondFlowLookupError(c, err)
+	}
+	if redirectTo, ended, err := h.consentForClientTurnedOff(challenge, consentReq); err != nil {
+		return respondFlowLookupError(c, err)
+	} else if ended {
+		return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": redirectTo})
 	}
 
 	// Get user information for session

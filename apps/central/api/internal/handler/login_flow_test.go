@@ -79,7 +79,7 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	tenantID := uuid.New()
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
 	c := &client.Client{
-		ID: uuid.New(), TenantID: tenantID, ClientID: testClientID,
+		ID: uuid.New(), TenantID: tenantID, ClientID: testClientID, Active: true,
 		EnabledAuthProviders: []string{"email", "github"},
 		AllowEmailLogin:      true,
 		GithubOAuthEnabled:   true,
@@ -123,7 +123,7 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 func TestGetLoginFlow_SameTenantSessionSkipsTheForm(t *testing.T) {
 	tenantID := uuid.New()
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
-	c := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	h := &loginFlowHydra{skip: true, subject: u.ID.String()}
 	app := newLoginFlowApp(t, h, u, c)
 
@@ -141,7 +141,7 @@ func TestGetLoginFlow_SameTenantSessionSkipsTheForm(t *testing.T) {
 
 func TestGetLoginFlow_UnregisteredClientIsRejected(t *testing.T) {
 	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
-	other := &client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: "someone-else"}
+	other := &client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: "someone-else"}
 	app := newLoginFlowApp(t, &loginFlowHydra{}, u, other)
 
 	status, body := getJSON(t, app, "/api/v1/login-flows/flow-1")

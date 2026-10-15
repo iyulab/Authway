@@ -54,7 +54,7 @@ func newSocialStartTestApp(t *testing.T, cl *client.Client) (*fiber.App, *[]stri
 }
 
 func TestStartSocialLogin_SendsTheBrowserToTheProvider(t *testing.T) {
-	app, rejected := newSocialStartTestApp(t, &client.Client{ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"google"}})
+	app, rejected := newSocialStartTestApp(t, &client.Client{Active: true, ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"google"}})
 
 	resp := get(t, app, "/login-flows/flow-1/social/google", "")
 
@@ -78,7 +78,7 @@ func TestStartSocialLogin_SendsTheBrowserToTheProvider(t *testing.T) {
 
 // The screen only shows enabled providers; the server enforces the same rule.
 func TestStartSocialLogin_ProviderNotOfferedByTheClient(t *testing.T) {
-	app, rejected := newSocialStartTestApp(t, &client.Client{ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"email"}})
+	app, rejected := newSocialStartTestApp(t, &client.Client{Active: true, ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"email"}})
 
 	resp := get(t, app, "/login-flows/flow-1/social/google", "")
 
@@ -91,7 +91,7 @@ func TestStartSocialLogin_ProviderNotOfferedByTheClient(t *testing.T) {
 }
 
 func TestStartSocialLogin_UnknownFlowShowsTheErrorScreen(t *testing.T) {
-	app, rejected := newSocialStartTestApp(t, &client.Client{ID: uuid.New(), ClientID: "app"})
+	app, rejected := newSocialStartTestApp(t, &client.Client{Active: true, ID: uuid.New(), ClientID: "app"})
 
 	resp := get(t, app, "/login-flows/no-such-flow/social/google", "")
 
@@ -107,7 +107,7 @@ func TestStartSocialLogin_UnknownFlowShowsTheErrorScreen(t *testing.T) {
 // A provider the client lists but nobody has credentials for must not send
 // the user to the provider with an empty client_id.
 func TestStartSocialLogin_ProviderWithoutCredentials(t *testing.T) {
-	app, rejected := newSocialStartTestApp(t, &client.Client{ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"github"}})
+	app, rejected := newSocialStartTestApp(t, &client.Client{Active: true, ID: uuid.New(), ClientID: "app", EnabledAuthProviders: []string{"github"}})
 
 	resp := get(t, app, "/login-flows/flow-1/social/github", "")
 

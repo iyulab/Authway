@@ -454,6 +454,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if client.System {
 		return nil, SyncStatus{}, ErrSystemClient
 	}
+	wasActive := client.Active
 
 	// Validate the *resulting* configuration after the patch is applied.
 	// We compute the merged view of public/grant_types/origins/redirects
@@ -719,6 +720,17 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		return nil, SyncStatus{}, fmt.Errorf("failed to update client: %w", err)
 	}
 
+	// A client turned off keeps no token in force, so turning it on again does
+	// not bring old sessions back. Its refresh tokens are refused while it is
+	// off (it is registered with no grants).
+	if wasActive && !client.Active && syncStatus.State == SyncStateOK {
+		if err := s.endTokens(&client); err != nil {
+			syncStatus = SyncStatus{State: SyncStateFailed, Error: err.Error()}
+			s.logger.Warn("Failed to end the tokens of a client turned off",
+				zap.Error(err), zap.String("client_id", client.ClientID))
+		}
+	}
+
 	s.logger.Info("Client updated in database",
 		zap.String("id", client.ID.String()),
 		zap.String("hydra_sync_state", syncStatus.State))
@@ -945,7 +957,7 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		BackChannelLogoutSessionRequired: c.BackChannelLogoutURI != "",
 		ClientURI:                        c.ClientURI,
 		LogoURI:                          c.Logo,
-		GrantTypes:                       c.GrantTypes,
+		GrantTypes:                       c.grantsInForce(),
 		ResponseTypes:                    []string{"code"},
 		Scope:                            strings.Join(c.Scopes, " "),
 		TokenEndpointAuthMethod:          authMethod,
@@ -955,6 +967,36 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		SkipLogoutConsent:                c.SkipLogoutConsent,
 		AccessTokenStrategy:              derefStrategy(c.AccessTokenStrategy),
 	}
+}
+
+// endTokens ends the tokens issued to a client: its access tokens, and what
+// each user of its tenant granted it — which ends their refresh tokens.
+func (s *service) endTokens(client *Client) error {
+	if err := s.hydraClient.DeleteClientTokens(client.ClientID); err != nil {
+		return err
+	}
+	var subjects []uuid.UUID
+	if err := s.db.Table("users").Where("tenant_id = ?", client.TenantID).Pluck("id", &subjects).Error; err != nil {
+		return fmt.Errorf("failed to list the tenant's users: %w", err)
+	}
+	for _, subject := range subjects {
+		if err := s.hydraClient.RevokeClientConsent(subject.String(), client.ClientID); err != nil {
+			return fmt.Errorf("failed to revoke a consent: %w", err)
+		}
+	}
+	return nil
+}
+
+// grantsInForce are the grants the authorization server is to serve the
+// client: none while the client is turned off. The engine checks a client's
+// grants on every token request — a refresh, client credentials, a device
+// code — and an authorization request, so a client registered with none gets
+// nothing from it; the stored grants come back when it is turned on.
+func (c *Client) grantsInForce() []string {
+	if !c.Active {
+		return []string{}
+	}
+	return c.GrantTypes
 }
 
 // derefStrategy flattens the optional per-client access token strategy for the

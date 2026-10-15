@@ -374,6 +374,15 @@ export class Provider {
     return { client, scopes, browser, pkce, flow: this.loginFlowFrom(loginScreen) }
   }
 
+  /**
+   * Opens an authorization-code + PKCE request and follows it to where it
+   * stops: a screen of the login UI (a flow id), or the application's redirect
+   * with a code or an error.
+   */
+  async authorize(client: TestClient, scopes = ['openid', 'profile', 'email'], browser = new Browser()): Promise<URL> {
+    return this.afterLogin(browser, await this.authorizeUrl(client, scopes, createPkce()))
+  }
+
   /** The address of an authorization-code + PKCE request; `extra` adds request parameters. */
   private async authorizeUrl(client: TestClient, scopes: string[], pkce: Pkce, extra: Record<string, string> = {}): Promise<string> {
     const d = await this.discovery()
@@ -630,6 +639,8 @@ export class Provider {
         afterConsent = (JSON.parse(consentBody) as { redirect_to: string }).redirect_to
       }
       next = await this.followUntil(browser, afterConsent, (u) => u.searchParams.has('code') || u.searchParams.has('error'))
+      // The provider may end the request at the consent step instead of answering it.
+      if (next.searchParams.has('error')) return { kind: 'rejected', status, body: next.toString() }
     }
     const code = next.searchParams.get('code')
     if (!code) throw new Error(`Authorization did not return a code: ${next}`)

@@ -55,7 +55,7 @@ func TestSuspendedAccount_EmailedLinkAndProviderAreRefused(t *testing.T) {
 func TestSuspendedAccount_ASessionIsNotReused(t *testing.T) {
 	tenantID := uuid.New()
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: false}
-	c := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	h := &loginFlowHydra{skip: true, subject: u.ID.String()}
 	app := newLoginFlowApp(t, h, u, c)
 

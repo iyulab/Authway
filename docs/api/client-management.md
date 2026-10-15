@@ -320,3 +320,22 @@ leaves where the client runs.
   `private_key_jwt` under `token_endpoint_auth_methods_supported`.
 - `POST /api/v1/oauth2/introspect` authenticates its caller with a client
   secret: a client that holds a key cannot call it.
+
+## Turning a client off: `active`
+
+`PUT /api/v1/clients/{id}` with `"active": false` stops a client being used
+without deleting it:
+
+- No one signs in to it. A new authorization request is answered with
+  `error=unauthorized_client` at the application's redirect URI; a sign-in
+  already under way is ended the same way at its login or consent step.
+- It gets no token by any grant — authorization code, refresh, client
+  credentials or device code. (It is registered with the authorization server
+  with no grants while it is off.)
+- The tokens it holds end: its access tokens are no longer active (Authway's
+  introspection answers them `{"active": false}`), and what its users granted
+  it is revoked, which ends their refresh tokens. A resource server that
+  verifies a JWT access token itself keeps accepting it until it expires.
+
+`"active": true` turns it on again. Users sign in to it as before; the
+sessions it had stay ended.

@@ -59,9 +59,9 @@ func newIntrospectionApp(t *testing.T, tokens map[string]string) (*fiber.App, *i
 	tenant, otherTenant := uuid.New(), uuid.New()
 	clients := &introspectingClients{
 		clients: map[string]*client.Client{
-			"resource-server": {ClientID: "resource-server", TenantID: tenant},
-			"spa":             {ClientID: "spa", TenantID: tenant, Public: true},
-			"other-tenant":    {ClientID: "other-tenant", TenantID: otherTenant},
+			"resource-server": {ClientID: "resource-server", TenantID: tenant, Active: true},
+			"spa":             {ClientID: "spa", TenantID: tenant, Public: true, Active: true},
+			"other-tenant":    {ClientID: "other-tenant", TenantID: otherTenant, Active: true},
 		},
 		secrets: map[string]string{"resource-server": resourceServerSecret},
 	}

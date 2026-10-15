@@ -171,7 +171,7 @@ func newSessionFlowApp(t *testing.T, h *sessionHydra, u *user.User, clients ...*
 // user gets the form.
 func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
-	c := &client.Client{ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID, AllowEmailLogin: true}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID, AllowEmailLogin: true}
 	request := func(requestURL string) *sessionHydra {
 		return &sessionHydra{login: hydra.LoginRequest{
 			Challenge: "flow-1", Skip: true, Subject: u.ID.String(), RequestURL: requestURL,
@@ -205,7 +205,7 @@ func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 func TestGetLoginFlow_ReusedSessionKeepsItsLifetime(t *testing.T) {
 	tenantID := uuid.New()
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
-	c := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	h := &sessionHydra{login: hydra.LoginRequest{
 		Challenge: "flow-1", Skip: true, Subject: u.ID.String(),
 		Client: &hydra.OAuth2Client{ClientID: testClientID},
@@ -295,8 +295,8 @@ func TestConsentFlow_RememberedAnswerIsKeptUntilRevoked(t *testing.T) {
 func TestFlowSettler_SettlesWhatNeedsNoScreen(t *testing.T) {
 	tenantID := uuid.New()
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
-	own := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
-	foreign := &client.Client{ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
+	own := &client.Client{Active: true, ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
+	foreign := &client.Client{Active: true, ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
 	session := func(requestURL string) hydra.LoginRequest {
 		return hydra.LoginRequest{
 			Challenge: "flow-1", Skip: true, Subject: u.ID.String(), RequestURL: requestURL,

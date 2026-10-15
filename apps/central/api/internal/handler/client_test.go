@@ -29,7 +29,7 @@ func TestCreate_ScopedActor_IgnoresBodyTenantIDAndPrivilegedFields(t *testing.T)
 	var gotReq *client.CreateClientRequest
 	fake := &fakeClientService{createFn: func(req *client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error) {
 		gotReq = req
-		return &client.Client{ID: uuid.New(), TenantID: scopedTenantID, ClientID: "authway_x", Name: req.Name}, &client.ClientCredentials{ClientID: "authway_x", ClientSecret: "s"}, nil
+		return &client.Client{Active: true, ID: uuid.New(), TenantID: scopedTenantID, ClientID: "authway_x", Name: req.Name}, &client.ClientCredentials{ClientID: "authway_x", ClientSecret: "s"}, nil
 	}}
 	h := newTestClientHandler(fake)
 
@@ -109,7 +109,7 @@ func TestCreate_AdminActor_FullRequestStillWorks(t *testing.T) {
 	var gotReq *client.CreateClientRequest
 	fake := &fakeClientService{createFn: func(req *client.CreateClientRequest) (*client.Client, *client.ClientCredentials, error) {
 		gotReq = req
-		return &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: "authway_y", Name: req.Name}, &client.ClientCredentials{ClientID: "authway_y", ClientSecret: "s"}, nil
+		return &client.Client{Active: true, ID: uuid.New(), TenantID: tenantID, ClientID: "authway_y", Name: req.Name}, &client.ClientCredentials{ClientID: "authway_y", ClientSecret: "s"}, nil
 	}}
 	h := newTestClientHandler(fake)
 
