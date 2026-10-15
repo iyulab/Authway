@@ -245,7 +245,10 @@ the login UI sends them to `initiate_login_uri` with `iss` (the issuer) and
 there, and the session the acceptance opened usually signs them in without a
 form. Without `initiate_login_uri` they go to `client_uri`; without either,
 they are told to sign in from the application. Both are absolute `https`
-URLs; an empty string clears one.
+URLs; an empty string clears one. `client_uri` is also where the
+[account screen](account.md#the-account-screen) links back to. In the admin
+console they are the application's **Home Page** and **Sign-In Start URL**,
+and the invite dialog has an **Application** choice.
 
 ### Clients whose tokens go to an API: `audience`
 

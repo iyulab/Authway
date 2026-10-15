@@ -38,9 +38,12 @@ func RefuseWith(c *fiber.Ctx, status int, code, detail string, extensions fiber.
 		"code":   code,
 	}
 	for k, v := range extensions {
-		if !reserved[k] {
-			body[k] = v
+		// An empty string says nothing; a member that is there should mean
+		// something (a hint of "" is no hint).
+		if s, isString := v.(string); reserved[k] || (isString && s == "") {
+			continue
 		}
+		body[k] = v
 	}
 	// What the status itself obliges: a 401 names the scheme (RFC 9110
 	// 15.5.2) — every credential this API takes is a bearer token — unless

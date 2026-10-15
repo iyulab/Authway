@@ -361,3 +361,52 @@ describe('ClientForm — API audiences and the back-channel logout address', () 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
   })
 })
+
+describe('ClientForm — the home page and the sign-in start URL', () => {
+  const existing = {
+    id: 'c1',
+    tenant_id: 't1',
+    client_id: 'app',
+    name: 'Web App',
+    redirect_uris: ['https://app.example.com/callback'],
+    grant_types: ['authorization_code'],
+    scopes: ['openid'],
+    public: false,
+    active: true,
+    client_uri: 'https://app.example.com',
+    initiate_login_uri: 'https://app.example.com/login',
+  } as Client
+
+  it('shows what an existing client has and submits it unchanged', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: existing })
+
+    expect(screen.getByLabelText('Home Page')).toHaveValue('https://app.example.com')
+    expect(screen.getByLabelText('Sign-In Start URL (Optional)')).toHaveValue('https://app.example.com/login')
+
+    await submit(user)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      client_uri: 'https://app.example.com',
+      initiate_login_uri: 'https://app.example.com/login',
+    })
+  })
+
+  it('takes only an absolute https URL without a fragment — users are sent there', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ initialData: { ...existing, client_uri: '', initiate_login_uri: '' } })
+
+    for (const label of ['Home Page', 'Sign-In Start URL (Optional)']) {
+      const field = screen.getByLabelText(label)
+      for (const bad of ['http://app.example.com', 'javascript:alert(1)', 'https://app.example.com/#top', '/login']) {
+        await user.clear(field)
+        await user.type(field, bad)
+        await submit(user)
+        expect(await screen.findByText('Enter one absolute https URL without a fragment (#…)'), `${label}: ${bad}`).toBeInTheDocument()
+      }
+      await user.clear(field)
+    }
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+})
+

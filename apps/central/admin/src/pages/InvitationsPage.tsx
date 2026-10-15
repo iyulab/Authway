@@ -9,6 +9,7 @@ import {
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline'
 import { invitationsApi, Invitation } from '@/lib/features-api'
+import { clientsApi } from '@/lib/api'
 import {
   Button,
   Card,
@@ -27,6 +28,16 @@ interface InvitationFormData {
   role: string
   message: string
   expires_in_hours: number
+  // '' = no particular application.
+  client_id: string
+}
+
+const emptyForm: InvitationFormData = {
+  email: '',
+  role: 'user',
+  message: '',
+  expires_in_hours: 72,
+  client_id: '',
 }
 
 const InvitationsPage: React.FC = () => {
@@ -41,12 +52,7 @@ const InvitationsPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false)
   const [selectedInvitation, setSelectedInvitation] = useState<Invitation | null>(null)
-  const [formData, setFormData] = useState<InvitationFormData>({
-    email: '',
-    role: 'user',
-    message: '',
-    expires_in_hours: 72,
-  })
+  const [formData, setFormData] = useState<InvitationFormData>(emptyForm)
 
   // Fetch invitations
   const { data, isLoading, error, refetch } = useQuery({
@@ -61,13 +67,23 @@ const InvitationsPage: React.FC = () => {
     enabled: !!selectedTenantId,
   })
 
+  // The applications an invitation can be for: the tenant's own, not the
+  // ones that are part of Authway. Loaded when the invite dialog opens.
+  const { data: clientsData } = useQuery({
+    queryKey: ['clients', selectedTenantId, 'invitable'],
+    queryFn: () => clientsApi.list({ tenant_id: selectedTenantId, limit: 200 }),
+    enabled: !!selectedTenantId && showCreateModal,
+  })
+  const applications = (clientsData?.data.clients || []).filter((c) => !c.system)
+  const chosenApplication = applications.find((c) => c.client_id === formData.client_id)
+
   const invitations = data?.data.invitations || []
   const totalInvitations = data?.data.total || 0
   const totalPages = Math.ceil(totalInvitations / pageSize)
 
   // Create mutation
   const createMutation = useMutation({
-    mutationFn: (data: InvitationFormData) =>
+    mutationFn: (data: Parameters<typeof invitationsApi.create>[0]) =>
       invitationsApi.create(data),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
@@ -106,17 +122,13 @@ const InvitationsPage: React.FC = () => {
   })
 
   const resetForm = () => {
-    setFormData({
-      email: '',
-      role: 'user',
-      message: '',
-      expires_in_hours: 72,
-    })
+    setFormData(emptyForm)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    const { client_id, ...rest } = formData
+    createMutation.mutate(client_id ? { ...rest, client_id } : rest)
   }
 
   const getStatusBadge = (status: string) => {
@@ -338,6 +350,30 @@ const InvitationsPage: React.FC = () => {
               <option value="admin">Admin</option>
               <option value="viewer">Viewer</option>
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="invitation-application" className="block text-sm font-medium text-gray-700">
+              Application (optional)
+            </label>
+            <select
+              id="invitation-application"
+              value={formData.client_id}
+              onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">No particular application</option>
+              {applications.map((c) => (
+                <option key={c.id} value={c.client_id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              {chosenApplication && !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
+                ? 'This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.'
+                : 'After accepting, the user is sent on to this application to sign in. Without one, they finish on Authway.'}
+            </p>
           </div>
 
           <div>

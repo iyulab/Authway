@@ -20,6 +20,21 @@
   change, delete or re-key it (`409 system_client`); deleting the tenant
   removes it, from the authorization server too, and it no longer counts as
   one of the tenant's clients. Migration 038.
+- **The admin console sets where users are sent** — an application's Home
+  Page (`client_uri`) and Sign-In Start URL (`initiate_login_uri`), and the
+  application an invitation is for (the invite dialog's Application choice;
+  the account screen's client is not offered).
+
+### Changed
+
+- **A client's home page is `client_uri` only.** The client field `website`
+  (never part of the published contract) said the same thing; the API no
+  longer reads, stores or returns it — a `website` sent on create or update is
+  ignored. Migration 039 moves each stored value that is a valid `client_uri`
+  (an absolute `https` URL without a fragment) into `client_uri` where that is
+  still empty; the column itself is dropped by a later migration.
+- A refusal no longer carries an extension member whose value is an empty
+  string (such as `"hint": ""`).
 
 ## [0.16.0] - 2026-10-15
 

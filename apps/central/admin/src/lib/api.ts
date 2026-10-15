@@ -78,7 +78,12 @@ export interface Client {
   client_id: string
   name: string
   description?: string
-  website?: string
+  // The application's home page — where a user goes back to from Authway's
+  // screens. An absolute https URL; '' on update clears it.
+  client_uri?: string
+  // Where the application starts a sign-in when Authway sends a user to it
+  // (an accepted invitation), with iss and login_hint. '' on update clears it.
+  initiate_login_uri?: string
   logo?: string
   redirect_uris: string[]
   post_logout_redirect_uris?: string[]
@@ -207,7 +212,8 @@ export const clientsApi = {
     tenant_id: string
     name: string
     description?: string
-    website?: string
+    client_uri?: string
+    initiate_login_uri?: string
     logo?: string
     redirect_uris: string[]
     post_logout_redirect_uris?: string[]

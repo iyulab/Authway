@@ -13,6 +13,9 @@ export default defineConfig({
     // origin also matches the single-domain deployment the console targets.
     environmentOptions: { jsdom: { url: 'http://localhost:8080' } },
     setupFiles: ['./src/test/setup.ts'],
+    // Typing into a whole form takes seconds when the machine is busy (a full
+    // parallel run); the default 5 s fails such tests for that alone.
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

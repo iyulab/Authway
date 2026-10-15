@@ -260,7 +260,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		ClientSecretHash: secretHash,
 		Name:             req.Name,
 		Description:      req.Description,
-		Website:          req.Website,
 		Logo:             req.Logo,
 		// nonNilURIs, not req.RedirectURIs: clients.redirect_uris is NOT NULL, and
 		// GORM writes an explicit NULL for a nil slice rather than omitting the
@@ -570,8 +569,6 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 	// Allow clearing description (empty string is valid)
 	client.Description = req.Description
-	// Allow clearing website (empty string is valid)
-	client.Website = req.Website
 	if req.Logo != "" {
 		client.Logo = req.Logo
 	}

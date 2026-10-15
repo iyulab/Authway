@@ -45,7 +45,7 @@ const mockClients = [
     client_id: 'test-client-1',
     name: 'Test Application 1',
     description: 'A test application for OAuth',
-    website: 'https://example.com',
+    client_uri: 'https://example.com',
     redirect_uris: ['http://localhost:3000/callback'],
     grant_types: ['authorization_code'],
     scopes: ['openid', 'email', 'profile'],

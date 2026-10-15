@@ -46,7 +46,9 @@ const ClientDetailPage: React.FC = () => {
       return clientsApi.update(clientId!, {
         name: data.name,
         description: data.description ?? '',
-        website: data.website ?? '',
+        // Sent as they stand: '' clears what was there.
+        client_uri: (data.client_uri ?? '').trim(),
+        initiate_login_uri: (data.initiate_login_uri ?? '').trim(),
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris,
         allowed_origins: allowedOrigins,

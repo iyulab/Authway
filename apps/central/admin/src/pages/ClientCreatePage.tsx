@@ -39,7 +39,8 @@ const ClientCreatePage: React.FC = () => {
         tenant_id: selectedTenant.id,
         name: data.name,
         description: data.description,
-        website: data.website || undefined,
+        client_uri: (data.client_uri ?? '').trim() || undefined,
+        initiate_login_uri: (data.initiate_login_uri ?? '').trim() || undefined,
         redirect_uris: redirectUris,
         post_logout_redirect_uris:
           postLogoutRedirectUris.length > 0 ? postLogoutRedirectUris : undefined,

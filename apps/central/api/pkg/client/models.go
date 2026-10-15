@@ -21,16 +21,19 @@ type Client struct {
 	// ClientSecretHash is what the secret is checked against (see secret.go).
 	// The authorization server authenticates the client at the token
 	// endpoint with its own copy; this one lets the API recognise the client.
-	ClientSecretHash string         `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
-	Name             string         `json:"name" gorm:"not null"`
-	Description      string         `json:"description"`
-	Website          string         `json:"website"`
-	Logo             string         `json:"logo"`
-	RedirectURIs     pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
-	GrantTypes       pq.StringArray `json:"grant_types" gorm:"type:text[]"`
-	Scopes           pq.StringArray `json:"scopes" gorm:"type:text[]"`
-	Public           bool           `json:"public" gorm:"default:false"`
-	Active           bool           `json:"active"`
+	ClientSecretHash string `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
+	Name             string `json:"name" gorm:"not null"`
+	Description      string `json:"description"`
+	// Website is retired (migration 039 moved its values into ClientURI). It is
+	// mapped read-only only until the migration that drops the column ships in
+	// a deployment of its own; nothing reads it.
+	Website      *string        `json:"-" gorm:"column:website;->"`
+	Logo         string         `json:"logo"`
+	RedirectURIs pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
+	GrantTypes   pq.StringArray `json:"grant_types" gorm:"type:text[]"`
+	Scopes       pq.StringArray `json:"scopes" gorm:"type:text[]"`
+	Public       bool           `json:"public" gorm:"default:false"`
+	Active       bool           `json:"active"`
 	// System marks an application Authway itself owns — the account screen's
 	// client, one per tenant (see EnsureAccountClient). The administration API
 	// refuses to change or delete it.
@@ -137,7 +140,6 @@ type PublicClient struct {
 	ClientID     string    `json:"client_id"`
 	Name         string    `json:"name"`
 	Description  string    `json:"description"`
-	Website      string    `json:"website"`
 	Logo         string    `json:"logo"`
 	RedirectURIs []string  `json:"redirect_uris"`
 	GrantTypes   []string  `json:"grant_types"`
@@ -229,7 +231,6 @@ func (c *Client) ToPublic() PublicClient {
 		ClientID:     c.ClientID,
 		Name:         c.Name,
 		Description:  c.Description,
-		Website:      c.Website,
 		Logo:         c.Logo,
 		RedirectURIs: c.RedirectURIs,
 		GrantTypes:   c.GrantTypes,
@@ -296,7 +297,6 @@ type CreateClientRequest struct {
 	ClientSecret string `json:"client_secret"` // Optional: Required only for confidential clients (ignored for public clients)
 
 	Description string `json:"description"`
-	Website     string `json:"website" validate:"omitempty,url"`
 	Logo        string `json:"logo" validate:"omitempty,url"`
 	// RedirectURIs is required only for redirect-based grants (authorization_code,
 	// implicit) — see validateClientConfig. A struct tag cannot express that
@@ -429,7 +429,6 @@ func (r *ScopedCreateClientRequest) ToCreateClientRequest(tenantID string) *Crea
 type UpdateClientRequest struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description"`
-	Website      string   `json:"website" validate:"omitempty,url"`
 	Logo         string   `json:"logo" validate:"omitempty,url"`
 	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,min=1"`
 	GrantTypes   []string `json:"grant_types" validate:"omitempty,min=1"`

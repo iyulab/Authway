@@ -76,6 +76,44 @@ describe('creating a client', () => {
   })
 })
 
+describe('where users are sent', () => {
+  it('sends the home page and the sign-in start URL when creating, trimmed', async () => {
+    const create = vi
+      .spyOn(clientsApi, 'create')
+      .mockResolvedValue(answer({ message: 'ok', client: existing, credentials: { client_id: 'app', client_secret: 's' } }))
+    const user = userEvent.setup()
+    render(<ClientCreatePage />)
+
+    await user.type(screen.getByLabelText('Client Name *'), 'Web App')
+    await user.type(screen.getByLabelText('Home Page'), ' https://app.example.com ')
+    await user.type(screen.getByLabelText('Sign-In Start URL (Optional)'), 'https://app.example.com/login')
+    await user.type(screen.getByLabelText(/^Redirect URIs/), 'https://app.example.com/callback')
+    await user.click(screen.getByRole('button', { name: /create/i }))
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0][0]).toMatchObject({
+      client_uri: 'https://app.example.com',
+      initiate_login_uri: 'https://app.example.com/login',
+    })
+  })
+
+  it('clears them by sending them empty when changing a client', async () => {
+    vi.spyOn(clientsApi, 'get').mockResolvedValue(
+      answer({ client: { ...existing, client_uri: 'https://app.example.com', initiate_login_uri: 'https://app.example.com/login' } }),
+    )
+    const update = vi.spyOn(clientsApi, 'update').mockResolvedValue(answer({ message: 'ok', client: existing }))
+    const user = userEvent.setup()
+    render(<ClientDetailPage />)
+
+    await user.clear(await screen.findByLabelText('Home Page'))
+    await user.clear(screen.getByLabelText('Sign-In Start URL (Optional)'))
+    await user.click(screen.getByRole('button', { name: /save|update/i }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0][1]).toMatchObject({ client_uri: '', initiate_login_uri: '' })
+  })
+})
+
 describe('changing a client', () => {
   it('clears the audiences and the logout address by sending them empty', async () => {
     vi.spyOn(clientsApi, 'get').mockResolvedValue(answer({ client: existing }))

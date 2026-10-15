@@ -153,6 +153,9 @@ export const invitationsApi = {
     role?: string
     message?: string
     expires_in_hours?: number
+    // The OAuth client_id of the application the invitation is for: after
+    // accepting, the user is sent to its sign-in start URL (or home page).
+    client_id?: string
   }) =>
     api.post<{ invitation: Invitation; message: string }>('/api/v1/invitations', data),
 

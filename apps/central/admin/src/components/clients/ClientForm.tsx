@@ -30,11 +30,23 @@ export function usesBrowserRedirect(redirectUris: string): boolean {
     })
 }
 
+/** An absolute https URL without a fragment — what the server accepts as client_uri and initiate_login_uri. */
+export function isApplicationAddress(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.host !== '' && url.hash === '' && !/\s/.test(value)
+  } catch {
+    return false
+  }
+}
+
 // Client form validation schema
 export const clientFormSchema = z.object({
   name: z.string().min(1, 'Client name is required'),
   description: z.string().optional(),
-  website: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  // Addresses the application publishes for users — see the superRefine below.
+  client_uri: z.string().optional(),
+  initiate_login_uri: z.string().optional(),
   // Required only for redirect-based grants — see the superRefine below. A
   // machine-to-machine client (client_credentials only) never redirects, and
   // forcing a dummy URI here pollutes its logout configuration.
@@ -96,6 +108,20 @@ export const clientFormSchema = z.object({
       path: ['audience'],
       message: 'Each audience must be a distinct identifier without spaces, at most 255 characters',
     })
+  }
+
+  // Mirrors the server rule (invalid_client_uri, invalid_initiate_login_uri):
+  // users are sent to these addresses, so only an absolute https URL without a
+  // fragment is accepted.
+  for (const field of ['client_uri', 'initiate_login_uri'] as const) {
+    const address = (data[field] ?? '').trim()
+    if (address !== '' && !isApplicationAddress(address)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: 'Enter one absolute https URL without a fragment (#…)',
+      })
+    }
   }
 
   // The shape only (invalid_backchannel_logout_uri). Whether the address may
@@ -176,7 +202,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       ? {
           name: initialData.name,
           description: initialData.description || '',
-          website: initialData.website || '',
+          client_uri: initialData.client_uri || '',
+          initiate_login_uri: initialData.initiate_login_uri || '',
           // M2M clients legitimately have no redirect_uris — the API may omit the field.
           redirect_uris: (initialData.redirect_uris || []).join('\n'),
           post_logout_redirect_uris: (initialData.post_logout_redirect_uris || []).join('\n'),
@@ -268,11 +295,11 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           error={errors.name?.message}
         />
         <Input
-          {...register('website')}
-          type="url"
-          label="Website URL"
-          placeholder="https://example.com"
-          error={errors.website?.message}
+          {...register('client_uri')}
+          label="Home Page"
+          placeholder="https://app.example.com"
+          helperText="Where users go back to from Authway's screens (the account screen, an accepted invitation when there is no sign-in start URL). https only."
+          error={errors.client_uri?.message}
         />
       </div>
 
@@ -281,6 +308,14 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         label="Description"
         placeholder="Enter a description for the client"
         rows={2}
+      />
+
+      <Input
+        {...register('initiate_login_uri')}
+        label="Sign-In Start URL (Optional)"
+        placeholder="https://app.example.com/login"
+        helperText="Where the application starts a sign-in. A user who accepts an invitation to this application is sent here with iss and login_hint, and the application sends them on to Authway. https only. Empty: they go to the home page."
+        error={errors.initiate_login_uri?.message}
       />
 
       {/* Redirect URIs */}

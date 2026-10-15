@@ -63,6 +63,15 @@ func TestRefuseWith_ExtensionsCannotReplaceTheStandardMembers(t *testing.T) {
 	}
 }
 
+func TestRefuseWith_LeavesOutAnEmptyMember(t *testing.T) {
+	_, _, body := answer(t, func(c *fiber.Ctx) error {
+		return RefuseWith(c, fiber.StatusBadRequest, "invalid_client_uri", "Bad.", fiber.Map{"field": "client_uri", "hint": ""})
+	})
+	if _, there := body["hint"]; there || body["field"] != "client_uri" {
+		t.Fatalf("got %v", body)
+	}
+}
+
 func TestRefuse_AddsTheHeadersTheStatusCallsFor(t *testing.T) {
 	_, headers, _ := answer(t, func(c *fiber.Ctx) error {
 		return Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Sign in.")
