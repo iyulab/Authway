@@ -306,6 +306,24 @@ jobs:
       - name: Build the API sample
         run: dotnet build samples/asp-api --nologo
 
+  clients:
+    name: .NET client build / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/csharp
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # The live tests need a deployment (AUTHWAY_CLIENT_TEST_*) and skip here; they run against a local one.
+      - name: Build and test Authway.Client
+        run: dotnet test --solution Authway.Client.slnx --configuration Release
+
   packages:
     name: TS packages build / typecheck / tarball verify
     runs-on: ubuntu-latest

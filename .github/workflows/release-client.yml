@@ -1,0 +1,50 @@
+name: Release .NET client
+
+# Authway.Client (clients/csharp) to nuget.org, driven only by a `client-v<version>` tag — a push to main never
+# publishes, and the npm SDK's `v*` tags do not match. The tests ran in CI on the tagged commit; this checks that the
+# tag, the project and the changelog agree and that nuget.org does not have the version yet, then packs and pushes.
+# Text under clients/ is checked for internal references by the repository's pre-commit hook before it is committed.
+
+on:
+  push:
+    tags: ['client-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-client
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: pack and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT: clients/csharp/src/Authway.Client/Authway.Client.csproj
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      # A mismatch fails here, not as a package nobody meant to publish — and a version already on nuget.org is a
+      # mistake to say aloud, not one --skip-duplicate should swallow.
+      - name: The tag, the project, the changelog and nuget.org agree
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#client-v}"
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT" | head -n1 | tr -d '\r')
+          [ "$tag" = "$version" ] || { echo "::error::The tag says $tag, $PROJECT says $version."; exit 1; }
+          grep -q "^## $version — [0-9]" clients/csharp/CHANGELOG.md || { echo "::error::clients/csharp/CHANGELOG.md has no dated $version."; exit 1; }
+          if curl -fsS https://api.nuget.org/v3-flatcontainer/authway.client/index.json 2>/dev/null | grep -q "\"$version\""; then
+            echo "::error::Authway.Client $version is already on nuget.org."; exit 1
+          fi
+      - name: Pack
+        working-directory: clients/csharp
+        run: dotnet pack src/Authway.Client/Authway.Client.csproj --configuration Release --output nupkg
+      - name: Push to nuget.org
+        working-directory: clients/csharp
+        run: dotnet nuget push nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY"
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

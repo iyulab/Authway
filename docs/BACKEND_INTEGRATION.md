@@ -362,6 +362,13 @@ public class UsersController : ControllerBase
 }
 ```
 
+### 5. Calling the administration API
+
+A .NET backend that registers applications, invites users, stores claims or receives
+webhooks can use `Authway.Client` ([clients/csharp](../clients/csharp/README.md)): it reads
+refusals as problem details and verifies Standard Webhooks deliveries. Signing users in
+and validating tokens stay with the ASP.NET handlers above.
+
 ---
 
 ## Node.js Integration

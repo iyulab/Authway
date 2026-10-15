@@ -25,6 +25,7 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 ### Features & Integration
 - **[Features Guide](./FEATURES.md)** - Custom claims written by your backend ([claims API](./api/claims.md)), Popup Login, Logout Redirects, OAuth/JWT Best Practices
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
+- **[.NET client](../clients/csharp/README.md)** - `Authway.Client`: the administration API, typed refusals and webhook verification from a .NET backend
 - **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
 - **[Service Clients](./api/service-clients.md)** - Tenant-scoped machine credentials for provisioning clients and writing claims
 - **[Custom Claims](./api/claims.md)** - Claims your backend stores for a user, and where they appear

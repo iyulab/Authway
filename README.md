@@ -33,6 +33,7 @@ track their actual published versions.
 - **Popup Login** - No-redirect authentication flow with Google OAuth support
 - **i18n Support** - Multi-language UI (Korean, English)
 - **TypeScript SDKs** - `@authway/client` and `@authway/react`
+- **.NET client** - `Authway.Client` for the administration API, typed refusals and webhook verification ([clients/csharp](./clients/csharp/))
 
 See [CHANGELOG.md](./CHANGELOG.md) for complete release notes, including
 recent security fixes.
@@ -183,6 +184,9 @@ authway/
 │   ├── central/api/          # Authway API (Go)
 │   ├── central/admin/        # Admin console (React)
 │   └── branding/auth-ui/     # Login screens (React)
+│
+├── clients/
+│   └── csharp/               # Authway.Client (.NET) — administration API, webhooks
 │
 ├── packages/
 │   ├── client/               # @authway/client (TypeScript)
