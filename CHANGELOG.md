@@ -3,9 +3,9 @@
 ### Changed
 
 - **Service credential refusals name their reason.** `POST
-  /api/v1/tenants/{id}/service-clients` answers `400 invalid_scope` for a
-  scope a service credential may not have and `404 not_found` for a tenant
-  that does not exist or is inactive; revoking one the tenant does not have is
+  /api/v1/tenants/{id}/service-clients` answers `404 not_found` for a tenant
+  that does not exist or is inactive (a scope a service credential may not
+  have stays `400 invalid_request` naming the `field`); revoking one the tenant does not have is
   `404 not_found`. A failure on Authway's side is `500` — it was `400` (issuing)
   or `404` (revoking). The three endpoints are now in the published contract.
 
