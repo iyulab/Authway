@@ -31,6 +31,16 @@ const ENTRY_KEY = 'authway.account.entry'
 
 const apiBase = () => getConfig().apiUrl || window.location.origin
 
+/** The application's address when it is an https URL — the only kind it registers, and the only kind followed. */
+const httpsUrl = (raw?: string): string | undefined => {
+  try {
+    const u = raw ? new URL(raw) : undefined
+    return u && u.protocol === 'https:' ? u.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const signIn = (entry: AccountEntry) =>
   new AuthwayClient({
     domain: apiBase(),
@@ -225,9 +235,10 @@ const AccountPage: React.FC = () => {
   }
 
   const app = entry?.app ?? readStored()?.entry.app
-  const back = app?.client_uri ? (
-    <a href={app.client_uri} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
-      {t('auth:account.backTo', { app: app.name })}
+  const backHref = httpsUrl(app?.client_uri)
+  const back = backHref ? (
+    <a href={backHref} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+      {t('auth:account.backTo', { app: app!.name })}
     </a>
   ) : null
 

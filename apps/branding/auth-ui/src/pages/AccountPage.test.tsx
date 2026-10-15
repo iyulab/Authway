@@ -96,7 +96,7 @@ describe('AccountPage', () => {
     )
     render(<AccountPage />)
     expect(await screen.findByText('person@example.com')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Notes' })).toHaveAttribute('href', 'https://notes.example')
+    expect(screen.getByRole('link', { name: 'Back to Notes' })).toHaveAttribute('href', 'https://notes.example/')
 
     await user.click(await screen.findByRole('button', { name: 'Turn on two-step verification' }))
     expect(await screen.findByAltText('QR code for your authenticator app')).toHaveAttribute('src', 'data:image/png;base64,iVBORw0KGgo=')
@@ -143,5 +143,13 @@ describe('AccountPage', () => {
     await user.type(screen.getByLabelText('6-digit code'), '654321')
     await user.click(screen.getByRole('button', { name: 'Turn off' }))
     expect(await screen.findByRole('button', { name: 'Turn on two-step verification' })).toBeInTheDocument()
+  })
+
+  it('offers no way back to an address that is not https', async () => {
+    mockSearchParams.set('client_id', 'notes')
+    server.use(http.get(`${API}/api/v1/account-entry`, () => HttpResponse.json({ ...entry, app: { name: 'Notes', client_uri: 'javascript:alert(1)' } })))
+    render(<AccountPage />)
+    expect(await screen.findByText('person@example.com')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Back to Notes' })).not.toBeInTheDocument()
   })
 })
