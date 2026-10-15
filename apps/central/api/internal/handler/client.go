@@ -124,7 +124,7 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	newClient, credentials, err := h.services.ClientService.Create(&req)
@@ -163,7 +163,7 @@ func (h *ClientHandler) createScoped(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
 	}
 	if err := h.validator.Struct(&scoped); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	tenantID, _ := c.Locals("tenant_id").(string)
@@ -245,7 +245,7 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	// Capture before-state for audit diff. Missing record surfaces as the
@@ -429,7 +429,7 @@ func (h *ClientHandler) UpdateGoogleOAuth(c *fiber.Ctx) error {
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	// Update client with Google OAuth settings

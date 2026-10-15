@@ -153,7 +153,7 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	// Before-state snapshot for audit diff. A miss surfaces as the same 404

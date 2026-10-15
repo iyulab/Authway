@@ -40,7 +40,7 @@ func (h *ServiceClientHandler) Create(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
 	}
 	if err := h.validator.Struct(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+		return apierror.Invalid(c, err)
 	}
 
 	sc, creds, err := h.service.Create(tenantID, &req)

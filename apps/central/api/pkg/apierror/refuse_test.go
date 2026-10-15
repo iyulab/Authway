@@ -116,6 +116,10 @@ func TestNoHandlerWritesTheErrorMemberItself(t *testing.T) {
 	}
 	root := filepath.Join("..", "..")
 	member := regexp.MustCompile(`"error"\s*:\s*[^{\s]`)
+	// A refusal built from an error's own text leaks what produced it — a
+	// validator names Go struct fields; use apierror.Invalid or a reviewed
+	// message (apierror.Message) instead.
+	leak := regexp.MustCompile(`NewError\([^)]*err\.Error\(\)`)
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
@@ -129,6 +133,9 @@ func TestNoHandlerWritesTheErrorMemberItself(t *testing.T) {
 		for i, line := range strings.Split(string(src), "\n") {
 			if member.MatchString(line) && !strings.Contains(line, "url.Values") {
 				t.Errorf("%s:%d writes an error member itself; use apierror.Refuse: %s", rel, i+1, strings.TrimSpace(line))
+			}
+			if leak.MatchString(line) {
+				t.Errorf("%s:%d refuses with an error's own text: %s", rel, i+1, strings.TrimSpace(line))
 			}
 		}
 		return nil
