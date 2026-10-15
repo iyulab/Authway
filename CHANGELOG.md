@@ -62,6 +62,12 @@
 
 ### Removed
 
+- `post_logout_redirect_uri` and `state` on `POST /api/v1/logout`, and the
+  `redirect_url` it answered. The address was answered back as sent, checked
+  against nothing — an application that navigated to it went wherever the
+  request said. The endpoint takes no body; where the application goes next is
+  its own to decide (the browser logout flow checks the address against the
+  client's `post_logout_redirect_uris`).
 - `GET /api/v1/clients/{client_id}/config`. It answered, without
   authentication, any client's redirect URIs and tenant id; nothing used it —
   discovery and the bootstrap document say what an application needs.
@@ -82,6 +88,12 @@
 
 ### Fixed
 
+- **Registering a client under a `client_id` that is taken is refused** with
+  `409 client_id_taken` (`field: client_id`). It answered `201` with the
+  client already registered under it — ignoring the request, and with a
+  `client_secret` that did not work. A `client_id` whose client was deleted
+  can be registered again: it answered `201` with the old client "restored"
+  but not registered with the authorization server, so it could not be used.
 - The admin console shows a refusal of a client's settings at the field it
   names (with its hint), not only in a passing message.
 - The page that carries the browser on after a provider sign-in wrote the
