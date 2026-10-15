@@ -47,7 +47,7 @@ Every flow endpoint answers JSON with `next`, which tells the screen what to do:
 | `terms` | Ask the user to accept the documents in `terms`; pass `terms_challenge` back to the named `flow` ([Terms](#terms)) |
 | `email_sent` | A sign-in link was emailed |
 
-Errors carry `error` (a message to show) and `code`. An unknown flow id is
+Errors are problem details ([Errors](errors.md)): show `detail`, branch on `code`. An unknown flow id is
 `400 invalid_flow`; one that expired or was already completed is
 `410 flow_expired`.
 

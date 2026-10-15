@@ -35,7 +35,7 @@ func TestErrorHandler_AnswersLikeEveryOtherRefusal(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if resp.StatusCode != tc.status || body["code"] != tc.code || body["error"] == "" || body["error"] == "internal detail" {
+		if resp.StatusCode != tc.status || body["code"] != tc.code || body["detail"] == "" || body["detail"] == "internal detail" {
 			t.Errorf("%s %s: status %d body %v", tc.method, tc.path, resp.StatusCode, body)
 		}
 	}
@@ -67,7 +67,7 @@ func TestErrorHandler_NamesStatusOnlyRefusals(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if resp.StatusCode != status || body["code"] != want || body["error"] != "refused" {
+		if resp.StatusCode != status || body["code"] != want || body["detail"] != "refused" {
 			t.Errorf("status %d: got %d %v, want code %s", status, resp.StatusCode, body, want)
 		}
 	}
@@ -88,7 +88,7 @@ func TestErrorHandler_WritesRefusals(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 400 || body["code"] != "tenant_required" || body["error"] != "name the tenant" {
+	if resp.StatusCode != 400 || body["code"] != "tenant_required" || body["detail"] != "name the tenant" {
 		t.Errorf("got %d %v", resp.StatusCode, body)
 	}
 }

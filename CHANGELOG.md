@@ -2,6 +2,18 @@
 
 ### Changed
 
+- **Breaking — refusals are RFC 9457 problem details.** Every refusal from
+  `/api/v1/*` is `application/problem+json` with `type` (`about:blank`),
+  `title`, `status`, `detail` and `code`; extension members such as `field`,
+  `hint`, `retry_after`, `max_age`, `min_length` stay where they were. The
+  message moved from `error` to `detail`; `code` keeps its values. A `401`
+  carries `WWW-Authenticate: Bearer`, a `429` carries `Retry-After`. A request
+  that fails validation names the member at fault in `field` instead of
+  repeating the validator's text. The refused invitation's state is
+  `invitation_status` (it was `status`, which problem details reserves), and a
+  sign-in link that cannot be used reports why in `detail` (it was `error`).
+  OAuth 2.0 endpoints (token, introspection, redirects) keep their own error
+  form. See `docs/api/errors.md`.
 - **Breaking — webhook deliveries are signed as Standard Webhooks specifies**
   (https://www.standardwebhooks.com), so any of its libraries verifies them.
   A delivery carries `webhook-id` (the event's id, the same on every retry and

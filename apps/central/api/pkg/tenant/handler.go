@@ -67,11 +67,7 @@ func (h *Handler) CreateTenant(c *fiber.Ctx) error {
 
 	// Validate request
 	if err := h.validate.Struct(req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "Validation failed",
-			"code":    "invalid_request",
-			"details": err.Error(),
-		})
+		return apierror.Invalid(c, err)
 	}
 
 	tenant, err := h.service.CreateTenant(req)
@@ -141,11 +137,7 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 
 	// Validate request
 	if err := h.validate.Struct(req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "Validation failed",
-			"code":    "invalid_request",
-			"details": err.Error(),
-		})
+		return apierror.Invalid(c, err)
 	}
 
 	// Before-state snapshot for audit diff. Miss surfaces as the same 404

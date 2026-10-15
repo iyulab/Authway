@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"context"
 	"net/url"
 	"slices"
@@ -34,17 +35,11 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	if err != nil {
 		h.logger.Error("OAuth client is not registered in Authway",
 			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This application is not registered with Authway.",
-			"code":  "client_not_registered",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "client_not_registered", "This application is not registered with Authway.")
 	}
 
 	if step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID); err != nil {
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"error": "The authorization server is unavailable. Try again shortly.",
-			"code":  "authorization_server_unavailable",
-		})
+		return apierror.Refuse(c, fiber.StatusBadGateway, "authorization_server_unavailable", "The authorization server is unavailable. Try again shortly.")
 	} else if settled {
 		return c.JSON(step)
 	}

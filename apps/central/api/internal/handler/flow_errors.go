@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,19 +17,10 @@ import (
 func respondFlowLookupError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, hydra.ErrFlowNotFound):
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This sign-in link is not valid. Start again from the application.",
-			"code":  "invalid_flow",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_flow", "This sign-in link is not valid. Start again from the application.")
 	case errors.Is(err, hydra.ErrFlowExpired):
-		return c.Status(fiber.StatusGone).JSON(fiber.Map{
-			"error": "This sign-in has expired or was already completed. Start again from the application.",
-			"code":  "flow_expired",
-		})
+		return apierror.Refuse(c, fiber.StatusGone, "flow_expired", "This sign-in has expired or was already completed. Start again from the application.")
 	default:
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"error": "The authorization server is unavailable. Try again shortly.",
-			"code":  "authorization_server_unavailable",
-		})
+		return apierror.Refuse(c, fiber.StatusBadGateway, "authorization_server_unavailable", "The authorization server is unavailable. Try again shortly.")
 	}
 }

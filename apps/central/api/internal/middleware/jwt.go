@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"strings"
 	"time"
 
@@ -24,29 +25,20 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
 			logger.Warn("Missing Authorization header")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Missing authorization header",
-				"code":  "unauthorized",
-			})
+			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Missing authorization header")
 		}
 
 		// Extract Bearer token
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			logger.Warn("Invalid Authorization header format")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid authorization header format",
-				"code":  "unauthorized",
-			})
+			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid authorization header format")
 		}
 
 		token := parts[1]
 		if token == "" {
 			logger.Warn("Empty bearer token")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Empty bearer token",
-				"code":  "unauthorized",
-			})
+			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Empty bearer token")
 		}
 
 		// Always validate via Hydra's introspection endpoint. It works for both
@@ -57,13 +49,9 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// trivial token forgery for `sub` and `tenant_id` claims.
 		userID, tenantID, authTime, sessionID, err := introspectToken(token, hydraClient, logger)
 		if err != nil {
-			logger.Error("Token introspection failed",
-				zap.Error(err),
-				zap.String("token_prefix", token[:min(20, len(token))]))
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid token",
-				"code":  "unauthorized",
-			})
+			logger.Error("Token introspection failed", zap.Error(err))
+			c.Set(fiber.HeaderWWWAuthenticate, `Bearer error="invalid_token"`)
+			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid token")
 		}
 
 		// If tenant_id is not in token (nil), look it up from user

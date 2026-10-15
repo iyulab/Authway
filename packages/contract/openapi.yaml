@@ -233,7 +233,7 @@ paths:
         '400':
           description: The terms_challenge is unknown, expired or of another flow (code invalid_terms_challenge)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
     post:
       operationId: acceptTerms
@@ -270,7 +270,7 @@ paths:
             re-read the login flow for it — the flow has not been signed in to
             yet and would offer the sign-in form again.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 anyOf:
                   - $ref: '#/components/schemas/Error'
@@ -538,7 +538,7 @@ paths:
             device's request has expired (start again on the device);
             `user_code_required`; or the flow is not valid (`invalid_flow`).
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '410': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -708,14 +708,14 @@ paths:
               description: Present for insufficient_user_authentication, naming the max_age to request.
               schema: { type: string }
           content:
-            application/json:
+            application/problem+json:
               schema:
-                type: object
-                required: [error, code]
-                properties:
-                  error: { type: string }
-                  code: { type: string, description: 'unauthorized or insufficient_user_authentication.' }
-                  max_age: { type: integer, description: Seconds; present for insufficient_user_authentication. }
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      code: { type: string, description: 'unauthorized or insufficient_user_authentication.' }
+                      max_age: { type: integer, description: Seconds; present for insufficient_user_authentication. }
         '404': { $ref: '#/components/responses/Error' }
         '502': { $ref: '#/components/responses/Error' }
 
@@ -749,7 +749,7 @@ paths:
         '409':
           description: The slug is taken (code tenant_slug_taken)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
     get:
       tags: [admin]
@@ -810,7 +810,7 @@ paths:
         '403':
           description: The default tenant cannot be deactivated (code default_tenant_protected)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '404': { $ref: '#/components/responses/Error' }
     delete:
@@ -824,7 +824,7 @@ paths:
         '403':
           description: The default tenant cannot be deleted (code default_tenant_protected)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409':
@@ -833,7 +833,7 @@ paths:
             (code tenant_has_users, tenant_has_clients or
             tenant_has_service_clients).
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/tenants/{id}/terms:
@@ -1050,7 +1050,7 @@ paths:
         '403':
           description: A service credential without the admin.clients:write scope (code insufficient_scope)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/clients/{id}:
@@ -1212,7 +1212,7 @@ paths:
         '400':
           description: Malformed id, or a public client, which has no secret (code public_client_has_no_secret)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
@@ -1246,7 +1246,7 @@ paths:
         '400':
           description: Malformed request, or no tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
     post:
@@ -1294,14 +1294,14 @@ paths:
         '400':
           description: Malformed request, or no tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409':
           description: Already a member (user_already_member) or already invited (invitation_already_pending)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/invitations/{id}:
@@ -1337,7 +1337,7 @@ paths:
         '409':
           description: Not pending any more (code invitation_not_pending)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/invitations/{id}/resend:
@@ -1356,7 +1356,7 @@ paths:
         '409':
           description: Not pending any more (code invitation_not_pending)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/webhooks:
@@ -1380,7 +1380,7 @@ paths:
         '400':
           description: No tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
     post:
@@ -1434,7 +1434,7 @@ paths:
         '400':
           description: Invalid value (code invalid_request), or no tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
@@ -1636,7 +1636,7 @@ paths:
         '400':
           description: A malformed filter (code invalid_request), or no tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
@@ -1685,7 +1685,7 @@ paths:
         '400':
           description: retention_days out of range (code invalid_request), or no tenant named (code tenant_required)
           content:
-            application/json:
+            application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
@@ -2127,7 +2127,7 @@ components:
     TooManyRequests:
       description: Rate limited; retry_after is in seconds
       content:
-        application/json:
+        application/problem+json:
           schema:
             allOf:
               - $ref: '#/components/schemas/Error'
@@ -2137,14 +2137,14 @@ components:
     Error:
       description: Refused
       content:
-        application/json:
+        application/problem+json:
           schema: { $ref: '#/components/schemas/Error' }
     SyncFailed:
       description: |
         Saved, but the authorization server rejected the change (only with
         strict_sync=true; code upstream_sync_failed).
       content:
-        application/json:
+        application/problem+json:
           schema:
             allOf:
               - $ref: '#/components/schemas/Error'
@@ -2246,15 +2246,16 @@ components:
           items: { $ref: '#/components/schemas/TermsDocument' }
 
     TermsMismatch:
-      type: object
-      required: [error, code, terms]
-      properties:
-        error: { type: string }
-        code: { const: terms_mismatch }
-        terms:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/TermsDocument' }
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          required: [terms]
+          properties:
+            code: { const: terms_mismatch }
+            terms:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/TermsDocument' }
 
     TermsAcceptance:
       type: object
@@ -2331,7 +2332,7 @@ components:
         valid: { type: boolean }
         email: { type: string }
         expires_at: { type: string }
-        error: { type: string }
+        detail: { type: string, description: Why the link cannot be used, when valid is false. }
 
     LogoutToken:
       description: |
@@ -2897,10 +2898,20 @@ components:
         error_description: { type: string }
 
     Error:
+      description: |
+        Every refusal: RFC 9457 problem details (`application/problem+json`),
+        in the form the *way family shares — `type` is `about:blank`, `title`
+        the status's reason phrase, `detail` a message for a person, and `code`
+        an extension member a caller branches on. Some refusals carry further
+        extension members (`field`, `hint`, `retry_after`, …), named where they
+        occur. A 401 carries `WWW-Authenticate`, a 429 `Retry-After`.
       type: object
-      required: [error, code]
+      required: [type, title, status, detail, code]
       properties:
-        error: { type: string, description: A message to show the user. }
+        type: { const: about:blank }
+        title: { type: string, description: The HTTP status's reason phrase. }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string, description: A message to show the user. }
         code:
           type: string
           description: |
@@ -2919,3 +2930,5 @@ components:
             password_too_short, password_too_long,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.
+        field: { type: string, description: The request member at fault, when there is one. }
+        hint: { type: string, description: What to do about it, when there is something. }

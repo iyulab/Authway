@@ -121,10 +121,7 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 	flow := flowParam(c)
 	var req PasswordLoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	loginReq, err := h.hydraClient.GetLoginRequest(flow)
@@ -138,10 +135,7 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 	if err != nil {
 		h.logger.Error("OAuth client is not registered in Authway",
 			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This application is not registered with Authway.",
-			"code":  "client_not_registered",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "client_not_registered", "This application is not registered with Authway.")
 	}
 	if !requestedClient.AllowsSignInMethod("email") {
 		return respondSignInMethodNotAllowed(c)
@@ -173,7 +167,7 @@ func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User,
 	step, err := h.flows.afterFirstFactor(flow, u, first, keepSignedIn)
 	if errors.Is(err, errSecondFactorNotStarted) || errors.Is(err, errTermsStep) {
 		h.logger.Error("Failed to start the next sign-in step", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to continue the sign-in", "code": "internal_error"})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to continue the sign-in")
 	}
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
@@ -230,7 +224,7 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	flow := flowParam(c)
 	var req VerifyMFALoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body", "code": "invalid_request"})
+		return apierror.Refuse(c, 400, "invalid_request", "Invalid request body")
 	}
 
 	pending, ok := h.mfaStore.Get(req.MFAChallenge)
@@ -248,9 +242,9 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 		h.logMFALoginFailure(c, u, phase)
 		middleware.IncrementRateLimitOnFailure(c)
 		if locked := h.mfaStore.RecordFailure(req.MFAChallenge); locked {
-			return c.Status(401).JSON(fiber.Map{"error": "too many failed attempts — please sign in again", "code": "mfa_locked"})
+			return apierror.Refuse(c, 401, "mfa_locked", "too many failed attempts — please sign in again")
 		}
-		return c.Status(401).JSON(fiber.Map{"error": invalidMessage, "code": "invalid_code"})
+		return apierror.Refuse(c, 401, "invalid_code", invalidMessage)
 	}
 
 	h.mfaStore.Delete(req.MFAChallenge)
@@ -261,7 +255,7 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	step, err := h.flows.proved(pending.HydraChallenge, u, method, pending.KeepSignedIn)
 	if errors.Is(err, errTermsStep) {
 		h.logger.Error("Failed to read the documents a user owes", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to continue the sign-in", "code": "internal_error"})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to continue the sign-in")
 	}
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
@@ -274,7 +268,7 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 }
 
 func respondInvalidMFAChallenge(c *fiber.Ctx) error {
-	return c.Status(400).JSON(fiber.Map{"error": "invalid or expired mfa challenge", "code": "invalid_mfa_challenge"})
+	return apierror.Refuse(c, 400, "invalid_mfa_challenge", "invalid or expired mfa challenge")
 }
 
 // logMFALoginFailure emits a sync audit entry for a failed login-time MFA
@@ -357,11 +351,11 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 	// Get user information first
 	userID, err := uuid.Parse(consentReq.Subject)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Invalid user ID"})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Invalid user ID")
 	}
 	user, err := h.userService.GetByID(userID)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "User not found"})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "User not found")
 	}
 
 	if redirectTo, settled, err := h.consentWithoutQuestion(c, challenge, consentReq, user); err != nil {
@@ -468,10 +462,7 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	challenge := flowParam(c)
 	var req AcceptConsentRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, 400, "invalid_request", "Invalid request body")
 	}
 
 	consentReq, err := h.hydraClient.GetConsentRequest(challenge)
@@ -482,15 +473,11 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 	// Get user information for session
 	userID, err := uuid.Parse(consentReq.Subject)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Invalid user ID")
 	}
 	user, err := h.userService.GetByID(userID)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get user information",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to get user information")
 	}
 
 	userClaims := h.storedClaims(c, user)
@@ -604,11 +591,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	// Authenticated subject, established by jwtAuth.
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok || userID == uuid.Nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"success": false,
-			"error":   "Unauthorized",
-			"guide":   "Send a valid 'Authorization: Bearer <access_token>' header.",
-		})
+		return apierror.RefuseWith(c, fiber.StatusUnauthorized, apierror.CodeForStatus(fiber.StatusUnauthorized), "Unauthorized", fiber.Map{"hint": "Send a valid 'Authorization: Bearer <access_token>' header."})
 	}
 	subject := userID.String()
 
@@ -627,12 +610,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		h.logger.Error("Failed to revoke user sessions",
 			zap.String("subject", subject),
 			zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"success": false,
-			"error":   "Failed to revoke sessions",
-			"guide":   "This could be a temporary Hydra connection issue. Try again or use OIDC logout flow.",
-			"details": apierror.Message(err, "unable to reach Hydra"),
-		})
+		return apierror.RefuseWith(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to revoke sessions", fiber.Map{"hint": "The authorization server may be briefly unreachable. Try again, or sign out through the OpenID Connect logout flow."})
 	}
 
 	h.logger.Info("User sessions revoked successfully",
@@ -670,17 +648,13 @@ func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
 		h.logger.Error("user_id not found in context - JWT middleware not applied?")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "User ID not found in context",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "User ID not found in context")
 	}
 
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
 		h.logger.Error("user_id in context is not a UUID")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Invalid user ID format in context",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Invalid user ID format in context")
 	}
 
 	// Get user from database
@@ -689,9 +663,7 @@ func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
 		h.logger.Error("Failed to get user by ID",
 			zap.String("user_id", userID.String()),
 			zap.Error(err))
-		return c.Status(404).JSON(fiber.Map{
-			"error": "User not found",
-		})
+		return apierror.Refuse(c, 404, apierror.CodeForStatus(404), "User not found")
 	}
 
 	return c.JSON(fiber.Map{
@@ -854,18 +826,12 @@ func (h *AuthHandler) PopupCallback(c *fiber.Ctx) error {
 // wrong password produce the same answer so the response does not reveal
 // which accounts exist.
 func respondInvalidCredentials(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-		"error": "Invalid email or password",
-		"code":  "invalid_credentials",
-	})
+	return apierror.Refuse(c, fiber.StatusUnauthorized, "invalid_credentials", "Invalid email or password")
 }
 
 // respondSignInMethodNotAllowed answers a sign-in attempt with a method the
 // client has not enabled. The screen hides such methods; this is the server's
 // own check.
 func respondSignInMethodNotAllowed(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-		"error": "This sign-in method is not available for this application.",
-		"code":  "sign_in_method_not_allowed",
-	})
+	return apierror.Refuse(c, fiber.StatusForbidden, "sign_in_method_not_allowed", "This sign-in method is not available for this application.")
 }

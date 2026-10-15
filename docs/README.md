@@ -29,6 +29,7 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 - **[Service Clients](./api/service-clients.md)** - Tenant-scoped machine credentials for provisioning clients and writing claims
 - **[Custom Claims](./api/claims.md)** - Claims your backend stores for a user, and where they appear
 - **[The User's Own Account](./api/account.md)** - Reading the profile and deleting the account with the user's access token; the recent sign-in requirement
+- **[Errors](./api/errors.md)** - Problem details (RFC 9457): `detail` to show, `code` to branch on
 - **[Webhooks](./api/webhooks.md)** - Events, payloads, signatures, deliveries
 - **[Login, Consent and Logout Flows](./api/login-flows.md)** - The contract a login screen uses: flow ids, sign-in methods, magic links, capabilities
 

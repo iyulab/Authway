@@ -2,6 +2,7 @@ package handler
 
 import (
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
@@ -108,17 +109,11 @@ func (h *EmailHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.Aud
 func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	var req email.SendVerificationRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-			"code":  "invalid_request",
-		})
+		return apierror.Invalid(c, err)
 	}
 
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
@@ -135,9 +130,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	verification, err := h.emailRepo.CreateVerification(usr.ID)
 	if err != nil {
 		h.logger.Error("Failed to create verification", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create verification",
-		})
+		return apierror.Refuse(c, http.StatusInternalServerError, apierror.CodeForStatus(http.StatusInternalServerError), "Failed to create verification")
 	}
 
 	// Send verification email
@@ -162,44 +155,31 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 	token := c.Query("token")
 	if token == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_request", "Token is required")
 	}
 
 	// Get verification by token
 	verification, err := h.emailRepo.GetVerificationByToken(token)
 	if err != nil {
 		h.logger.Error("Verification token not found", zap.Error(err))
-		return c.Status(http.StatusNotFound).JSON(fiber.Map{
-			"error": "Invalid or expired verification token",
-			"code":  "invalid_token",
-		})
+		return apierror.Refuse(c, http.StatusNotFound, "invalid_token", "Invalid or expired verification token")
 	}
 
 	// Check if expired
 	if verification.IsExpired() {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Verification token has expired",
-			"code":  "token_expired",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "token_expired", "Verification token has expired")
 	}
 
 	// Mark verification as verified
 	if err := h.emailRepo.MarkVerificationAsVerified(verification.ID); err != nil {
 		h.logger.Error("Failed to mark verification as verified", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to verify email",
-		})
+		return apierror.Refuse(c, http.StatusInternalServerError, apierror.CodeForStatus(http.StatusInternalServerError), "Failed to verify email")
 	}
 
 	// Update user email_verified status
 	if err := h.userSvc.UpdateEmailVerified(verification.UserID, true); err != nil {
 		h.logger.Error("Failed to update user email verified status", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update user status",
-		})
+		return apierror.Refuse(c, http.StatusInternalServerError, apierror.CodeForStatus(http.StatusInternalServerError), "Failed to update user status")
 	}
 
 	if verifiedUser, err := h.userSvc.GetByID(verification.UserID); err == nil {
@@ -226,17 +206,11 @@ func (h *EmailHandler) VerifyEmail(c *fiber.Ctx) error {
 func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	var req email.ForgotPasswordRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-			"code":  "invalid_request",
-		})
+		return apierror.Invalid(c, err)
 	}
 
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
@@ -248,9 +222,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	reset, err := h.emailRepo.CreatePasswordReset(usr.ID)
 	if err != nil {
 		h.logger.Error("Failed to create password reset", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create password reset",
-		})
+		return apierror.Refuse(c, http.StatusInternalServerError, apierror.CodeForStatus(http.StatusInternalServerError), "Failed to create password reset")
 	}
 
 	// Send reset email
@@ -274,29 +246,18 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	token := c.Query("token")
 	if token == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_request", "Token is required")
 	}
 
 	// Get reset by token
 	reset, err := h.emailRepo.GetPasswordResetByToken(token)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid or expired reset token",
-			"code":  "invalid_token",
-			"valid": false,
-		})
+		return apierror.RefuseWith(c, http.StatusBadRequest, "invalid_token", "Invalid or expired reset token", nil)
 	}
 
 	// Check if valid (not used and not expired)
 	if !reset.IsValid() {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Reset token is invalid or has expired",
-			"code":  "token_expired",
-			"valid": false,
-		})
+		return apierror.RefuseWith(c, http.StatusBadRequest, "token_expired", "Reset token is invalid or has expired", nil)
 	}
 
 	// The length the new password has to have is the tenant's of the account
@@ -327,34 +288,22 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	var req email.ResetPasswordRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "invalid_request",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-			"code":  "invalid_request",
-		})
+		return apierror.Invalid(c, err)
 	}
 
 	// Get reset by token
 	reset, err := h.emailRepo.GetPasswordResetByToken(req.Token)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid or expired reset token",
-			"code":  "invalid_token",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "invalid_token", "Invalid or expired reset token")
 	}
 
 	// Check if valid
 	if !reset.IsValid() {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Reset token is invalid or has expired",
-			"code":  "token_expired",
-		})
+		return apierror.Refuse(c, http.StatusBadRequest, "token_expired", "Reset token is invalid or has expired")
 	}
 
 	resetUser, resetUserErr := h.userSvc.GetByID(reset.UserID)
@@ -366,16 +315,10 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	if err := h.userSvc.UpdatePassword(reset.UserID, req.NewPassword); err != nil {
 		var refused *user.PasswordError
 		if errors.As(err, &refused) {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-				"error":      refused.Error(),
-				"code":       refused.Code(),
-				"min_length": refused.MinLength,
-			})
+			return apierror.RefuseWith(c, http.StatusBadRequest, refused.Code(), refused.Error(), fiber.Map{"min_length": refused.MinLength})
 		}
 		h.logger.Error("Failed to update password", zap.Error(err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update password",
-		})
+		return apierror.Refuse(c, http.StatusInternalServerError, apierror.CodeForStatus(http.StatusInternalServerError), "Failed to update password")
 	}
 
 	h.logUserAudit(c, resetUser, audit.ActionUserPasswordReset, nil)

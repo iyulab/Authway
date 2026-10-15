@@ -242,7 +242,7 @@ func TestVerifyMFALogin_LocksAfterMaxAttempts(t *testing.T) {
 	for range maxMFAAttempts {
 		lastStatus, lastBody = doJSON(t, app, "/login-flows/c1/mfa", `{"mfa_challenge":"`+challenge+`","code":"000000"}`)
 	}
-	if lastStatus != fiber.StatusUnauthorized || lastBody["error"] != "too many failed attempts — please sign in again" {
+	if lastStatus != fiber.StatusUnauthorized || lastBody["detail"] != "too many failed attempts — please sign in again" {
 		t.Fatalf("after %d attempts: status=%d body=%v", maxMFAAttempts, lastStatus, lastBody)
 	}
 
@@ -304,8 +304,8 @@ func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	if status != fiber.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %v", status, body)
 	}
-	if body["error"] != "Invalid email or password" {
-		t.Errorf("error = %v, want rejection — wrong-tenant password must not authenticate", body["error"])
+	if body["detail"] != "Invalid email or password" {
+		t.Errorf("detail = %v, want rejection — wrong-tenant password must not authenticate", body["detail"])
 	}
 	if *acceptCount != 0 {
 		t.Errorf("hydra accept called %d times, want 0", *acceptCount)

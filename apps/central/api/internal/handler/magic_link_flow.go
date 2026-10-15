@@ -41,7 +41,7 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 	flow := flowParam(c)
 	var req sendMagicLinkRequest
 	if err := c.BodyParser(&req); err != nil || !strings.Contains(req.Email, "@") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "A valid email address is required.", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "A valid email address is required.")
 	}
 
 	loginReq, err := h.auth.hydraClient.GetLoginRequest(flow)
@@ -51,10 +51,7 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 	cl, err := h.auth.clientService.GetByClientID(loginReq.Client.ClientID)
 	if err != nil {
 		h.auth.logger.Error("OAuth client is not registered in Authway", zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This application is not registered with Authway.",
-			"code":  "client_not_registered",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "client_not_registered", "This application is not registered with Authway.")
 	}
 	if !cl.AllowsSignInMethod("magic_link") {
 		return respondSignInMethodNotAllowed(c)
@@ -62,10 +59,7 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 
 	if _, err := h.links.SendMagicLink(cl.TenantID, strings.TrimSpace(req.Email), flow, c.IP(), c.Get("User-Agent")); err != nil {
 		h.auth.logger.Error("Failed to issue magic link", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "The sign-in link could not be issued. Try again shortly.",
-			"code":  "internal_error",
-		})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "The sign-in link could not be issued. Try again shortly.")
 	}
 	return c.JSON(fiber.Map{"next": nextEmailSent})
 }
@@ -81,11 +75,11 @@ type magicLinkTokenRequest struct {
 func (h *MagicLinkFlowHandler) Inspect(c *fiber.Ctx) error {
 	var req magicLinkTokenRequest
 	if err := c.BodyParser(&req); err != nil || req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
 	}
 	link, err := h.links.InspectMagicLink(req.Token)
 	if err != nil || link.LoginFlow == "" {
-		return c.JSON(fiber.Map{"valid": false, "error": apierror.Message(err, "This sign-in link is not valid.")})
+		return c.JSON(fiber.Map{"valid": false, "detail": apierror.Message(err, "This sign-in link is not valid.")})
 	}
 	return c.JSON(fiber.Map{"valid": true, "email": link.Email, "expires_at": link.ExpiresAt})
 }
@@ -96,22 +90,16 @@ func (h *MagicLinkFlowHandler) Inspect(c *fiber.Ctx) error {
 func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 	var req magicLinkTokenRequest
 	if err := c.BodyParser(&req); err != nil || req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
 	}
 	link, u, err := h.links.VerifyMagicLink(req.Token)
 	if err != nil {
 		h.auth.logger.Warn("Magic link not redeemed", zap.Error(err))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": apierror.Message(err, "This sign-in link is not valid."),
-			"code":  "invalid_link",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_link", apierror.Message(err, "This sign-in link is not valid."))
 	}
 	if link.LoginFlow == "" {
 		// Issued before links were tied to a login flow; there is nothing to sign in to.
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This sign-in link is no longer valid. Start again from the application.",
-			"code":  "invalid_link",
-		})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_link", "This sign-in link is no longer valid. Start again from the application.")
 	}
 	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false)
 }

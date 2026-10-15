@@ -58,7 +58,7 @@ When it is too old (or unknown), the answer is the step-up challenge of
 HTTP/1.1 401 Unauthorized
 WWW-Authenticate: Bearer error="insufficient_user_authentication", error_description="A more recent sign-in is required", max_age="600"
 
-{ "error": "Sign in again to delete your account.", "code": "insufficient_user_authentication", "max_age": 600 }
+{ "type": "about:blank", "title": "Unauthorized", "status": 401, "detail": "Sign in again to delete your account.", "code": "insufficient_user_authentication", "max_age": 600 }
 ```
 
 Send the user through authorization again with that `max_age` — the
@@ -142,7 +142,7 @@ its user has just given a code and is looking at the recovery codes.
 | `all` | Every session has ended, **this one too**: the access token did not say which session it came from (it was issued before sessions were named in tokens). Show the recovery codes from this answer, then send the user to sign in again |
 | `none` | The factor is on, but the sessions could not be ended (the authorization server did not answer). The user can sign out everywhere themselves |
 
-A refusal carries `error` and `code`, like every other call:
+A refusal is problem details with a `code`, like every other call ([Errors](errors.md)):
 
 | `code` | Status | When |
 |---|---|---|

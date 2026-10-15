@@ -53,9 +53,17 @@ export async function conform(method: string, path: string, res: Response): Prom
     pointer = response.$ref
     response = lookup(response.$ref)
   }
-  if (!response.content?.['application/json']) return
+  if (!response.content || Object.keys(response.content).length === 0) return
+  // The answer's media type must be one the contract names for it: a refusal
+  // is application/problem+json, an OAuth error or a success application/json.
+  const mediaType = (res.headers.get('content-type') ?? '').split(';')[0].trim()
+  if (!response.content[mediaType]) {
+    throw new Error(
+      `${method} ${path} ${status} answered ${mediaType || 'no Content-Type'}; the contract names ${Object.keys(response.content).join(', ')}`,
+    )
+  }
 
-  const ref = `contract${pointer}/content/${segment('application/json')}/schema`
+  const ref = `contract${pointer}/content/${segment(mediaType)}/schema`
   let validate = compiled.get(ref)
   if (!validate) {
     validate = ajv.compile({ $ref: ref })

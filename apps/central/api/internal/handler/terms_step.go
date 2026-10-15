@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"context"
 	"errors"
 	"fmt"
@@ -191,10 +192,7 @@ func termsStep(flow string, step signInStep) fiber.Map {
 }
 
 func respondInvalidTermsChallenge(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-		"error": "This sign-in step has expired. Start again from the application.",
-		"code":  "invalid_terms_challenge",
-	})
+	return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_terms_challenge", "This sign-in step has expired. Start again from the application.")
 }
 
 // GetOwedTerms serves GET /api/v1/login-flows/:flow/terms?terms_challenge=…
@@ -214,7 +212,7 @@ func (h *AuthHandler) GetOwedTerms(c *fiber.Ctx) error {
 	due, err := h.flows.owed(u)
 	if err != nil {
 		h.logger.Error("Failed to read the documents a user owes", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read the terms", "code": "internal_error"})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to read the terms")
 	}
 	return c.JSON(termsStep(flow, signInStep{TermsChallenge: challenge, Terms: due}))
 }
@@ -231,7 +229,7 @@ func (h *AuthHandler) AcceptTerms(c *fiber.Ctx) error {
 	flow := flowParam(c)
 	var req AcceptTermsRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 	pending, ok := h.flows.owing.Get(req.TermsChallenge, flow)
 	if !ok {
@@ -255,14 +253,10 @@ func (h *AuthHandler) AcceptTerms(c *fiber.Ctx) error {
 	switch {
 	case errors.As(err, &mismatch):
 		body := termsStep(flow, signInStep{Terms: mismatch.Owed})
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "The terms changed while they were shown. Review them again.",
-			"code":  "terms_mismatch",
-			"terms": body["terms"],
-		})
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "terms_mismatch", "The terms changed while they were shown. Review them again.", fiber.Map{"terms": body["terms"]})
 	case err != nil:
 		h.logger.Error("Failed to record an acceptance", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to record the acceptance", "code": "internal_error"})
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to record the acceptance")
 	}
 	h.flows.owing.Delete(req.TermsChallenge)
 	h.logUserAudit(c, u, audit.ActionUserTermsAccepted, map[string]any{
@@ -298,7 +292,7 @@ func (h *AuthHandler) DeclineTerms(c *fiber.Ctx) error {
 	flow := flowParam(c)
 	var req DeclineTermsRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 	if _, ok := h.flows.owing.Get(req.TermsChallenge, flow); !ok {
 		return respondInvalidTermsChallenge(c)

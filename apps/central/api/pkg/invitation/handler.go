@@ -173,12 +173,12 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 		token = decoded
 	}
 	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
 	}
 
 	invitation, err := h.service.GetByToken(token)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invitation not found or expired", "code": "invalid_token"})
+		return apierror.Refuse(c, fiber.StatusNotFound, "invalid_token", "invitation not found or expired")
 	}
 
 	if !invitation.CanBeAccepted() {
@@ -188,11 +188,7 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 		} else {
 			status = string(invitation.Status)
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "invitation cannot be accepted",
-			"code":   "invitation_not_acceptable",
-			"status": status,
-		})
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invitation_not_acceptable", "invitation cannot be accepted", fiber.Map{"invitation_status": status})
 	}
 
 	return c.JSON(fiber.Map{
@@ -215,11 +211,11 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 	var req AcceptInvitationRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
 	}
 
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required", "code": "invalid_request"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
 	}
 
 	// Check if user is already logged in
@@ -235,12 +231,12 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 		h.logger.Warn("Failed to accept invitation", zap.Error(err), zap.Int("token_length", len(req.Token)))
 		var refusedPassword *user.PasswordError
 		if errors.As(err, &refusedPassword) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": refusedPassword.Error(), "code": refusedPassword.Code(), "min_length": refusedPassword.MinLength})
+			return apierror.RefuseWith(c, fiber.StatusBadRequest, refusedPassword.Code(), refusedPassword.Error(), fiber.Map{"min_length": refusedPassword.MinLength})
 		}
 		if errors.Is(err, ErrAddressNotAllowed) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error(), "code": "email_domain_not_allowed"})
+			return apierror.Refuse(c, fiber.StatusBadRequest, "email_domain_not_allowed", err.Error())
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": apierror.Message(err, "failed to accept invitation"), "code": "invitation_not_accepted"})
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invitation_not_accepted", apierror.Message(err, "failed to accept invitation"))
 	}
 
 	h.logger.Info("Invitation accepted", zap.String("user_id", accepted.ID.String()), zap.String("email", accepted.Email))

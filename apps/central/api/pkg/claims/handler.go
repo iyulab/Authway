@@ -82,9 +82,7 @@ func (h *Handler) Patch(c *fiber.Ctx) error {
 	var tooLargeErr *ClaimsTooLargeError
 	switch {
 	case errors.As(err, &reservedErr):
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": reservedErr.Error(), "code": "reserved_claim", "keys": reservedErr.Keys,
-		})
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "reserved_claim", reservedErr.Error(), fiber.Map{"keys": reservedErr.Keys})
 	case errors.As(err, &invalidErr):
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", invalidErr.Error())
 	case errors.As(err, &tooLargeErr):

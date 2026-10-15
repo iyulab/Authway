@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"context"
 	"fmt"
 	"strconv"
@@ -66,15 +67,11 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		blockKey := fmt.Sprintf("%sblock:%s:%s", cfg.KeyPrefix, path, ip)
 		blocked, err := cfg.RedisClient.Exists(ctx, blockKey).Result()
 		if err != nil && !cfg.SkipOnError {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "rate limit error"})
+			return apierror.Refuse(c, fiber.StatusInternalServerError, apierror.CodeForStatus(fiber.StatusInternalServerError), "rate limit error")
 		}
 		if blocked > 0 {
 			ttl, _ := cfg.RedisClient.TTL(ctx, blockKey).Result()
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error":       "Too many attempts. Try again later.",
-				"code":        "too_many_requests",
-				"retry_after": int(ttl.Seconds()),
-			})
+			return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(ttl.Seconds())})
 		}
 		countStr, err := cfg.RedisClient.Get(ctx, key).Result()
 		var count int64 = 0
@@ -84,11 +81,7 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		if int(count) >= cfg.MaxAttempts {
 			cfg.RedisClient.Set(ctx, blockKey, "1", cfg.BlockDuration)
 			cfg.RedisClient.Del(ctx, key)
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error":       "Too many attempts. Try again later.",
-				"code":        "too_many_requests",
-				"retry_after": int(cfg.BlockDuration.Seconds()),
-			})
+			return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(cfg.BlockDuration.Seconds())})
 		}
 		c.Locals("rate_limit_key", key)
 		c.Locals("rate_limit_cfg", cfg)

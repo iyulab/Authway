@@ -17,7 +17,7 @@ and the exact request restrictions. Every other `/clients*` route (`GET`,
 the two admin methods above — except the public `GET
 /clients/{client_id}/config` endpoint, which requires no authentication at
 all. A missing or rejected credential answers `401` with
-`{"error": "...", "code": "unauthorized"}`.
+problem details with `"code": "unauthorized"` ([Errors](errors.md)).
 
 This document covers two semantics that are easy to get wrong: **Hydra sync
 visibility** and **client-config validation**.
@@ -91,10 +91,13 @@ When the upstream sync fails:
 
 ```http
 HTTP/1.1 502 Bad Gateway
-Content-Type: application/json
+Content-Type: application/problem+json
 
 {
-  "error": "Upstream OAuth provider sync failed",
+  "type": "about:blank",
+  "title": "Bad Gateway",
+  "status": 502,
+  "detail": "Upstream OAuth provider sync failed",
   "code": "upstream_sync_failed",
   "sync_status": { "state": "failed", "error": "..." },
   "hint": "Authway DB was updated but Hydra rejected the change. Retry, or omit ?strict_sync=true to accept best-effort sync (drift visible in sync_status)."
@@ -123,12 +126,15 @@ on Hydra failure with DB rollback — strict by construction.)
 ## Client config validation
 
 Create/Update reject internally inconsistent client configurations with a
-`400 Bad Request` and a structured body. Each error has a stable `code`,
-the offending `field`, a human `message`, and an actionable `hint`.
+`400 Bad Request` problem details ([Errors](errors.md)): a stable `code`,
+the offending `field`, a human `detail`, and an actionable `hint`.
 
 ```json
 {
-  "error": "Public clients must not be assigned a client_secret",
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Public clients must not be assigned a client_secret",
   "code": "public_client_with_secret",
   "field": "client_secret",
   "hint": "Either set public=false (confidential, recommended for ASP.NET / Next.js / Blazor Server / any backend), or omit client_secret and use PKCE (recommended for SPA / native / mobile)."

@@ -54,11 +54,7 @@ func (h *AuthHandler) DeleteMe(c *fiber.Ctx) error {
 		maxAge := strconv.Itoa(int(recentAuthentication.Seconds()))
 		c.Set(fiber.HeaderWWWAuthenticate,
 			`Bearer error="insufficient_user_authentication", error_description="A more recent sign-in is required", max_age="`+maxAge+`"`)
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "Sign in again to delete your account.",
-			"code":    "insufficient_user_authentication",
-			"max_age": int(recentAuthentication.Seconds()),
-		})
+		return apierror.RefuseWith(c, fiber.StatusUnauthorized, "insufficient_user_authentication", "Sign in again to delete your account.", fiber.Map{"max_age": int(recentAuthentication.Seconds())})
 	}
 
 	u, err := h.userService.GetByID(userID)

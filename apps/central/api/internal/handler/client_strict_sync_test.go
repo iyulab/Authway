@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/client"
 )
 
@@ -24,8 +25,8 @@ func TestStrictSync_FailsLoudlyOnlyWhenAskedTo(t *testing.T) {
 	answer := func(query string, status client.SyncStatus) (int, map[string]any) {
 		app := fiber.New()
 		app.Put("/clients/:id", func(c *fiber.Ctx) error {
-			if code, body := h.respondWithSync(c, status); code != 0 {
-				return c.Status(code).JSON(body)
+			if refused := h.respondWithSync(c, status); refused != nil {
+				return apierror.RefuseWith(c, refused.Status, refused.Code, refused.Message, refused.Extensions)
 			}
 			return c.JSON(fiber.Map{"message": "updated", "sync_status": status})
 		})

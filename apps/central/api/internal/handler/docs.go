@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,9 +47,7 @@ func (h *DocsHandler) ListDocs(c *fiber.Ctx) error {
 	tree, err := h.buildFileTree(h.docsPath, "")
 	if err != nil {
 		h.logger.Error("Failed to build docs tree", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to load documentation tree",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to load documentation tree")
 	}
 
 	return c.JSON(fiber.Map{
@@ -64,9 +63,7 @@ func (h *DocsHandler) GetDoc(c *fiber.Ctx) error {
 
 	// Prevent directory traversal
 	if strings.Contains(docPath, "..") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid path",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Invalid path")
 	}
 
 	fullPath := filepath.Join(h.docsPath, docPath)
@@ -75,14 +72,10 @@ func (h *DocsHandler) GetDoc(c *fiber.Ctx) error {
 	stat, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return c.Status(404).JSON(fiber.Map{
-				"error": "Document not found",
-			})
+			return apierror.Refuse(c, 404, apierror.CodeForStatus(404), "Document not found")
 		}
 		h.logger.Error("Failed to stat file", zap.Error(err), zap.String("path", fullPath))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to access document",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to access document")
 	}
 
 	// If directory, return file list
@@ -90,9 +83,7 @@ func (h *DocsHandler) GetDoc(c *fiber.Ctx) error {
 		tree, err := h.buildFileTree(fullPath, docPath)
 		if err != nil {
 			h.logger.Error("Failed to build tree", zap.Error(err))
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to load directory",
-			})
+			return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to load directory")
 		}
 		return c.JSON(fiber.Map{
 			"data": tree,
@@ -103,9 +94,7 @@ func (h *DocsHandler) GetDoc(c *fiber.Ctx) error {
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		h.logger.Error("Failed to read file", zap.Error(err), zap.String("path", fullPath))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to read document",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to read document")
 	}
 
 	return c.JSON(fiber.Map{
@@ -125,9 +114,7 @@ func (h *DocsHandler) GetDoc(c *fiber.Ctx) error {
 func (h *DocsHandler) SearchDocs(c *fiber.Ctx) error {
 	query := c.Query("q")
 	if query == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Search query is required",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Search query is required")
 	}
 
 	results := []DocFile{}
@@ -178,9 +165,7 @@ func (h *DocsHandler) SearchDocs(c *fiber.Ctx) error {
 
 	if err != nil {
 		h.logger.Error("Search failed", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Search failed",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Search failed")
 	}
 
 	return c.JSON(fiber.Map{
@@ -195,18 +180,14 @@ func (h *DocsHandler) UpdateDoc(c *fiber.Ctx) error {
 	docPath := c.Params("*")
 
 	if strings.Contains(docPath, "..") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid path",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Invalid path")
 	}
 
 	var body struct {
 		Content string `json:"content"`
 	}
 	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Invalid request body")
 	}
 
 	fullPath := filepath.Join(h.docsPath, docPath)
@@ -214,17 +195,13 @@ func (h *DocsHandler) UpdateDoc(c *fiber.Ctx) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		h.logger.Error("Failed to create directory", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create directory",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to create directory")
 	}
 
 	// Write file
 	if err := os.WriteFile(fullPath, []byte(body.Content), 0644); err != nil {
 		h.logger.Error("Failed to write file", zap.Error(err), zap.String("path", fullPath))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to save document",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to save document")
 	}
 
 	h.logger.Info("Document updated", zap.String("path", docPath))
@@ -241,23 +218,17 @@ func (h *DocsHandler) DeleteDoc(c *fiber.Ctx) error {
 	docPath := c.Params("*")
 
 	if strings.Contains(docPath, "..") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid path",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Invalid path")
 	}
 
 	fullPath := filepath.Join(h.docsPath, docPath)
 
 	if err := os.Remove(fullPath); err != nil {
 		if os.IsNotExist(err) {
-			return c.Status(404).JSON(fiber.Map{
-				"error": "Document not found",
-			})
+			return apierror.Refuse(c, 404, apierror.CodeForStatus(404), "Document not found")
 		}
 		h.logger.Error("Failed to delete file", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to delete document",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to delete document")
 	}
 
 	h.logger.Info("Document deleted", zap.String("path", docPath))
@@ -272,9 +243,7 @@ func (h *DocsHandler) DeleteDoc(c *fiber.Ctx) error {
 func (h *DocsHandler) UploadDoc(c *fiber.Ctx) error {
 	file, err := c.FormFile("file")
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No file provided",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "No file provided")
 	}
 
 	// Get target path from form
@@ -284,9 +253,7 @@ func (h *DocsHandler) UploadDoc(c *fiber.Ctx) error {
 	}
 
 	if strings.Contains(targetPath, "..") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid path",
-		})
+		return apierror.Refuse(c, 400, apierror.CodeForStatus(400), "Invalid path")
 	}
 
 	fullPath := filepath.Join(h.docsPath, targetPath)
@@ -294,17 +261,13 @@ func (h *DocsHandler) UploadDoc(c *fiber.Ctx) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		h.logger.Error("Failed to create directory", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create directory",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to create directory")
 	}
 
 	// Save file
 	if err := c.SaveFile(file, fullPath); err != nil {
 		h.logger.Error("Failed to save file", zap.Error(err))
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to upload file",
-		})
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to upload file")
 	}
 
 	h.logger.Info("Document uploaded", zap.String("path", targetPath))
