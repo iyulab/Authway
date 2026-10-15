@@ -25,6 +25,7 @@ import { useTenantStore } from '@/stores/tenant'
 
 // Available webhook event types
 const WEBHOOK_EVENTS = [
+  { value: '*', label: 'All events (now and later)' },
   { value: 'user.created', label: 'User Created' },
   { value: 'user.updated', label: 'User Updated' },
   { value: 'user.deleted', label: 'User Deleted' },
@@ -188,6 +189,15 @@ const WebhooksPage: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // A blank number field would be sent as nothing and quietly mean "the default".
+    if (!Number.isFinite(formData.retry_count) || formData.retry_count < 0 || formData.retry_count > 10) {
+      toast.error('Retry count must be a number from 0 to 10')
+      return
+    }
+    if (!Number.isFinite(formData.timeout_secs) || formData.timeout_secs < 5 || formData.timeout_secs > 60) {
+      toast.error('Timeout must be a number of seconds from 5 to 60')
+      return
+    }
     if (selectedWebhook) {
       updateMutation.mutate({ id: selectedWebhook.id, data: formData })
     } else {

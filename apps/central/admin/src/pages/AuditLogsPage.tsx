@@ -143,7 +143,7 @@ const AuditLogsPage: React.FC = () => {
             <div className="text-2xl font-bold text-gray-900">{summary.total_30d}</div>
           </Card>
           <Card className="p-4">
-            <div className="text-sm text-gray-500">Security Events</div>
+            <div className="text-sm text-gray-500">Security Events (last 24 hours)</div>
             <div className="text-2xl font-bold text-yellow-600">{summary.security_events}</div>
           </Card>
           <Card className="p-4">

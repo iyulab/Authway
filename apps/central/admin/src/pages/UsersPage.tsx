@@ -117,7 +117,8 @@ const UsersPage: React.FC = () => {
         id: selectedUser.id,
         data: {
           name: data.name,
-          avatar_url: data.avatar_url || undefined,
+          // Empty clears the picture; the API keeps a field that is left out.
+          avatar_url: data.avatar_url ?? '',
         },
       })
     }
@@ -129,17 +130,20 @@ const UsersPage: React.FC = () => {
     }
   }
 
-  // Get provider badge color
-  const getProviderBadge = (provider: string) => {
-    switch (provider) {
-      case 'google':
-        return <Badge variant="info" size="sm">Google</Badge>
-      case 'github':
-        return <Badge variant="purple" size="sm">GitHub</Badge>
-      default:
-        return <Badge variant="default" size="sm">Local</Badge>
-    }
-  }
+  // The provider accounts that sign in to this one; none means password or emailed link.
+  const PROVIDER_NAMES: Record<string, string> = { google: 'Google', github: 'GitHub', microsoft: 'Microsoft', apple: 'Apple' }
+  const getProviderBadge = (connections: string[] = []) =>
+    connections.length === 0 ? (
+      <Badge variant="default" size="sm">Password / link</Badge>
+    ) : (
+      <span className="inline-flex gap-1">
+        {connections.map((c) => (
+          <Badge key={c} variant="info" size="sm">
+            {PROVIDER_NAMES[c] ?? c}
+          </Badge>
+        ))}
+      </span>
+    )
 
   // Show message if no tenant selected
   if (!selectedTenantId) {
@@ -266,7 +270,7 @@ const UsersPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getProviderBadge(user.provider)}
+                      {getProviderBadge(user.connections)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge

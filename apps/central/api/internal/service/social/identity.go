@@ -127,7 +127,7 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 	setLinkedSubject(account, id.Provider, id.Subject)
 
 	if id.Picture != "" && account.AvatarURL == nil {
-		if _, err := users.Update(account.ID, &user.UpdateUserRequest{AvatarURL: id.Picture}); err != nil {
+		if _, err := users.Update(account.ID, &user.UpdateUserRequest{AvatarURL: &id.Picture}); err != nil {
 			logger.Warn("Failed to store the provider's picture", zap.Error(err))
 		}
 	}

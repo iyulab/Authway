@@ -64,7 +64,8 @@ export interface User {
   avatar_url?: string
   email_verified: boolean
   active: boolean
-  provider: 'local' | 'google' | 'github'
+  /** The sign-in providers the account is linked to. */
+  connections?: string[]
   last_login_at?: string
   created_at: string
   updated_at: string

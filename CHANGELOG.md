@@ -2,6 +2,11 @@
 
 ### Changed
 
+- **A user in the administration API names their connections instead of a
+  provider.** `connections` lists the sign-in providers the account is linked
+  to; `provider` is gone — it said `local` for every account, since nothing
+  ever set it. Updating a user (`PUT /api/v1/users/{id}`) now clears a field
+  sent empty (a picture could not be removed); a field left out stays.
 - **An invitation has no `role`.** It was kept and returned, and nothing read
   it — an invitation gives no role or permission (the application decides
   those). It is no longer accepted, stored or returned; one sent is ignored.
@@ -29,6 +34,10 @@
   counts (it counted one page) and shows only what `/health` says (it showed
   fixed "Connected" states and versions), and the invitation form offers every
   application rather than the first 20.
+- The admin console's webhook form refuses a blank retry count or timeout
+  instead of sending nothing (which quietly meant the default), offers "all
+  events" (`*`), and the audit summary says its security events are from the
+  last 24 hours.
 - The admin console's settings page showed values it had not read — an
   environment, an internal address, token lifetimes, a PKCE requirement and
   component versions that were not this deployment's. It now shows the

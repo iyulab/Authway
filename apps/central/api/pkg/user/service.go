@@ -177,12 +177,18 @@ func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Update fields
-	if req.Name != "" {
-		user.Name = &req.Name
+	// A field left out stays; an empty one is cleared.
+	clearable := func(v *string) *string {
+		if *v == "" {
+			return nil
+		}
+		return v
 	}
-	if req.AvatarURL != "" {
-		user.AvatarURL = &req.AvatarURL
+	if req.Name != nil {
+		user.Name = clearable(req.Name)
+	}
+	if req.AvatarURL != nil {
+		user.AvatarURL = clearable(req.AvatarURL)
 	}
 
 	if err := s.db.Save(&user).Error; err != nil {

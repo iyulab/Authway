@@ -2139,7 +2139,7 @@ paths:
           application/json:
             schema:
               type: object
-              description: An empty or absent field leaves the stored value alone.
+              description: An absent field leaves the stored value alone; an empty one clears it.
               properties:
                 name: { type: string }
                 avatar_url: { type: string }
@@ -3031,7 +3031,10 @@ components:
         avatar_url: { type: string }
         email_verified: { type: boolean }
         active: { type: boolean }
-        provider: { type: string }
+        connections:
+          description: The sign-in providers the account is linked to (google, github, microsoft, apple) — empty for one that signs in only by password or emailed link.
+          type: array
+          items: { type: string }
         totp_enabled: { type: boolean }
         last_login_at: { type: ['null', string] }
         created_at: { type: string }

@@ -162,8 +162,8 @@ func (f *fakeAccounts) Create(tenantID uuid.UUID, req *user.CreateUserRequest) (
 func (f *fakeAccounts) Update(id uuid.UUID, req *user.UpdateUserRequest) (*user.User, error) {
 	for _, u := range f.users {
 		if u.ID == id {
-			if req.AvatarURL != "" {
-				u.AvatarURL = &req.AvatarURL
+			if req.AvatarURL != nil {
+				u.AvatarURL = req.AvatarURL
 			}
 			return u, nil
 		}

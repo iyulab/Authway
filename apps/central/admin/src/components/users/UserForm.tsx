@@ -56,8 +56,10 @@ export const UserForm: React.FC<UserFormProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-500">Provider</label>
-              <p className="mt-1 text-sm text-gray-900 capitalize">{initialData.provider}</p>
+              <label className="block text-sm font-medium text-gray-500">Connected accounts</label>
+              <p className="mt-1 text-sm text-gray-900 capitalize">
+                {initialData.connections?.length ? initialData.connections.join(', ') : 'None'}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500">Status</label>

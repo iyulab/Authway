@@ -221,7 +221,8 @@ func TestUpdate_EmptyFieldsLeaveExistingValuesUnchanged(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
 
-	if _, err := svc.Update(u.ID, &UpdateUserRequest{Name: "Updated Name", AvatarURL: "https://example.com/a.png"}); err != nil {
+	name, avatar := "Updated Name", "https://example.com/a.png"
+	if _, err := svc.Update(u.ID, &UpdateUserRequest{Name: &name, AvatarURL: &avatar}); err != nil {
 		t.Fatalf("Update (set avatar): %v", err)
 	}
 
@@ -234,6 +235,19 @@ func TestUpdate_EmptyFieldsLeaveExistingValuesUnchanged(t *testing.T) {
 	}
 	if updated.AvatarURL == nil || *updated.AvatarURL != "https://example.com/a.png" {
 		t.Fatalf("expected AvatarURL to remain set after an empty-field update, got %v", updated.AvatarURL)
+	}
+
+	// An empty field clears it — the picture could not be removed before.
+	cleared := ""
+	updated, err = svc.Update(u.ID, &UpdateUserRequest{AvatarURL: &cleared})
+	if err != nil {
+		t.Fatalf("Update (clear avatar): %v", err)
+	}
+	if updated.AvatarURL != nil {
+		t.Fatalf("expected AvatarURL to be cleared, got %q", *updated.AvatarURL)
+	}
+	if updated.Name == nil || *updated.Name != "Updated Name" {
+		t.Fatalf("clearing the picture changed the name: %v", updated.Name)
 	}
 }
 

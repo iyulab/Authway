@@ -53,18 +53,20 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 
 // PublicUser returns user data safe for public consumption
 type PublicUser struct {
-	ID            uuid.UUID  `json:"id"`
-	TenantID      uuid.UUID  `json:"tenant_id"`
-	Email         string     `json:"email"`
-	Name          string     `json:"name"`
-	AvatarURL     string     `json:"avatar_url"`
-	EmailVerified bool       `json:"email_verified"`
-	Active        bool       `json:"active"`
-	Provider      string     `json:"provider"`
-	TOTPEnabled   bool       `json:"totp_enabled"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	TenantID      uuid.UUID `json:"tenant_id"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	AvatarURL     string    `json:"avatar_url"`
+	EmailVerified bool      `json:"email_verified"`
+	Active        bool      `json:"active"`
+	// Connections are the sign-in providers the account is linked to. (The
+	// stored provider column said "local" for every account — nothing set it.)
+	Connections []string   `json:"connections"`
+	TOTPEnabled bool       `json:"totp_enabled"`
+	LastLoginAt *time.Time `json:"last_login_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // ToPublic converts User to PublicUser
@@ -85,7 +87,7 @@ func (u *User) ToPublic() PublicUser {
 		AvatarURL:     avatarURL,
 		EmailVerified: u.EmailVerified,
 		Active:        u.Active,
-		Provider:      u.Provider,
+		Connections:   append([]string{}, u.LinkedProviders()...),
 		TOTPEnabled:   u.TOTPEnabled,
 		LastLoginAt:   u.LastLoginAt,
 		CreatedAt:     u.CreatedAt,
@@ -100,10 +102,11 @@ type CreateUserRequest struct {
 	Name     string `json:"name" validate:"required"`
 }
 
-// UpdateUserRequest represents the request to update a user
+// UpdateUserRequest changes a user's profile: a field left out stays as it
+// is, and an empty one is cleared.
 type UpdateUserRequest struct {
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatar_url"`
+	Name      *string `json:"name"`
+	AvatarURL *string `json:"avatar_url"`
 }
 
 // LoginRequest represents the login request
