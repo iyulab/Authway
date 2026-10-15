@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import CodeInput from '../components/CodeInput'
 import { followRedirect, submitFlowStep } from '../utils/loginFlow'
 
 /** The answers the backend gives that this page explains itself. */
@@ -72,25 +73,7 @@ const DevicePage: React.FC = () => {
               <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
-          <div>
-            <label htmlFor="user_code" className="block text-sm font-medium text-gray-700">
-              {t('auth:device.codeLabel')}
-            </label>
-            <input
-              id="user_code"
-              name="user_code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              autoCapitalize="characters"
-              autoComplete="one-time-code"
-              spellCheck={false}
-              maxLength={16}
-              autoFocus
-              className="mt-1 appearance-none relative block w-full px-3 py-4 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 text-center text-2xl tracking-widest font-mono"
-              placeholder="ABCD-EFGH"
-            />
-          </div>
+          <CodeInput id="user_code" label={t('auth:device.codeLabel')} value={code} onChange={setCode} autoFocus />
           <button
             type="submit"
             disabled={isSubmitting}

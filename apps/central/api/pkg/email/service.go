@@ -90,12 +90,12 @@ func (s *Service) SendInvitationEmail(toEmail, inviterName, tenantName, message,
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via SMTP
-func (s *Service) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
+func (s *Service) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
 	subject := "Authway - 로그인 링크"
 	if isNewUser {
 		subject = "Authway - 가입 및 로그인 링크"
 	}
-	body, err := renderMagicLinkTemplate(linkURL, isNewUser)
+	body, err := renderMagicLinkTemplate(linkURL, code, isNewUser)
 	if err != nil {
 		return err
 	}
@@ -339,8 +339,10 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
 	})
 }
 
-// renderMagicLinkTemplate renders passwordless magic link HTML template
-func renderMagicLinkTemplate(linkURL string, isNewUser bool) (string, error) {
+// renderMagicLinkTemplate renders passwordless magic link HTML template. The
+// code does what the link does, typed into the screen that started the
+// sign-in — for a reader on another device than that screen.
+func renderMagicLinkTemplate(linkURL, code string, isNewUser bool) (string, error) {
 	headline := "🔗 로그인 링크"
 	intro := "아래 버튼을 클릭하여 Authway에 로그인하세요."
 	if isNewUser {
@@ -369,8 +371,10 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) (string, error) {
         {{template "button" (button .LinkURL "로그인하기" "#4F46E5")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
         <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">{{.LinkURL}}</p>
+        <p>다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 아래 코드를 입력하세요:</p>
+        <p style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #111827; text-align: center; background: #f5f5f5; padding: 14px; border-radius: 6px;">{{.Code}}</p>
         <div class="footer">
-            <p>이 링크는 일정 시간 후 만료됩니다.</p>
+            <p>링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.</p>
             <p>본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.</p>
         </div>
     </div>
@@ -381,6 +385,7 @@ func renderMagicLinkTemplate(linkURL string, isNewUser bool) (string, error) {
 		"Headline": headline,
 		"Intro":    intro,
 		"LinkURL":  linkURL,
+		"Code":     code,
 	})
 }
 

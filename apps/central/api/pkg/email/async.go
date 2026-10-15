@@ -104,6 +104,6 @@ func (a *Async) SendInvitationEmail(toEmail, inviterName, tenantName, message, i
 	})
 }
 
-func (a *Async) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
-	return a.send("magic_link", toEmail, func() error { return a.inner.SendMagicLinkEmail(toEmail, linkURL, isNewUser) })
+func (a *Async) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
+	return a.send("magic_link", toEmail, func() error { return a.inner.SendMagicLinkEmail(toEmail, linkURL, code, isNewUser) })
 }

@@ -5,5 +5,5 @@ type EmailService interface {
 	SendVerificationEmail(toEmail, token string) error
 	SendPasswordResetEmail(toEmail, token string) error
 	SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error
-	SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error
+	SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error
 }

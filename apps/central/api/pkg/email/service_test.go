@@ -88,14 +88,17 @@ func TestRenderInvitationTemplate_MessageIsConditional(t *testing.T) {
 func TestRenderMagicLinkTemplate_HeadlineDependsOnIsNewUser(t *testing.T) {
 	link := "https://auth.example.com/magic?token=xyz"
 
-	returning := mustRender(t)(renderMagicLinkTemplate(link, false))
+	returning := mustRender(t)(renderMagicLinkTemplate(link, "BCDF-GHJK", false))
 	if strings.Contains(returning, "환영합니다") {
 		t.Error("expected the returning-user template to not use the welcome-new-user headline")
 	}
 
-	newUser := mustRender(t)(renderMagicLinkTemplate(link, true))
+	newUser := mustRender(t)(renderMagicLinkTemplate(link, "BCDF-GHJK", true))
 	if !strings.Contains(newUser, "환영합니다") {
 		t.Error("expected the new-user template to use the welcome headline")
+	}
+	if !strings.Contains(newUser, "BCDF-GHJK") || !strings.Contains(returning, "BCDF-GHJK") {
+		t.Error("expected both variants to show the code")
 	}
 	if !strings.Contains(newUser, link) || !strings.Contains(returning, link) {
 		t.Error("expected both variants to embed the link")
@@ -114,7 +117,7 @@ func TestEveryMessageStylesItsButtonInline(t *testing.T) {
 		"verification": must(renderEmailTemplate("verification", link)),
 		"reset":        must(renderEmailTemplate("reset", link)),
 		"invitation":   must(renderInvitationTemplate("Alice", "Acme", "", link)),
-		"magic link":   must(renderMagicLinkTemplate(link, false)),
+		"magic link":   must(renderMagicLinkTemplate(link, "BCDF-GHJK", false)),
 	}
 	for name, html := range messages {
 		if strings.Contains(html, `class="button"`) || strings.Contains(html, ".button") {

@@ -374,6 +374,39 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
+  /api/v1/login-flows/{flow}/magic-link/code:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: redeemMagicLinkCode
+      description: |
+        Does what redeeming the link does, with the code the same email
+        carries — typed into the screen that started the sign-in, for a
+        reader who opened the email on another device. Any case, with or
+        without the hyphen. A code works once; after five wrong codes for a
+        sign-in its codes stop working (its links still work).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: 'As the email shows it: XXXX-XXXX.' }
+      responses:
+        '200':
+          description: Signed in, or a second factor or the tenant's terms are owed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Redirect'
+                  - $ref: '#/components/schemas/MFARequired'
+                  - $ref: '#/components/schemas/TermsRequired'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '400': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
   /api/v1/magic-links/inspect:
     post:
       operationId: inspectMagicLink
@@ -2398,6 +2431,12 @@ components:
         valid: { type: boolean }
         email: { type: string }
         expires_at: { type: string }
+        flow:
+          type: string
+          description: |
+            The login flow the link signs in to. Only the browser that started
+            that flow can finish it with the link — a page in another one
+            shows the code to type there instead.
         detail: { type: string, description: Why the link cannot be used, when valid is false. }
 
     LogoutToken:

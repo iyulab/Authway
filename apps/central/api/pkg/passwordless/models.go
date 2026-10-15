@@ -30,12 +30,20 @@ type MagicLink struct {
 	TokenType MagicLinkTokenType `json:"token_type" gorm:"size:50;not null"`
 	// LoginFlow is the login flow the link signs in to. Redeeming the link
 	// completes that flow, so the application receives ordinary OAuth tokens.
-	LoginFlow string     `json:"-" gorm:"column:login_flow"`
-	IPAddress string     `json:"ip_address" gorm:"size:45"`
-	UserAgent string     `json:"user_agent" gorm:"size:512"`
-	UsedAt    *time.Time `json:"used_at"`
-	ExpiresAt time.Time  `json:"expires_at" gorm:"not null;index"`
-	CreatedAt time.Time  `json:"created_at"`
+	LoginFlow string `json:"-" gorm:"column:login_flow"`
+	// CodeSealed is the code the email carries alongside the link, sealed with
+	// the at-rest key: typed into the screen that started the sign-in, it does
+	// what the link does, for a reader who opened the mail on another device.
+	// A code is short, so a plain hash of it would be easy to reverse.
+	CodeSealed string `json:"-" gorm:"column:code_sealed;not null;default:''"`
+	// CodeAttempts counts wrong codes entered for this link's sign-in. At
+	// maxCodeAttempts the code stops working; the link itself still does.
+	CodeAttempts int        `json:"-" gorm:"column:code_attempts;not null;default:0"`
+	IPAddress    string     `json:"ip_address" gorm:"size:45"`
+	UserAgent    string     `json:"user_agent" gorm:"size:512"`
+	UsedAt       *time.Time `json:"used_at"`
+	ExpiresAt    time.Time  `json:"expires_at" gorm:"not null;index"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // IsExpired checks if the magic link has expired

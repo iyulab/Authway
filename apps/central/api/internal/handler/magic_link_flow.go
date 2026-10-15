@@ -35,9 +35,6 @@ type sendMagicLinkRequest struct {
 // the same answer as one that may, and no link.
 // POST /api/v1/login-flows/:flow/magic-link
 func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
-	// Each request may send an email, so each one counts against the limit.
-	middleware.IncrementRateLimitOnFailure(c)
-
 	flow := flowParam(c)
 	var req sendMagicLinkRequest
 	if err := c.BodyParser(&req); err != nil || !strings.Contains(req.Email, "@") {
@@ -56,6 +53,11 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 	if !cl.AllowsSignInMethod("magic_link") {
 		return respondSignInMethodNotAllowed(c)
 	}
+
+	// From here a request may send an email, so each one counts against the
+	// limit — whether or not the address gets one, or the answer would tell.
+	// A request refused above sends nothing.
+	middleware.IncrementRateLimitOnFailure(c)
 
 	if _, err := h.links.SendMagicLink(cl.TenantID, strings.TrimSpace(req.Email), flow, c.IP(), c.Get("User-Agent")); err != nil {
 		h.auth.logger.Error("Failed to issue magic link", zap.Error(err))
@@ -81,7 +83,10 @@ func (h *MagicLinkFlowHandler) Inspect(c *fiber.Ctx) error {
 	if err != nil || link.LoginFlow == "" {
 		return c.JSON(fiber.Map{"valid": false, "detail": apierror.Message(err, "This sign-in link is not valid.")})
 	}
-	return c.JSON(fiber.Map{"valid": true, "email": link.Email, "expires_at": link.ExpiresAt})
+	// The flow lets the page tell whether it is the browser that started the
+	// sign-in — only that one can finish it with the link; another one shows
+	// the code to type there instead.
+	return c.JSON(fiber.Map{"valid": true, "email": link.Email, "expires_at": link.ExpiresAt, "flow": link.LoginFlow})
 }
 
 // Redeem uses the link up and continues its login flow: signed in, or — for
@@ -100,6 +105,29 @@ func (h *MagicLinkFlowHandler) Redeem(c *fiber.Ctx) error {
 	if link.LoginFlow == "" {
 		// Issued before links were tied to a login flow; there is nothing to sign in to.
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_link", "This sign-in link is no longer valid. Start again from the application.")
+	}
+	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false)
+}
+
+type magicLinkCodeRequest struct {
+	Code string `json:"code"`
+}
+
+// RedeemCode does what Redeem does, for the code the email carries — typed
+// into the screen that started the sign-in, when the email was read on
+// another device than that screen.
+// POST /api/v1/login-flows/:flow/magic-link/code
+func (h *MagicLinkFlowHandler) RedeemCode(c *fiber.Ctx) error {
+	flow := flowParam(c)
+	var req magicLinkCodeRequest
+	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "code is required")
+	}
+	link, u, err := h.links.VerifyMagicLinkCode(flow, req.Code)
+	if err != nil {
+		middleware.IncrementRateLimitOnFailure(c)
+		h.auth.logger.Warn("Sign-in code not redeemed", zap.Error(err))
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_code", apierror.Message(err, "This code is not valid."))
 	}
 	return h.auth.firstFactorPassed(c, link.LoginFlow, u, byEmailedLink, false)
 }

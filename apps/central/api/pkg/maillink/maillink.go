@@ -38,9 +38,11 @@ func InvitationAccept(frontendURL, token string) string {
 	return withToken(frontendURL, PathInvitationAccept, token)
 }
 
-// MagicLink is a login factor: the page POSTs the token back to the API.
-func MagicLink(frontendURL, token string) string {
-	return withToken(frontendURL, PathMagicLink, token)
+// MagicLink is a login factor: the page POSTs the token back to the API. The
+// link also carries the code the email shows, so that a page opened on another
+// device than the one signing in can show the code to type there.
+func MagicLink(frontendURL, token, code string) string {
+	return withToken(frontendURL, PathMagicLink, token) + "&code=" + url.QueryEscape(code)
 }
 
 // VerifyEmail confirms ownership of an address.

@@ -40,7 +40,7 @@ func (s *slowSender) SendPasswordResetEmail(string, string) error { return s.del
 func (s *slowSender) SendInvitationEmail(string, string, string, string, string) error {
 	return s.deliver()
 }
-func (s *slowSender) SendMagicLinkEmail(string, string, bool) error { return s.deliver() }
+func (s *slowSender) SendMagicLinkEmail(string, string, string, bool) error { return s.deliver() }
 
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
@@ -59,7 +59,7 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 
 	start := time.Now()
 	for i := 0; i < 5; i++ {
-		if err := a.SendMagicLinkEmail("user@example.com", "https://example.com/link", false); err != nil {
+		if err := a.SendMagicLinkEmail("user@example.com", "https://example.com/link", "BCDF-GHJK", false); err != nil {
 			t.Fatalf("send %d: %v", i, err)
 		}
 	}
@@ -72,7 +72,7 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 	if err := a.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Close before delivery = %v, want the context's deadline", err)
 	}
-	if err := a.SendMagicLinkEmail("late@example.com", "https://example.com/link", false); !errors.Is(err, ErrMailerClosed) {
+	if err := a.SendMagicLinkEmail("late@example.com", "https://example.com/link", "BCDF-GHJK", false); !errors.Is(err, ErrMailerClosed) {
 		t.Fatalf("send after Close = %v, want ErrMailerClosed", err)
 	}
 
@@ -205,7 +205,7 @@ type recordingSender struct {
 func (r *recordingSender) SendPasswordResetEmail(string, string) error {
 	return fmt.Errorf("%w: timed out", ErrTransient)
 }
-func (r *recordingSender) SendMagicLinkEmail(string, string, bool) error {
+func (r *recordingSender) SendMagicLinkEmail(string, string, string, bool) error {
 	r.links.Add(1)
 	return nil
 }
@@ -222,7 +222,7 @@ func TestAsync_AWaitingRetryLeavesTheSenderFree(t *testing.T) {
 	if err := a.SendPasswordResetEmail("user@example.com", "t"); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.SendMagicLinkEmail("other@example.com", "https://example.com/link", false); err != nil {
+	if err := a.SendMagicLinkEmail("other@example.com", "https://example.com/link", "BCDF-GHJK", false); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return inner.links.Load() == 1 })

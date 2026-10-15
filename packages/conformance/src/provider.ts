@@ -492,19 +492,45 @@ export class Provider {
    * from the mail capture, and redeems it in the browser that started the
    * sign-in.
    */
-  async continueWithMagicLink(attempt: LoginAttempt, email: string): Promise<LoginOutcome> {
-    const { browser, flow } = attempt
-    const sendRes = await browser.fetch(this.loginFlowUrl(flow, '/magic-link'), {
+  /**
+   * Asks the login flow to email a sign-in link and returns the link from the
+   * mail — the newest one to `email`.
+   */
+  async sendMagicLink(attempt: LoginAttempt, email: string): Promise<URL> {
+    const sendRes = await attempt.browser.fetch(this.loginFlowUrl(attempt.flow, '/magic-link'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     })
     await conform('POST', '/api/v1/login-flows/{flow}/magic-link', sendRes)
     const sendBody = await sendRes.text()
-    if (!sendRes.ok) return { kind: 'rejected', status: sendRes.status, body: sendBody }
+    if (!sendRes.ok) throw new Error(`Sending the link was refused (${sendRes.status}): ${sendBody}`)
     if ((JSON.parse(sendBody) as { next?: string }).next !== 'email_sent') throw new Error(`Unexpected answer: ${sendBody}`)
+    const link = await waitForLink(this.config.mailApi, email, '/magic-link', 15_000, (url) => {
+      const token = url.searchParams.get('token')
+      return token !== null && !this.usedLinks.has(token)
+    })
+    this.usedLinks.add(link.searchParams.get('token')!)
+    return link
+  }
 
-    const link = await waitForLink(this.config.mailApi, email, '/magic-link')
+  /** Links this run has already taken from the mailbox — each mail is read once. */
+  private readonly usedLinks = new Set<string>()
+
+  /** Types `code` — from a mail sendMagicLink fetched — into the sign-in that asked for it. */
+  async continueWithMagicLinkCode(attempt: LoginAttempt, code: string): Promise<LoginOutcome> {
+    const res = await attempt.browser.fetch(this.loginFlowUrl(attempt.flow, '/magic-link/code'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/magic-link/code', res.clone())
+    return this.afterFirstFactor(attempt, res.status, await res.text())
+  }
+
+  async continueWithMagicLink(attempt: LoginAttempt, email: string): Promise<LoginOutcome> {
+    const { browser } = attempt
+    const link = await this.sendMagicLink(attempt, email)
     const token = link.searchParams.get('token')
     if (!token) throw new Error(`Sign-in link carries no token: ${link}`)
     const redeemRes = await browser.fetch(`${this.config.api}/api/v1/magic-links/redeem`, {

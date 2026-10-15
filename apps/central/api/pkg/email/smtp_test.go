@@ -128,7 +128,7 @@ func (f *fakeSMTP) sent() ([]string, string) {
 
 func TestSMTP_SendsAMessageWithTextAndHTMLAndAnEncodedSubject(t *testing.T) {
 	f := startFakeSMTP(t, "250 ok")
-	if err := f.service(t, "").SendMagicLinkEmail("user@example.com", "https://login.example.com/magic-link?token=abc", false); err != nil {
+	if err := f.service(t, "").SendMagicLinkEmail("user@example.com", "https://login.example.com/magic-link?token=abc", "BCDF-GHJK", false); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	commands, data := f.sent()

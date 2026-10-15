@@ -311,7 +311,7 @@ func main() {
 	// early so the audit.Service is available to wire into write-path handlers
 	// below. Route registration still happens later once jwtAuth/adminAuth are
 	// constructed.
-	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, auditService, cfg.App.FrontendURL, cfg.Security.AllowPrivateTargets)
+	newFeatureServices := InitNewFeatureServices(db, zapLogger, userService, tenantService, mailer, auditService, cfg.App.FrontendURL, cfg.Security.AllowPrivateTargets, totpCipher)
 
 	serviceClientService := serviceclient.NewService(db, zapLogger, hydraClient)
 	serviceClientHandler := handler.NewServiceClientHandler(serviceClientService, zapLogger, newFeatureServices.AuditService)
@@ -406,6 +406,7 @@ func main() {
 	v1.Post("/login-flows/:flow/magic-link", ratelimitmw.MagicLinkRateLimit(redisClient), magicLinkHandler.Send)
 	v1.Post("/magic-links/inspect", magicLinkHandler.Inspect)
 	v1.Post("/magic-links/redeem", loginRateLimit, magicLinkHandler.Redeem)
+	v1.Post("/login-flows/:flow/magic-link/code", loginRateLimit, magicLinkHandler.RedeemCode)
 
 	// Consent and logout screens: what to ask, and the user's answer.
 	v1.Get("/consent-flows/:flow", authHandler.GetConsentFlow)

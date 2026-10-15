@@ -133,14 +133,14 @@ func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantNa
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via Sendway.
-func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
+func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
 	subject := "Authway - 로그인 링크"
 	if isNewUser {
 		subject = "Authway - 가입 및 로그인 링크"
 	}
 
-	body := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n이 링크는 일정 시간 후 만료됩니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL)
-	htmlBody, err := renderMagicLinkTemplate(linkURL, isNewUser)
+	body := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 이 코드를 입력하세요: %s\n\n링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL, code)
+	htmlBody, err := renderMagicLinkTemplate(linkURL, code, isNewUser)
 	if err != nil {
 		return err
 	}

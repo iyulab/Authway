@@ -46,13 +46,15 @@ function bodies(message: MailHogMessage): string[] {
 
 /**
  * Waits for a message addressed to `recipient` and returns the first link in it
- * whose path ends with `path` (e.g. "/invitation/accept").
+ * whose path ends with `path` (e.g. "/invitation/accept") and that `accept`
+ * takes — newest message first.
  */
 export async function waitForLink(
   mailApi: string,
   recipient: string,
   path: string,
   timeoutMs = 15_000,
+  accept: (url: URL) => boolean = () => true,
 ): Promise<URL> {
   const deadline = Date.now() + timeoutMs
   const query = `${mailApi}/api/v2/search?kind=to&query=${encodeURIComponent(recipient)}`
@@ -64,7 +66,7 @@ export async function waitForLink(
         for (const body of bodies(message)) {
           for (const match of body.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
             const url = new URL(match[0].replace(/&amp;/g, '&'))
-            if (url.pathname.endsWith(path)) return url
+            if (url.pathname.endsWith(path) && accept(url)) return url
           }
         }
       }

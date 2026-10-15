@@ -1,6 +1,8 @@
 package passwordless
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"authway/apps/central/api/internal/database"
+	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tokenhash"
@@ -25,11 +28,12 @@ import (
 // with. The outbound link is the only place the plaintext still appears.
 type stubEmailSender struct {
 	lastLinkURL string
+	lastCode    string
 	refuse      error
 }
 
-func (s *stubEmailSender) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
-	s.lastLinkURL = linkURL
+func (s *stubEmailSender) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
+	s.lastLinkURL, s.lastCode = linkURL, code
 	return s.refuse
 }
 
@@ -98,7 +102,15 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { db.Exec(`DELETE FROM tenants WHERE id = ?`, tn.ID) })
 
 	sender := &stubEmailSender{}
-	svc := NewService(db, userService, invService, sender, zap.NewNop(), "http://localhost:3001")
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := crypto.NewCipher(base64.StdEncoding.EncodeToString(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(db, userService, invService, sender, zap.NewNop(), "http://localhost:3001", cipher)
 	return &fixture{db: db, svc: svc, invitation: invService, tenant: tn, sender: sender}
 }
 
@@ -354,7 +366,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 func TestMayProvision_FailsClosed(t *testing.T) {
 	f := newFixture(t)
 	userService := user.NewService(f.db, zap.NewNop())
-	ungated := NewService(f.db, userService, nil, nil, zap.NewNop(), "http://localhost:3001").(*service)
+	ungated := NewService(f.db, userService, nil, nil, zap.NewNop(), "http://localhost:3001", nil).(*service)
 
 	if ungated.mayProvision(f.tenant.ID, "anyone@example.com") {
 		t.Error("a missing invitation gate must deny provisioning, not allow it")

@@ -135,10 +135,14 @@ func LoginRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 
 // MagicLinkRateLimit limits sign-in link emails. The handler counts every
 // request (each one may send an email), not just failures.
+// MagicLinkRateLimit bounds the sign-in emails one network address asks for.
+// It is a ceiling for an address many people share (an office, a mobile
+// carrier); how many links one mailbox receives is limited per mailbox, by
+// the passwordless service.
 func MagicLinkRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 	return RateLimit(RateLimitConfig{
 		RedisClient:    redisClient,
-		MaxAttempts:    5,
+		MaxAttempts:    20,
 		WindowDuration: 15 * time.Minute,
 		BlockDuration:  15 * time.Minute,
 		KeyPrefix:      "ratelimit:magiclink:",

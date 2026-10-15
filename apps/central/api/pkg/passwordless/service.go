@@ -1,10 +1,15 @@
 package passwordless
 
 import (
-	"authway/apps/central/api/pkg/apierror"
+	"crypto/rand"
+	"crypto/subtle"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 
+	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
@@ -15,7 +20,8 @@ import (
 
 // EmailSender interface for sending emails
 type EmailSender interface {
-	SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error
+	// code is the link's code as the reader types it (XXXX-XXXX).
+	SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error
 }
 
 // InvitationGate reports whether a magic-link sign-in may create a new
@@ -41,6 +47,11 @@ type Service interface {
 	// VerifyMagicLink consumes the token: it marks the link used and may
 	// provision a user. It is not idempotent and must never back a GET.
 	VerifyMagicLink(token string) (*MagicLink, *user.User, error)
+	// VerifyMagicLinkCode does what VerifyMagicLink does, for the code the
+	// email carries instead of the link — typed into the screen that started
+	// loginFlow. Wrong codes are counted; after maxCodeAttempts the codes of
+	// that sign-in's links stop working.
+	VerifyMagicLinkCode(loginFlow, code string) (*MagicLink, *user.User, error)
 	// InspectMagicLink reports whether a token is currently redeemable without
 	// consuming it or touching any user state.
 	InspectMagicLink(token string) (*MagicLink, error)
@@ -54,13 +65,15 @@ type service struct {
 	emailSender EmailSender
 	logger      *zap.Logger
 	frontendURL string
+	codes       crypto.Cipher
 	tokenExpiry time.Duration
 }
 
 // NewService wires the passwordless flow. invitations must not be nil — a nil
 // gate is treated as "provisioning denied" rather than "no policy", so a wiring
-// mistake fails closed instead of silently restoring self-registration.
-func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, frontendURL string) Service {
+// mistake fails closed instead of silently restoring self-registration. codes
+// seals each link's code at rest (the at-rest cipher).
+func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, frontendURL string, codes crypto.Cipher) Service {
 	return &service{
 		db:          db,
 		userService: userService,
@@ -68,6 +81,7 @@ func NewService(db *gorm.DB, userService user.Service, invitations InvitationGat
 		emailSender: emailSender,
 		logger:      logger,
 		frontendURL: frontendURL,
+		codes:       codes,
 		tokenExpiry: 15 * time.Minute,
 	}
 }
@@ -75,6 +89,51 @@ func NewService(db *gorm.DB, userService user.Service, invitations InvitationGat
 func generateToken() (string, error) {
 	return tokenhash.Generate()
 }
+
+// A link's code: eight letters from an alphabet without vowels (no words, and
+// nothing that reads as another letter or a digit) — the shape RFC 8628 §6.1
+// recommends for codes people type, and the one the device sign-in uses.
+const (
+	codeAlphabet = "BCDFGHJKLMNPQRSTVWXZ"
+	codeLength   = 8
+	// maxCodeAttempts wrong codes end the codes of a sign-in's links.
+	maxCodeAttempts = 5
+	// At most maxLinksPerMailbox links go to one address in mailboxWindow.
+	maxLinksPerMailbox = 5
+	mailboxWindow      = 15 * time.Minute
+)
+
+func generateCode() (string, error) {
+	b := make([]byte, codeLength)
+	limit := big.NewInt(int64(len(codeAlphabet)))
+	for i := range b {
+		n, err := rand.Int(rand.Reader, limit)
+		if err != nil {
+			return "", err
+		}
+		b[i] = codeAlphabet[n.Int64()]
+	}
+	return string(b), nil
+}
+
+// normalizeCode reads a code as typed: any case, with or without the hyphen
+// or spaces.
+func normalizeCode(typed string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(typed) {
+		if r != '-' && r != ' ' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// displayCode is how the email shows a code: XXXX-XXXX.
+func displayCode(code string) string {
+	return code[:4] + "-" + code[4:]
+}
+
+var errInvalidCode = apierror.NewPublic("this code is not valid; check it, or ask for a new email")
 
 // mayProvision reports whether a user may be created for this address. It fails
 // closed on a missing gate or a lookup error: the safe answer to "is this
@@ -97,6 +156,14 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
+	code, err := generateCode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate code: %w", err)
+	}
+	sealedCode, err := s.codes.Encrypt(code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seal code: %w", err)
+	}
 	expiresAt := time.Now().Add(s.tokenExpiry)
 	tokenType := TokenTypeLogin
 	if _, err := s.userService.GetByEmailAndTenant(tenantID, email); err != nil {
@@ -115,27 +182,46 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 		}
 		tokenType = TokenTypeRegister
 	}
+	// A mailbox gets a few links at a time, however many network addresses ask
+	// for them. Past that no link is made and the answer stays the same — a
+	// refusal would tell that the address can sign in, since an address that
+	// cannot never has links to count.
+	var recent int64
+	if err := s.db.Model(&MagicLink{}).
+		Where("tenant_id = ? AND lower(email) = lower(?) AND created_at > ?", tenantID, email, time.Now().Add(-mailboxWindow)).
+		Count(&recent).Error; err != nil {
+		return nil, fmt.Errorf("failed to count recent links: %w", err)
+	}
+	if recent >= maxLinksPerMailbox {
+		s.logger.Warn("Magic link suppressed: too many for this address",
+			zap.String("email", email), zap.String("tenant_id", tenantID.String()))
+		return &MagicLinkResponse{
+			Message:   "Magic link sent to your email",
+			ExpiresAt: expiresAt,
+		}, nil
+	}
 	magicLink := &MagicLink{
-		TenantID:  tenantID,
-		Email:     email,
-		TokenHash: tokenhash.Hash(token),
-		TokenType: tokenType,
-		LoginFlow: loginFlow,
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
-		ExpiresAt: expiresAt,
+		TenantID:   tenantID,
+		Email:      email,
+		TokenHash:  tokenhash.Hash(token),
+		TokenType:  tokenType,
+		LoginFlow:  loginFlow,
+		CodeSealed: sealedCode,
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
+		ExpiresAt:  expiresAt,
 	}
 	if err := s.db.Create(magicLink).Error; err != nil {
 		return nil, fmt.Errorf("failed to create magic link: %w", err)
 	}
 	// frontendURL is the auth UI, not the API — this link is opened by a
 	// human, and the page redeems the token only when they confirm.
-	linkURL := maillink.MagicLink(s.frontendURL, token)
+	linkURL := maillink.MagicLink(s.frontendURL, token, displayCode(code))
 	if s.emailSender != nil {
 		isNewUser := tokenType == TokenTypeRegister
 		// A link that could not be handed to the sender gets the same answer
 		// as one that was: the answer must not depend on the address.
-		if err := s.emailSender.SendMagicLinkEmail(email, linkURL, isNewUser); err != nil {
+		if err := s.emailSender.SendMagicLinkEmail(email, linkURL, displayCode(code), isNewUser); err != nil {
 			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", email))
 		}
 	}
@@ -180,6 +266,51 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 	if err := s.db.Where("token_hash = ?", tokenhash.Hash(token)).First(&magicLink).Error; err != nil {
 		return nil, nil, apierror.NewPublic("invalid or expired token")
 	}
+	return s.signIn(&magicLink)
+}
+
+func (s *service) VerifyMagicLinkCode(loginFlow, code string) (*MagicLink, *user.User, error) {
+	typed := normalizeCode(code)
+	now := time.Now()
+	live := func() *gorm.DB {
+		return s.db.Model(&MagicLink{}).
+			Where("login_flow = ? AND used_at IS NULL AND expires_at > ? AND code_sealed <> ''", loginFlow, now)
+	}
+
+	if len(typed) == codeLength {
+		var candidates []MagicLink
+		if err := live().Where("code_attempts < ?", maxCodeAttempts).Find(&candidates).Error; err != nil {
+			return nil, nil, fmt.Errorf("failed to look up the sign-in's links: %w", err)
+		}
+		for i := range candidates {
+			stored, err := s.codes.Decrypt(candidates[i].CodeSealed)
+			if err != nil || subtle.ConstantTimeCompare([]byte(stored), []byte(typed)) != 1 {
+				continue
+			}
+			// Claimed by a single conditional UPDATE, like the link: of two
+			// requests with the right code exactly one signs in.
+			claim := s.db.Model(&MagicLink{}).
+				Where("id = ? AND used_at IS NULL AND expires_at > ? AND code_attempts < ?", candidates[i].ID, now, maxCodeAttempts).
+				Update("used_at", now)
+			if claim.Error != nil {
+				return nil, nil, fmt.Errorf("failed to mark the link as used: %w", claim.Error)
+			}
+			if claim.RowsAffected == 1 {
+				return s.signIn(&candidates[i])
+			}
+			break
+		}
+	}
+
+	if err := live().Update("code_attempts", gorm.Expr("code_attempts + 1")).Error; err != nil {
+		s.logger.Error("Failed to count a wrong sign-in code", zap.Error(err))
+	}
+	return nil, nil, errInvalidCode
+}
+
+// signIn finds — or, for an invited address, creates — the user a redeemed
+// link signs in.
+func (s *service) signIn(magicLink *MagicLink) (*MagicLink, *user.User, error) {
 	var u *user.User
 	var err error
 	u, err = s.userService.GetByEmailAndTenant(magicLink.TenantID, magicLink.Email)
@@ -207,7 +338,7 @@ func (s *service) VerifyMagicLink(token string) (*MagicLink, *user.User, error) 
 		}
 		s.logger.Info("User authenticated via magic link", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
 	}
-	return &magicLink, u, nil
+	return magicLink, u, nil
 }
 
 // markEmailVerified records that the user proved control of the address by

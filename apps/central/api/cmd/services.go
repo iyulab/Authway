@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
@@ -36,6 +37,7 @@ func InitNewFeatureServices(
 	auditService audit.Service,
 	frontendURL string,
 	webhookAllowPrivateTargets bool,
+	atRest crypto.Cipher,
 ) *NewFeatureServices {
 	auditHandler := audit.NewHandler(auditService, logger)
 
@@ -58,7 +60,7 @@ func InitNewFeatureServices(
 	}
 	// invitationService doubles as the passwordless invitation gate — magic-link
 	// provisioning is allowed only for an invited address (invitation-only).
-	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL)
+	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL, atRest)
 
 	return &NewFeatureServices{
 		AuditService:        auditService,
@@ -133,6 +135,6 @@ type passwordlessEmailAdapterImpl struct {
 	emailService email.EmailService
 }
 
-func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, linkURL string, isNewUser bool) error {
-	return a.emailService.SendMagicLinkEmail(toEmail, linkURL, isNewUser)
+func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
+	return a.emailService.SendMagicLinkEmail(toEmail, linkURL, code, isNewUser)
 }

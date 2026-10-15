@@ -2,13 +2,39 @@ import React, { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import CodeInput from '../components/CodeInput'
 import { getConfig } from '../config'
-import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
+import { followRedirect, nextScreen, submitLoginStep, type FlowStep } from '../utils/loginFlow'
 
 interface LinkInfo {
   valid: boolean
   email?: string
+  /** The sign-in the link is for. */
+  flow?: string
   detail?: string
+}
+
+// The sign-ins this browser asked for a link for. Only the browser that
+// started a sign-in can finish it with the link; a link opened anywhere else
+// shows its code, to type into that browser instead. Shared by the browser's
+// tabs, so a link opened in a new tab is recognised.
+const SENT_FLOWS_KEY = 'authway.magicLinkFlows'
+
+function sentFlows(): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SENT_FLOWS_KEY) ?? '[]')
+    return Array.isArray(stored) ? stored : []
+  } catch {
+    return []
+  }
+}
+
+function rememberSentFlow(flow: string) {
+  try {
+    localStorage.setItem(SENT_FLOWS_KEY, JSON.stringify([flow, ...sentFlows().filter((f) => f !== flow)].slice(0, 10)))
+  } catch {
+    // Without storage every link shows its code — which still signs in.
+  }
 }
 
 // Full class names, so the stylesheet build sees them.
@@ -31,9 +57,11 @@ const ERROR_ICON = 'M6 18L18 6M6 6l12 12'
 
 /**
  * Sign-in by emailed link, in two halves:
- *  - `?flow=` — part of a login: ask for the address and send the link.
+ *  - `?flow=` — part of a login: ask for the address and send the link, then
+ *    take the code the email also carries, for an email read on another device.
  *  - `?token=` — the link's landing page: confirm, then complete the login.
- *    It must be the browser that started the sign-in.
+ *    Only the browser that started the sign-in can; anywhere else the page
+ *    shows the link's code to type there.
  * The landing page never redeems on load: mail scanners open links too.
  */
 const MagicLinkPage: React.FC = () => {
@@ -42,12 +70,14 @@ const MagicLinkPage: React.FC = () => {
   const navigate = useNavigate()
   const flow = searchParams.get('flow')
   const token = searchParams.get('token')
+  const linkCode = searchParams.get('code')
 
   const [email, setEmail] = useState('')
   const [isSent, setIsSent] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null)
+  const [code, setCode] = useState('')
 
   const post = async (path: string, body: unknown) => {
     const res = await fetch(`${getConfig().apiUrl}/api/v1${path}`, {
@@ -74,6 +104,7 @@ const MagicLinkPage: React.FC = () => {
     try {
       const data = await submitLoginStep(flow, '/magic-link', { email })
       if (data.next === 'email_sent') {
+        rememberSentFlow(flow)
         setIsSent(true)
       } else {
         setError(data.detail || t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
@@ -85,27 +116,36 @@ const MagicLinkPage: React.FC = () => {
     }
   }
 
-  const handleRedeem = async () => {
+  // The link — or its code — is one factor: a user who has a second one gives
+  // it next, and a user who owes the tenant's documents accepts them.
+  const signIn = async (step: Promise<FlowStep>, failed: string) => {
     setIsBusy(true)
     setError(null)
     try {
-      const data = await post('/magic-links/redeem', { token })
+      const data = await step
       if (data.next === 'redirect' && data.redirect_to) {
         followRedirect(data.redirect_to)
         return
       }
-      // The link is one factor: a user who has a second one gives it next,
-      // and a user who owes the tenant's documents accepts them.
-      const next = nextScreen(data)
+      const next = nextScreen(data, flow)
       if (next) {
         navigate(next)
         return
       }
-      setError(data.detail || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+      setError(data.detail || failed)
     } catch {
-      setError(t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+      setError(failed)
     }
     setIsBusy(false)
+  }
+
+  const handleRedeem = () =>
+    signIn(post('/magic-links/redeem', { token }), t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+
+  const handleCode = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!flow || !code.trim()) return
+    signIn(submitLoginStep(flow, '/magic-link/code', { code }), t('auth:magicLink.invalidCode', 'This code is not valid.'))
   }
 
   const page = (children: React.ReactNode) => (
@@ -133,6 +173,23 @@ const MagicLinkPage: React.FC = () => {
           <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
           <p className="mt-2 text-sm text-red-600">{error || linkInfo.detail}</p>
           <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
+        </div>
+      )
+    }
+    // Another browser than the one that asked for the link: the link cannot
+    // finish that sign-in here, the code can — there.
+    if (linkCode && linkInfo.flow && !sentFlows().includes(linkInfo.flow)) {
+      return page(
+        <div className="text-center">
+          {cardIcon('indigo', MAIL_ICON)}
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.otherDeviceTitle', 'Finish where you started')}</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            {t('auth:magicLink.otherDeviceMessage', 'Enter this code on the screen where you started signing in:')}
+          </p>
+          <p className="mt-6 font-mono text-3xl font-bold tracking-widest text-gray-900" data-testid="link-code">
+            {linkCode}
+          </p>
+          <p className="mt-6 text-sm text-gray-500">{linkInfo.email}</p>
         </div>
       )
     }
@@ -175,6 +232,24 @@ const MagicLinkPage: React.FC = () => {
         <p className="mt-4 text-sm text-gray-500">
           {t('auth:magicLink.sameBrowser', 'Open the link in this browser within 15 minutes to sign in.')}
         </p>
+        <form onSubmit={handleCode} className="mt-8 space-y-4 text-left">
+          <p className="text-sm text-gray-600 text-center">
+            {t('auth:magicLink.codePrompt', 'Reading the email on another device? Enter the code it shows.')}
+          </p>
+          {error && (
+            <div className="rounded-md bg-red-50 p-4" role="alert">
+              <div className="text-sm text-red-700">{error}</div>
+            </div>
+          )}
+          <CodeInput id="magic_link_code" label={t('auth:magicLink.codeLabel', 'Code from the email')} value={code} onChange={setCode} />
+          <button
+            type="submit"
+            disabled={isBusy || !code.trim()}
+            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('auth:magicLink.continue', 'Continue')}
+          </button>
+        </form>
       </div>
     )
   }

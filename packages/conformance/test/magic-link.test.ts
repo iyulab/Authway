@@ -39,6 +39,42 @@ describe('sign-in with an emailed link', () => {
   // A request that may send mail must not tell a caller whether the address
   // belongs to anyone: a registered address and an unknown one get the same
   // status and the same body.
+  // The same email carries a code: typed into the screen that started the
+  // sign-in, it completes the request like the link — for a reader who opened
+  // the email on another device, where the link cannot finish the sign-in.
+  it('completes the authorization request with the code typed where the sign-in started', async () => {
+    const attempt = await provider.startLogin(client)
+    const link = await provider.sendMagicLink(attempt, user.email)
+
+    // The landing page learns which sign-in the link is for, to tell whether
+    // it is the browser that started it.
+    const inspected = await fetch(`${provider.config.api}/api/v1/magic-links/inspect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: link.searchParams.get('token') }),
+    })
+    await conform('POST', '/api/v1/magic-links/inspect', inspected.clone())
+    const inspection = await inspected.json()
+    expect(inspection.valid).toBe(true)
+    expect(inspection.flow).toBe(attempt.flow)
+    const code = link.searchParams.get('code')
+    expect(code).toMatch(/^[B-DF-HJ-NP-TV-XZ]{4}-[B-DF-HJ-NP-TV-XZ]{4}$/)
+
+    const wrong = await attempt.browser.fetch(provider.loginFlowUrl(attempt.flow, '/magic-link/code'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'ZZZZ-ZZZZ' }),
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/magic-link/code', wrong.clone())
+    expect(wrong.status).toBe(400)
+    expect((await wrong.json()).code).toBe('invalid_code')
+
+    // Any case, without the hyphen: the same code.
+    const outcome = await provider.continueWithMagicLinkCode(attempt, code!.replace('-', '').toLowerCase())
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('code')
+    if (outcome.kind === 'code') subjects.add(outcome.sub)
+  })
+
   it('answers a registered address exactly like an unknown one', async () => {
     const nobody = `nobody-${randomToken(4)}@example.test`
     const post = (url: string, email: string) =>

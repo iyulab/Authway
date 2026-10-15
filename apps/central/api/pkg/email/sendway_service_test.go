@@ -141,14 +141,14 @@ func TestSendwayEmailService_SendMagicLinkEmail_SubjectVariesByIsNewUser(t *test
 	defer ts.Close()
 	svc := newTestSendwayService(t, ts)
 
-	if err := svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", false); err != nil {
+	if err := svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", "BCDF-GHJK", false); err != nil {
 		t.Fatalf("SendMagicLinkEmail (returning user): %v", err)
 	}
 	if strings.Contains(captured.Subject, "가입") {
 		t.Fatalf("expected a returning-user subject with no signup wording, got %q", captured.Subject)
 	}
 
-	if err := svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", true); err != nil {
+	if err := svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", "BCDF-GHJK", true); err != nil {
 		t.Fatalf("SendMagicLinkEmail (new user): %v", err)
 	}
 	if !strings.Contains(captured.Subject, "가입") {
@@ -178,7 +178,7 @@ func TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType(t *testing.T) {
 			return svc.SendInvitationEmail("user@example.com", "Alice", "Acme", "welcome", "https://app.example.com/invite?token=t")
 		}},
 		{"magic-link", func() error {
-			return svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", false)
+			return svc.SendMagicLinkEmail("user@example.com", "https://app.example.com/magic?token=t", "BCDF-GHJK", false)
 		}},
 	}
 

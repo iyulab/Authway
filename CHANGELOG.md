@@ -24,6 +24,15 @@
   Page (`client_uri`) and Sign-In Start URL (`initiate_login_uri`), and the
   application an invitation is for (the invite dialog's Application choice;
   the account screen's client is not offered).
+- **Sign in with the code from the email on another device.** The sign-in
+  link email also carries a code (`XXXX-XXXX`). Typed into the screen that
+  asked for the email — `POST /api/v1/login-flows/{flow}/magic-link/code`
+  with `{"code"}` — it does what the link does there. The login UI takes it
+  on its "Check your email" screen; a link opened in another browser than the
+  one that asked for it shows its code instead of failing. A code works once
+  and uses its link up; five wrong codes for a sign-in end its codes (the
+  links still work). `POST /api/v1/magic-links/inspect` also answers with the
+  link's `flow`. Migration 041.
 
 ### Changed
 
@@ -35,6 +44,13 @@
   still empty; migration 040 then drops the column.
 - A refusal no longer carries an extension member whose value is an empty
   string (such as `"hint": ""`).
+- **Sign-in link emails are limited per mailbox.** One address gets at most
+  five links in 15 minutes, whoever asks; past that the answer is the same
+  and no email goes out. The limit per network address is now a ceiling of
+  20 in 15 minutes (it was 5, which a few people behind one office address
+  reached together), and a request refused before any email could be sent —
+  a client that does not offer the link, an invalid address — no longer
+  counts against it.
 
 ## [0.16.0] - 2026-10-15
 

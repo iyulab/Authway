@@ -38,6 +38,14 @@ func (f *fakeLinks) VerifyMagicLink(token string) (*passwordless.MagicLink, *use
 	return f.link, f.user, nil
 }
 
+func (f *fakeLinks) VerifyMagicLinkCode(loginFlow, code string) (*passwordless.MagicLink, *user.User, error) {
+	if loginFlow != f.link.LoginFlow || code != "BCDF-GHJK" || f.redeemed {
+		return nil, nil, apierror.NewPublic("this code is not valid; check it, or ask for a new email")
+	}
+	f.redeemed = true
+	return f.link, f.user, nil
+}
+
 func (f *fakeLinks) InspectMagicLink(token string) (*passwordless.MagicLink, error) {
 	if token != "tok" {
 		return nil, errors.New("not found")
@@ -62,6 +70,7 @@ func newMagicLinkTestApp(t *testing.T, allowed []string) (*fiber.App, *fakeLinks
 	app.Post("/login-flows/:flow/magic-link", h.Send)
 	app.Post("/magic-links/inspect", h.Inspect)
 	app.Post("/magic-links/redeem", h.Redeem)
+	app.Post("/login-flows/:flow/magic-link/code", h.RedeemCode)
 	return app, links, cl, acceptCount
 }
 
@@ -96,6 +105,10 @@ func TestMagicLink_InspectDoesNotRedeem_RedeemCompletesTheFlowOnce(t *testing.T)
 	if status != fiber.StatusOK || body["valid"] != true || links.redeemed {
 		t.Fatalf("inspect: status %d body %v redeemed=%v", status, body, links.redeemed)
 	}
+	// The page compares it with the flows this browser started.
+	if body["flow"] != "flow-1=" {
+		t.Errorf("inspect flow = %v, want the link's login flow", body["flow"])
+	}
 
 	status, body = doJSON(t, app, "/magic-links/redeem", `{"token":"tok"}`)
 	if status != fiber.StatusOK || body["next"] != "redirect" || body["redirect_to"] != "https://example.com/callback" {
@@ -108,5 +121,39 @@ func TestMagicLink_InspectDoesNotRedeem_RedeemCompletesTheFlowOnce(t *testing.T)
 	status, body = doJSON(t, app, "/magic-links/redeem", `{"token":"tok"}`)
 	if status != fiber.StatusBadRequest || body["code"] != "invalid_link" {
 		t.Fatalf("second redeem: status %d body %v, want 400 invalid_link", status, body)
+	}
+}
+
+// The code completes the flow it was sent for, once, like the link; a wrong
+// one is refused with invalid_code and does not sign anyone in.
+func TestMagicLink_CodeCompletesItsFlowOnce(t *testing.T) {
+	app, _, _, acceptCount := newMagicLinkTestApp(t, []string{"magic_link"})
+
+	status, body := doJSON(t, app, "/login-flows/flow-1%3D/magic-link/code", `{"code":"BCDF-GHJX"}`)
+	if status != fiber.StatusBadRequest || body["code"] != "invalid_code" {
+		t.Fatalf("wrong code: status %d body %v, want 400 invalid_code", status, body)
+	}
+	status, body = doJSON(t, app, "/login-flows/other-flow/magic-link/code", `{"code":"BCDF-GHJK"}`)
+	if status != fiber.StatusBadRequest || body["code"] != "invalid_code" {
+		t.Fatalf("another flow: status %d body %v, want 400 invalid_code", status, body)
+	}
+	status, body = doJSON(t, app, "/login-flows/flow-1%3D/magic-link/code", `{}`)
+	if status != fiber.StatusBadRequest || body["code"] != "invalid_request" {
+		t.Fatalf("no code: status %d body %v, want 400 invalid_request", status, body)
+	}
+	if *acceptCount != 0 {
+		t.Fatalf("hydra accept called %d times before the right code", *acceptCount)
+	}
+
+	status, body = doJSON(t, app, "/login-flows/flow-1%3D/magic-link/code", `{"code":"BCDF-GHJK"}`)
+	if status != fiber.StatusOK || body["next"] != "redirect" {
+		t.Fatalf("right code: status %d body %v", status, body)
+	}
+	status, body = doJSON(t, app, "/login-flows/flow-1%3D/magic-link/code", `{"code":"BCDF-GHJK"}`)
+	if status != fiber.StatusBadRequest || body["code"] != "invalid_code" {
+		t.Fatalf("second use: status %d body %v, want 400 invalid_code", status, body)
+	}
+	if *acceptCount != 1 {
+		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
 	}
 }

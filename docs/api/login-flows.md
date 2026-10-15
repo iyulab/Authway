@@ -125,18 +125,31 @@ authorization request with an OAuth error.
 
 `{"email": "…"}` → `next: email_sent` — whether or not the address may sign
 in, so the answer reveals nothing about accounts. The email links to
-`<login UI>/magic-link?token=…`. That page should:
+`<login UI>/magic-link?token=…&code=…` and also shows the code. That page
+should:
 
 1. `POST /api/v1/magic-links/inspect` with `{"token": "…"}` — reports
-   `valid` and `email` without using the link up (mail scanners open links
-   too);
+   `valid`, `email` and the `flow` the link signs in to, without using the
+   link up (mail scanners open links too);
 2. on the user's confirmation, `POST /api/v1/magic-links/redeem` with the
    same body → `next: redirect`, or `next: mfa` with `mfa_challenge` and
    `flow` for a user with a second factor. The page has only the token, so it
    takes the flow from the answer.
 
 The link has to be opened in the browser that started the sign-in: the
-authorization server ties the login to that browser.
+authorization server ties the login to that browser. The login UI remembers
+the flows it sent a link for; a link opened anywhere else — the email read on
+a phone — shows its code instead, to type into the screen that started the
+sign-in.
+
+### `POST /api/v1/login-flows/{flow}/magic-link/code`
+
+`{"code": "BCDF-GHJK"}` — the code from the email, typed into the screen that
+asked for it — does what redeeming the link does: `next: redirect`, `mfa` or
+`terms`. Any case, with or without the hyphen. A wrong, used or expired code
+is `400 invalid_code`. A code works once and uses its link up; after five
+wrong codes for a sign-in its codes stop working, while its links still
+work.
 
 ### Terms
 

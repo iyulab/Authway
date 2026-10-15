@@ -36,7 +36,7 @@ func TestBuildersProduceTheDeclaredPaths(t *testing.T) {
 		want string
 	}{
 		{InvitationAccept(front, "abc"), front + "/invitation/accept?token=abc"},
-		{MagicLink(front, "abc"), front + "/magic-link?token=abc"},
+		{MagicLink(front, "abc", "BCDF-GHJK"), front + "/magic-link?token=abc&code=BCDF-GHJK"},
 		{VerifyEmail(front, "abc"), front + "/verify-email?token=abc"},
 		{ResetPassword(front, "abc"), front + "/reset-password?token=abc"},
 	}
@@ -50,7 +50,7 @@ func TestBuildersProduceTheDeclaredPaths(t *testing.T) {
 func TestTokensAreQueryEscaped(t *testing.T) {
 	// Magic-link tokens are base64 and can contain '+' and '=', which change
 	// meaning in a query string if passed through raw.
-	got := MagicLink("https://auth.example.test", "a+b/c=")
+	got := MagicLink("https://auth.example.test", "a+b/c=", "BCDF-GHJK")
 	if strings.Contains(got, "a+b/c=") {
 		t.Errorf("token was not escaped: %s", got)
 	}
