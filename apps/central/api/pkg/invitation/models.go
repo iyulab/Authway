@@ -12,7 +12,6 @@ type InvitationStatus string
 const (
 	StatusPending  InvitationStatus = "pending"
 	StatusAccepted InvitationStatus = "accepted"
-	StatusDeclined InvitationStatus = "declined"
 	StatusExpired  InvitationStatus = "expired"
 	StatusRevoked  InvitationStatus = "revoked"
 )

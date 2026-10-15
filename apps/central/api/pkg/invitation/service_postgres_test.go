@@ -18,7 +18,7 @@ import (
 // stubEmailSender captures the last invitation email instead of delivering
 // it. Migration 020 stopped storing the plaintext token (only its hash is
 // persisted — see Invitation.TokenHash), so a test that needs to call
-// Accept/Decline with the real token can no longer read it back from the
+// Accept with the real token can no longer read it back from the
 // database or the returned struct. The outbound link is the only place the
 // plaintext still appears.
 type stubEmailSender struct {

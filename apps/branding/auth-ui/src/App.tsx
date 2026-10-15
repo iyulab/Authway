@@ -9,7 +9,6 @@ import ResendVerificationPage from './pages/ResendVerificationPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ErrorPage from './pages/ErrorPage'
-import PopupCallbackPage from './pages/PopupCallbackPage'
 import MFAVerifyPage from './pages/MFAVerifyPage'
 import TermsPage from './pages/TermsPage'
 import MagicLinkPage from './pages/MagicLinkPage'
@@ -34,7 +33,6 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/error" element={<ErrorPage />} />
-        <Route path="/popup-callback" element={<PopupCallbackPage />} />
         <Route path="/mfa/verify" element={<MFAVerifyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/magic-link" element={<MagicLinkPage />} />

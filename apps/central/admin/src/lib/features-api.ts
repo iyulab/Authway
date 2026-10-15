@@ -59,7 +59,7 @@ export interface Invitation {
   // Display name derived by the API — 'system' for system-actor invitations.
   inviter_name: string
   tenant_name: string
-  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked'
+  status: 'pending' | 'accepted' | 'expired' | 'revoked'
   // The application the invitation is for, when it names one.
   client?: { client_id: string; name: string; initiate_login_uri?: string; client_uri?: string }
   message?: string

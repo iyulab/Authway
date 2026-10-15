@@ -50,6 +50,14 @@
 - The `/api/v1/docs` endpoints, which listed, served and (with the admin key)
   wrote and deleted files in a `docs` directory beside the running API — one
   no image carries. Nothing used them.
+- `POST /api/v1/invitations/decline` and the `declined` invitation status.
+  No screen offered declining; an invitation nobody accepts expires, and an
+  administrator can revoke it.
+- `GET /oauth/popup-callback` and the sign-in screen's `/popup-callback` page.
+  An application's own page completes a popup sign-in (it imports
+  `@authway/client/popup-callback`); these could not reach a cross-origin
+  opener, and the API's page put the `error` query parameter into a script
+  without escaping `<`.
 
 ### Fixed
 

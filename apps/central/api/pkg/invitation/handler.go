@@ -102,9 +102,9 @@ func (h *Handler) ListInvitations(c *fiber.Ctx) error {
 
 	status := InvitationStatus(c.Query("status"))
 	switch status {
-	case "", StatusPending, StatusAccepted, StatusDeclined, StatusExpired, StatusRevoked:
+	case "", StatusPending, StatusAccepted, StatusExpired, StatusRevoked:
 	default:
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "status must be one of pending, accepted, declined, expired, revoked")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "status must be one of pending, accepted, expired, revoked")
 	}
 	limit := c.QueryInt("limit", 20)
 	switch {
@@ -252,31 +252,6 @@ func (h *Handler) AcceptInvitation(c *fiber.Ctx) error {
 	})
 }
 
-// DeclineInvitation declines an invitation
-// POST /api/v1/invitations/decline
-func (h *Handler) DeclineInvitation(c *fiber.Ctx) error {
-	token := c.Query("token")
-	if token == "" {
-		var body struct {
-			Token string `json:"token"`
-		}
-		if err := c.BodyParser(&body); err == nil {
-			token = body.Token
-		}
-	}
-
-	if token == "" {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "token is required")
-	}
-
-	if err := h.service.Decline(token); err != nil {
-		h.logger.Warn("Failed to decline invitation", zap.Error(err))
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invitation_not_acceptable", apierror.Message(err, "failed to decline invitation"))
-	}
-
-	return c.JSON(fiber.Map{"message": "invitation declined"})
-}
-
 // RevokeInvitation revokes a pending invitation
 // DELETE /api/v1/invitations/:id
 func (h *Handler) RevokeInvitation(c *fiber.Ctx) error {
@@ -336,7 +311,6 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	public := app.Group("/invitations")
 	public.Get("/token/:token", h.GetInvitationByToken)
 	public.Post("/accept", h.AcceptInvitation)
-	public.Post("/decline", h.DeclineInvitation)
 
 	// Admin Console protected endpoints - use adminMiddleware only (validates admin session + tenant context)
 	protected := app.Group("/invitations", adminMiddleware)

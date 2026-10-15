@@ -348,9 +348,6 @@ func main() {
 	app.Get("/logout", flowEntryHandler.Logout)
 	app.Get("/device", flowEntryHandler.Device)
 
-	// Popup callback for popup-based authentication (@authway/client, @authway/react)
-	app.Get("/oauth/popup-callback", authHandler.PopupCallback)
-
 	// Onboarding is invitation-only — public self-registration removed (D-a/B).
 	// Users are created by accepting an invitation (POST
 	// /api/v1/invitations/accept). There is deliberately no admin "create user"

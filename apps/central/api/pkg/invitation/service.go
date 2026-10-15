@@ -59,7 +59,6 @@ type Service interface {
 	// optionally only those in one status, and how many match in total.
 	ListByTenant(tenantID uuid.UUID, status InvitationStatus, limit, offset int) ([]Invitation, int64, error)
 	Accept(token string, userID *uuid.UUID, name, password string) (*user.User, error)
-	Decline(token string) error
 	Revoke(id uuid.UUID) error
 	Resend(id uuid.UUID) error
 	CleanupExpired() (int64, error)
@@ -366,22 +365,6 @@ func (s *service) Accept(token string, userID *uuid.UUID, name, password string)
 	}
 	s.logger.Info("Invitation accepted", zap.String("invitation_id", inv.ID.String()), zap.String("user_id", u.ID.String()))
 	return u, nil
-}
-
-func (s *service) Decline(token string) error {
-	inv, err := s.GetByToken(token)
-	if err != nil {
-		return err
-	}
-	if inv.Status != StatusPending {
-		return apierror.NewPublic(fmt.Sprintf("invitation cannot be declined (status: %s)", inv.Status))
-	}
-	inv.Status = StatusDeclined
-	if err := s.db.Save(inv).Error; err != nil {
-		return fmt.Errorf("failed to decline invitation: %w", err)
-	}
-	s.logger.Info("Invitation declined", zap.String("invitation_id", inv.ID.String()))
-	return nil
 }
 
 func (s *service) Revoke(id uuid.UUID) error {

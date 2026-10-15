@@ -1648,7 +1648,7 @@ paths:
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
-        - { name: status, in: query, required: false, schema: { type: string, enum: [pending, accepted, declined, expired, revoked] } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [pending, accepted, expired, revoked] } }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
@@ -2869,7 +2869,7 @@ components:
         id: { type: string }
         tenant_id: { type: string }
         email: { type: string }
-        status: { type: string, enum: [pending, accepted, declined, expired, revoked] }
+        status: { type: string, enum: [pending, accepted, expired, revoked] }
         message: { type: string }
         inviter_id: { type: ['null', string], description: null when issued with the admin key. }
         inviter_name: { type: string }

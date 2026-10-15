@@ -97,7 +97,7 @@ public sealed record Page<T>(IReadOnlyList<T> Items, int Total, int Limit, int O
 public sealed record InvitationApp(string ClientId, string Name, string? InitiateLoginUri = null, string? ClientUri = null);
 
 /// <summary>An invitation to join a tenant.</summary>
-/// <param name="Status"><c>pending</c>, <c>accepted</c>, <c>declined</c>, <c>expired</c> or <c>revoked</c>.</param>
+/// <param name="Status"><c>pending</c>, <c>accepted</c>, <c>expired</c> or <c>revoked</c>.</param>
 public sealed record Invitation(
     string Id,
     string TenantId,

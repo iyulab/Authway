@@ -228,7 +228,7 @@ public sealed class InvitationsApi
     }
 
     /// <summary>A page of the tenant's invitations, newest first.</summary>
-    /// <param name="status"><c>pending</c>, <c>accepted</c>, <c>declined</c>, <c>expired</c> or <c>revoked</c>; null for all.</param>
+    /// <param name="status"><c>pending</c>, <c>accepted</c>, <c>expired</c> or <c>revoked</c>; null for all.</param>
     public async Task<Page<Invitation>> ListAsync(string? status = null, int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
     {
         var list = await client.SendAsync(HttpMethod.Get,
