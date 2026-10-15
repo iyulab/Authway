@@ -140,15 +140,10 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
-	role := req.Role
-	if role == "" {
-		role = "member"
-	}
 	invitation := &Invitation{
 		TenantID:  tenantID,
 		InviterID: inviterID,
 		Email:     req.Email,
-		Role:      role,
 		TokenHash: tokenhash.Hash(token),
 		Status:    StatusPending,
 		Message:   req.Message,

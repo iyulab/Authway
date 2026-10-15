@@ -53,7 +53,6 @@ export interface Invitation {
   id: string
   tenant_id: string
   email: string
-  role: string
   // null when the invitation was issued by the system actor (admin API key),
   // which has no user behind it.
   inviter_id: string | null
@@ -61,6 +60,8 @@ export interface Invitation {
   inviter_name: string
   tenant_name: string
   status: 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked'
+  // The application the invitation is for, when it names one.
+  client?: { client_id: string; name: string; initiate_login_uri?: string; client_uri?: string }
   message?: string
   expires_at: string
   accepted_at?: string
@@ -150,9 +151,7 @@ export const invitationsApi = {
   // Created in the selected tenant, which the API client sends as X-Tenant-ID.
   create: (data: {
     email: string
-    role?: string
     message?: string
-    expires_in_hours?: number
     // The OAuth client_id of the application the invitation is for: after
     // accepting, the user is sent to its sign-in start URL (or home page).
     client_id?: string

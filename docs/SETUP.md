@@ -43,7 +43,7 @@ API key rather than a signed-in person.
 
 ```bash
 # 1. Issue the invitation (admin API key, no user required)
-curl -X POST http://localhost:8080/api/v1/invitations   -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY"   -H "X-Tenant-ID: <tenant-id>"   -H "Content-Type: application/json"   -d '{"email":"first.user@example.com","role":"member"}'
+curl -X POST http://localhost:8080/api/v1/invitations   -H "Authorization: Bearer $AUTHWAY_ADMIN_API_KEY"   -H "X-Tenant-ID: <tenant-id>"   -H "Content-Type: application/json"   -d '{"email":"first.user@example.com"}'
 # 201 — inviter_id is null and inviter_name reads "system"
 ```
 

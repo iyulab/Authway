@@ -91,3 +91,27 @@ describe('inviting a user to an application', () => {
     expect(screen.getByText(/has no sign-in start URL or home page yet/)).toBeInTheDocument()
   })
 })
+
+describe('the invitation list', () => {
+  it('shows the application each invitation is for, and offers no role', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(invitationsApi, 'list').mockResolvedValue(
+      answer({
+        invitations: [
+          { id: 'i1', tenant_id: 't1', email: 'a@example.com', inviter_id: null, inviter_name: 'system', tenant_name: 'Tenant', status: 'pending', expires_at: '2026-10-22T00:00:00Z', created_at: '2026-10-15T00:00:00Z', client: { client_id: 'notes', name: 'Notes' } },
+        ],
+        total: 1,
+        limit: 10,
+        offset: 0,
+      }),
+    )
+    render(<InvitationsPage />)
+    expect(await screen.findByText('a@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Application' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Notes' })).toBeInTheDocument()
+
+    await openDialog(user)
+    expect(screen.queryByText('Role')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Expires In/)).not.toBeInTheDocument()
+  })
+})

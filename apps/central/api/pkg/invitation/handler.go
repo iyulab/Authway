@@ -197,7 +197,6 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 			TenantName:  invitation.TenantName,
 			InviterName: invitation.InviterName,
 			Email:       invitation.Email,
-			Role:        invitation.Role,
 			Message:     invitation.Message,
 			ExpiresAt:   invitation.ExpiresAt,
 			Client:      invitation.App,

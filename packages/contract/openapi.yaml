@@ -1541,7 +1541,6 @@ paths:
               required: [email]
               properties:
                 email: { type: string }
-                role: { type: string }
                 message: { type: string }
                 client_id:
                   description: |
@@ -2676,7 +2675,6 @@ components:
         email: { type: string }
         tenant_name: { type: string }
         inviter_name: { type: string }
-        role: { type: string }
         message: { type: string }
         expires_at: { type: string }
         client:
@@ -2704,7 +2702,6 @@ components:
         id: { type: string }
         tenant_id: { type: string }
         email: { type: string }
-        role: { type: string }
         status: { type: string, enum: [pending, accepted, declined, expired, revoked] }
         message: { type: string }
         inviter_id: { type: ['null', string], description: null when issued with the admin key. }

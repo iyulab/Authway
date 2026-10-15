@@ -36,7 +36,11 @@ type Invitation struct {
 	// invitations rather than destroying them.
 	InviterID *uuid.UUID `json:"inviter_id" gorm:"type:uuid"`
 	Email     string     `json:"email" gorm:"size:255;not null;index"`
-	Role      string     `json:"role" gorm:"size:50;default:member"`
+	// Role decided nothing: it was kept and returned, and no code read it —
+	// an invitation gives no role or permission. It stays mapped, read-only,
+	// until a migration drops the column.
+	// TODO: drop invitations.role, then this field.
+	Role string `json:"-" gorm:"->;column:role"`
 	// TokenHash is the SHA-256 hex digest of the invitation token. The
 	// plaintext never touches the database — an invitation token grants
 	// account-creation capability on its own, so a DB read must not yield a
@@ -73,7 +77,6 @@ func (i *Invitation) CanBeAccepted() bool {
 // CreateInvitationRequest represents the request to create an invitation
 type CreateInvitationRequest struct {
 	Email   string `json:"email" validate:"required,email"`
-	Role    string `json:"role"`
 	Message string `json:"message"`
 	// ClientID optionally names the application the invitation is for, by
 	// its OAuth client_id — one of the tenant's clients.
@@ -103,7 +106,6 @@ type InvitationResponse struct {
 	TenantName  string    `json:"tenant_name"`
 	InviterName string    `json:"inviter_name"`
 	Email       string    `json:"email"`
-	Role        string    `json:"role"`
 	Message     string    `json:"message"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	// Client is the application the invitation is for, when it names one.

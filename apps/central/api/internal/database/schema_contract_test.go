@@ -114,7 +114,7 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		table string
 	}{
 		{"invitation", &invitation.Invitation{
-			TenantID: tenantID, Email: "c@example.com", Role: "member",
+			TenantID: tenantID, Email: "c@example.com",
 			TokenHash: tokenhash.Hash(uuid.New().String()), Status: invitation.StatusPending, ExpiresAt: future,
 		}, "invitations"},
 		{"magic_link", &passwordless.MagicLink{

@@ -2,6 +2,13 @@
 
 ### Changed
 
+- **An invitation has no `role`.** It was kept and returned, and nothing read
+  it — an invitation gives no role or permission (the application decides
+  those). It is no longer accepted, stored or returned; one sent is ignored.
+  The admin console no longer offers a role, nor an expiry it did not apply
+  (an invitation is valid for 7 days), and its invitation list shows the
+  application each invitation is for. The column stays until a later
+  migration drops it.
 - **Service credential refusals name their reason.** `POST
   /api/v1/tenants/{id}/service-clients` answers `404 not_found` for a tenant
   that does not exist or is inactive (a scope a service credential may not

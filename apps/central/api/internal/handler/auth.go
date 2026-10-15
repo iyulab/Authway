@@ -675,7 +675,7 @@ func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
 		// change it, or to set one.
 		"has_password": user.PasswordHash != "",
 		"created_at":   user.CreatedAt,
-		"updated_at":     user.UpdatedAt,
+		"updated_at":   user.UpdatedAt,
 	})
 }
 

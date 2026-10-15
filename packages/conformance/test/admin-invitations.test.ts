@@ -15,13 +15,15 @@ describe('admin API: managing invitations', () => {
   let invitation: Invitation
 
   const invite = () =>
-    provider.admin('/api/v1/invitations', { method: 'POST', body: JSON.stringify({ email, role: 'member' }) })
+    // A role is not something an invitation gives: one sent is not kept.
+    provider.admin('/api/v1/invitations', { method: 'POST', body: JSON.stringify({ email, role: 'admin' }) })
 
   it('creates an invitation, refusing a second pending one for the same address', async () => {
     const res = await invite()
     await conform('POST', '/api/v1/invitations', res)
     expect(res.status).toBe(201)
     invitation = ((await res.json()) as { invitation: Invitation }).invitation
+    expect(invitation).not.toHaveProperty('role')
 
     const again = await invite()
     await conform('POST', '/api/v1/invitations', again)

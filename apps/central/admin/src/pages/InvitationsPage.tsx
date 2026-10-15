@@ -25,18 +25,14 @@ import { useTenantStore } from '@/stores/tenant'
 
 interface InvitationFormData {
   email: string
-  role: string
   message: string
-  expires_in_hours: number
   // '' = no particular application.
   client_id: string
 }
 
 const emptyForm: InvitationFormData = {
   email: '',
-  role: 'user',
   message: '',
-  expires_in_hours: 72,
   client_id: '',
 }
 
@@ -235,7 +231,7 @@ const InvitationsPage: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Application</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invited By</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
@@ -260,8 +256,8 @@ const InvitationsPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{invitation.email}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant="info">{invitation.role}</Badge>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {invitation.client?.name ?? '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(invitation.status)}
@@ -340,19 +336,6 @@ const InvitationsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Role</label>
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
-
-          <div>
             <label htmlFor="invitation-application" className="block text-sm font-medium text-gray-700">
               Application (optional)
             </label>
@@ -387,16 +370,7 @@ const InvitationsPage: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Expires In (hours)</label>
-            <Input
-              type="number"
-              min={1}
-              max={168}
-              value={formData.expires_in_hours}
-              onChange={(e) => setFormData({ ...formData, expires_in_hours: parseInt(e.target.value) })}
-            />
-          </div>
+          <p className="text-xs text-gray-500">The invitation is valid for 7 days. It gives no role or permission — the application decides those.</p>
 
           <div className="flex justify-end space-x-3 pt-4">
             <Button
