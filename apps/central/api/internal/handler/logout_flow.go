@@ -55,9 +55,7 @@ func (h *LogoutFlowHandler) CompleteLogout(c *fiber.Ctx) error {
 	// must not strand the user on the logout screen (POST /api/v1/logout,
 	// whose whole purpose is revocation, does fail on it).
 	if logoutReq.Subject != "" {
-		if err := h.hydra.RevokeUserSessions(logoutReq.Subject); err != nil {
-			h.logger.Error("Failed to revoke user sessions during logout", zap.String("subject", logoutReq.Subject), zap.Error(err))
-		}
+		logBestEffortRevocation(h.logger, "Signing out through the logout screen", logoutReq.Subject, h.hydra.RevokeUserSessions(logoutReq.Subject))
 		// The user signed out the way most do — through the screen — and
 		// that is the same event as the sign-out API's.
 		if h.signOuts != nil {

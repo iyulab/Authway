@@ -346,17 +346,9 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 		h.logger.Error("Failed to mark reset as used", zap.Error(err))
 	}
 
-	// Invalidate all user sessions for security
-	if err := h.hydraClient.RevokeUserSessions(reset.UserID.String()); err != nil {
-		h.logger.Error("Failed to revoke user sessions after password reset",
-			zap.String("user_id", reset.UserID.String()),
-			zap.Error(err))
-		// Don't fail the request even if session revocation fails
-		// The password has already been reset successfully
-	} else {
-		h.logger.Info("Successfully revoked all user sessions after password reset",
-			zap.String("user_id", reset.UserID.String()))
-	}
+	// End the account's sessions: whoever held them may not know the new
+	// password. The password is reset either way.
+	logBestEffortRevocation(h.logger, "Resetting a password", reset.UserID.String(), h.hydraClient.RevokeUserSessions(reset.UserID.String()))
 
 	return c.JSON(fiber.Map{
 		"message": "Password reset successfully",

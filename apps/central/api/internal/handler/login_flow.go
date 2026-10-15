@@ -141,9 +141,7 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 	clearSession := func(reason string) (fiber.Map, bool, error) {
 		h.logger.Warn("Clearing a session that no longer maps to a user",
 			zap.String("subject", loginReq.Subject), zap.String("reason", reason))
-		if err := h.hydraClient.RevokeUserSessions(loginReq.Subject); err != nil {
-			h.logger.Error("Failed to revoke user sessions", zap.Error(err))
-		}
+		logBestEffortRevocation(h.logger, "Clearing a session with no user", loginReq.Subject, h.hydraClient.RevokeUserSessions(loginReq.Subject))
 		// login_required restarts the flow with a form instead of surfacing an
 		// error to the OAuth client.
 		resp, err := h.hydraClient.RejectLoginRequest(flow, "login_required", "Please login again")
