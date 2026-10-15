@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -80,6 +81,13 @@ func TestCreateUser_TenantScopedUniqueness(t *testing.T) {
 		t.Fatalf("expected the same email to be creatable in a different tenant, got: %v", err)
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u2.ID) })
+
+	// provider decides nothing: a write must not name the column a later
+	// migration drops, or the drop breaks the application still running.
+	stmt := db.Session(&gorm.Session{DryRun: true}).Create(&User{ID: uuid.New(), TenantID: tnA.ID, Email: "x@example.com"}).Statement
+	if sql := stmt.SQL.String(); strings.Contains(sql, `"provider"`) {
+		t.Errorf("a user write names the retired provider column: %s", sql)
+	}
 }
 
 // TestGetByEmailAndTenant_ScopesCorrectly is the direct regression guard for

@@ -18,7 +18,11 @@ type User struct {
 	AvatarURL     *string   `json:"avatar_url"`
 	EmailVerified bool      `json:"email_verified" gorm:"default:false"`
 	Active        bool      `json:"active"`
-	Provider      string    `json:"provider" gorm:"default:local"` // local, google, github, microsoft, apple
+	// Provider decided nothing: every account held "local" (nothing set it)
+	// and the sign-in providers an account uses are its links below. It stays
+	// mapped, read-only, until a migration drops the column.
+	// TODO: drop users.provider, then this field.
+	Provider string `json:"-" gorm:"->;column:provider"`
 	// The account at each sign-in provider this account signs in with. Within
 	// a tenant a provider account belongs to one account that is not deleted
 	// (unique indexes uq_users_tenant_<provider>_id).

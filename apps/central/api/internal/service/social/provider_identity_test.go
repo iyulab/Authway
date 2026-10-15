@@ -137,7 +137,7 @@ func (f *fakeAccounts) LinkProvider(id uuid.UUID, provider, subject string) erro
 func newFakeAccounts() *fakeAccounts { return &fakeAccounts{} }
 
 func (f *fakeAccounts) add(tenantID uuid.UUID, email string) *user.User {
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: email, Provider: "local"}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: email}
 	f.users = append(f.users, u)
 	return u
 }
