@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+### Added
+
+- **The account screen's entry** — `GET /api/v1/account-entry?client_id=<an
+  application's client_id>` (public) answers with the client the account
+  screen signs a user in with and the application to go back to
+  (`app.name`, `app.client_uri`). Each tenant gets that client the first time
+  one of its users arrives: public (PKCE), no consent screen, owned by
+  Authway. The administration API lists it with `system: true` and refuses to
+  change, delete or re-key it (`409 system_client`); deleting the tenant
+  removes it, from the authorization server too, and it no longer counts as
+  one of the tenant's clients. Migration 038.
+
 ## [0.16.0] - 2026-10-15
 
 > Minor, with two breaking changes for API consumers, both moving to the

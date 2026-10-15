@@ -2,6 +2,7 @@ package handler
 
 import (
 	"authway/apps/central/api/pkg/tenantscope"
+	"errors"
 	"strconv"
 
 	"authway/apps/central/api/internal/config"
@@ -254,6 +255,9 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 	beforeClient, _ := h.services.ClientService.GetByID(id)
 
 	updatedClient, syncStatus, err := h.services.ClientService.Update(id, &req)
+	if errors.Is(err, client.ErrSystemClient) {
+		return refuseSystemClient(c)
+	}
 	if err != nil {
 		if cerr, ok := err.(*client.ConfigError); ok {
 			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
@@ -316,6 +320,9 @@ func (h *ClientHandler) Delete(c *fiber.Ctx) error {
 	beforeClient, _ := h.services.ClientService.GetByID(id)
 
 	syncStatus, err := h.services.ClientService.Delete(id)
+	if errors.Is(err, client.ErrSystemClient) {
+		return refuseSystemClient(c)
+	}
 	if err != nil {
 		h.logger.Error("Failed to delete client", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
@@ -354,6 +361,9 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 	beforeClient, _ := h.services.ClientService.GetByID(id)
 
 	credentials, syncStatus, err := h.services.ClientService.RegenerateSecret(id)
+	if errors.Is(err, client.ErrSystemClient) {
+		return refuseSystemClient(c)
+	}
 	if err != nil {
 		if cerr, ok := err.(*client.ConfigError); ok {
 			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
@@ -586,4 +596,11 @@ func (h *ClientHandler) GetPublicConfig(c *fiber.Ctx) error {
 		"scopes":        []string{"openid", "profile", "email"}, // Default scopes
 		"tenant_id":     foundClient.TenantID,
 	})
+}
+
+// refuseSystemClient answers a change to an application Authway owns — the
+// account screen's client.
+func refuseSystemClient(c *fiber.Ctx) error {
+	return apierror.RefuseWith(c, fiber.StatusConflict, "system_client", "This application is part of Authway and cannot be changed or deleted.",
+		fiber.Map{"hint": "It is the tenant's account screen client; it goes away with the tenant."})
 }

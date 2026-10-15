@@ -187,7 +187,9 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 
 	// Check if tenant has active (non-deleted) clients
 	var clientCount int64
-	if err := s.db.Table("clients").Where("tenant_id = ? AND deleted_at IS NULL", id).Count(&clientCount).Error; err != nil {
+	// Clients Authway registered itself (the account screen's) do not count:
+	// they go with the tenant (Handler.OnDeleted).
+	if err := s.db.Table("clients").Where("tenant_id = ? AND deleted_at IS NULL AND NOT is_system", id).Count(&clientCount).Error; err != nil {
 		return fmt.Errorf("failed to check client count: %w", err)
 	}
 	if clientCount > 0 {

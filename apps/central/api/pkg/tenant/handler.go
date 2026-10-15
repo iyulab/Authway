@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"errors"
+	"go.uber.org/zap"
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
@@ -15,6 +16,13 @@ type Handler struct {
 	service      *Service
 	validate     *validator.Validate
 	auditService audit.Service
+	onDeleted    []func(uuid.UUID) error
+}
+
+// OnDeleted runs f after a tenant is deleted — for what goes with it that this
+// package does not own, such as the clients Authway registered for it.
+func (h *Handler) OnDeleted(f func(tenantID uuid.UUID) error) {
+	h.onDeleted = append(h.onDeleted, f)
 }
 
 // NewHandler creates a new tenant handler. auditService may be nil — the
@@ -208,6 +216,15 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 			return apierror.Refuse(c, fiber.StatusConflict, "tenant_has_service_clients", "Cannot delete tenant with active service clients")
 		}
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to delete tenant")
+	}
+
+	for _, f := range h.onDeleted {
+		if err := f(id); err != nil {
+			// The tenant is gone either way; what stayed behind is logged to clear.
+			if logger, ok := c.Locals("logger").(*zap.Logger); ok {
+				logger.Error("Something of a deleted tenant was not removed", zap.String("tenant_id", id.String()), zap.Error(err))
+			}
+		}
 	}
 
 	if beforeTenant != nil {

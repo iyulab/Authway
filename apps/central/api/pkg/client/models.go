@@ -31,6 +31,10 @@ type Client struct {
 	Scopes           pq.StringArray `json:"scopes" gorm:"type:text[]"`
 	Public           bool           `json:"public" gorm:"default:false"`
 	Active           bool           `json:"active"`
+	// System marks an application Authway itself owns — the account screen's
+	// client, one per tenant (see EnsureAccountClient). The administration API
+	// refuses to change or delete it.
+	System bool `json:"-" gorm:"column:is_system;not null;default:false"`
 
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`
@@ -127,6 +131,7 @@ func (c *Client) BeforeCreate(tx *gorm.DB) error {
 
 // PublicClient returns client data safe for public consumption
 type PublicClient struct {
+	System       bool      `json:"system"`
 	ID           uuid.UUID `json:"id"`
 	TenantID     uuid.UUID `json:"tenant_id"`
 	ClientID     string    `json:"client_id"`
@@ -218,6 +223,7 @@ func (c *Client) AllowsSignInMethod(method string) bool {
 
 func (c *Client) ToPublic() PublicClient {
 	return PublicClient{
+		System:       c.System,
 		ID:           c.ID,
 		TenantID:     c.TenantID,
 		ClientID:     c.ClientID,
@@ -275,6 +281,10 @@ func (c *Client) ToPublic() PublicClient {
 
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
+	// System is set only by Authway itself (EnsureAccountClient); a request
+	// body cannot carry it.
+	System bool `json:"-"`
+
 	TenantID string `json:"tenant_id" validate:"required,uuid"` // Required
 	Name     string `json:"name" validate:"required"`
 	Public   bool   `json:"public"` // true: Public client (SPA, Mobile), false: Confidential client (Backend)

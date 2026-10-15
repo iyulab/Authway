@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -188,6 +189,10 @@ func (f *fakeClientService) RegenerateSecret(uuid.UUID) (*client.ClientCredentia
 	return nil, client.SyncStatus{}, fmt.Errorf("not implemented")
 }
 func (f *fakeClientService) SyncAllClientsToHydra() (int, int, error) { return 0, 0, nil }
+func (f *fakeClientService) EnsureAccountClient(uuid.UUID, string) (*client.Client, error) {
+	return nil, errors.New("not used")
+}
+func (f *fakeClientService) DeleteSystemClients(uuid.UUID) error { return nil }
 
 // fakeClaimsService is a claims.Service nothing in the login path calls.
 type fakeClaimsService struct{}

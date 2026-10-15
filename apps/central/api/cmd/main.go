@@ -378,6 +378,7 @@ func main() {
 
 	// What this deployment offers, so screens show only what works.
 	v1.Get("/capabilities", handler.NewCapabilitiesHandler(socialHandler).Get)
+	v1.Get("/account-entry", handler.NewAccountEntryHandler(clientService, cfg.App.FrontendURL, zapLogger).Get)
 
 	// A resource server asks whether a token is still good (RFC 7662). The
 	// caller is a confidential client, not a user and not an administrator.
@@ -503,6 +504,7 @@ func main() {
 
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
+	tenantHandler.OnDeleted(clientService.DeleteSystemClients)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 
 	// Service client provisioning — admin-only, since

@@ -34,6 +34,12 @@ type Service interface {
 	ValidateClient(clientID, clientSecret string) (*Client, error)
 	RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus, error)
 	SyncAllClientsToHydra() (int, int, error) // returns (synced, failed, error)
+	// EnsureAccountClient returns the tenant's account screen client,
+	// registering it the first time (see system.go).
+	EnsureAccountClient(tenantID uuid.UUID, loginUI string) (*Client, error)
+	// DeleteSystemClients removes the clients Authway registered for a
+	// tenant, when the tenant is deleted.
+	DeleteSystemClients(tenantID uuid.UUID) error
 }
 
 type service struct {
@@ -265,6 +271,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		Scopes:       req.Scopes,
 		Public:       req.Public,
 		Active:       true,
+		System:       req.System,
 	}
 
 	// Set Google OAuth if provided
@@ -464,6 +471,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 			return nil, SyncStatus{}, apierror.NewPublic("client not found")
 		}
 		return nil, SyncStatus{}, fmt.Errorf("failed to get client: %w", err)
+	}
+	if client.System {
+		return nil, SyncStatus{}, ErrSystemClient
 	}
 
 	// Validate the *resulting* configuration after the patch is applied.
@@ -731,7 +741,16 @@ func (s *service) Delete(id uuid.UUID) (SyncStatus, error) {
 	if err != nil {
 		return SyncStatus{}, err
 	}
+	if client.System {
+		return SyncStatus{}, ErrSystemClient
+	}
+	return s.delete(client)
+}
 
+// delete removes a client from the authorization server, then from the
+// database.
+func (s *service) delete(client *Client) (SyncStatus, error) {
+	id := client.ID
 	// Delete from Hydra first
 	syncStatus := SyncStatus{State: SyncStateOK}
 	if err := s.hydraClient.DeleteOAuth2Client(client.ClientID); err != nil {
@@ -802,6 +821,9 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	client, err := s.GetByID(id)
 	if err != nil {
 		return nil, SyncStatus{}, err
+	}
+	if client.System {
+		return nil, SyncStatus{}, ErrSystemClient
 	}
 	if client.Public {
 		return nil, SyncStatus{}, &ConfigError{

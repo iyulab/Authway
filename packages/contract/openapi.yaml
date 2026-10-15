@@ -52,6 +52,56 @@ paths:
                   auth_ui: { type: string, description: The login UI's public address; emailed links point at it. }
                   version: { type: string }
 
+  /api/v1/account-entry:
+    get:
+      tags: [account]
+      operationId: getAccountEntry
+      summary: How the account screen signs a user in
+      description: |
+        An application links a user to the account screen
+        (`{login UI}/account?client_id=<its client_id>`), where the user turns a
+        second factor on or off and renews recovery codes. The screen asks this
+        first: the tenant's account screen client — registered the first time
+        a user of the tenant gets here — to sign the user in with (PKCE, no
+        consent screen), and the application to go back to. Public: nothing in
+        the answer is secret.
+      security: []
+      parameters:
+        - { name: client_id, in: query, required: true, description: The OAuth client_id of the application that linked here., schema: { type: string } }
+      responses:
+        '200':
+          description: The account screen's client and the application
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, redirect_uri, scope, app]
+                properties:
+                  client_id: { type: string, description: The tenant's account screen client. }
+                  redirect_uri: { type: string, description: 'Where its sign-in comes back: {login UI}/account/callback.' }
+                  scope: { type: string }
+                  app:
+                    type: object
+                    required: [name]
+                    properties:
+                      name: { type: string }
+                      client_uri: { type: string, description: Where the user goes back to; empty when the application registered none. }
+        '400':
+          description: No client_id (code invalid_request)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: No such application (code unknown_client)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: The account screen client could not be registered (code account_unavailable)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /api/v1/capabilities:
     get:
       operationId: getCapabilities
@@ -1170,6 +1220,11 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: The application is part of Authway — the tenant's account screen client (code system_client)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
     delete:
       tags: [admin]
@@ -1182,6 +1237,11 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: The application is part of Authway — the tenant's account screen client (code system_client)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
 
   /api/v1/clients/{id}/regenerate-secret:
@@ -1216,6 +1276,11 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: The application is part of Authway — the tenant's account screen client (code system_client)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
 
   /api/v1/invitations:
@@ -2760,8 +2825,14 @@ components:
 
     Client:
       type: object
-      required: [id, tenant_id, client_id, name, public, grant_types, scopes, token_endpoint_auth_method]
+      required: [id, tenant_id, client_id, name, public, grant_types, scopes, token_endpoint_auth_method, system]
       properties:
+        system:
+          type: boolean
+          description: |
+            Part of Authway: the tenant's account screen client, registered the
+            first time a user of the tenant opens that screen. It cannot be
+            changed or deleted (code system_client); it goes with the tenant.
         id: { type: string, description: Authway's id for the registration (admin API paths). }
         tenant_id: { type: string }
         client_id: { type: string, description: The OAuth client_id. }
@@ -2927,7 +2998,8 @@ components:
             tenant_has_clients, tenant_has_service_clients, tenant_required,
             user_already_member, invitation_already_pending,
             invitation_not_pending, email_domain_not_allowed,
-            password_too_short, password_too_long,
+            password_too_short, password_too_long, system_client,
+            unknown_client, account_unavailable,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.
         field: { type: string, description: The request member at fault, when there is one. }
