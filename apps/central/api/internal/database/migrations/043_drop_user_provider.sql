@@ -1,0 +1,25 @@
+-- ============================================================
+-- Migration 043: Drop users.provider
+-- ============================================================
+-- Every account held 'local' here: nothing ever set it, and the sign-in
+-- providers an account uses are its links (google_id, github_id,
+-- microsoft_id, apple_id). The administration API stopped returning it, and
+-- the previous deployment stopped writing it and only kept it mapped,
+-- read-only, until this migration.
+--
+-- What it deletes: on every deployment checked before this migration was
+-- applied, every row held 'local'. Check yours first if it may differ:
+--   SELECT provider, count(*) FROM users GROUP BY 1;
+--
+-- Destructive, so it ships in a deployment of its own, after the application
+-- that stopped writing the column.
+--
+-- There are no down migrations. To have the column back as it was defined
+-- (the values are gone):
+--   ALTER TABLE users ADD COLUMN provider VARCHAR(50) DEFAULT 'local';
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction.
+-- ============================================================
+
+ALTER TABLE users DROP COLUMN IF EXISTS provider;

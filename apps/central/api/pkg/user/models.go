@@ -20,11 +20,6 @@ type User struct {
 	// Active is false while an administrator has suspended the account: it
 	// cannot sign in (see the sign-in steps) and its sessions were ended.
 	Active bool `json:"active"`
-	// Provider decided nothing: every account held "local" (nothing set it)
-	// and the sign-in providers an account uses are its links below. It stays
-	// mapped, read-only, until a migration drops the column.
-	// TODO: drop users.provider, then this field.
-	Provider string `json:"-" gorm:"->;column:provider"`
 	// The account at each sign-in provider this account signs in with. Within
 	// a tenant a provider account belongs to one account that is not deleted
 	// (unique indexes uq_users_tenant_<provider>_id).

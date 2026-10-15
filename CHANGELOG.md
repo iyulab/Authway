@@ -5,7 +5,7 @@
 - **A user in the administration API names their connections instead of a
   provider.** `connections` lists the sign-in providers the account is linked
   to; `provider` is gone — it said `local` for every account, since nothing
-  ever set it. Updating a user (`PUT /api/v1/users/{id}`) now clears a field
+  ever set it. Migration 043 drops the column. Updating a user (`PUT /api/v1/users/{id}`) now clears a field
   sent empty (a picture could not be removed); a field left out stays.
 - **An invitation has no `role`.** It was kept and returned, and nothing read
   it — an invitation gives no role or permission (the application decides
