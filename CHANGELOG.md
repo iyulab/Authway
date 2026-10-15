@@ -32,6 +32,15 @@
 
 ### Added
 
+- **Refusals of an invitation, a webhook or a tenant's settings name the
+  member at fault** in `field`, as refusals of a client's settings did:
+  `email` or `client_id` for an invitation, `name`, `url`, `events`,
+  `retry_count` or `timeout_secs` for a webhook. A member inside an object is
+  named by its path (`settings.allowed_domains`) — it was named by its own
+  name alone — and a list by its name, not an element's index. The admin
+  console shows each refusal at its field in these forms. An invitation's
+  `email` must now be an address (`400 invalid_request`, `field: email`); it
+  was only required to be present.
 - **Suspending a user.** `PUT /api/v1/users/{id}` takes `active`: `false`
   ends the user's sessions (refresh tokens stop working, applications
   registered for back-channel logout are told) and refuses their sign-in with

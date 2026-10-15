@@ -25,7 +25,9 @@ Content-Type: application/problem+json
 | `code` | A stable identifier to branch on — the contract lists them ([`openapi.yaml`](../../packages/contract/openapi.yaml), schema `Error`) |
 
 Some refusals carry further members, named where they occur: `field` (the
-request member at fault), `hint` (what to do about it), `retry_after`
+request member at fault — a member inside an object by its path, such as
+`settings.allowed_domains`, and a list by its own name, not an element's
+index), `hint` (what to do about it), `retry_after`
 (seconds), `max_age`, `min_length`, `terms`, `sync_status`. A `401` carries
 `WWW-Authenticate`; a `429` carries `Retry-After`.
 

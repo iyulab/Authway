@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -68,12 +69,12 @@ const jwksHint = "Register the public half of the key the client signs its asser
 // validateAuthentication checks how a client is to authenticate at the token
 // endpoint against what kind of client it is, and returns the key set as it
 // will be stored. method is "" when the caller named none.
-func (s *service) validateAuthentication(public bool, method string, jwks json.RawMessage, jwksURI string) (string, *ConfigError) {
-	refuseMethod := func(message, hint string) *ConfigError {
-		return &ConfigError{Code: "invalid_token_endpoint_auth_method", Field: "token_endpoint_auth_method", Message: message, Hint: hint}
+func (s *service) validateAuthentication(public bool, method string, jwks json.RawMessage, jwksURI string) (string, *apierror.Refusal) {
+	refuseMethod := func(message, hint string) *apierror.Refusal {
+		return &apierror.Refusal{Code: "invalid_token_endpoint_auth_method", Field: "token_endpoint_auth_method", Message: message, Hint: hint}
 	}
-	refuseKeys := func(message string) *ConfigError {
-		return &ConfigError{Code: "invalid_jwks", Field: "jwks", Message: message, Hint: jwksHint}
+	refuseKeys := func(message string) *apierror.Refusal {
+		return &apierror.Refusal{Code: "invalid_jwks", Field: "jwks", Message: message, Hint: jwksHint}
 	}
 	hasKeys := len(bytes.TrimSpace(jwks)) > 0 && !bytes.Equal(bytes.TrimSpace(jwks), []byte("null"))
 
@@ -146,9 +147,9 @@ func (s *service) validateAuthentication(public bool, method string, jwks json.R
 // validateJWKSURI checks the address the authorization server fetches a
 // client's keys from. The server calls it from inside its own network, so it
 // is held to what a logout address is held to: a public https address.
-func (s *service) validateJWKSURI(uri string) *ConfigError {
-	refuse := func(message string) *ConfigError {
-		return &ConfigError{
+func (s *service) validateJWKSURI(uri string) *apierror.Refusal {
+	refuse := func(message string) *apierror.Refusal {
+		return &apierror.Refusal{
 			Code: "invalid_jwks_uri", Field: "jwks_uri", Message: message,
 			Hint: "Give the public https URL the client's key set is served at, e.g. https://app.example.com/.well-known/jwks.json.",
 		}

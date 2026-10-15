@@ -149,28 +149,33 @@ func TestCreateAndUpdate_RefuseInvalidValues(t *testing.T) {
 	valid := func() CreateWebhookRequest {
 		return CreateWebhookRequest{Name: "valid", URL: "https://example.com/hook", Events: []string{"user.created"}}
 	}
-	bad := map[string]func(*CreateWebhookRequest){
-		"blank name":       func(r *CreateWebhookRequest) { r.Name = " " },
-		"relative url":     func(r *CreateWebhookRequest) { r.URL = "/hook" },
-		"non-http url":     func(r *CreateWebhookRequest) { r.URL = "ftp://example.com/hook" },
-		"no events":        func(r *CreateWebhookRequest) { r.Events = nil },
-		"unknown event":    func(r *CreateWebhookRequest) { r.Events = []string{"user.exploded"} },
-		"negative retries": func(r *CreateWebhookRequest) { r.RetryCount = intp(-1) },
-		"too many retries": func(r *CreateWebhookRequest) { r.RetryCount = intp(MaxRetryCount + 1) },
-		"zero timeout":     func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(0) },
-		"long timeout":     func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(MaxTimeoutSecs + 1) },
+	// Each refusal names the member at fault, so a form can show it there.
+	bad := map[string]struct {
+		mutate func(*CreateWebhookRequest)
+		field  string
+	}{
+		"blank name":       {func(r *CreateWebhookRequest) { r.Name = " " }, "name"},
+		"relative url":     {func(r *CreateWebhookRequest) { r.URL = "/hook" }, "url"},
+		"non-http url":     {func(r *CreateWebhookRequest) { r.URL = "ftp://example.com/hook" }, "url"},
+		"no events":        {func(r *CreateWebhookRequest) { r.Events = nil }, "events"},
+		"unknown event":    {func(r *CreateWebhookRequest) { r.Events = []string{"user.exploded"} }, "events"},
+		"negative retries": {func(r *CreateWebhookRequest) { r.RetryCount = intp(-1) }, "retry_count"},
+		"too many retries": {func(r *CreateWebhookRequest) { r.RetryCount = intp(MaxRetryCount + 1) }, "retry_count"},
+		"zero timeout":     {func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(0) }, "timeout_secs"},
+		"long timeout":     {func(r *CreateWebhookRequest) { r.TimeoutSecs = intp(MaxTimeoutSecs + 1) }, "timeout_secs"},
 	}
-	for name, mutate := range bad {
+	for name, tc := range bad {
 		t.Run("create/"+name, func(t *testing.T) {
 			req := valid()
-			mutate(&req)
+			tc.mutate(&req)
 			wh, err := svc.Create(tenantID, &req)
 			if err == nil {
 				cleanupWebhook(t, db, wh.ID)
 				t.Fatal("expected a refusal")
 			}
-			if apierror.Message(err, "") == "" {
-				t.Fatalf("expected a refusal worded for the caller, got %v", err)
+			var refusal *apierror.Refusal
+			if !errors.As(err, &refusal) || refusal.Message == "" || refusal.Field != tc.field {
+				t.Fatalf("expected a refusal worded for the caller naming %s, got %#v", tc.field, err)
 			}
 		})
 	}

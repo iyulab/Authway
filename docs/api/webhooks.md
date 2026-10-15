@@ -31,8 +31,8 @@ Content-Type: application/json
 | `retry_count` | `3` | `0`–`10` — attempts after the first |
 | `timeout_secs` | `30` | `1`–`60` — how long each attempt waits for an answer |
 
-A value outside its range is refused with `400 invalid_request`; nothing is
-silently replaced.
+A value outside its range is refused with `400 invalid_request`, naming the
+member in `field`; nothing is silently replaced.
 
 Deliveries go to public addresses only: a URL naming `localhost` or a
 loopback, private, link-local, shared or reserved address is refused, and a hostname

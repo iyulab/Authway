@@ -114,6 +114,35 @@ func TestInvalid_NamesTheMemberNotTheGoField(t *testing.T) {
 	}
 }
 
+// A member inside an object is named by its path; a bad element of a list
+// names the list.
+func TestInvalid_NamesANestedMemberByItsPath(t *testing.T) {
+	type settings struct {
+		AllowedDomains []string `validate:"omitempty,dive,fqdn"`
+	}
+	type request struct {
+		Settings *settings
+	}
+	err := validator.New().Struct(request{Settings: &settings{AllowedDomains: []string{"example.com", "not a domain"}}})
+	_, _, body := answer(t, func(c *fiber.Ctx) error { return Invalid(c, err) })
+	if body["field"] != "settings.allowed_domains" {
+		t.Fatalf("field = %v, want settings.allowed_domains (%v)", body["field"], body)
+	}
+}
+
+// A refusal a service returns carries its member and hint to the response.
+func TestWrite_CarriesFieldAndHint(t *testing.T) {
+	status, _, body := answer(t, func(c *fiber.Ctx) error {
+		return Write(c, &Refusal{Code: "invalid_url", Field: "url", Message: "Bad.", Hint: "Use https."})
+	})
+	if status != fiber.StatusBadRequest || body["field"] != "url" || body["hint"] != "Use https." || body["code"] != "invalid_url" {
+		t.Fatalf("status %d, body %v", status, body)
+	}
+	if Message(RejectField("url", "Bad."), "fallback") != "Bad." {
+		t.Fatal("a refusal's own text is worded for the caller")
+	}
+}
+
 // Every refusal goes through Refuse. A handler that writes {"error": …} itself
 // brings back the previous shape; the only bodies allowed an "error" member are
 // the ones whose standards define it (OAuth 2.0 error responses).

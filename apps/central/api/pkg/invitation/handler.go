@@ -7,6 +7,7 @@ import (
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/user"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -14,15 +15,17 @@ import (
 
 // Handler handles invitation HTTP requests
 type Handler struct {
-	service Service
-	logger  *zap.Logger
+	service  Service
+	logger   *zap.Logger
+	validate *validator.Validate
 }
 
 // NewHandler creates a new invitation handler
 func NewHandler(service Service, logger *zap.Logger) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		service:  service,
+		logger:   logger,
+		validate: validator.New(),
 	}
 }
 
@@ -60,8 +63,8 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
 	}
 
-	if req.Email == "" {
-		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "email is required")
+	if err := h.validate.Struct(&req); err != nil {
+		return apierror.Invalid(c, err)
 	}
 
 	invitation, err := h.service.Create(tenantID, inviterID, &req)
@@ -69,15 +72,15 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
 		switch {
 		case errors.Is(err, ErrAlreadyMember):
-			return apierror.Refuse(c, fiber.StatusConflict, "user_already_member", err.Error())
+			return apierror.RefuseWith(c, fiber.StatusConflict, "user_already_member", err.Error(), fiber.Map{"field": "email"})
 		case errors.Is(err, ErrAlreadyInvited):
-			return apierror.Refuse(c, fiber.StatusConflict, "invitation_already_pending", err.Error())
+			return apierror.RefuseWith(c, fiber.StatusConflict, "invitation_already_pending", err.Error(), fiber.Map{"field": "email"})
 		case errors.Is(err, ErrTenantNotFound):
 			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", err.Error())
 		case errors.Is(err, ErrAddressNotAllowed):
-			return apierror.Refuse(c, fiber.StatusBadRequest, "email_domain_not_allowed", err.Error())
+			return apierror.RefuseWith(c, fiber.StatusBadRequest, "email_domain_not_allowed", err.Error(), fiber.Map{"field": "email"})
 		case errors.Is(err, ErrUnknownClient):
-			return apierror.Refuse(c, fiber.StatusBadRequest, "unknown_client", err.Error())
+			return apierror.RefuseWith(c, fiber.StatusBadRequest, "unknown_client", err.Error(), fiber.Map{"field": "client_id"})
 		}
 		var pub *apierror.Public
 		if errors.As(err, &pub) {

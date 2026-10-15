@@ -43,10 +43,15 @@ func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditA
 }
 
 // refuse answers a service error: a not-found id is 404, a refusal the
-// service worded for the caller is 400, anything else 500.
+// service worded for the caller is 400 (naming the member at fault, when it
+// knows it), anything else 500.
 func (h *Handler) refuse(c *fiber.Ctx, err error, fallback string) error {
 	if errors.Is(err, ErrNotFound) {
 		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "webhook not found")
+	}
+	var refusal *apierror.Refusal
+	if errors.As(err, &refusal) {
+		return apierror.Write(c, refusal)
 	}
 	var pub *apierror.Public
 	if errors.As(err, &pub) {

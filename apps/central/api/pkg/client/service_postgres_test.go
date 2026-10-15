@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -148,9 +149,9 @@ func TestRegenerateSecret_RefusesPublicClient(t *testing.T) {
 	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, created.ID) })
 
 	creds, _, err := svc.RegenerateSecret(created.ID)
-	cerr, ok := err.(*ConfigError)
+	cerr, ok := err.(*apierror.Refusal)
 	if !ok || cerr.Code != "public_client_has_no_secret" {
-		t.Fatalf("RegenerateSecret on a public client = (%v, %v), want ConfigError public_client_has_no_secret", creds, err)
+		t.Fatalf("RegenerateSecret on a public client = (%v, %v), want apierror.Refusal public_client_has_no_secret", creds, err)
 	}
 
 	var secret string

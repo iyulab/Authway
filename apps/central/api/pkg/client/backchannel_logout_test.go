@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"context"
 	"errors"
 	"net"
@@ -201,7 +202,7 @@ func TestCreate_AnAddressTheAuthorizationServerRefusesIsTheCallersError(t *testi
 		Scopes:               []string{"openid"},
 		BackChannelLogoutURI: "https://app.example.com/backchannel-logout",
 	})
-	var cerr *ConfigError
+	var cerr *apierror.Refusal
 	if !errors.As(err, &cerr) || cerr.Code != "invalid_backchannel_logout_uri" {
 		t.Fatalf("got %v, want invalid_backchannel_logout_uri", err)
 	}
@@ -243,7 +244,7 @@ func TestUpdate_AChangeTheAuthorizationServerRefusesIsNotKept(t *testing.T) {
 
 	address := "https://app.example.com/backchannel-logout"
 	_, _, err = svc.Update(created.ID, &UpdateClientRequest{Name: created.Name + "-renamed", BackChannelLogoutURI: &address})
-	var cerr *ConfigError
+	var cerr *apierror.Refusal
 	if !errors.As(err, &cerr) || cerr.Code != "invalid_backchannel_logout_uri" {
 		t.Fatalf("got %v, want invalid_backchannel_logout_uri", err)
 	}

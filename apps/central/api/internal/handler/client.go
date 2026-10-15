@@ -133,8 +133,9 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		// Surface client-config violations as 400 with a stable code/hint payload
 		// so SDKs and the Admin Console can render targeted UX.
-		if cerr, ok := err.(*client.ConfigError); ok {
-			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
+		var refusal *apierror.Refusal
+		if errors.As(err, &refusal) {
+			return apierror.Write(c, refusal)
 		}
 		h.logger.Error("Failed to create client", zap.Error(err), zap.String("name", req.Name))
 		return fiber.NewError(fiber.StatusInternalServerError, apierror.Message(err, "failed to create client"))
@@ -173,8 +174,9 @@ func (h *ClientHandler) createScoped(c *fiber.Ctx) error {
 
 	newClient, credentials, err := h.services.ClientService.Create(req)
 	if err != nil {
-		if cerr, ok := err.(*client.ConfigError); ok {
-			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
+		var refusal *apierror.Refusal
+		if errors.As(err, &refusal) {
+			return apierror.Write(c, refusal)
 		}
 		h.logger.Error("Failed to create client (scoped)", zap.Error(err), zap.String("name", scoped.Name), zap.String("tenant_id", tenantID))
 		return fiber.NewError(fiber.StatusInternalServerError, apierror.Message(err, "failed to create client"))
@@ -260,8 +262,9 @@ func (h *ClientHandler) Update(c *fiber.Ctx) error {
 		return refuseSystemClient(c)
 	}
 	if err != nil {
-		if cerr, ok := err.(*client.ConfigError); ok {
-			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
+		var refusal *apierror.Refusal
+		if errors.As(err, &refusal) {
+			return apierror.Write(c, refusal)
 		}
 		h.logger.Error("Failed to update client", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))
@@ -366,8 +369,9 @@ func (h *ClientHandler) RegenerateSecret(c *fiber.Ctx) error {
 		return refuseSystemClient(c)
 	}
 	if err != nil {
-		if cerr, ok := err.(*client.ConfigError); ok {
-			return apierror.RefuseWith(c, fiber.StatusBadRequest, cerr.Code, cerr.Message, fiber.Map{"field": cerr.Field, "hint": cerr.Hint})
+		var refusal *apierror.Refusal
+		if errors.As(err, &refusal) {
+			return apierror.Write(c, refusal)
 		}
 		h.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", idStr))
 		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "client not found"))

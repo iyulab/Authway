@@ -111,7 +111,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	}
 	keyAuth := req.TokenEndpointAuthMethod == AuthMethodPrivateKeyJWT
 	if keyAuth && req.ClientSecret != "" {
-		return nil, nil, &ConfigError{
+		return nil, nil, &apierror.Refusal{
 			Code:    "invalid_token_endpoint_auth_method",
 			Field:   "client_secret",
 			Message: "a client that authenticates with a key has no secret",
@@ -174,12 +174,12 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 
 		} else if req.ClientID != "" || req.ClientSecret != "" {
 			// Partial credentials are a caller mistake, not a server fault —
-			// surface as a structured ConfigError so the handler maps it to 400.
+			// surface as a structured apierror.Refusal so the handler maps it to 400.
 			missing := "client_secret"
 			if req.ClientID == "" {
 				missing = "client_id"
 			}
-			return nil, nil, &ConfigError{
+			return nil, nil, &apierror.Refusal{
 				Code:    "confidential_client_partial_credentials",
 				Field:   missing,
 				Message: "Confidential clients must provide both client_id and client_secret, or neither",
@@ -518,7 +518,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// would leave the authorization server holding whatever the other method
 	// used — a secret that was meant to be gone would work again.
 	if req.TokenEndpointAuthMethod != nil && *req.TokenEndpointAuthMethod != client.AuthMethod() {
-		return nil, SyncStatus{}, &ConfigError{
+		return nil, SyncStatus{}, &apierror.Refusal{
 			Code:    "token_endpoint_auth_method_is_fixed",
 			Field:   "token_endpoint_auth_method",
 			Message: "how a client authenticates cannot be changed",
@@ -529,7 +529,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	var replacedKeys, replacedKeysURI string
 	if replacesKeys {
 		if mergedPublic != client.Public || !client.AuthenticatesWithKey() {
-			return nil, SyncStatus{}, &ConfigError{
+			return nil, SyncStatus{}, &apierror.Refusal{
 				Code:    "invalid_jwks",
 				Field:   "jwks",
 				Message: "a key is registered only for a client that authenticates with one",
@@ -539,12 +539,12 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		if req.JWKSURI != nil {
 			replacedKeysURI = *req.JWKSURI
 		}
-		var cerr *ConfigError
+		var cerr *apierror.Refusal
 		if replacedKeys, cerr = s.validateAuthentication(false, AuthMethodPrivateKeyJWT, req.JWKS, replacedKeysURI); cerr != nil {
 			return nil, SyncStatus{}, cerr
 		}
 	} else if client.AuthenticatesWithKey() && mergedPublic {
-		return nil, SyncStatus{}, &ConfigError{
+		return nil, SyncStatus{}, &apierror.Refusal{
 			Code:    "token_endpoint_auth_method_is_fixed",
 			Field:   "public",
 			Message: "a client that authenticates with a key cannot become a public client",
@@ -716,7 +716,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// does another. A server that cannot be reached is a different matter:
 	// the change stands and the answer reports that it has yet to be passed on.
 	syncStatus := SyncStatus{State: SyncStateOK}
-	var refusal *ConfigError
+	var refusal *apierror.Refusal
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&client).Error; err != nil {
 			return err
@@ -842,7 +842,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 		return nil, SyncStatus{}, ErrSystemClient
 	}
 	if client.Public {
-		return nil, SyncStatus{}, &ConfigError{
+		return nil, SyncStatus{}, &apierror.Refusal{
 			Code:    "public_client_has_no_secret",
 			Field:   "public",
 			Message: "Public clients have no secret to regenerate",
@@ -850,7 +850,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 		}
 	}
 	if client.AuthenticatesWithKey() {
-		return nil, SyncStatus{}, &ConfigError{
+		return nil, SyncStatus{}, &apierror.Refusal{
 			Code:    "client_has_no_secret",
 			Field:   "token_endpoint_auth_method",
 			Message: "This client authenticates with a key and has no secret",

@@ -48,18 +48,19 @@ describe('admin API: managing webhooks', () => {
     expect(((await read.json()) as { webhook: Webhook }).webhook).not.toHaveProperty('secret')
   })
 
-  it('refuses values outside their range instead of replacing them', async () => {
-    for (const body of [
-      { name, url: '/relative', events: ['user.created'] },
-      { name, url, events: ['user.exploded'] },
-      { name, url, events: [] },
-      { name, url, events: ['user.created'], retry_count: 11 },
-      { name, url, events: ['user.created'], timeout_secs: 0 },
-    ]) {
+  it('refuses values outside their range instead of replacing them, naming the member', async () => {
+    for (const [body, field] of [
+      [{ name, url: '/relative', events: ['user.created'] }, 'url'],
+      [{ name, url, events: ['user.exploded'] }, 'events'],
+      [{ name, url, events: [] }, 'events'],
+      [{ name, url, events: ['user.created'], retry_count: 11 }, 'retry_count'],
+      [{ name, url, events: ['user.created'], timeout_secs: 0 }, 'timeout_secs'],
+      [{ name: ' ', url, events: ['user.created'] }, 'name'],
+    ] as const) {
       const res = await provider.admin('/api/v1/webhooks', json(body))
       await conform('POST', '/api/v1/webhooks', res)
       expect(res.status, JSON.stringify(body)).toBe(400)
-      expect(await code(res)).toBe('invalid_request')
+      expect(await res.json(), JSON.stringify(body)).toMatchObject({ code: 'invalid_request', field })
     }
   })
 
@@ -106,7 +107,7 @@ describe('admin API: managing webhooks', () => {
     })
     await conform('PATCH', '/api/v1/webhooks/{id}', refused)
     expect(refused.status).toBe(400)
-    expect(await code(refused)).toBe('invalid_request')
+    expect(await refused.json()).toMatchObject({ code: 'invalid_request', field: 'timeout_secs' })
   })
 
   it('tests a webhook once and reports the delivery, then lists it', async () => {

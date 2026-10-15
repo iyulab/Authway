@@ -126,10 +126,10 @@ type UpdateWebhookRequest struct {
 
 func validateName(name string) error {
 	if strings.TrimSpace(name) == "" {
-		return apierror.NewPublic("name is required")
+		return apierror.RejectField("name", "name is required")
 	}
 	if len(name) > 255 {
-		return apierror.NewPublic("name must be at most 255 characters")
+		return apierror.RejectField("name", "name must be at most 255 characters")
 	}
 	return nil
 }
@@ -140,24 +140,24 @@ func validateName(name string) error {
 func (s *service) validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return apierror.NewPublic("url must be an absolute http or https URL")
+		return apierror.RejectField("url", "url must be an absolute http or https URL")
 	}
 	if len(raw) > 2048 {
-		return apierror.NewPublic("url must be at most 2048 characters")
+		return apierror.RejectField("url", "url must be at most 2048 characters")
 	}
 	if s.policy.RefusesHost(u.Hostname()) {
-		return apierror.NewPublic("url must not point at a local or private address")
+		return apierror.RejectField("url", "url must not point at a local or private address")
 	}
 	return nil
 }
 
 func validateEvents(events []string) error {
 	if len(events) == 0 {
-		return apierror.NewPublic("at least one event is required")
+		return apierror.RejectField("events", "at least one event is required")
 	}
 	for _, e := range events {
 		if !knownEvent(e) {
-			return apierror.NewPublic(fmt.Sprintf("unknown event %q; GET /api/v1/webhooks/events lists them", e))
+			return apierror.RejectField("events", fmt.Sprintf("unknown event %q; GET /api/v1/webhooks/events lists them", e))
 		}
 	}
 	return nil
@@ -165,14 +165,14 @@ func validateEvents(events []string) error {
 
 func validateRetryCount(n int) error {
 	if n < 0 || n > MaxRetryCount {
-		return apierror.NewPublic(fmt.Sprintf("retry_count must be between 0 and %d", MaxRetryCount))
+		return apierror.RejectField("retry_count", fmt.Sprintf("retry_count must be between 0 and %d", MaxRetryCount))
 	}
 	return nil
 }
 
 func validateTimeout(n int) error {
 	if n < 1 || n > MaxTimeoutSecs {
-		return apierror.NewPublic(fmt.Sprintf("timeout_secs must be between 1 and %d", MaxTimeoutSecs))
+		return apierror.RejectField("timeout_secs", fmt.Sprintf("timeout_secs must be between 1 and %d", MaxTimeoutSecs))
 	}
 	return nil
 }
@@ -213,7 +213,7 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateWebhookRequest) (*Webhoo
 		validateRetryCount(webhook.RetryCount),
 		validateTimeout(webhook.TimeoutSecs),
 	); err != nil {
-		return nil, firstPublic(err)
+		return nil, firstRefusal(err)
 	}
 
 	secret, err := generateSecret()
@@ -228,9 +228,9 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateWebhookRequest) (*Webhoo
 	return webhook, nil
 }
 
-// firstPublic returns the first refusal errors.Join collected, so a response
+// firstRefusal returns the first refusal errors.Join collected, so a response
 // names one problem in plain words.
-func firstPublic(err error) error {
+func firstRefusal(err error) error {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, e := range joined.Unwrap() {
 			if e != nil {
@@ -293,7 +293,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateWebhookRequest) (*Webhook, err
 		updates["timeout_secs"] = *req.TimeoutSecs
 	}
 	if err := errors.Join(errs...); err != nil {
-		return nil, firstPublic(err)
+		return nil, firstRefusal(err)
 	}
 	if len(updates) > 0 {
 		if err := s.db.Model(webhook).Updates(updates).Error; err != nil {

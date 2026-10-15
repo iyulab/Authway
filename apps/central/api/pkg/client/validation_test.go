@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -36,12 +37,12 @@ func TestUpdateClientRequest_AccessTokenStrategyValidation(t *testing.T) {
 				t.Fatalf("struct validation must stay out of this field's way, got %v", err)
 			}
 
-			var got *ConfigError
+			var got *apierror.Refusal
 			if c.strategy != nil {
 				got = validateAccessTokenStrategy(*c.strategy)
 			}
 			if c.wantErr && got == nil {
-				t.Fatal("want a ConfigError, got nil")
+				t.Fatal("want a apierror.Refusal, got nil")
 			}
 			if !c.wantErr && got != nil {
 				t.Fatalf("want no error, got %+v", got)
@@ -282,10 +283,10 @@ func TestValidateClientConfig(t *testing.T) {
 				t.Fatalf("want code=%s, got %s (msg=%s)", tt.wantCode, got.Code, got.Message)
 			}
 			if got.Hint == "" {
-				t.Errorf("ConfigError missing Hint — every violation should be actionable")
+				t.Errorf("apierror.Refusal missing Hint — every violation should be actionable")
 			}
 			if got.Field == "" {
-				t.Errorf("ConfigError missing Field")
+				t.Errorf("apierror.Refusal missing Field")
 			}
 		})
 	}
@@ -315,13 +316,6 @@ func TestDerefStrategy(t *testing.T) {
 		if got := derefStrategy(&v); got != s {
 			t.Fatalf("pinned client must send %q, got %q", s, got)
 		}
-	}
-}
-
-func TestConfigError_Error(t *testing.T) {
-	e := &ConfigError{Code: "x", Field: "y", Message: "z", Hint: "h"}
-	if e.Error() == "" {
-		t.Fatal("Error() returned empty string")
 	}
 }
 

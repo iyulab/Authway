@@ -3420,5 +3420,11 @@ components:
             invalid_enabled_auth_providers,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.
-        field: { type: string, description: The request member at fault, when there is one. }
+        field:
+          type: string
+          description: |
+            The request member at fault, when there is one: a member inside an
+            object by its path (`settings.allowed_domains`), and a list by its
+            own name — not an element's index. An admin API refusal that judges
+            one member of the body carries it, so a form can show it at that input.
         hint: { type: string, description: What to do about it, when there is something. }

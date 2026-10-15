@@ -28,7 +28,23 @@ describe('admin API: managing invitations', () => {
     const again = await invite()
     await conform('POST', '/api/v1/invitations', again)
     expect(again.status).toBe(409)
-    expect(await code(again)).toBe('invitation_already_pending')
+    expect(await again.json()).toMatchObject({ code: 'invitation_already_pending', field: 'email' })
+  })
+
+  it('refuses what is not an address, or an application the tenant does not have, naming the member', async () => {
+    for (const [body, want] of [
+      [{ email: 'not an address' }, { code: 'invalid_request', field: 'email' }],
+      [{}, { code: 'invalid_request', field: 'email' }],
+      [
+        { email: `conformance-${randomToken(6)}@example.test`, client_id: `none-${randomToken(6)}` },
+        { code: 'unknown_client', field: 'client_id' },
+      ],
+    ] as const) {
+      const res = await provider.admin('/api/v1/invitations', { method: 'POST', body: JSON.stringify(body) })
+      await conform('POST', '/api/v1/invitations', res)
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      expect(await res.json(), JSON.stringify(body)).toMatchObject(want)
+    }
   })
 
   it('refuses an invitation that names no tenant', async () => {

@@ -33,13 +33,17 @@ func (e *Public) Error() string {
 	return e.msg
 }
 
-// Message returns err's own text if err is (or wraps) a *Public, otherwise
-// fallback. Handlers call this instead of err.Error() at every API-boundary
-// response.
+// Message returns err's own text if err is (or wraps) a *Public or a
+// *Refusal, otherwise fallback. Handlers call this instead of err.Error() at
+// every API-boundary response.
 func Message(err error, fallback string) string {
 	var pub *Public
 	if errors.As(err, &pub) {
 		return pub.Error()
+	}
+	var refusal *Refusal
+	if errors.As(err, &refusal) {
+		return refusal.Error()
 	}
 	return fallback
 }

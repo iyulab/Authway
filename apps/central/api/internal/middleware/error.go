@@ -13,7 +13,7 @@ import (
 func ErrorHandler(c *fiber.Ctx, err error) error {
 	var refusal *apierror.Refusal
 	if errors.As(err, &refusal) {
-		return apierror.RefuseWith(c, refusal.Status, refusal.Code, refusal.Message, refusal.Extensions)
+		return apierror.Write(c, refusal)
 	}
 
 	var fiberErr *fiber.Error

@@ -65,12 +65,18 @@ func RefuseWith(c *fiber.Ctx, status int, code, detail string, extensions fiber.
 }
 
 // Refusal is a refusal carried as an error, for code that decides to refuse
-// before it holds the response: a handler returns it unchanged and the
-// framework error handler writes it with Refuse.
+// before it holds the response — a service judging what the caller sent, or a
+// handler helper. Its text is worded for the caller. A handler returns it
+// unchanged and the framework error handler writes it with Write.
 type Refusal struct {
-	Status     int
-	Code       string
+	// Status is the HTTP status; zero means 400 — a refusal of what was sent.
+	Status int
+	Code   string
+	// Field is the request member at fault, when there is one, and Hint what
+	// to do about it.
+	Field      string
 	Message    string
+	Hint       string
 	Extensions fiber.Map
 }
 
@@ -79,6 +85,30 @@ func (r *Refusal) Error() string { return r.Message }
 // Reject builds a Refusal.
 func Reject(status int, code, message string) *Refusal {
 	return &Refusal{Status: status, Code: code, Message: message}
+}
+
+// RejectField builds a 400 invalid_request Refusal of one request member.
+func RejectField(field, message string) *Refusal {
+	return &Refusal{Status: fiber.StatusBadRequest, Code: "invalid_request", Field: field, Message: message}
+}
+
+// Write answers with the refusal r.
+func Write(c *fiber.Ctx, r *Refusal) error {
+	status := r.Status
+	if status == 0 {
+		status = fiber.StatusBadRequest
+	}
+	extensions := fiber.Map{}
+	for k, v := range r.Extensions {
+		extensions[k] = v
+	}
+	if r.Field != "" {
+		extensions["field"] = r.Field
+	}
+	if r.Hint != "" {
+		extensions["hint"] = r.Hint
+	}
+	return RefuseWith(c, status, r.Code, r.Message, extensions)
 }
 
 // CodeForStatus names a refusal that carries only a status — one the framework
@@ -119,7 +149,7 @@ func CodeForStatus(status int) string {
 func Invalid(c *fiber.Ctx, err error) error {
 	var fields validator.ValidationErrors
 	if errors.As(err, &fields) && len(fields) > 0 {
-		field := snakeCase(fields[0].Field())
+		field := memberPath(fields[0].StructNamespace())
 		detail := "Invalid value for " + field
 		if fields[0].Tag() == "required" {
 			detail = field + " is required"
@@ -127,6 +157,25 @@ func Invalid(c *fiber.Ctx, err error) error {
 		return RefuseWith(c, fiber.StatusBadRequest, "invalid_request", detail, fiber.Map{"field": field})
 	}
 	return Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request")
+}
+
+// memberPath turns a validator namespace into the request member it names:
+// the body's own type dropped, each Go field as the JSON member it is sent as,
+// and an element's index dropped — the member is the list, as a refusal of one
+// redirect URI names redirect_uris
+// (CreateTenantRequest.Settings.AllowedDomains[1] → settings.allowed_domains).
+func memberPath(namespace string) string {
+	segments := strings.Split(namespace, ".")
+	if len(segments) > 1 {
+		segments = segments[1:]
+	}
+	for i, s := range segments {
+		if open := strings.IndexByte(s, '['); open >= 0 {
+			s = s[:open]
+		}
+		segments[i] = snakeCase(s)
+	}
+	return strings.Join(segments, ".")
 }
 
 // snakeCase turns a Go field name into the JSON member it is sent as

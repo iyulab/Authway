@@ -68,6 +68,17 @@ describe('admin API: managing tenants', () => {
     const notAColor = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'PUT', body: JSON.stringify({ primary_color: 'greenish' }) })
     await conform('PUT', '/api/v1/tenants/{id}', notAColor)
     expect(notAColor.status).toBe(400)
+    expect(await notAColor.json()).toMatchObject({ code: 'invalid_request', field: 'primary_color' })
+  })
+
+  it('names a setting it refuses by its place in the body', async () => {
+    const res = await provider.admin(`/api/v1/tenants/${tenant!.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ settings: { signup_mode: 'open', allowed_domains: ['example.test', 'not a domain'] } }),
+    })
+    await conform('PUT', '/api/v1/tenants/{id}', res)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'invalid_request', field: 'settings.allowed_domains' })
   })
 
   it('deletes an empty tenant, after which it is not found', async () => {

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -72,7 +73,7 @@ func TestCreate_CredentialRules(t *testing.T) {
 		wantID       string // "" = generated
 		wantSecret   string // "" with public=false means generated
 		wantMethod   string
-		wantCode     string // ConfigError code when refused
+		wantCode     string // apierror.Refusal code when refused
 	}{
 		{name: "public with its own id", public: true, clientID: "spa_" + suffix,
 			grants: []string{"authorization_code"}, wantID: "spa_" + suffix, wantMethod: "none"},
@@ -103,9 +104,9 @@ func TestCreate_CredentialRules(t *testing.T) {
 
 			created, creds, err := svc.Create(req)
 			if tc.wantCode != "" {
-				cerr, ok := err.(*ConfigError)
+				cerr, ok := err.(*apierror.Refusal)
 				if !ok || cerr.Code != tc.wantCode {
-					t.Fatalf("Create = %v, want ConfigError %s", err, tc.wantCode)
+					t.Fatalf("Create = %v, want apierror.Refusal %s", err, tc.wantCode)
 				}
 				return
 			}

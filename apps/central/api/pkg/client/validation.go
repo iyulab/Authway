@@ -1,6 +1,7 @@
 package client
 
 import (
+	"authway/apps/central/api/pkg/apierror"
 	"context"
 	"fmt"
 	"net"
@@ -9,19 +10,6 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 )
-
-// ConfigError represents a structured client-configuration validation failure.
-// The Code field is stable and machine-readable; UI/SDKs key on it.
-type ConfigError struct {
-	Code    string `json:"code"`    // e.g. "public_with_secret", "confidential_without_credentials"
-	Field   string `json:"field"`   // e.g. "client_secret", "grant_types"
-	Message string `json:"message"` // human-readable
-	Hint    string `json:"hint"`    // remediation guidance
-}
-
-func (e *ConfigError) Error() string {
-	return fmt.Sprintf("%s: %s (field=%s, hint=%s)", e.Code, e.Message, e.Field, e.Hint)
-}
 
 // validateClientConfig checks the combination of public/grant_types/secret/origins
 // for internally inconsistent setups. Returns the first error found.
@@ -32,7 +20,7 @@ func (e *ConfigError) Error() string {
 // `/signin-oidc` with Hydra `invalid_client` because ASP.NET sends
 // `client_secret_post` while the registered method is `none`. Catching the
 // mismatch at registration is much cheaper than debugging the runtime symptom.
-func validateClientConfig(public bool, clientSecret string, grantTypes []string, redirectURIs []string, allowedOrigins []string) *ConfigError {
+func validateClientConfig(public bool, clientSecret string, grantTypes []string, redirectURIs []string, allowedOrigins []string) *apierror.Refusal {
 	gt := normalizeGrantTypes(grantTypes)
 
 	if cerr := validateGrantTypes(gt); cerr != nil {
@@ -46,7 +34,7 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 		// Public clients (SPA, native, mobile) must NOT carry a client_secret —
 		// it's a leaked credential by definition (RFC 6749 §2.1).
 		if strings.TrimSpace(clientSecret) != "" {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "public_client_with_secret",
 				Field:   "client_secret",
 				Message: "Public clients must not be assigned a client_secret",
@@ -57,7 +45,7 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 		// Public clients use PKCE — the client_credentials grant requires a
 		// confidential client.
 		if containsAny(gt, "client_credentials") {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "public_client_with_client_credentials",
 				Field:   "grant_types",
 				Message: "Public clients cannot use the client_credentials grant",
@@ -68,7 +56,7 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 		// authorization_code in a browser context needs CORS allow-list. A
 		// native app has no origin to list.
 		if containsAny(gt, "authorization_code") && usesBrowserRedirect(redirectURIs) && len(allowedOrigins) == 0 {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "public_client_missing_allowed_origins",
 				Field:   "allowed_origins",
 				Message: "Public clients with authorization_code need allowed_origins for browser CORS",
@@ -90,10 +78,10 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 // does nothing.
 var supportedGrantTypes = []string{"authorization_code", "refresh_token", "client_credentials", deviceCodeGrant}
 
-func validateGrantTypes(normalizedGrants []string) *ConfigError {
+func validateGrantTypes(normalizedGrants []string) *apierror.Refusal {
 	for _, g := range normalizedGrants {
 		if !containsAny(supportedGrantTypes, g) {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "unsupported_grant_type",
 				Field:   "grant_types",
 				Message: fmt.Sprintf("%q is not a grant this provider offers", g),
@@ -114,12 +102,12 @@ func validateGrantTypes(normalizedGrants []string) *ConfigError {
 // "Default (inherit)" option) un-submittable, so a client pinned to jwt could
 // never be returned to inheriting. Empirically confirmed; see
 // TestUpdateClientRequest_AccessTokenStrategyValidation.
-func validateAccessTokenStrategy(strategy string) *ConfigError {
+func validateAccessTokenStrategy(strategy string) *apierror.Refusal {
 	switch strategy {
 	case "", "jwt", "opaque":
 		return nil
 	}
-	return &ConfigError{
+	return &apierror.Refusal{
 		Code:    "invalid_access_token_strategy",
 		Field:   "access_token_strategy",
 		Message: "access_token_strategy must be \"jwt\", \"opaque\", or empty",
@@ -138,14 +126,14 @@ func validateAccessTokenStrategy(strategy string) *ConfigError {
 // Runs last so that client-type violations (secret-on-public, wrong grant) are
 // reported first — those describe *what the client is*, this one only describes
 // what it is missing.
-func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []string) *ConfigError {
+func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []string) *apierror.Refusal {
 	if !containsAny(normalizedGrants, "authorization_code") {
 		return nil
 	}
 	if len(redirectURIs) > 0 {
 		return nil
 	}
-	return &ConfigError{
+	return &apierror.Refusal{
 		Code:    "redirect_grant_without_redirect_uris",
 		Field:   "redirect_uris",
 		Message: "Clients using authorization_code must declare at least one redirect_uri",
@@ -157,11 +145,11 @@ func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []st
 // carry no fragment (RFC 6749 §3.1.2). Any scheme is allowed: a native app
 // may be called back on a private-use scheme such as
 // `com.example.app:/oauth2redirect` (RFC 8252 §7.1), which has no host.
-func validateRedirectURIForm(redirectURIs []string) *ConfigError {
+func validateRedirectURIForm(redirectURIs []string) *apierror.Refusal {
 	for _, raw := range redirectURIs {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme == "" || (u.Host == "" && u.Path == "" && u.Opaque == "") || u.Fragment != "" || strings.Contains(raw, "#") {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "invalid_redirect_uri",
 				Field:   "redirect_uris",
 				Message: fmt.Sprintf("%q is not a usable redirect URI", raw),
@@ -229,11 +217,11 @@ const maxAudienceLength = 255
 // opaque identifier the resource server compares its own with — commonly the
 // API's URL — so it must be something that survives as one value of a JWT's
 // aud claim: not empty, no whitespace, not repeated.
-func validateAudience(audience []string) *ConfigError {
+func validateAudience(audience []string) *apierror.Refusal {
 	seen := map[string]bool{}
 	for _, value := range audience {
 		if value == "" || len(value) > maxAudienceLength || strings.ContainsAny(value, " \t\r\n") || seen[value] {
-			return &ConfigError{
+			return &apierror.Refusal{
 				Code:    "invalid_audience",
 				Field:   "audience",
 				Message: "each audience must be a distinct identifier of 1 to 255 characters without whitespace",
@@ -250,16 +238,16 @@ func validateAudience(audience []string) *ConfigError {
 // client names on its own side as well, when it connects to them — so it can
 // refuse one this service let through, such as a host name that resolved
 // differently for it.
-func refusedByAuthorizationServer(refused *hydra.ClientRefusedError) *ConfigError {
+func refusedByAuthorizationServer(refused *hydra.ClientRefusedError) *apierror.Refusal {
 	if strings.Contains(refused.Reason, "backchannel_logout_uri") {
-		return &ConfigError{
+		return &apierror.Refusal{
 			Code:    "invalid_backchannel_logout_uri",
 			Field:   "backchannel_logout_uri",
 			Message: "backchannel_logout_uri must not point at a local or private address",
 			Hint:    "The authorization server may not call this address. Give a public https address of the application's backend.",
 		}
 	}
-	return &ConfigError{
+	return &apierror.Refusal{
 		Code:    "invalid_client_metadata",
 		Message: "The authorization server did not accept this client: " + refused.Reason,
 		Hint:    "Correct the field the message names and try again.",
@@ -270,13 +258,13 @@ func refusedByAuthorizationServer(refused *hydra.ClientRefusedError) *ConfigErro
 // users — where it starts a sign-in, its home page: empty, or an absolute
 // https URL without a fragment. Users are sent there, so a scheme other
 // than https (javascript:, a custom one) is refused.
-func validateApplicationURI(field, uri string) *ConfigError {
+func validateApplicationURI(field, uri string) *apierror.Refusal {
 	if uri == "" {
 		return nil
 	}
 	u, err := url.Parse(uri)
 	if err != nil || len(uri) > maxBackChannelLogoutURILength || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
-		return &ConfigError{Code: "invalid_" + field, Field: field, Message: field + " must be an absolute https URL without a fragment"}
+		return &apierror.Refusal{Code: "invalid_" + field, Field: field, Message: field + " must be an absolute https URL without a fragment"}
 	}
 	return nil
 }
@@ -288,16 +276,16 @@ var signInMethods = map[string]bool{"email": true, "magic_link": true, "google":
 // request names them (nil: not named). An empty list is refused: a client
 // nobody can sign in to is not a configuration, and the stored empty list was
 // read as the default — email and Google — the opposite of what was asked.
-func validateSignInMethods(methods []string) *ConfigError {
+func validateSignInMethods(methods []string) *apierror.Refusal {
 	if methods == nil {
 		return nil
 	}
 	if len(methods) == 0 {
-		return &ConfigError{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: "name at least one way to sign in", Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+		return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: "name at least one way to sign in", Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
 	}
 	for _, m := range methods {
 		if !signInMethods[m] {
-			return &ConfigError{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: fmt.Sprintf("%q is not a way to sign in", m), Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+			return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: fmt.Sprintf("%q is not a way to sign in", m), Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
 		}
 	}
 	return nil
@@ -315,13 +303,13 @@ const maxBackChannelLogoutURILength = 2048
 // address, unless private targets are allowed. A host name is looked up now
 // and refused if it leads inward; what it resolves to later is for the
 // authorization server to check when it connects.
-func (s *service) validateBackChannelLogoutURI(uri string) *ConfigError {
+func (s *service) validateBackChannelLogoutURI(uri string) *apierror.Refusal {
 	if uri == "" {
 		return nil
 	}
 	const hint = "Give the URL of an endpoint on the application's backend that accepts a POST with a logout_token, e.g. https://app.example.com/backchannel-logout."
-	refuse := func(message string) *ConfigError {
-		return &ConfigError{Code: "invalid_backchannel_logout_uri", Field: "backchannel_logout_uri", Message: message, Hint: hint}
+	refuse := func(message string) *apierror.Refusal {
+		return &apierror.Refusal{Code: "invalid_backchannel_logout_uri", Field: "backchannel_logout_uri", Message: message, Hint: hint}
 	}
 	u, err := url.Parse(uri)
 	if err != nil || len(uri) > maxBackChannelLogoutURILength || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
