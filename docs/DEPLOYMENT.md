@@ -62,6 +62,37 @@ az postgres flexible-server create \
   --version 15
 ```
 
+#### Database and role
+
+The API and the authorization server connect as a role of their own, not as
+the server's administrator login. The administrator can reach every database
+on the server; the application role reaches only its own. The role owns the
+database and everything in it, because the API's migrations and the
+authorization server's (`hydra migrate sql`) create and alter tables — run
+both with the role's credentials:
+
+```sql
+-- as the server administrator
+SET createrole_self_grant = 'set, inherit';  -- lets the administrator hand objects to the role
+CREATE ROLE authway LOGIN PASSWORD '<application-password>';
+CREATE DATABASE authway OWNER authway;
+\c authway
+ALTER SCHEMA public OWNER TO authway;
+-- anything the administrator creates here later stays usable by the application
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authway;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authway;
+```
+
+Use letters and digits for the password: it is placed in the authorization
+server's `DSN` URL as it is.
+
+To move an existing database that the administrator owns to such a role,
+change the owner of the database, the `public` schema and each table and
+function in it explicitly (`ALTER ... OWNER TO`). Avoid `REASSIGN OWNED`: it
+also moves objects outside this database that the administrator owns. Running
+processes keep working through the administrator's membership in the role, so
+each one can then be switched to the role's credentials on its own deploy.
+
 ### 2. Deploy Hydra
 
 ```bash
@@ -487,6 +518,7 @@ Dropping a column or table is a two-deployment change — see
 
 - [ ] **HTTPS Everywhere**: All endpoints use HTTPS
 - [ ] **Secure Secrets**: Use environment variables or Azure Key Vault
+- [ ] **Database Role**: The API and the authorization server connect as an application role that owns only their database, not as the server administrator ([Database and role](#database-and-role))
 - [ ] **CORS Configured**: `AUTHWAY_CORS_ALLOWED_ORIGINS` lists the login screens and console; each browser application has its origin in `allowed_origins`
 - [ ] **Cookie Security**: `Secure`, `HttpOnly`, `SameSite=Strict`
 - [ ] **Rate Limiting**: API rate limits configured
