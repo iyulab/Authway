@@ -39,6 +39,15 @@
   invalid_logo`); an empty string clears it. The admin console has a field for
   it. A client that already had a logo shows it once the client is next saved.
 
+### Removed
+
+- `GET /api/v1/clients/{client_id}/config`. It answered, without
+  authentication, any client's redirect URIs and tenant id; nothing used it —
+  discovery and the bootstrap document say what an application needs.
+- The `/api/v1/docs` endpoints, which listed, served and (with the admin key)
+  wrote and deleted files in a `docs` directory beside the running API — one
+  no image carries. Nothing used them.
+
 ### Fixed
 
 - **A client's own Microsoft and Apple credentials were ignored.** They were
@@ -49,6 +58,8 @@
   fields present change, as documented; an empty string clears. A tenant's
   description, the other way round, could not be cleared; an empty string now
   clears it.
+- `POST /api/v1/logout` is in the published contract; it was documented only
+  in prose, which gave a failure's answer in a form it no longer has.
 - **Signing out through the logout screen was not recorded.** The `user.logout`
   audit entry, and the webhook event that follows it, came only from `POST
   /api/v1/logout`; signing out through OpenID Connect logout — the way most

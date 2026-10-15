@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strconv"
 
-	"authway/apps/central/api/internal/config"
 	"authway/apps/central/api/internal/service"
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
@@ -20,16 +19,14 @@ type ClientHandler struct {
 	services     *service.Services
 	logger       *zap.Logger
 	validator    *validator.Validate
-	config       *config.Config
 	auditService audit.Service
 }
 
-func NewClientHandler(services *service.Services, logger *zap.Logger, cfg *config.Config, auditService audit.Service) *ClientHandler {
+func NewClientHandler(services *service.Services, logger *zap.Logger, auditService audit.Service) *ClientHandler {
 	return &ClientHandler{
 		services:     services,
 		logger:       logger,
 		validator:    validator.New(),
-		config:       cfg,
 		auditService: auditService,
 	}
 }
@@ -573,32 +570,6 @@ func (h *ClientHandler) SyncToHydra(c *fiber.Ctx) error {
 		"message": "Hydra sync completed",
 		"synced":  synced,
 		"failed":  failed,
-	})
-}
-
-// GetPublicConfig handles getting public OAuth configuration for a client by client_id
-// This is a PUBLIC endpoint that doesn't require authentication
-// Used by SDK to auto-configure OAuth settings
-func (h *ClientHandler) GetPublicConfig(c *fiber.Ctx) error {
-	clientID := c.Params("client_id")
-	if clientID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "client_id is required")
-	}
-
-	// Get client by client_id (not UUID)
-	foundClient, err := h.services.ClientService.GetByClientID(clientID)
-	if err != nil {
-		h.logger.Error("Failed to get client config", zap.Error(err), zap.String("client_id", clientID))
-		return fiber.NewError(fiber.StatusNotFound, "Client not found")
-	}
-
-	// Return public configuration (no secrets)
-	return c.JSON(fiber.Map{
-		"client_id":     foundClient.ClientID,
-		"oauth_url":     h.config.Hydra.PublicURL,
-		"redirect_uris": foundClient.RedirectURIs,
-		"scopes":        []string{"openid", "profile", "email"}, // Default scopes
-		"tenant_id":     foundClient.TenantID,
 	})
 }
 

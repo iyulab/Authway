@@ -309,7 +309,7 @@ server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
 | Status | Meaning |
 |--------|---------|
 | `401` | No token, or one that is no longer valid |
-| `500` | The sessions could not be ended (`{ "success": false, "error", "guide", "details" }`) — try again |
+| `500` | `internal_server_error` — the sessions could not be ended; try again ([problem details](errors.md)) |
 
 ---
 

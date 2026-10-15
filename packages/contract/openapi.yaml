@@ -843,6 +843,48 @@ paths:
                       email: { type: string }
         '400': { $ref: '#/components/responses/Error' }
 
+  /api/v1/logout:
+    post:
+      tags: [account]
+      operationId: signOutEverywhere
+      summary: End every session of the signed-in user
+      description: |
+        Ends every session of the user at the authorization server — on every
+        device and for every application — with their remembered consents and
+        the tokens issued under them: the access token used for this call
+        stops working, as does any refresh token. Applications registered for
+        back-channel logout are told. The user is the one the token belongs
+        to; the body cannot name another. Sends `user.logout`.
+      security: [{ userToken: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                post_logout_redirect_uri:
+                  description: Answered back as redirect_url, for the application to navigate to.
+                  type: string
+                state:
+                  description: Appended to redirect_url as `?state=…`.
+                  type: string
+      responses:
+        '200':
+          description: Signed out
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message]
+                properties:
+                  success: { const: true }
+                  message: { type: string }
+                  redirect_url: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+        # The sessions could not be ended (code internal_server_error); try again.
+        '500': { $ref: '#/components/responses/Error' }
+
   /api/v1/profile/me:
     get:
       tags: [account]

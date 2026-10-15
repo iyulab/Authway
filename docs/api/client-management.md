@@ -14,9 +14,7 @@ no custom `client_id`/`client_secret`). See
 [Service Clients](./service-clients.md) for provisioning, token acquisition,
 and the exact request restrictions. Every other `/clients*` route (`GET`,
 `PUT`, `DELETE`, `regenerate-secret`, …) is unchanged and still accepts only
-the two admin methods above — except the public `GET
-/clients/{client_id}/config` endpoint, which requires no authentication at
-all. A missing or rejected credential answers `401` with
+the two admin methods above. A missing or rejected credential answers `401` with
 problem details with `"code": "unauthorized"` ([Errors](errors.md)).
 
 This document covers two semantics that are easy to get wrong: **Hydra sync

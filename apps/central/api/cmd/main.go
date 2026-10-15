@@ -333,9 +333,8 @@ func main() {
 	}
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
-	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
+	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
-	docsHandler := handler.NewDocsHandler(zapLogger)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
 	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)
@@ -433,9 +432,6 @@ func main() {
 	// validated token, so a caller can only revoke their own sessions.
 	v1.Post("/logout", jwtAuth, authHandler.Logout)
 
-	// Public client configuration (no auth required)
-	v1.Get("/clients/:client_id/config", clientHandler.GetPublicConfig)
-
 	// Admin auth — accepts EITHER the long-lived AUTHWAY_ADMIN_API_KEY (for
 	// programmatic callers like CI/curl) or an admin session token issued by
 	// /admin/login (used by the Admin Console UI). Fail-closed on missing key.
@@ -478,16 +474,6 @@ func main() {
 	v1.Put("/tenants/:id/terms/:kind", termsAuth, termsHandler.Publish)
 	v1.Delete("/tenants/:id/terms/:kind", termsAuth, termsHandler.Retire)
 	v1.Get("/users/:id/terms-acceptances", termsAuth, termsHandler.Acceptances)
-
-	// Documentation API routes (public read, admin write)
-	v1.Get("/docs", docsHandler.ListDocs)
-	v1.Get("/docs/search", docsHandler.SearchDocs)
-	v1.Get("/docs/download/*", docsHandler.DownloadDoc)
-	v1.Get("/docs/*", docsHandler.GetDoc)
-	// Admin only docs operations
-	v1.Put("/docs/*", adminAuth, docsHandler.UpdateDoc)
-	v1.Delete("/docs/*", adminAuth, docsHandler.DeleteDoc)
-	v1.Post("/docs/upload", adminAuth, docsHandler.UploadDoc)
 
 	// MFA management routes (authenticated users). Registered before the
 	// admin routes on /users/:id: a route matches in the order it was

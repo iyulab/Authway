@@ -348,10 +348,12 @@ export class Provider {
   }
 
   async logout(accessToken: string): Promise<Response> {
-    return fetch(`${this.config.api}/api/v1/logout`, {
+    const res = await fetch(`${this.config.api}/api/v1/logout`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
+    await conform('POST', '/api/v1/logout', res)
+    return res
   }
 
   // ---- authorization-code + PKCE login ------------------------------------

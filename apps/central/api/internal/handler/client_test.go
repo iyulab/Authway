@@ -10,13 +10,12 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"authway/apps/central/api/internal/config"
 	"authway/apps/central/api/internal/service"
 	"authway/apps/central/api/pkg/client"
 )
 
 func newTestClientHandler(fake *fakeClientService) *ClientHandler {
-	return NewClientHandler(&service.Services{ClientService: fake}, zap.NewNop(), &config.Config{}, nil)
+	return NewClientHandler(&service.Services{ClientService: fake}, zap.NewNop(), nil)
 }
 
 // TestCreate_ScopedActor_IgnoresBodyTenantIDAndPrivilegedFields is the core
