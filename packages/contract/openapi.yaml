@@ -2149,6 +2149,17 @@ paths:
               properties:
                 name: { type: string }
                 avatar_url: { type: string }
+                active:
+                  description: |
+                    false suspends the account: its sessions end (refresh
+                    tokens stop working, applications registered for
+                    back-channel logout are told) and signing in is refused
+                    with `403 account_suspended` once the user has proved who
+                    they are. true lifts the suspension. The account, its
+                    connections and second factor are kept. JWT access tokens
+                    already issued stay valid until they expire. Sent as
+                    `user.suspended` / `user.reactivated` events.
+                  type: boolean
       responses:
         '200':
           description: Updated
@@ -2163,6 +2174,9 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        # The account is suspended but its sessions could not be ended (code
+        # authorization_server_unavailable); the same request again ends them.
+        '502': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: deleteUser
@@ -2902,7 +2916,7 @@ components:
         lists only the events it sends.
       type: string
       enum: [user.created, user.updated, user.deleted, user.login, user.logout, user.password_changed,
-             user.mfa_enabled, user.mfa_disabled,
+             user.mfa_enabled, user.mfa_disabled, user.suspended, user.reactivated,
              client.created, client.updated, client.deleted, test, '*']
 
     WebhookEventPayload:
@@ -3042,7 +3056,7 @@ components:
         name: { type: string }
         avatar_url: { type: string }
         email_verified: { type: boolean }
-        active: { type: boolean }
+        active: { type: boolean, description: false while an administrator has suspended the account. }
         connections:
           description: The sign-in providers the account is linked to (google, github, microsoft, apple) — empty for one that signs in only by password or emailed link.
           type: array
@@ -3242,7 +3256,7 @@ components:
           type: string
           description: |
             Stable identifier, for example invalid_flow, flow_expired,
-            invalid_credentials, sign_in_method_not_allowed,
+            invalid_credentials, account_suspended, sign_in_method_not_allowed,
             invalid_mfa_challenge, invalid_code, mfa_locked, invalid_link,
             invalid_request, client_not_registered, invalid_token,
             token_expired, invitation_not_acceptable, invitation_not_accepted,

@@ -27,6 +27,8 @@ const (
 	EventUserPasswordChanged EventType = "user.password_changed"
 	EventUserMFAEnabled      EventType = "user.mfa_enabled"
 	EventUserMFADisabled     EventType = "user.mfa_disabled"
+	EventUserSuspended       EventType = "user.suspended"
+	EventUserReactivated     EventType = "user.reactivated"
 	EventClientCreated       EventType = "client.created"
 	EventClientUpdated       EventType = "client.updated"
 	EventClientDeleted       EventType = "client.deleted"
@@ -50,6 +52,8 @@ var Events = []struct {
 	{EventUserPasswordChanged, "A user set a new password"},
 	{EventUserMFAEnabled, "A user turned on a second factor"},
 	{EventUserMFADisabled, "A user turned off a second factor"},
+	{EventUserSuspended, "An administrator suspended a user account"},
+	{EventUserReactivated, "An administrator lifted a user account's suspension"},
 	{EventClientCreated, "An OAuth client was registered"},
 	{EventClientUpdated, "An OAuth client was changed"},
 	{EventClientDeleted, "An OAuth client was deleted"},

@@ -91,6 +91,14 @@ A typical "delete my account" button therefore does:
 An administrator deleting a user (`DELETE /api/v1/users/{id}`) ends that
 user's sessions and tokens in the same way.
 
+An administrator can also **suspend** a user instead of deleting them
+(`PUT /api/v1/users/{id}` with `"active": false`): their sessions end the same
+way, and signing in is refused with `403 account_suspended` — after the user
+has given the right password or otherwise proved who they are — until the
+suspension is lifted (`"active": true`). The account, its connections and
+second factor are kept. JWT access tokens already issued stay valid until they
+expire.
+
 ---
 
 ## 3. Two-factor authentication

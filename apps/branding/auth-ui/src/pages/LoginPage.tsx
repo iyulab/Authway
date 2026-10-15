@@ -25,6 +25,7 @@ type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>
 // Backend error codes that have a localized message on this screen.
 const LOGIN_ERROR_KEYS: Record<string, string> = {
   invalid_credentials: 'auth:errors.invalidCredentials',
+  account_suspended: 'auth:errors.accountSuspended',
   invalid_flow: 'auth:errors.flowInvalid',
   sign_in_method_not_allowed: 'auth:errors.signInMethodNotAllowed',
   too_many_requests: 'auth:errors.tooManyRequests',

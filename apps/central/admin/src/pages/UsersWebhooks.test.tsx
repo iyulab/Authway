@@ -35,6 +35,32 @@ describe('users', () => {
     expect(screen.getByText('Microsoft')).toBeInTheDocument()
     expect(screen.getByText('Password / link')).toBeInTheDocument()
   })
+
+  it('suspends a user after asking, and lifts a suspension', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(usersApi, 'list').mockResolvedValue(
+      answer({
+        users: [
+          { id: 'u1', tenant_id: 't1', email: 'a@example.com', name: 'A', email_verified: true, active: true, connections: [], created_at: '', updated_at: '' },
+          { id: 'u2', tenant_id: 't1', email: 's@example.com', name: 'S', email_verified: true, active: false, connections: [], created_at: '', updated_at: '' },
+        ],
+        total: 2,
+        limit: 10,
+        offset: 0,
+      }),
+    )
+    const update = vi.spyOn(usersApi, 'update').mockResolvedValue(answer({ message: 'ok', user: {} }))
+    render(<UsersPage />)
+
+    expect(await screen.findByText('Suspended')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Suspend a@example.com' }))
+    expect(update).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Suspend' }))
+    expect(update).toHaveBeenCalledWith('u1', { active: false })
+
+    await user.click(screen.getByRole('button', { name: 'Lift the suspension of s@example.com' }))
+    expect(update).toHaveBeenCalledWith('u2', { active: true })
+  })
 })
 
 describe('webhooks', () => {

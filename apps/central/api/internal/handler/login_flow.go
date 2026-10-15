@@ -39,7 +39,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	}
 
 	if step, settled, err := h.loginWithoutForm(c.Context(), flow, loginReq, requestedClient.TenantID); err != nil {
-		return apierror.Refuse(c, fiber.StatusBadGateway, "authorization_server_unavailable", "The authorization server is unavailable. Try again shortly.")
+		return respondFlowLookupError(c, err)
 	} else if settled {
 		return c.JSON(step)
 	}

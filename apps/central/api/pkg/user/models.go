@@ -17,7 +17,9 @@ type User struct {
 	Name          *string   `json:"name"`
 	AvatarURL     *string   `json:"avatar_url"`
 	EmailVerified bool      `json:"email_verified" gorm:"default:false"`
-	Active        bool      `json:"active"`
+	// Active is false while an administrator has suspended the account: it
+	// cannot sign in (see the sign-in steps) and its sessions were ended.
+	Active bool `json:"active"`
 	// Provider decided nothing: every account held "local" (nothing set it)
 	// and the sign-in providers an account uses are its links below. It stays
 	// mapped, read-only, until a migration drops the column.
@@ -111,6 +113,9 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Name      *string `json:"name"`
 	AvatarURL *string `json:"avatar_url"`
+	// Active false suspends the account: it cannot sign in, and its sessions
+	// end. True lifts the suspension. Left out, it stays as it is.
+	Active *bool `json:"active"`
 }
 
 // LoginRequest represents the login request

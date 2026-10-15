@@ -16,6 +16,8 @@ import (
 // logged by the caller, never returned.
 func respondFlowLookupError(c *fiber.Ctx, err error) error {
 	switch {
+	case errors.Is(err, errAccountSuspended):
+		return apierror.Refuse(c, fiber.StatusForbidden, "account_suspended", "This account is suspended. Contact the administrator of the application.")
 	case errors.Is(err, hydra.ErrFlowNotFound):
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_flow", "This sign-in link is not valid. Start again from the application.")
 	case errors.Is(err, hydra.ErrFlowExpired):

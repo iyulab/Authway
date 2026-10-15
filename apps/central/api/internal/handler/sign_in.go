@@ -65,6 +65,12 @@ type signInStep struct {
 	RedirectTo string
 }
 
+// errAccountSuspended refuses a sign-in to an account an administrator has
+// suspended. Every way of signing in passes the steps below, so it is checked
+// there: after the user proved who they are (the refusal says nothing to
+// anyone who has not), and again where a flow is accepted.
+var errAccountSuspended = errors.New("the account is suspended")
+
 // errSecondFactorNotStarted is a failure to park a sign-in for its second
 // factor, as opposed to the authorization server refusing the flow.
 var errSecondFactorNotStarted = errors.New("could not start the second factor step")
@@ -74,6 +80,9 @@ var errSecondFactorNotStarted = errors.New("could not start the second factor st
 // else is signed in. keepSignedIn is the user's choice to stay signed in on
 // this browser (see SessionPolicy).
 func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod, keepSignedIn bool) (signInStep, error) {
+	if !u.Active {
+		return signInStep{}, errAccountSuspended
+	}
 	if !u.TOTPEnabled {
 		return s.proved(flow, u, first, keepSignedIn)
 	}
@@ -100,6 +109,9 @@ func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod,
 // none of which a user asked for by leaving "keep me signed in" unticked.
 // That choice decides only how long the session lasts.
 func (s *signIn) accept(flow string, u *user.User, method signInMethod, keepSignedIn bool) (string, error) {
+	if !u.Active {
+		return "", errAccountSuspended
+	}
 	resp, err := acceptAuthenticatedLogin(s.hydra, s.authentications, flow, &hydra.AcceptLoginRequest{
 		Subject:     u.ID.String(),
 		Remember:    true,

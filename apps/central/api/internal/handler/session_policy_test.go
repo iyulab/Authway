@@ -170,7 +170,7 @@ func newSessionFlowApp(t *testing.T, h *sessionHydra, u *user.User, clients ...*
 // an answer without a prompt, the application is told so; asked plainly, the
 // user gets the form.
 func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
-	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
 	c := &client.Client{ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID, AllowEmailLogin: true}
 	request := func(requestURL string) *sessionHydra {
 		return &sessionHydra{login: hydra.LoginRequest{
@@ -204,7 +204,7 @@ func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 // Reusing a session neither lengthens it nor marks the consent step.
 func TestGetLoginFlow_ReusedSessionKeepsItsLifetime(t *testing.T) {
 	tenantID := uuid.New()
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
 	c := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	h := &sessionHydra{login: hydra.LoginRequest{
 		Challenge: "flow-1", Skip: true, Subject: u.ID.String(),
@@ -294,7 +294,7 @@ func TestConsentFlow_RememberedAnswerIsKeptUntilRevoked(t *testing.T) {
 // first: a flow that is settled there never opens a screen.
 func TestFlowSettler_SettlesWhatNeedsNoScreen(t *testing.T) {
 	tenantID := uuid.New()
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
 	own := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	foreign := &client.Client{ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
 	session := func(requestURL string) hydra.LoginRequest {

@@ -77,7 +77,7 @@ func getJSON(t *testing.T, app *fiber.App, path string) (int, map[string]any) {
 
 func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	tenantID := uuid.New()
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
 	c := &client.Client{
 		ID: uuid.New(), TenantID: tenantID, ClientID: testClientID,
 		EnabledAuthProviders: []string{"email", "github"},
@@ -122,7 +122,7 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 
 func TestGetLoginFlow_SameTenantSessionSkipsTheForm(t *testing.T) {
 	tenantID := uuid.New()
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: "user@example.com", Active: true}
 	c := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: testClientID}
 	h := &loginFlowHydra{skip: true, subject: u.ID.String()}
 	app := newLoginFlowApp(t, h, u, c)
@@ -140,7 +140,7 @@ func TestGetLoginFlow_SameTenantSessionSkipsTheForm(t *testing.T) {
 }
 
 func TestGetLoginFlow_UnregisteredClientIsRejected(t *testing.T) {
-	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com"}
+	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
 	other := &client.Client{ID: uuid.New(), TenantID: u.TenantID, ClientID: "someone-else"}
 	app := newLoginFlowApp(t, &loginFlowHydra{}, u, other)
 

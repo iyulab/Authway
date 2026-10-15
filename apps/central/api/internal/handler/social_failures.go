@@ -19,6 +19,7 @@ const (
 	msgInvalidSignIn   = "This sign-in link is not valid or has expired. Start again from the application."
 	msgSignInFailed    = "Signing in with this provider did not complete. Try again or use another sign-in method."
 	msgProviderRefused = "The sign-in was cancelled or refused at the provider."
+	msgSuspended       = "This account is suspended. Contact the administrator of the application."
 )
 
 // endSignIn finishes a failed provider callback in the browser. Once the

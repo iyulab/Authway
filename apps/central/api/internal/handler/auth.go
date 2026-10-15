@@ -178,6 +178,10 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 // emailed link does not otherwise know.
 func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User, first signInMethod, keepSignedIn bool) error {
 	step, err := h.flows.afterFirstFactor(flow, u, first, keepSignedIn)
+	if errors.Is(err, errAccountSuspended) {
+		h.logAuthFailure(c, u.TenantID, audit.ActionUserLoginFailed, u.Email, "account_suspended", map[string]any{"user_id": u.ID.String()})
+		return respondFlowLookupError(c, err)
+	}
 	if errors.Is(err, errSecondFactorNotStarted) || errors.Is(err, errTermsStep) {
 		h.logger.Error("Failed to start the next sign-in step", zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to continue the sign-in")

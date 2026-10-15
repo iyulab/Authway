@@ -9,6 +9,8 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   BuildingOfficeIcon,
+  NoSymbolIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { usersApi, User } from '@/lib/api'
 import {
@@ -38,6 +40,7 @@ const UsersPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   // Fetch users for selected tenant
@@ -80,6 +83,21 @@ const UsersPage: React.FC = () => {
         error.response?.data?.detail ||
         'Failed to update user'
       toast.error(`Update failed: ${errorMessage}`)
+    },
+  })
+
+  // Suspending ends the user's sessions and refuses their sign-ins; lifting
+  // it lets them sign in again. The account, its links and second factor stay.
+  const activeMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => usersApi.update(id, { active }),
+    onSuccess: (_res, { active }) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setShowSuspendConfirm(false)
+      setSelectedUser(null)
+      toast.success(active ? 'Suspension lifted' : 'User suspended — their sessions have ended')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to change the suspension')
     },
   })
 
@@ -276,7 +294,7 @@ const UsersPage: React.FC = () => {
                       <StatusBadge
                         active={user.active}
                         activeText="Active"
-                        inactiveText="Inactive"
+                        inactiveText="Suspended"
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -309,6 +327,28 @@ const UsersPage: React.FC = () => {
                         >
                           <PencilIcon className="h-5 w-5" />
                         </button>
+                        {user.active ? (
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user)
+                              setShowSuspendConfirm(true)
+                            }}
+                            className="text-amber-600 hover:text-amber-900"
+                            title="Suspend"
+                            aria-label={`Suspend ${user.email}`}
+                          >
+                            <NoSymbolIcon className="h-5 w-5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => activeMutation.mutate({ id: user.id, active: true })}
+                            className="text-green-600 hover:text-green-900"
+                            title="Lift suspension"
+                            aria-label={`Lift the suspension of ${user.email}`}
+                          >
+                            <ArrowPathIcon className="h-5 w-5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(user)}
                           className="text-red-600 hover:text-red-900"
@@ -350,6 +390,21 @@ const UsersPage: React.FC = () => {
           isSubmitting={updateMutation.isPending}
         />
       )}
+
+      {/* Suspend Confirmation */}
+      <ConfirmDialog
+        isOpen={showSuspendConfirm}
+        onClose={() => {
+          setShowSuspendConfirm(false)
+          setSelectedUser(null)
+        }}
+        onConfirm={() => selectedUser && activeMutation.mutate({ id: selectedUser.id, active: false })}
+        title="Suspend User"
+        message={`Suspend "${selectedUser?.email}"? Their sessions end now and they cannot sign in until the suspension is lifted. The account is kept.`}
+        confirmText="Suspend"
+        variant="danger"
+        isLoading={activeMutation.isPending}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

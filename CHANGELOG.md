@@ -22,6 +22,15 @@
 
 ### Added
 
+- **Suspending a user.** `PUT /api/v1/users/{id}` takes `active`: `false`
+  ends the user's sessions (refresh tokens stop working, applications
+  registered for back-channel logout are told) and refuses their sign-in with
+  `403 account_suspended`, by every way of signing in, once they have proved
+  who they are; `true` lifts it. The account, its connections and second
+  factor are kept. New events `user.suspended` and `user.reactivated` (audit
+  and webhooks). The admin console suspends a user after asking and lifts a
+  suspension; the sign-in screen says the account is suspended. `active` was
+  returned before and meant nothing — every account was active.
 - **An application's logo on the sign-in and consent screens.** A client's
   `logo` was kept and returned, and no screen showed it. It is now registered
   with the authorization server as the client's `logo_uri`, the login and

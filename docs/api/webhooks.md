@@ -107,6 +107,7 @@ refused sign-in, for one) sends nothing.
 | `user.logout` | A user signs out |
 | `user.password_changed` | A user sets a new password |
 | `user.mfa_enabled`, `user.mfa_disabled` | A user turns a second factor on or off |
+| `user.suspended`, `user.reactivated` | An administrator suspends a user account, or lifts its suspension |
 | `client.created`, `client.updated`, `client.deleted` | An OAuth client is registered, changed or deleted |
 | `test` | `POST /api/v1/webhooks/{id}/test` |
 

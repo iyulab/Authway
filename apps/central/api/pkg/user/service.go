@@ -190,6 +190,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
 	if req.AvatarURL != nil {
 		user.AvatarURL = clearable(req.AvatarURL)
 	}
+	if req.Active != nil {
+		user.Active = *req.Active
+	}
 
 	if err := s.db.Save(&user).Error; err != nil {
 		s.logger.Error("Failed to update user", zap.Error(err), zap.String("id", id.String()))

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"authway/apps/central/api/pkg/tenantscope"
+	"errors"
 	"strconv"
 
 	"authway/apps/central/api/internal/hydra"
@@ -172,6 +173,38 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 
 	h.logger.Info("User updated successfully", zap.String("id", idStr))
 
+	if beforeUser != nil && beforeUser.Active != updatedUser.Active {
+		action := audit.ActionUserSuspended
+		if updatedUser.Active {
+			action = audit.ActionUserReactivated
+		}
+		h.logAudit(c, updatedUser.TenantID, action, updatedUser.ID.String(), map[string]any{"email": updatedUser.Email})
+	}
+	if req.Name != nil || req.AvatarURL != nil {
+		h.logProfileChange(c, beforeUser, updatedUser)
+	}
+	// Suspending ends the account's sessions, so its refresh tokens stop
+	// working and its applications are told; signing in again is refused at
+	// the sign-in steps. Asked again, it ends them again — a suspension whose
+	// sessions could not be ended is completed by repeating it.
+	if req.Active != nil && !*req.Active {
+		if err := h.hydraClient.RevokeUserSessions(updatedUser.ID.String()); err != nil && !errors.Is(err, hydra.ErrApplicationsNotNotified) {
+			h.logger.Error("Suspended a user, but could not end their sessions", zap.String("id", idStr), zap.Error(err))
+			return apierror.RefuseWith(c, fiber.StatusBadGateway, "authorization_server_unavailable",
+				"The account is suspended, but its sessions could not be ended",
+				fiber.Map{"hint": "Send the same request again to end them."})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "User updated successfully",
+		"user":    updatedUser.ToPublic(),
+	})
+}
+
+// logProfileChange records an administrator's change to a user's name or
+// picture, with what each was before when it changed.
+func (h *UserHandler) logProfileChange(c *fiber.Ctx, beforeUser, updatedUser *user.User) {
 	auditDetails := map[string]any{
 		"email": updatedUser.Email,
 	}
@@ -186,11 +219,6 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 		}
 	}
 	h.logAudit(c, updatedUser.TenantID, audit.ActionUserUpdated, updatedUser.ID.String(), auditDetails)
-
-	return c.JSON(fiber.Map{
-		"message": "User updated successfully",
-		"user":    updatedUser.ToPublic(),
-	})
 }
 
 // Delete handles deleting a user

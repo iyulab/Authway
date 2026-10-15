@@ -162,6 +162,11 @@ func (s *signIn) park(p *pendingTerms, due []terms.Document) (signInStep, error)
 // lasts was decided when the user signed in (the authorization server ignores
 // a lifetime given here).
 func (s *signIn) reuse(flow string, sessionUser *user.User, amr []string) (string, error) {
+	// Suspending an account ends its sessions; one that outlived that (the
+	// authorization server was unreachable) still does not sign in.
+	if !sessionUser.Active {
+		return "", errAccountSuspended
+	}
 	resp, err := s.hydra.AcceptLoginRequest(flow, &hydra.AcceptLoginRequest{
 		Subject: sessionUser.ID.String(),
 		AMR:     amr,

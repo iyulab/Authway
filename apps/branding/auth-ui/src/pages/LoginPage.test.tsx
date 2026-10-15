@@ -437,6 +437,26 @@ describe('LoginPage', () => {
       expect(mockNavigate).not.toHaveBeenCalled()
     })
 
+    it('says the account is suspended when the server refuses it so', async () => {
+      server.use(
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
+          return HttpResponse.json(
+            { detail: 'This account is suspended.', code: 'account_suspended' },
+            { status: 403 }
+          )
+        })
+      )
+
+      await user.type(screen.getByLabelText('이메일'), 'test@example.com')
+      await user.type(screen.getByLabelText('비밀번호'), 'right-password')
+      await user.click(screen.getByRole('button', { name: '로그인' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('정지된 계정입니다. 애플리케이션 관리자에게 문의하세요.')).toBeInTheDocument()
+      })
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
     it('navigates to the MFA verify page when the server requires a second factor', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {

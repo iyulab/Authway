@@ -178,7 +178,7 @@ export const usersApi = {
   get: (id: string) =>
     api.get<{ user: User }>(`/api/v1/users/${id}`),
 
-  update: (id: string, data: { name?: string; avatar_url?: string }) =>
+  update: (id: string, data: { name?: string; avatar_url?: string; active?: boolean }) =>
     api.put<{ message: string; user: User }>(`/api/v1/users/${id}`, data),
 
   delete: (id: string) =>

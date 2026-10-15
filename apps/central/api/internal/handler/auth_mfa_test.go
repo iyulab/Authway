@@ -96,6 +96,7 @@ func buildTestUser(t *testing.T, password string, totpEnabled bool) *user.User {
 		Email:        "user@example.com",
 		PasswordHash: string(hash),
 		TOTPEnabled:  totpEnabled,
+		Active:       true,
 	}
 }
 

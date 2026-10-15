@@ -38,6 +38,8 @@ var auditEvents = map[audit.AuditAction]EventType{
 	audit.ActionUserConnectionRemoved: EventUserUpdated,
 	audit.ActionUserMFAEnabled:        EventUserMFAEnabled,
 	audit.ActionUserMFADisabled:       EventUserMFADisabled,
+	audit.ActionUserSuspended:         EventUserSuspended,
+	audit.ActionUserReactivated:       EventUserReactivated,
 	audit.ActionClientCreated:         EventClientCreated,
 	audit.ActionClientUpdated:         EventClientUpdated,
 	audit.ActionClientDeleted:         EventClientDeleted,

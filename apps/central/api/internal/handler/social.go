@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -397,6 +398,11 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow string, u *user.User) error {
 	method := byProvider(provider)
 	step, err := s.flows.afterFirstFactor(flow, u, method, false)
+	if errors.Is(err, errAccountSuspended) {
+		s.logger.Info("Social sign-in refused: the account is suspended",
+			zap.String("provider", provider), zap.String("user_id", u.ID.String()))
+		return s.endSignIn(c, flow, "access_denied", msgSuspended)
+	}
 	if err != nil {
 		s.logger.Error("Failed to continue the login flow after a social sign-in",
 			zap.String("provider", provider), zap.Error(err))
