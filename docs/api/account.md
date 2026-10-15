@@ -17,8 +17,10 @@ GET /api/v1/profile/me
 Authorization: Bearer <the user's access token>
 ```
 
-answers `{ "id", "email", "name", "email_verified", "created_at", "updated_at" }`.
-`id` is the `sub` of the user's tokens.
+answers `{ "id", "email", "name", "email_verified", "has_password",
+"created_at", "updated_at" }`. `id` is the `sub` of the user's tokens;
+`has_password` is false for an account that signs in only by an emailed link
+or another provider.
 
 ---
 
@@ -209,7 +211,43 @@ recovery codes are removed. To turn it on again, start from `setup`.
 
 ---
 
-## 4. Signing out everywhere
+## 4. Changing the password
+
+```http
+POST /api/v1/users/password
+Authorization: Bearer <the user's access token>
+Content-Type: application/json
+
+{ "current_password": "…", "new_password": "…" }
+```
+
+An account with a password proves it with `current_password` — a token alone
+does not change it. An account without one (`has_password: false`) leaves
+`current_password` out and sets its first password; for that the user must
+have signed in recently, as for [deleting the account](#the-user-must-have-signed-in-recently).
+The new password follows the tenant's rule.
+
+On `200` the answer is `{ "message", "sessions_ended" }`: the user's other
+sessions — every device, every application — have ended, with the tokens
+issued in them, and applications that registered a `backchannel_logout_uri`
+are told. `sessions_ended` is `others` (this session stays), `all` (the token
+named no session, so this one ended too — sign the user in again) or `none`
+(they could not be ended; the password is changed all the same). The webhook
+event is `user.password_changed`.
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `400` | `invalid_current_password` | The current password is not correct. Repeated ones are limited like failed sign-ins (`429`) |
+| `400` | `password_too_short` / `password_too_long` | The new password breaks the tenant's rule; `min_length` says the least |
+| `400` | `invalid_request` | No `new_password` |
+| `401` | `insufficient_user_authentication` | Setting a first password needs a recent sign-in — sign in again with `max_age` and retry |
+| `401` | `unauthorized` | No token, or one that is no longer valid |
+
+The [account screen](#the-account-screen) offers this.
+
+---
+
+## 5. Signing out everywhere
 
 ```http
 POST /api/v1/logout
@@ -245,8 +283,8 @@ server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
 ## The account screen
 
 Authway hosts a page where a signed-in user manages their own sign-in —
-for now, turning two-step verification on and off and renewing recovery
-codes. Link to it from your application:
+turning two-step verification on and off, renewing recovery codes, and
+changing (or setting a first) password. Link to it from your application:
 
 ```
 {login screens}/account?client_id=<your application's client_id>

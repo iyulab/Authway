@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -14,6 +15,9 @@ const (
 	MinPasswordLength = 8
 	MaxPasswordLength = 72 // bytes — bcrypt takes in no more
 )
+
+// ErrWrongPassword is a current password that does not match the account's.
+var ErrWrongPassword = errors.New("the current password is not correct")
 
 // PasswordError is a password the rule refuses. It is the caller's to
 // correct, so its text is written to be shown.

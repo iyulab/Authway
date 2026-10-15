@@ -441,6 +441,50 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/password:
+    post:
+      tags: [account]
+      operationId: changeOwnPassword
+      summary: Set a new password for the signed-in user
+      description: |
+        An account with a password sends the current one (`current_password`);
+        a wrong one is `400 invalid_current_password`, and repeated wrong ones
+        are limited like failed sign-ins. An account without one (it signs in
+        by link or by another provider; `has_password: false` on the profile)
+        sets its first with a recent sign-in instead — otherwise `401
+        insufficient_user_authentication` with `max_age`, as deleting the
+        account answers. The new password follows the tenant's rule (`400
+        password_too_short` with `min_length`, or `password_too_long`).
+
+        The user's other sessions end, with the tokens issued in them;
+        `sessions_ended` says which, as turning on a second factor does.
+      security: [{ userToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, sessions_ended]
+                properties:
+                  message: { type: string }
+                  sessions_ended: { type: string, enum: [others, all, none] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /api/v1/users/mfa/setup:
     post:
       tags: [account]
@@ -2667,6 +2711,9 @@ components:
         email: { type: string }
         name: { type: ['null', string] }
         email_verified: { type: boolean }
+        has_password:
+          type: boolean
+          description: Whether the account has a password — one that signs in only by link or by another provider has none.
         created_at: { type: string }
         updated_at: { type: string }
 

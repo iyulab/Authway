@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -147,8 +148,8 @@ func TestPasswordLifecycle_VerifyChangeReset(t *testing.T) {
 		t.Fatal("expected VerifyPassword to reject an incorrect password")
 	}
 
-	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{CurrentPassword: "wrong-password", NewPassword: "new-password-2"}); err == nil {
-		t.Fatal("expected ChangePassword to reject an incorrect current password")
+	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{CurrentPassword: "wrong-password", NewPassword: "new-password-2"}); !errors.Is(err, ErrWrongPassword) {
+		t.Fatalf("ChangePassword with an incorrect current password: %v, want ErrWrongPassword", err)
 	}
 	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{CurrentPassword: "initial-password-1", NewPassword: "new-password-2"}); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
@@ -375,5 +376,30 @@ func TestOnCreated_HearsOfEveryAccountAndOnlyOnceItExists(t *testing.T) {
 	}
 	if len(heard) != 1 {
 		t.Fatalf("a refused creation was announced: %v", heard)
+	}
+}
+
+// An account without a password — it signs in by link or another provider —
+// sets its first one with no current password to prove (the handler asks for
+// a recent sign-in instead), and from then on has one to prove.
+func TestChangePassword_AnAccountWithoutOneSetsItsFirst(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tn := freshTenant(t, db, ts)
+	u, err := svc.Create(tn.ID, &CreateUserRequest{Email: fmt.Sprintf("nopw-%s@example.com", uuid.New().String()[:8])})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+
+	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{NewPassword: "first-password-1"}); err != nil {
+		t.Fatalf("first password: %v", err)
+	}
+	reloaded, _ := svc.GetByID(u.ID)
+	if !svc.VerifyPassword(reloaded, "first-password-1") {
+		t.Fatal("the first password does not sign in")
+	}
+	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{NewPassword: "second-password-2"}); !errors.Is(err, ErrWrongPassword) {
+		t.Fatalf("a second change without the current password: %v, want ErrWrongPassword", err)
 	}
 }

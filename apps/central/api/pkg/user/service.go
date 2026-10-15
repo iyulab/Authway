@@ -236,9 +236,8 @@ func (s *service) ChangePassword(userID uuid.UUID, req *ChangePasswordRequest) e
 		return err
 	}
 
-	// Verify current password
-	if !s.VerifyPassword(user, req.CurrentPassword) {
-		return fmt.Errorf("current password is incorrect")
+	if user.PasswordHash != "" && !s.VerifyPassword(user, req.CurrentPassword) {
+		return ErrWrongPassword
 	}
 
 	if err := s.checkPassword(user.TenantID, req.NewPassword); err != nil {

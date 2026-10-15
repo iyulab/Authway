@@ -17,6 +17,7 @@ const (
 	ActionUserLoginFailed      AuditAction = "user.login_failed"
 	ActionUserLogout           AuditAction = "user.logout"
 	ActionUserPasswordReset    AuditAction = "user.password_reset"
+	ActionUserPasswordChanged  AuditAction = "user.password_changed"
 	ActionUserMFAEnabled       AuditAction = "user.mfa_enabled"
 	ActionUserMFADisabled      AuditAction = "user.mfa_disabled"
 	ActionUserMFAFailed        AuditAction = "user.mfa_failed"
@@ -66,6 +67,7 @@ var Actions = []struct {
 	{ActionUserLoginFailed, "Sign-in refused"},
 	{ActionUserLogout, "User signed out"},
 	{ActionUserPasswordReset, "Password reset with an emailed link"},
+	{ActionUserPasswordChanged, "Password changed by its owner"},
 	{ActionUserMFAEnabled, "MFA enabled"},
 	{ActionUserMFADisabled, "MFA disabled"},
 	{ActionUserMFAFailed, "MFA code refused"},

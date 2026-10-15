@@ -37,24 +37,36 @@ func removeAccount(hc *hydra.Client, users user.Service, id uuid.UUID) error {
 	return users.Delete(id)
 }
 
+// signedInRecently reports whether the token's user signed in within
+// recentAuthentication.
+func signedInRecently(c *fiber.Ctx) bool {
+	authTime, _ := c.Locals("auth_time").(time.Time)
+	return !authTime.IsZero() && time.Since(authTime) <= recentAuthentication
+}
+
+// refuseStaleSignIn is the step-up challenge of RFC 9470: 401 with
+// WWW-Authenticate naming insufficient_user_authentication and the max_age to
+// request, so the application sends the user through sign-in again and
+// retries with the new token.
+func refuseStaleSignIn(c *fiber.Ctx, detail string) error {
+	maxAge := strconv.Itoa(int(recentAuthentication.Seconds()))
+	c.Set(fiber.HeaderWWWAuthenticate,
+		`Bearer error="insufficient_user_authentication", error_description="A more recent sign-in is required", max_age="`+maxAge+`"`)
+	return apierror.RefuseWith(c, fiber.StatusUnauthorized, "insufficient_user_authentication", detail, fiber.Map{"max_age": int(recentAuthentication.Seconds())})
+}
+
 // DeleteMe deletes the signed-in user's own account.
 // DELETE /api/v1/profile/me
 //
 // The access token must come from a session whose user signed in within
-// recentAuthentication. Otherwise the answer is the step-up challenge of
-// RFC 9470: 401 with WWW-Authenticate naming insufficient_user_authentication
-// and the max_age to request, so the application sends the user through
-// sign-in again and retries with the new token.
+// recentAuthentication; otherwise the answer is refuseStaleSignIn.
 func (h *AuthHandler) DeleteMe(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
 		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Sign in to delete your account.")
 	}
-	if authTime, _ := c.Locals("auth_time").(time.Time); authTime.IsZero() || time.Since(authTime) > recentAuthentication {
-		maxAge := strconv.Itoa(int(recentAuthentication.Seconds()))
-		c.Set(fiber.HeaderWWWAuthenticate,
-			`Bearer error="insufficient_user_authentication", error_description="A more recent sign-in is required", max_age="`+maxAge+`"`)
-		return apierror.RefuseWith(c, fiber.StatusUnauthorized, "insufficient_user_authentication", "Sign in again to delete your account.", fiber.Map{"max_age": int(recentAuthentication.Seconds())})
+	if !signedInRecently(c) {
+		return refuseStaleSignIn(c, "Sign in again to delete your account.")
 	}
 
 	u, err := h.userService.GetByID(userID)

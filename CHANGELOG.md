@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### Added
+
+- **A signed-in user changes their own password** — `POST
+  /api/v1/users/password` with `current_password` and `new_password`. An
+  account without a password (it signs in by link or another provider) sets
+  its first one without `current_password`, after a recent sign-in
+  (`401 insufficient_user_authentication` otherwise). The user's other
+  sessions end with the tokens issued in them (`sessions_ended`, as turning on
+  a second factor answers); the webhook event is `user.password_changed`. The
+  account screen offers it. `GET /api/v1/profile/me` answers `has_password`.
+
 ## [0.17.0] - 2026-10-15
 
 > Minor, no breaking change for applications. Users get a hosted account

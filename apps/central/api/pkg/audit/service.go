@@ -190,6 +190,7 @@ func (s *service) GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]Audi
 		ActionUserMFAFailed,
 		ActionUserMFADisabled,
 		ActionUserPasswordReset,
+		ActionUserPasswordChanged,
 		ActionUserDeleted,
 		ActionUserClaimsUpdated,
 		ActionConsentRevoked,

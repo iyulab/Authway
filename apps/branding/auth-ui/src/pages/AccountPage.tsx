@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { AuthwayClient } from '@authway/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import AccountPassword from './AccountPassword'
 import { getConfig } from '../config'
 
 /** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
@@ -73,6 +74,11 @@ const refusal = async (res: Response): Promise<{ code?: string; detail?: string 
   }
 }
 
+// The code exchange of each comeback, run once: the code works once, so a
+// second run of the effect (React runs effects twice in development) waits for
+// the first instead of failing on a used-up code.
+const exchanges = new Map<string, Promise<unknown>>()
+
 /**
  * The comeback from sign-in: finishes the authorization code exchange, then
  * returns to the account screen of the application the user came from.
@@ -88,8 +94,10 @@ export const AccountCallbackPage: React.FC = () => {
       setFailed(true)
       return
     }
-    signIn(stored.entry)
-      .handleRedirectCallback()
+    const key = window.location.search
+    if (!exchanges.has(key)) exchanges.set(key, signIn(stored.entry).handleRedirectCallback())
+    exchanges
+      .get(key)!
       .then(() => navigate(`/account?client_id=${encodeURIComponent(stored.appClientId)}`, { replace: true }))
       .catch(() => setFailed(true))
   }, [navigate])
@@ -158,7 +166,9 @@ const AccountPage: React.FC = () => {
       sessionStorage.setItem(ENTRY_KEY, JSON.stringify({ appClientId, entry: answer } satisfies Stored))
       const sdk = signIn(answer)
       if (!(await sdk.isAuthenticated()) && !(await sdk.checkSession().catch(() => false))) {
-        await sdk.loginWithRedirect()
+        // A run that was cleaned up must not start a sign-in: two would each
+        // store their own state, and the one that comes back would not match.
+        if (!cancelled) await sdk.loginWithRedirect()
         return
       }
       if (cancelled) return
@@ -281,6 +291,7 @@ const AccountPage: React.FC = () => {
   )
 
   return page(
+    <>
     <section className="bg-white shadow rounded-lg p-6 space-y-4">
       <h2 className="text-lg font-semibold text-gray-900">{t('auth:account.twoFactor')}</h2>
 
@@ -355,7 +366,12 @@ const AccountPage: React.FC = () => {
           </button>
         </div>
       )}
-    </section>,
+    </section>
+    <AccountPassword
+      call={call}
+      signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
+    />
+    </>,
   )
 }
 

@@ -424,6 +424,7 @@ func main() {
 	// user could read another's email and name with it, whatever their tenant.
 	v1.Get("/profile/me", jwtAuth, authHandler.ProfileMe)
 	v1.Delete("/profile/me", jwtAuth, authHandler.DeleteMe)
+	v1.Post("/users/password", jwtAuth, loginRateLimit, authHandler.ChangePassword)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the

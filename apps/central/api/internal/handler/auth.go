@@ -671,7 +671,10 @@ func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
 		"email":          user.Email,
 		"name":           user.Name,
 		"email_verified": user.EmailVerified,
-		"created_at":     user.CreatedAt,
+		// Whether the account has a password — the account screen offers to
+		// change it, or to set one.
+		"has_password": user.PasswordHash != "",
+		"created_at":   user.CreatedAt,
 		"updated_at":     user.UpdatedAt,
 	})
 }

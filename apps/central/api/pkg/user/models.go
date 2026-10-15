@@ -119,8 +119,11 @@ type LoginWithMFARequest struct {
 	TOTPCode string `json:"totp_code" validate:"required,len=6"`
 }
 
-// ChangePasswordRequest represents the change password request
+// ChangePasswordRequest is a signed-in user setting a new password. An
+// account that has one proves it with CurrentPassword; an account without
+// one (signed in by link or by another provider) sends none. How long the new
+// one must be is the tenant's rule (see checkPassword).
 type ChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password" validate:"required"`
-	NewPassword     string `json:"new_password" validate:"required,min=8"`
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
