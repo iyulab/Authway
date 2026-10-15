@@ -11,6 +11,7 @@ import {
   KeyIcon,
 } from '@heroicons/react/24/outline'
 import { webhooksApi, Webhook } from '@/lib/features-api'
+import { refusalAt } from '@/lib/api'
 import {
   Button,
   Card,
@@ -149,7 +150,19 @@ const WebhooksPage: React.FC = () => {
     },
   })
 
+  // The refusal of the form's last submission, shown at the member it names.
+  // Any edit, or closing the form, makes it stale.
+  const formError = selectedWebhook ? updateMutation.error : createMutation.error
+  const refused = (field: string) => refusalAt(formError, field)
+  const edit = (patch: Partial<WebhookFormData>) => {
+    if (createMutation.error) createMutation.reset()
+    if (updateMutation.error) updateMutation.reset()
+    setFormData((prev) => ({ ...prev, ...patch }))
+  }
+
   const resetForm = () => {
+    createMutation.reset()
+    updateMutation.reset()
     setFormData({
       name: '',
       url: '',
@@ -179,12 +192,11 @@ const WebhooksPage: React.FC = () => {
   }
 
   const handleEventToggle = (event: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      events: prev.events.includes(event)
-        ? prev.events.filter((e) => e !== event)
-        : [...prev.events, event],
-    }))
+    edit({
+      events: formData.events.includes(event)
+        ? formData.events.filter((e) => e !== event)
+        : [...formData.events, event],
+    })
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -194,8 +206,8 @@ const WebhooksPage: React.FC = () => {
       toast.error('Retry count must be a number from 0 to 10')
       return
     }
-    if (!Number.isFinite(formData.timeout_secs) || formData.timeout_secs < 5 || formData.timeout_secs > 60) {
-      toast.error('Timeout must be a number of seconds from 5 to 60')
+    if (!Number.isFinite(formData.timeout_secs) || formData.timeout_secs < 1 || formData.timeout_secs > 60) {
+      toast.error('Timeout must be a number of seconds from 1 to 60')
       return
     }
     if (selectedWebhook) {
@@ -362,7 +374,8 @@ const WebhooksPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700">Name</label>
             <Input
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => edit({ name: e.target.value })}
+              error={refused('name')}
               placeholder="My Webhook"
               required
             />
@@ -373,7 +386,8 @@ const WebhooksPage: React.FC = () => {
             <Input
               type="url"
               value={formData.url}
-              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+              onChange={(e) => edit({ url: e.target.value })}
+              error={refused('url')}
               placeholder="https://example.com/webhook"
               required
             />
@@ -394,6 +408,7 @@ const WebhooksPage: React.FC = () => {
                 </label>
               ))}
             </div>
+            {refused('events') && <p className="mt-1 text-sm text-red-600">{refused('events')}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -404,17 +419,19 @@ const WebhooksPage: React.FC = () => {
                 min={0}
                 max={10}
                 value={formData.retry_count}
-                onChange={(e) => setFormData({ ...formData, retry_count: parseInt(e.target.value) })}
+                onChange={(e) => edit({ retry_count: parseInt(e.target.value) })}
+                error={refused('retry_count')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Timeout (seconds)</label>
               <Input
                 type="number"
-                min={5}
+                min={1}
                 max={60}
                 value={formData.timeout_secs}
-                onChange={(e) => setFormData({ ...formData, timeout_secs: parseInt(e.target.value) })}
+                onChange={(e) => edit({ timeout_secs: parseInt(e.target.value) })}
+                error={refused('timeout_secs')}
               />
             </div>
           </div>
@@ -423,7 +440,7 @@ const WebhooksPage: React.FC = () => {
             <input
               type="checkbox"
               checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+              onChange={(e) => edit({ enabled: e.target.checked })}
               className="rounded border-gray-300"
             />
             <label className="ml-2 text-sm text-gray-700">Enabled</label>

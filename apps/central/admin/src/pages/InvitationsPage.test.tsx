@@ -90,6 +90,20 @@ describe('inviting a user to an application', () => {
     await user.selectOptions(screen.getByLabelText('Application (optional)'), await screen.findByRole('option', { name: 'Bare' }))
     expect(screen.getByText(/has no sign-in start URL or home page yet/)).toBeInTheDocument()
   })
+
+  it('shows a refusal at the field it names, until that is changed', async () => {
+    vi.spyOn(invitationsApi, 'create').mockRejectedValue({
+      response: { status: 400, data: { code: 'email_domain_not_allowed', field: 'email', detail: 'this address is not in a domain the organization allows' } },
+    })
+    const user = userEvent.setup()
+    render(<InvitationsPage />)
+    await openDialog(user)
+    await user.click(screen.getByRole('button', { name: 'Send Invitation' }))
+
+    expect(await screen.findByText('this address is not in a domain the organization allows')).toBeInTheDocument()
+    await user.type(screen.getByPlaceholderText('user@example.com'), 'x')
+    expect(screen.queryByText('this address is not in a domain the organization allows')).not.toBeInTheDocument()
+  })
 })
 
 describe('the invitation list', () => {

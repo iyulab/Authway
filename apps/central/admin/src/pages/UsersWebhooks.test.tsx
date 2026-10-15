@@ -80,4 +80,20 @@ describe('webhooks', () => {
     expect(error).toHaveBeenCalledWith('Retry count must be a number from 0 to 10')
     expect(create).not.toHaveBeenCalled()
   })
+
+  it('shows a refusal at the field it names', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(webhooksApi, 'list').mockResolvedValue(answer({ webhooks: [], total: 0, limit: 10, offset: 0 }))
+    vi.spyOn(webhooksApi, 'create').mockRejectedValue({
+      response: { status: 400, data: { code: 'invalid_request', field: 'url', detail: 'url must not point at a local or private address' } },
+    })
+    render(<WebhooksPage />)
+
+    await user.click(await screen.findByRole('button', { name: /add webhook/i }))
+    await user.type(screen.getByPlaceholderText('My Webhook'), 'Hook')
+    await user.type(screen.getByPlaceholderText('https://example.com/webhook'), 'https://10.0.0.1/hook')
+    await user.click(screen.getByLabelText('User Created'))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    expect(await screen.findByText('url must not point at a local or private address')).toBeInTheDocument()
+  })
 })

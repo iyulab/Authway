@@ -9,7 +9,7 @@ import {
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline'
 import { invitationsApi, Invitation } from '@/lib/features-api'
-import { clientsApi } from '@/lib/api'
+import { clientsApi, refusalAt } from '@/lib/api'
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import {
   Input,
   Modal,
   Pagination,
+  Select,
 } from '@/components/ui'
 import { useTenantStore } from '@/stores/tenant'
 
@@ -117,7 +118,16 @@ const InvitationsPage: React.FC = () => {
     },
   })
 
+  // The refusal of the last invitation sent, shown at the member it names.
+  // Any edit, or closing the form, makes it stale.
+  const refused = (field: string) => refusalAt(createMutation.error, field)
+  const edit = (patch: Partial<InvitationFormData>) => {
+    if (createMutation.error) createMutation.reset()
+    setFormData((prev) => ({ ...prev, ...patch }))
+  }
+
   const resetForm = () => {
+    createMutation.reset()
     setFormData(emptyForm)
   }
 
@@ -329,41 +339,35 @@ const InvitationsPage: React.FC = () => {
             <Input
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => edit({ email: e.target.value })}
+              error={refused('email')}
               placeholder="user@example.com"
               required
             />
           </div>
 
-          <div>
-            <label htmlFor="invitation-application" className="block text-sm font-medium text-gray-700">
-              Application (optional)
-            </label>
-            <select
-              id="invitation-application"
-              value={formData.client_id}
-              onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="">No particular application</option>
-              {applications.map((c) => (
-                <option key={c.id} value={c.client_id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              {chosenApplication && !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
+          <Select
+            id="invitation-application"
+            label="Application (optional)"
+            value={formData.client_id}
+            onChange={(e) => edit({ client_id: e.target.value })}
+            error={refused('client_id')}
+            options={[
+              { value: '', label: 'No particular application' },
+              ...applications.map((c) => ({ value: c.client_id, label: c.name })),
+            ]}
+            helperText={
+              chosenApplication && !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
                 ? 'This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.'
-                : 'After accepting, the user is sent on to this application to sign in. Without one, they finish on Authway.'}
-            </p>
-          </div>
+                : 'After accepting, the user is sent on to this application to sign in. Without one, they finish on Authway.'
+            }
+          />
 
           <div>
             <label className="block text-sm font-medium text-gray-700">Message (optional)</label>
             <textarea
               value={formData.message}
-              onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+              onChange={(e) => edit({ message: e.target.value })}
               placeholder="Personal message to include in the invitation..."
               rows={3}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"

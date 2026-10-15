@@ -55,6 +55,35 @@ api.interceptors.response.use(
   }
 )
 
+/**
+ * The API's refusal (RFC 9457 problem details). `field` names the request
+ * member at fault — a member inside an object by its path
+ * (`settings.allowed_domains`).
+ */
+export interface ServerRefusal {
+  code?: string
+  field?: string
+  detail?: string
+  hint?: string
+}
+
+/** The refusal behind a failed request, or null when the API gave none. */
+export function serverRefusal(error: unknown): ServerRefusal | null {
+  const data = (error as { response?: { data?: unknown } } | null | undefined)?.response?.data
+  return data && typeof data === 'object' ? (data as ServerRefusal) : null
+}
+
+/** A refusal as a form shows it at its field: what is wrong, then what to do. */
+export function refusalMessage(refusal: ServerRefusal): string {
+  return [refusal.detail, refusal.hint].filter(Boolean).join(' ') || 'Refused by the server'
+}
+
+/** What the refusal behind `error` says about the request member `field`, if it names it. */
+export function refusalAt(error: unknown, field: string): string | undefined {
+  const refusal = serverRefusal(error)
+  return refusal?.field === field ? refusalMessage(refusal) : undefined
+}
+
 // API types
 export interface User {
   id: string

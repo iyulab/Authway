@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { tenantsApi, type Tenant, type TenantSettings } from '@/lib/api'
+import { refusalAt, tenantsApi, type Tenant, type TenantSettings } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 
@@ -18,6 +18,17 @@ interface Draft {
   sessionTimeout: string
   allowedDomains: string
   signupMode: string
+}
+
+// The request member each draft field is sent as: a refusal from the API
+// names that member, and the form shows it at the field.
+const memberOf: Record<keyof Draft, string> = {
+  name: 'name',
+  description: 'description',
+  passwordMinLength: 'settings.password_min_length',
+  sessionTimeout: 'settings.session_timeout',
+  allowedDomains: 'settings.allowed_domains',
+  signupMode: 'settings.signup_mode',
 }
 
 const draftOf = (t: Tenant): Draft => ({
@@ -98,8 +109,13 @@ const TenantSettingsForm: React.FC = () => {
 
   if (!draft) return null
   const errors = draftErrors(draft)
-  const set = (field: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+  // What is wrong with a field: the form's own check first, then what the API
+  // refused of the last save. Any edit makes that refusal stale.
+  const errorAt = (field: keyof Draft) => errors[field] ?? refusalAt(save.error, memberOf[field])
+  const set = (field: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    if (save.error) save.reset()
     setDraft({ ...draft, [field]: e.target.value })
+  }
 
   return (
     <form
@@ -110,11 +126,12 @@ const TenantSettingsForm: React.FC = () => {
       }}
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input label="이름" value={draft.name} onChange={set('name')} error={errors.name} />
+        <Input label="이름" value={draft.name} onChange={set('name')} error={errorAt('name')} />
         <Select
           label="가입 방식"
           value={draft.signupMode}
           onChange={set('signupMode')}
+          error={errorAt('signupMode')}
           options={[
             { value: 'invite_only', label: '초대 전용 — 첫 로그인에 초대가 있어야 함' },
             { value: 'open', label: '공개 — 누구나 첫 로그인으로 계정이 생김' },
@@ -126,7 +143,7 @@ const TenantSettingsForm: React.FC = () => {
           placeholder={String(MIN_PASSWORD)}
           value={draft.passwordMinLength}
           onChange={set('passwordMinLength')}
-          error={errors.passwordMinLength}
+          error={errorAt('passwordMinLength')}
           helperText="모든 테넌트의 바닥은 8 자입니다. 올리기만 할 수 있습니다."
         />
         <Input
@@ -135,7 +152,7 @@ const TenantSettingsForm: React.FC = () => {
           placeholder="기본"
           value={draft.sessionTimeout}
           onChange={set('sessionTimeout')}
-          error={errors.sessionTimeout}
+          error={errorAt('sessionTimeout')}
           helperText="사용자의 로그인 세션이 유지되는 시간. 최대 43200 분(30 일)."
         />
       </div>
@@ -145,9 +162,10 @@ const TenantSettingsForm: React.FC = () => {
         placeholder="example.com"
         value={draft.allowedDomains}
         onChange={set('allowedDomains')}
+        error={errorAt('allowedDomains')}
         helperText="이름이 있으면 이 도메인의 주소로만 계정이 생깁니다(초대·첫 로그인). 비우면 제한 없음. 이미 있는 계정은 그대로."
       />
-      <Textarea label="설명" rows={2} value={draft.description} onChange={set('description')} />
+      <Textarea label="설명" rows={2} value={draft.description} onChange={set('description')} error={errorAt('description')} />
       <div className="flex justify-end">
         <Button type="submit" disabled={Object.keys(errors).length > 0} isLoading={save.isPending}>
           저장

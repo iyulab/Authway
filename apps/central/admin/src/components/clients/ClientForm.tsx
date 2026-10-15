@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Input, Textarea, Select, Checkbox, CheckboxGroup, Button } from '@/components/ui'
 import { useQuery } from '@tanstack/react-query'
-import { Client, capabilitiesApi } from '@/lib/api'
+import { Client, ServerRefusal, capabilitiesApi, refusalMessage } from '@/lib/api'
 
 /** The non-empty lines of a one-per-line field, trimmed. */
 export function lines(value?: string): string[] {
@@ -175,17 +175,10 @@ export const AVAILABLE_AUTH_PROVIDERS = [
   { value: 'apple', label: 'Apple' },
 ]
 
-/** A refusal from the server that names the field it is about (RFC 9457 with `field`). */
-export interface ClientFormServerError {
-  field?: string
-  detail?: string
-  hint?: string
-}
-
 export interface ClientFormProps {
   initialData?: Client
   /** The server's refusal of the last submission; shown at the field it names. */
-  serverError?: ClientFormServerError | null
+  serverError?: ServerRefusal | null
   onSubmit: (data: ClientFormData) => void
   onCancel: () => void
   isSubmitting?: boolean
@@ -247,8 +240,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   useEffect(() => {
     const field = serverError?.field
     if (!field || !(field in clientFormSchema.shape)) return
-    const message = [serverError.detail, serverError.hint].filter(Boolean).join(' ')
-    setError(field as keyof ClientFormData, { type: 'server', message: message || 'Refused by the server' }, { shouldFocus: true })
+    setError(field as keyof ClientFormData, { type: 'server', message: refusalMessage(serverError) }, { shouldFocus: true })
   }, [serverError, setError])
 
   const grantTypes = watch('grant_types') || []

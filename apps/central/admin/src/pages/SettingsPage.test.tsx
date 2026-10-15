@@ -79,4 +79,18 @@ describe('settings', () => {
       },
     ])
   })
+
+  it('shows a refused setting at its field', async () => {
+    const user = userEvent.setup()
+    const tenant = { id: 't1', name: 'Tenant', slug: 'tenant', active: true, settings: { signup_mode: 'invite_only' } }
+    vi.spyOn(tenantsApi, 'get').mockResolvedValue(answer(tenant))
+    vi.spyOn(tenantsApi, 'update').mockRejectedValue({
+      response: { status: 400, data: { code: 'invalid_request', field: 'settings.allowed_domains', detail: 'Invalid value for settings.allowed_domains' } },
+    })
+    render(<SettingsPage />)
+
+    await user.type(await screen.findByLabelText('허용 이메일 도메인'), 'not a domain')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    expect(await screen.findByText('Invalid value for settings.allowed_domains')).toBeInTheDocument()
+  })
 })

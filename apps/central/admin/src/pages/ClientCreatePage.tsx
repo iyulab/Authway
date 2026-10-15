@@ -8,10 +8,10 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
 } from '@heroicons/react/24/outline'
-import { clientsApi } from '@/lib/api'
+import { clientsApi, serverRefusal } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Card, Modal } from '@/components/ui'
-import { ClientForm, ClientFormData, ClientFormServerError, lines } from '@/components/clients'
+import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
 const ClientCreatePage: React.FC = () => {
   const navigate = useNavigate()
@@ -115,7 +115,7 @@ const ClientCreatePage: React.FC = () => {
         </div>
         <div className="p-6">
           <ClientForm
-            serverError={(createMutation.error as { response?: { data?: ClientFormServerError } } | null)?.response?.data}
+            serverError={serverRefusal(createMutation.error)}
             onSubmit={(data) => createMutation.mutate(data)}
             onCancel={() => navigate('/clients')}
             isSubmitting={createMutation.isPending}
