@@ -10,37 +10,38 @@ import (
 type AuditAction string
 
 const (
-	ActionUserCreated          AuditAction = "user.created"
-	ActionUserUpdated          AuditAction = "user.updated"
-	ActionUserDeleted          AuditAction = "user.deleted"
-	ActionUserLogin            AuditAction = "user.login"
-	ActionUserLoginFailed      AuditAction = "user.login_failed"
-	ActionUserLogout           AuditAction = "user.logout"
-	ActionUserPasswordReset    AuditAction = "user.password_reset"
-	ActionUserPasswordChanged  AuditAction = "user.password_changed"
-	ActionUserMFAEnabled       AuditAction = "user.mfa_enabled"
-	ActionUserMFADisabled      AuditAction = "user.mfa_disabled"
-	ActionUserMFAFailed        AuditAction = "user.mfa_failed"
-	ActionUserEmailVerified    AuditAction = "user.email_verified"
-	ActionUserClaimsUpdated    AuditAction = "user.claims_updated"
-	ActionUserTermsAccepted    AuditAction = "user.terms_accepted"
-	ActionClientCreated        AuditAction = "client.created"
-	ActionClientUpdated        AuditAction = "client.updated"
-	ActionClientDeleted        AuditAction = "client.deleted"
-	ActionTenantCreated        AuditAction = "tenant.created"
-	ActionTenantUpdated        AuditAction = "tenant.updated"
-	ActionTenantDeleted        AuditAction = "tenant.deleted"
-	ActionTenantTermsPublished AuditAction = "tenant.terms_published"
-	ActionTenantTermsRetired   AuditAction = "tenant.terms_retired"
-	ActionConsentGranted       AuditAction = "consent.granted"
-	ActionConsentRevoked       AuditAction = "consent.revoked"
-	ActionWebhookCreated       AuditAction = "webhook.created"
-	ActionWebhookUpdated       AuditAction = "webhook.updated"
-	ActionWebhookDeleted       AuditAction = "webhook.deleted"
-	ActionServiceClientCreated AuditAction = "service_client.created"
-	ActionServiceClientRevoked AuditAction = "service_client.revoked"
-	ActionAdminLoginSuccess    AuditAction = "admin.login_success"
-	ActionAdminLogout          AuditAction = "admin.logout"
+	ActionUserCreated           AuditAction = "user.created"
+	ActionUserUpdated           AuditAction = "user.updated"
+	ActionUserDeleted           AuditAction = "user.deleted"
+	ActionUserLogin             AuditAction = "user.login"
+	ActionUserLoginFailed       AuditAction = "user.login_failed"
+	ActionUserLogout            AuditAction = "user.logout"
+	ActionUserPasswordReset     AuditAction = "user.password_reset"
+	ActionUserPasswordChanged   AuditAction = "user.password_changed"
+	ActionUserConnectionRemoved AuditAction = "user.connection_removed"
+	ActionUserMFAEnabled        AuditAction = "user.mfa_enabled"
+	ActionUserMFADisabled       AuditAction = "user.mfa_disabled"
+	ActionUserMFAFailed         AuditAction = "user.mfa_failed"
+	ActionUserEmailVerified     AuditAction = "user.email_verified"
+	ActionUserClaimsUpdated     AuditAction = "user.claims_updated"
+	ActionUserTermsAccepted     AuditAction = "user.terms_accepted"
+	ActionClientCreated         AuditAction = "client.created"
+	ActionClientUpdated         AuditAction = "client.updated"
+	ActionClientDeleted         AuditAction = "client.deleted"
+	ActionTenantCreated         AuditAction = "tenant.created"
+	ActionTenantUpdated         AuditAction = "tenant.updated"
+	ActionTenantDeleted         AuditAction = "tenant.deleted"
+	ActionTenantTermsPublished  AuditAction = "tenant.terms_published"
+	ActionTenantTermsRetired    AuditAction = "tenant.terms_retired"
+	ActionConsentGranted        AuditAction = "consent.granted"
+	ActionConsentRevoked        AuditAction = "consent.revoked"
+	ActionWebhookCreated        AuditAction = "webhook.created"
+	ActionWebhookUpdated        AuditAction = "webhook.updated"
+	ActionWebhookDeleted        AuditAction = "webhook.deleted"
+	ActionServiceClientCreated  AuditAction = "service_client.created"
+	ActionServiceClientRevoked  AuditAction = "service_client.revoked"
+	ActionAdminLoginSuccess     AuditAction = "admin.login_success"
+	ActionAdminLogout           AuditAction = "admin.logout"
 )
 
 // AuditSeverity represents the severity level of the audit event
@@ -68,6 +69,7 @@ var Actions = []struct {
 	{ActionUserLogout, "User signed out"},
 	{ActionUserPasswordReset, "Password reset with an emailed link"},
 	{ActionUserPasswordChanged, "Password changed by its owner"},
+	{ActionUserConnectionRemoved, "Sign-in provider unlinked by its owner"},
 	{ActionUserMFAEnabled, "MFA enabled"},
 	{ActionUserMFADisabled, "MFA disabled"},
 	{ActionUserMFAFailed, "MFA code refused"},

@@ -115,3 +115,40 @@ func TestLinkProvider_OneAccountPerProviderAccountInATenant(t *testing.T) {
 		t.Errorf("after the first account was deleted: %v", err)
 	}
 }
+
+// Unlinking ends the link, so the provider's account no longer finds this
+// one — and the account keeps a way to sign in.
+func TestUnlinkProvider_EndsTheLinkButNotTheLastWayIn(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tn := freshTenant(t, db, ts)
+	u, err := svc.Create(tn.ID, &CreateUserRequest{Email: fmt.Sprintf("unlink-%s@example.com", uuid.New().String()[:8])})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+	subject := "g-" + uuid.New().String()
+	if err := svc.LinkProvider(u.ID, "google", subject); err != nil {
+		t.Fatalf("LinkProvider: %v", err)
+	}
+
+	if err := svc.UnlinkProvider(u.ID, "google"); !errors.Is(err, ErrLastSignInMethod) {
+		t.Fatalf("unlinking the only way in: %v, want ErrLastSignInMethod", err)
+	}
+	if err := svc.UnlinkProvider(u.ID, "github"); !errors.Is(err, ErrNotLinked) {
+		t.Fatalf("unlinking what is not linked: %v, want ErrNotLinked", err)
+	}
+	if err := svc.ChangePassword(u.ID, &ChangePasswordRequest{NewPassword: "a-password-1"}); err != nil {
+		t.Fatalf("set a password: %v", err)
+	}
+	if err := svc.UnlinkProvider(u.ID, "google"); err != nil {
+		t.Fatalf("UnlinkProvider: %v", err)
+	}
+	if _, err := svc.GetByProviderSubject(tn.ID, "google", subject); !errors.Is(err, ErrUserNotFound) {
+		t.Errorf("the provider's account still finds the account: %v", err)
+	}
+	reloaded, _ := svc.GetByID(u.ID)
+	if len(reloaded.LinkedProviders()) != 0 {
+		t.Errorf("still linked: %v", reloaded.LinkedProviders())
+	}
+}

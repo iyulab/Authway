@@ -28,18 +28,19 @@ type EventRef struct {
 // auditEvents maps what the audit log records to the event it is sent as. An
 // audit action without an entry is not a webhook event.
 var auditEvents = map[audit.AuditAction]EventType{
-	audit.ActionUserCreated:       EventUserCreated,
-	audit.ActionUserUpdated:       EventUserUpdated,
-	audit.ActionUserDeleted:       EventUserDeleted,
-	audit.ActionUserLogin:         EventUserLogin,
-	audit.ActionUserLogout:        EventUserLogout,
-	audit.ActionUserPasswordReset:   EventUserPasswordChanged,
-	audit.ActionUserPasswordChanged: EventUserPasswordChanged,
-	audit.ActionUserMFAEnabled:    EventUserMFAEnabled,
-	audit.ActionUserMFADisabled:   EventUserMFADisabled,
-	audit.ActionClientCreated:     EventClientCreated,
-	audit.ActionClientUpdated:     EventClientUpdated,
-	audit.ActionClientDeleted:     EventClientDeleted,
+	audit.ActionUserCreated:           EventUserCreated,
+	audit.ActionUserUpdated:           EventUserUpdated,
+	audit.ActionUserDeleted:           EventUserDeleted,
+	audit.ActionUserLogin:             EventUserLogin,
+	audit.ActionUserLogout:            EventUserLogout,
+	audit.ActionUserPasswordReset:     EventUserPasswordChanged,
+	audit.ActionUserPasswordChanged:   EventUserPasswordChanged,
+	audit.ActionUserConnectionRemoved: EventUserUpdated,
+	audit.ActionUserMFAEnabled:        EventUserMFAEnabled,
+	audit.ActionUserMFADisabled:       EventUserMFADisabled,
+	audit.ActionClientCreated:         EventClientCreated,
+	audit.ActionClientUpdated:         EventClientUpdated,
+	audit.ActionClientDeleted:         EventClientDeleted,
 }
 
 // FromAudit returns a function that sends the webhook event, if any, for an

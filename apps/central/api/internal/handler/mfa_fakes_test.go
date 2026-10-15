@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -130,6 +131,25 @@ func (f *fakeUserService) List(int, int) ([]*user.User, int64, error) {
 func (f *fakeUserService) VerifyPassword(*user.User, string) bool { return false }
 func (f *fakeUserService) ChangePassword(uuid.UUID, *user.ChangePasswordRequest) error {
 	return fmt.Errorf("not implemented")
+}
+
+// UnlinkProvider follows the real rule: an account keeps a way to sign in.
+func (f *fakeUserService) UnlinkProvider(id uuid.UUID, provider string) error {
+	u, err := f.GetByID(id)
+	if err != nil {
+		return err
+	}
+	linked := u.LinkedProviders()
+	if !slices.Contains(linked, provider) {
+		return user.ErrNotLinked
+	}
+	if u.PasswordHash == "" && len(linked) == 1 {
+		return user.ErrLastSignInMethod
+	}
+	if provider == "google" {
+		u.GoogleID = nil
+	}
+	return nil
 }
 func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error {
 	f.signIns++

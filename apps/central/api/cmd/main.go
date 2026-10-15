@@ -425,6 +425,8 @@ func main() {
 	v1.Get("/profile/me", jwtAuth, authHandler.ProfileMe)
 	v1.Delete("/profile/me", jwtAuth, authHandler.DeleteMe)
 	v1.Post("/users/password", jwtAuth, loginRateLimit, authHandler.ChangePassword)
+	v1.Get("/users/connections", jwtAuth, authHandler.ListConnections)
+	v1.Delete("/users/connections/:provider", jwtAuth, authHandler.RemoveConnection)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the

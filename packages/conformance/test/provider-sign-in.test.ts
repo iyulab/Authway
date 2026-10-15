@@ -124,4 +124,28 @@ describe('sign-in through another identity provider', () => {
     expect(outcome.sub).toBe(memberSub)
     expect(claimsOf(outcome.tokens.id_token ?? '').amr).toEqual(['fed', 'otp', 'mfa'])
   })
+
+  // The user sees which provider accounts sign in to theirs and removes one:
+  // that provider account then reaches it only as any new one would — by an
+  // address the provider has verified.
+  it('lets the user see and remove the link to a provider account', async ({ skip }) => {
+    if (offered.length === 0) skip()
+    const call = async (method: string, path: string): Promise<Response> => {
+      const res = await fetch(`${config.api}/api/v1/users/connections${path}`, { method, headers: { Authorization: `Bearer ${memberAccessToken}` } })
+      await conform(method, `/api/v1/users/connections${path ? '/{provider}' : ''}`, res.clone())
+      return res
+    }
+    const providers = async () => ((await (await call('GET', '')).json()) as { connections: { provider: string }[] }).connections.map((c) => c.provider)
+    expect(await providers()).toContain(config.idpStandInAs)
+
+    expect((await call('DELETE', '/not-a-provider')).status).toBe(404)
+    const removed = await call('DELETE', `/${config.idpStandInAs}`)
+    expect(removed.status, await removed.clone().text()).toBe(200)
+    expect(await providers()).not.toContain(config.idpStandInAs)
+
+    // Without the link, the provider account with an unverified address no longer reaches the account.
+    const outcome = await signIn({ subject: memberAtProvider, email: member.email, emailVerified: false })
+    expect(outcome.kind).not.toBe('code')
+    expect(outcome.kind).not.toBe('second_factor')
+  })
 })

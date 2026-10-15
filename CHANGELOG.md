@@ -10,6 +10,12 @@
   sessions end with the tokens issued in them (`sessions_ended`, as turning on
   a second factor answers); the webhook event is `user.password_changed`. The
   account screen offers it. `GET /api/v1/profile/me` answers `has_password`.
+- **A user sees and removes the links to sign-in providers** — `GET
+  /api/v1/users/connections` names the provider accounts that sign in to the
+  user's, `DELETE /api/v1/users/connections/{provider}` ends one (after a
+  recent sign-in; never the account's only way to sign in — `409
+  last_sign_in_method`). The way out of a link the user did not mean, and of
+  "linked to another account". The account screen lists them.
 
 ## [0.17.0] - 2026-10-15
 

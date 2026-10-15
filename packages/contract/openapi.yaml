@@ -485,6 +485,53 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /api/v1/users/connections:
+    get:
+      tags: [account]
+      operationId: listOwnConnections
+      summary: The sign-in providers the signed-in user's account is linked to
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The links, in a fixed order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connections]
+                properties:
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      required: [provider]
+                      properties:
+                        provider: { type: string, description: 'google, github, microsoft or apple' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/connections/{provider}:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [account]
+      operationId: removeOwnConnection
+      summary: End the account's link to a provider account
+      description: |
+        That provider account no longer signs in to this one; it reaches an
+        account again only as a new one would (by an address the provider has
+        verified). Needs a recent sign-in (`401
+        insufficient_user_authentication` with `max_age` otherwise). The
+        account's only way to sign in — no password and no other link — is
+        `409 last_sign_in_method`; a provider it is not linked to is `404
+        not_connected`.
+      security: [{ userToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
   /api/v1/users/mfa/setup:
     post:
       tags: [account]

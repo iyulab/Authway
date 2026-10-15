@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
@@ -35,6 +36,10 @@ type Service interface {
 	// account, and that its email address is verified — a link is only made
 	// on an address the provider has verified.
 	LinkProvider(userID uuid.UUID, provider, subject string) error
+	// UnlinkProvider ends the account's link to a provider's account.
+	// ErrNotLinked when there is none; ErrLastSignInMethod when the account
+	// would be left with no way to sign in (no password, no other link).
+	UnlinkProvider(userID uuid.UUID, provider string) error
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
 	Update(id uuid.UUID, req *UpdateUserRequest) (*User, error)
 	Delete(id uuid.UUID) error
@@ -352,6 +357,29 @@ func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error
 		return ErrUserNotFound
 	}
 	s.logger.Info("Sign-in provider linked", zap.String("user_id", userID.String()), zap.String("provider", provider))
+	return nil
+}
+
+func (s *service) UnlinkProvider(userID uuid.UUID, provider string) error {
+	column, ok := providerColumns[provider]
+	if !ok {
+		return ErrNotLinked
+	}
+	u, err := s.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	linked := u.LinkedProviders()
+	if !slices.Contains(linked, provider) {
+		return ErrNotLinked
+	}
+	if u.PasswordHash == "" && len(linked) == 1 {
+		return ErrLastSignInMethod
+	}
+	if err := s.db.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error; err != nil {
+		return fmt.Errorf("failed to unlink sign-in provider: %w", err)
+	}
+	s.logger.Info("Sign-in provider unlinked", zap.String("user_id", userID.String()), zap.String("provider", provider))
 	return nil
 }
 

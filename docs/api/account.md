@@ -247,7 +247,32 @@ The [account screen](#the-account-screen) offers this.
 
 ---
 
-## 5. Signing out everywhere
+## 5. Connected sign-in providers
+
+```http
+GET /api/v1/users/connections
+DELETE /api/v1/users/connections/{provider}
+Authorization: Bearer <the user's access token>
+```
+
+`GET` answers `{ "connections": [ { "provider": "google" }, … ] }` — the
+provider accounts that sign in to this one. `DELETE` ends a link: that
+provider account then reaches an account only as a new one would, by an
+address the provider has verified. It is the way out of a link the user did
+not mean, and of the refusal "linked to another account" when they sign in
+with a different account at that provider.
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `401` | `insufficient_user_authentication` | Removing a link needs a recent sign-in — sign in again with `max_age` and retry |
+| `404` | `not_connected` | The account is not linked to that provider |
+| `409` | `last_sign_in_method` | It is the account's only way to sign in (no password, no other link) — set a password first |
+
+The [account screen](#the-account-screen) offers this.
+
+---
+
+## 6. Signing out everywhere
 
 ```http
 POST /api/v1/logout
@@ -283,8 +308,9 @@ server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
 ## The account screen
 
 Authway hosts a page where a signed-in user manages their own sign-in —
-turning two-step verification on and off, renewing recovery codes, and
-changing (or setting a first) password. Link to it from your application:
+turning two-step verification on and off, renewing recovery codes,
+changing (or setting a first) password, and removing the link to a sign-in
+provider. Link to it from your application:
 
 ```
 {login screens}/account?client_id=<your application's client_id>

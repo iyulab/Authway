@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { AuthwayClient } from '@authway/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
+import AccountConnections from './AccountConnections'
 import { getConfig } from '../config'
 
 /** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
@@ -368,6 +369,10 @@ const AccountPage: React.FC = () => {
       )}
     </section>
     <AccountPassword
+      call={call}
+      signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
+    />
+    <AccountConnections
       call={call}
       signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
     />
