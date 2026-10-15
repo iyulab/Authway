@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-15
+
+> Minor, with two breaking changes for API consumers, both moving to the
+> standards Authway's sibling services share: refusals are RFC 9457 problem
+> details (the message is `detail`, `code` keeps its values), and webhook
+> deliveries are signed as Standard Webhooks specifies. No change for
+> applications that only sign users in through OpenID Connect.
+
 ### Changed
 
 - **Breaking — refusals are RFC 9457 problem details.** Every refusal from
