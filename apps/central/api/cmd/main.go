@@ -450,9 +450,6 @@ func main() {
 	v1.Post("/clients/:id/regenerate-secret", adminAuth, clientHandler.RegenerateSecret)
 
 	// Client Google OAuth configuration routes (admin-only)
-	v1.Put("/clients/:id/google-oauth", adminAuth, clientHandler.UpdateGoogleOAuth)
-	v1.Delete("/clients/:id/google-oauth", adminAuth, clientHandler.DisableGoogleOAuth)
-	v1.Get("/clients/:id/google-oauth/status", adminAuth, clientHandler.GetGoogleOAuthStatus)
 
 	// Client Hydra sync (admin operation for one-time migration)
 	v1.Post("/clients/sync-hydra", adminAuth, clientHandler.SyncToHydra)

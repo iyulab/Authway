@@ -44,6 +44,9 @@
 - `GET /api/v1/clients/{client_id}/config`. It answered, without
   authentication, any client's redirect URIs and tenant id; nothing used it —
   discovery and the bootstrap document say what an application needs.
+- `PUT`/`DELETE /api/v1/clients/{id}/google-oauth` and `GET
+  …/google-oauth/status`: a second way to set what the `google_*` fields of
+  creating and changing a client already set. Use those fields.
 - The `/api/v1/docs` endpoints, which listed, served and (with the admin key)
   wrote and deleted files in a `docs` directory beside the running API — one
   no image carries. Nothing used them.
@@ -58,6 +61,11 @@
   fields present change, as documented; an empty string clears. A tenant's
   description, the other way round, could not be cleared; an empty string now
   clears it.
+- **A client's own GitHub credentials could be set only when it was
+  created.** Changing a client now takes `github_oauth_enabled`,
+  `github_client_id` and `github_client_secret` like the other three
+  providers. The per-client provider credentials, `GET /health` and `POST
+  /api/v1/clients/sync-hydra` are now in the published contract.
 - `POST /api/v1/logout` is in the published contract; it was documented only
   in prose, which gave a failure's answer in a form it no longer has.
 - **Signing out through the logout screen was not recorded.** The `user.logout`

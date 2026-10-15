@@ -613,6 +613,15 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if req.GoogleRedirectURI != nil {
 		client.GoogleRedirectURI = req.GoogleRedirectURI
 	}
+	if req.GithubOAuthEnabled != nil {
+		client.GithubOAuthEnabled = *req.GithubOAuthEnabled
+	}
+	if req.GithubClientID != nil {
+		client.GithubClientID = req.GithubClientID
+	}
+	if req.GithubClientSecret != nil {
+		client.GithubClientSecret = req.GithubClientSecret
+	}
 
 	// Update allowed origins if provided (nil = not provided, empty = clear)
 	if req.AllowedOrigins != nil {

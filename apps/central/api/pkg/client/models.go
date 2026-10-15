@@ -443,6 +443,11 @@ type UpdateClientRequest struct {
 	GoogleClientSecret *string `json:"google_client_secret"`
 	GoogleRedirectURI  *string `json:"google_redirect_uri" validate:"omitempty,url"`
 
+	// GitHub OAuth Settings (optional) — the same rule as the other providers.
+	GithubOAuthEnabled *bool   `json:"github_oauth_enabled"`
+	GithubClientID     *string `json:"github_client_id"`
+	GithubClientSecret *string `json:"github_client_secret"`
+
 	// CORS Allowed Origins
 	AllowedOrigins []string `json:"allowed_origins" validate:"omitempty,dive,url"`
 

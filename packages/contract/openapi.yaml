@@ -30,6 +30,28 @@ tags:
 security: []
 
 paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: The running API and the migrations it ships
+      description: |
+        Answers while the API serves. `migrations` lists the database
+        migrations this build ships, oldest first, so a deployment can check
+        the database against what it deployed.
+      responses:
+        '200':
+          description: Serving
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, migrations]
+                properties:
+                  status: { const: ok }
+                  service: { type: string }
+                  version: { type: string }
+                  migrations: { type: array, items: { type: string } }
+                  timestamp: { type: string }
   /.well-known/authway-config:
     get:
       operationId: getBootstrapConfig
@@ -1320,6 +1342,29 @@ paths:
                 logo:
                   description: The application's logo, shown with its name on the sign-in and consent screens (`logo_uri` in OpenID Connect Dynamic Client Registration). An absolute https URL; an empty string clears it.
                   type: string
+                google_oauth_enabled:
+                  description: |
+                    The application signs its users in to Google with its own
+                    Google app (the four providers follow one rule): when
+                    enabled and its credentials are set, sign-in with that
+                    provider uses them; otherwise the deployment's. Secrets are
+                    stored sealed and never returned.
+                  type: boolean
+                google_client_id: { type: string }
+                google_client_secret: { type: string, writeOnly: true }
+                google_redirect_uri: { type: string }
+                github_oauth_enabled: { type: boolean }
+                github_client_id: { type: string }
+                github_client_secret: { type: string, writeOnly: true }
+                microsoft_oauth_enabled: { type: boolean }
+                microsoft_client_id: { type: string }
+                microsoft_client_secret: { type: string, writeOnly: true }
+                microsoft_tenant_id: { type: string, description: The app's directory; "common" when not set. }
+                apple_oauth_enabled: { type: boolean, description: Used only when all four Apple values are set. }
+                apple_client_id: { type: string }
+                apple_team_id: { type: string }
+                apple_key_id: { type: string }
+                apple_private_key: { type: string, writeOnly: true }
                 backchannel_logout_uri:
                   description: |
                     Where the client's backend is told that a user's session
@@ -1440,6 +1485,29 @@ paths:
                 logo:
                   description: The application's logo, shown with its name on the sign-in and consent screens (`logo_uri` in OpenID Connect Dynamic Client Registration). An absolute https URL; an empty string clears it.
                   type: string
+                google_oauth_enabled:
+                  description: |
+                    The application signs its users in to Google with its own
+                    Google app (the four providers follow one rule): when
+                    enabled and its credentials are set, sign-in with that
+                    provider uses them; otherwise the deployment's. Secrets are
+                    stored sealed and never returned.
+                  type: boolean
+                google_client_id: { type: string }
+                google_client_secret: { type: string, writeOnly: true }
+                google_redirect_uri: { type: string }
+                github_oauth_enabled: { type: boolean }
+                github_client_id: { type: string }
+                github_client_secret: { type: string, writeOnly: true }
+                microsoft_oauth_enabled: { type: boolean }
+                microsoft_client_id: { type: string }
+                microsoft_client_secret: { type: string, writeOnly: true }
+                microsoft_tenant_id: { type: string, description: The app's directory; "common" when not set. }
+                apple_oauth_enabled: { type: boolean, description: Used only when all four Apple values are set. }
+                apple_client_id: { type: string }
+                apple_team_id: { type: string }
+                apple_key_id: { type: string }
+                apple_private_key: { type: string, writeOnly: true }
                 backchannel_logout_uri:
                   description: |
                     Where the client's backend is told that a user's session
@@ -1510,6 +1578,30 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
 
+  /api/v1/clients/sync-hydra:
+    post:
+      tags: [admin]
+      operationId: syncClientsToAuthorizationServer
+      summary: Write every client to the authorization server again
+      description: |
+        Reconciles the authorization server with what Authway stores, for
+        every client — after a change was saved but did not reach it
+        (sync_status failed), or after a deployment changed what is synced.
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [synced, failed]
+                properties:
+                  message: { type: string }
+                  synced: { type: integer }
+                  failed: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
   /api/v1/clients/{id}/regenerate-secret:
     post:
       tags: [admin]
@@ -3167,6 +3259,12 @@ components:
         logo:
           description: The application's logo, shown on the sign-in and consent screens. Empty when none is registered.
           type: string
+        google_oauth_enabled: { type: boolean, description: The application signs in to Google with its own app (its credentials are not returned). }
+        google_redirect_uri: { type: [string, 'null'] }
+        github_oauth_enabled: { type: boolean }
+        microsoft_oauth_enabled: { type: boolean }
+        microsoft_tenant_id: { type: [string, 'null'] }
+        apple_oauth_enabled: { type: boolean }
         backchannel_logout_uri:
           description: |
             Where the client's backend is told that a user's session has ended.

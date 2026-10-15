@@ -68,6 +68,22 @@ describe('login UI backend routes', () => {
     expect((await res.json()).client_logo_uri ?? '').toBe('')
   })
 
+  // A deployment checks the database against the build it deployed by the
+  // migrations /health names; the authorization server is brought back in
+  // line with what Authway stores by sync-hydra.
+  it('answers /health with its version and migrations, and reconciles clients on request', async () => {
+    const health = await fetch(`${provider.config.api}/health`)
+    await conform('GET', '/health', health)
+    const body = (await health.json()) as { status: string; migrations: string[] }
+    expect(body.status).toBe('ok')
+    expect(body.migrations.length).toBeGreaterThan(0)
+
+    const sync = await provider.admin('/api/v1/clients/sync-hydra', { method: 'POST' })
+    await conform('POST', '/api/v1/clients/sync-hydra', sync)
+    expect(sync.status).toBe(200)
+    expect(((await sync.json()) as { failed: number }).failed).toBe(0)
+  })
+
   // An application is configured with one address and finds the rest from
   // here; whichever provider it talks to, the issuer named must be the one
   // whose discovery document it then reads.

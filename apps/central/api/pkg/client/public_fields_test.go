@@ -14,6 +14,7 @@ import (
 func TestPublicClientReadsEveryUpdatableField(t *testing.T) {
 	writeOnly := map[string]bool{
 		"google_client_id": true, "google_client_secret": true,
+		"github_client_id": true, "github_client_secret": true,
 		"microsoft_client_id": true, "microsoft_client_secret": true,
 		"apple_client_id": true, "apple_team_id": true, "apple_key_id": true, "apple_private_key": true,
 	}

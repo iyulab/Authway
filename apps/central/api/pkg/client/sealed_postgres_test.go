@@ -157,15 +157,21 @@ func TestProviderSecrets_StaySealedThroughAnUpdate(t *testing.T) {
 	if _, _, err := svc.Update(created.ID, &UpdateClientRequest{Name: renamed, GoogleClientSecret: &rotated}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
+	// GitHub's credentials change through the same request as the others' —
+	// an update could not name them.
+	githubRotated := "gh-rotated"
+	if _, _, err := svc.Update(created.ID, &UpdateClientRequest{GithubClientSecret: &githubRotated}); err != nil {
+		t.Fatalf("Update (GitHub): %v", err)
+	}
 	after, err := svc.GetByID(created.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
-	if got := secretsOf(after); got["google_client_secret"] != rotated || got["github_client_secret"] != githubSecret || got["apple_private_key"] != appleKey {
+	if got := secretsOf(after); got["google_client_secret"] != rotated || got["github_client_secret"] != githubRotated || got["apple_private_key"] != appleKey {
 		t.Errorf("after the update the secrets read %v", got)
 	}
 	for column := range providerSecrets {
-		if row := stored(t, db, created.ID, column); !strings.HasPrefix(row, crypto.SealedPrefix) || strings.Contains(row, rotated) {
+		if row := stored(t, db, created.ID, column); !strings.HasPrefix(row, crypto.SealedPrefix) || strings.Contains(row, rotated) || strings.Contains(row, githubRotated) {
 			t.Errorf("%s is stored as %q after the update, want it sealed", column, row)
 		}
 	}
