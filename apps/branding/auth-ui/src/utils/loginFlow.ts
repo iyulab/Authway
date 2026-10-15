@@ -19,7 +19,7 @@ export interface FlowStep {
   terms?: TermsDocument[]
   /** The flow a second factor or terms step belongs to. */
   flow?: string
-  error?: string
+  detail?: string
   code?: string
 }
 

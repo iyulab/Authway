@@ -88,7 +88,7 @@ const WebhooksPage: React.FC = () => {
       setRevealed({ name: data.webhook.name, secret: data.secret })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to create webhook')
+      toast.error(error.response?.data?.detail || 'Failed to create webhook')
     },
   })
 
@@ -104,7 +104,7 @@ const WebhooksPage: React.FC = () => {
       toast.success('Webhook updated successfully')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to update webhook')
+      toast.error(error.response?.data?.detail || 'Failed to update webhook')
     },
   })
 
@@ -118,7 +118,7 @@ const WebhooksPage: React.FC = () => {
       toast.success('Webhook deleted successfully')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to delete webhook')
+      toast.error(error.response?.data?.detail || 'Failed to delete webhook')
     },
   })
 
@@ -129,7 +129,7 @@ const WebhooksPage: React.FC = () => {
       setRevealed({ name: webhook.name, secret: data.secret })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to rotate secret')
+      toast.error(error.response?.data?.detail || 'Failed to rotate secret')
     },
   })
 
@@ -144,7 +144,7 @@ const WebhooksPage: React.FC = () => {
       }
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to test webhook')
+      toast.error(error.response?.data?.detail || 'Failed to test webhook')
     },
   })
 

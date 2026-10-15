@@ -69,7 +69,7 @@ describe('LoginPage', () => {
     it('shows error when login challenge fetch fails', async () => {
       server.use(
         http.get('http://localhost:8080/api/v1/login-flows/:flow', () => {
-          return HttpResponse.json({ error: 'Server error' }, { status: 500 })
+          return HttpResponse.json({ detail: 'Server error' }, { status: 500 })
         })
       )
 
@@ -398,7 +398,7 @@ describe('LoginPage', () => {
     it('handles login error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
-          return HttpResponse.json({ error: 'Invalid credentials' })
+          return HttpResponse.json({ detail: 'Invalid credentials' })
         })
       )
 
@@ -419,7 +419,7 @@ describe('LoginPage', () => {
       server.use(
         http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
           return HttpResponse.json(
-            { error: 'Invalid email or password', code: 'invalid_credentials' },
+            { detail: 'Invalid email or password', code: 'invalid_credentials' },
             { status: 401 }
           )
         })

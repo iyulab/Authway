@@ -85,7 +85,7 @@ const TermsPage: React.FC = () => {
         setTicked(new Set())
         setRevised(true)
       } else {
-        setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.error ?? t('auth:terms.failed')))
+        setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.detail ?? t('auth:terms.failed')))
       }
     } catch {
       setError(t('auth:terms.failed'))
@@ -103,7 +103,7 @@ const TermsPage: React.FC = () => {
         followRedirect(step.redirect_to)
         return
       }
-      setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.error ?? t('auth:terms.failed')))
+      setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.detail ?? t('auth:terms.failed')))
     } catch {
       setError(t('auth:terms.failed'))
     }

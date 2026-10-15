@@ -72,7 +72,7 @@ describe('accepting an invitation', () => {
   }, 15000)
 
   it('that cannot be used, offers the way back to sign-in only when there is a sign-in to go back to', async () => {
-    server.use(http.get(`${API}/api/v1/invitations/token/:token`, () => HttpResponse.json({ error: 'gone' }, { status: 404 })))
+    server.use(http.get(`${API}/api/v1/invitations/token/:token`, () => HttpResponse.json({ detail: 'gone' }, { status: 404 })))
     renderAt('/invitation/accept?token=used')
     await screen.findByText(i18n.t('auth:invitation.invalidTitle'))
     expect(screen.queryByText(i18n.t('auth:invitation.backToLogin'))).toBeNull()

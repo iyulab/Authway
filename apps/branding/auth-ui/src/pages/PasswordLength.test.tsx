@@ -62,7 +62,7 @@ describe('the password length a tenant asks for', () => {
 
     it('says a refusal for length in the screen\'s language, with the length in force', async () => {
       server.use(http.post(`${API}/api/v1/invitations/accept`, () =>
-        HttpResponse.json({ error: 'password must be at least 12 characters', code: 'password_too_short', min_length: 12 }, { status: 400 })))
+        HttpResponse.json({ detail: 'password must be at least 12 characters', code: 'password_too_short', min_length: 12 }, { status: 400 })))
       await open(8)
       await fill('nine-char')
 
@@ -100,7 +100,7 @@ describe('the password length a tenant asks for', () => {
 
     it('says a refusal for length in the screen\'s language, with the length in force', async () => {
       server.use(http.post(`${API}/api/v1/email/reset-password`, () =>
-        HttpResponse.json({ error: 'password must be at least 12 characters', code: 'password_too_short', min_length: 12 }, { status: 400 })))
+        HttpResponse.json({ detail: 'password must be at least 12 characters', code: 'password_too_short', min_length: 12 }, { status: 400 })))
       await open(8)
       await fill('nine-char')
 

@@ -42,7 +42,7 @@ const LoginPage: React.FC = () => {
       navigate('/dashboard')
     } catch (err: any) {
       console.error('Login error:', err)
-      setError(err.response?.data?.error || '로그인에 실패했습니다.')
+      setError(err.response?.data?.detail || '로그인에 실패했습니다.')
     } finally {
       setIsLoading(false)
     }

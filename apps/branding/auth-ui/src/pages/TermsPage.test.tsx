@@ -29,7 +29,7 @@ function owing(terms = owed) {
   server.use(
     http.get('http://localhost:8080/api/v1/login-flows/:flow/terms', ({ request }) => {
       if (new URL(request.url).searchParams.get('terms_challenge') !== 'c-1') {
-        return HttpResponse.json({ error: 'expired', code: 'invalid_terms_challenge' }, { status: 400 })
+        return HttpResponse.json({ detail: 'expired', code: 'invalid_terms_challenge' }, { status: 400 })
       }
       return HttpResponse.json({ next: 'terms', flow: 'f-1=', terms_challenge: 'c-1', terms })
     }),
@@ -118,7 +118,7 @@ describe('TermsPage', () => {
     server.use(
       http.post('http://localhost:8080/api/v1/login-flows/:flow/terms', () =>
         HttpResponse.json(
-          { error: 'changed', code: 'terms_mismatch', terms: [{ kind: 'terms_of_service', version: '2', url: 'https://example.test/terms/2' }] },
+          { detail: 'changed', code: 'terms_mismatch', terms: [{ kind: 'terms_of_service', version: '2', url: 'https://example.test/terms/2' }] },
           { status: 400 },
         ),
       ),

@@ -31,7 +31,7 @@ export default function VerifyEmailPage() {
           setMessage(data.message || t('auth:verifyEmail.success.message'));
         } else {
           setStatus('error');
-          setMessage(data.error || t('auth:verifyEmail.error.failed'));
+          setMessage(data.detail || t('auth:verifyEmail.error.failed'));
         }
       } catch {
         setStatus('error');

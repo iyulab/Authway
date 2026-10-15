@@ -76,7 +76,7 @@ describe('ConsentPage', () => {
     it('shows error when consent challenge fetch fails', async () => {
       server.use(
         http.get('http://localhost:8080/api/v1/consent-flows/:flow', () => {
-          return HttpResponse.json({ error: 'Server error' }, { status: 500 })
+          return HttpResponse.json({ detail: 'Server error' }, { status: 500 })
         })
       )
 
@@ -272,7 +272,7 @@ describe('ConsentPage', () => {
     it('handles consent approval error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', () => {
-          return HttpResponse.json({ error: 'Consent processing failed' })
+          return HttpResponse.json({ detail: 'Consent processing failed' })
         })
       )
 
@@ -361,7 +361,7 @@ describe('ConsentPage', () => {
     it('handles consent rejection error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', () => {
-          return HttpResponse.json({ error: 'Rejection processing failed' })
+          return HttpResponse.json({ detail: 'Rejection processing failed' })
         })
       )
 

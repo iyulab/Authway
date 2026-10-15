@@ -49,8 +49,7 @@ const TenantSelectionPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to create tenant'
       toast.error(errorMessage)
     },

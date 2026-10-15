@@ -41,8 +41,8 @@ const ConsentPage: React.FC = () => {
           // Nothing to ask (the client skips consent, or single sign-on).
           // Keep the loading state while the browser leaves.
           followRedirect(data.redirect_to)
-        } else if (data.error) {
-          setError(data.error)
+        } else if (data.detail) {
+          setError(data.detail)
           setIsLoading(false)
         } else {
           setConsentInfo(data)
@@ -61,8 +61,8 @@ const ConsentPage: React.FC = () => {
   const handleAnswer = (data: FlowStep) => {
     if (data.next === 'redirect' && data.redirect_to) {
       followRedirect(data.redirect_to)
-    } else if (data.error) {
-      setError(data.error)
+    } else if (data.detail) {
+      setError(data.detail)
     }
   }
 

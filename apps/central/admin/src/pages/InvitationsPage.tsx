@@ -76,7 +76,7 @@ const InvitationsPage: React.FC = () => {
       toast.success(response.data.message || 'Invitation created successfully')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to create invitation')
+      toast.error(error.response?.data?.detail || 'Failed to create invitation')
     },
   })
 
@@ -90,7 +90,7 @@ const InvitationsPage: React.FC = () => {
       toast.success('Invitation revoked successfully')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to revoke invitation')
+      toast.error(error.response?.data?.detail || 'Failed to revoke invitation')
     },
   })
 
@@ -101,7 +101,7 @@ const InvitationsPage: React.FC = () => {
       toast.success(response.data.message || 'Invitation resent successfully')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to resend invitation')
+      toast.error(error.response?.data?.detail || 'Failed to resend invitation')
     },
   })
 

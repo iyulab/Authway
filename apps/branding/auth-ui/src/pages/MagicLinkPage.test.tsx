@@ -93,7 +93,7 @@ describe('MagicLinkPage', () => {
     mockSearchParams.set('token', 'spent')
     server.use(
       http.post('http://localhost:8080/api/v1/magic-links/inspect', () =>
-        HttpResponse.json({ valid: false, error: 'magic link has already been used' })
+        HttpResponse.json({ valid: false, detail: 'magic link has already been used' })
       )
     )
 

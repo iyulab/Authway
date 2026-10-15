@@ -147,7 +147,7 @@ const AcceptInvitationPage: React.FC = () => {
         if (body.code === 'password_too_short') {
           throw new Error(t('auth:validation.passwordMin', { length: body.min_length ?? LEAST_PASSWORD_LENGTH }))
         }
-        throw new Error(body.error || 'accept failed')
+        throw new Error(body.detail || 'accept failed')
       }
       return body
     },

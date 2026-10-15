@@ -39,7 +39,7 @@ export default function ResendVerificationPage() {
         setMessage(t('auth:resendVerification.success.message'));
       } else {
         setStatus('error');
-        setMessage(data.error || t('auth:resendVerification.error.failed'));
+        setMessage(data.detail || t('auth:resendVerification.error.failed'));
       }
     } catch {
       setStatus('error');

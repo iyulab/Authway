@@ -53,7 +53,7 @@ const LogoutPage: React.FC = () => {
         if (data.next === 'redirect' && data.redirect_to) {
           window.location.href = data.redirect_to
         } else {
-          setError({ message: data.error || t('auth:logout.error'), fallbackRedirect: referrerOrigin() })
+          setError({ message: data.detail || t('auth:logout.error'), fallbackRedirect: referrerOrigin() })
         }
       })
       .catch((err) => {

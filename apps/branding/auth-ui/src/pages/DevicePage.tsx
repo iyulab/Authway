@@ -36,7 +36,7 @@ const DevicePage: React.FC = () => {
         followRedirect(step.redirect_to)
         return
       }
-      setError(step.code && KNOWN_ERRORS.includes(step.code) ? t(`auth:device.errors.${step.code}`) : (step.error ?? t('common:errorOccurred')))
+      setError(step.code && KNOWN_ERRORS.includes(step.code) ? t(`auth:device.errors.${step.code}`) : (step.detail ?? t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {

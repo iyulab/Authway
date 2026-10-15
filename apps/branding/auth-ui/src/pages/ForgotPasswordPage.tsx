@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
       if (response.ok) {
         setIsSuccess(true);
       } else {
-        setError(data.error || t('password:forgot.errors.failed'));
+        setError(data.detail || t('password:forgot.errors.failed'));
       }
     } catch {
       setError(t('password:forgot.errors.serverError'));

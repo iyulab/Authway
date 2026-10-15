@@ -41,7 +41,7 @@ describe('LogoutPage', () => {
     mockSearchParams.set('flow', 'spent')
     server.use(
       http.post('http://localhost:8080/api/v1/logout-flows/:flow', () =>
-        HttpResponse.json({ error: 'This sign-in has expired or was already completed.', code: 'flow_expired' }, { status: 410 })
+        HttpResponse.json({ detail: 'This sign-in has expired or was already completed.', code: 'flow_expired' }, { status: 410 })
       )
     )
 

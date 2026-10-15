@@ -39,8 +39,8 @@ const MFAVerifyPage: React.FC = () => {
         followRedirect(data.redirect_to)
       } else if (next) {
         navigate(next)
-      } else if (data.error) {
-        throw new Error(data.error)
+      } else if (data.detail) {
+        throw new Error(data.detail)
       } else {
         navigate('/')
       }

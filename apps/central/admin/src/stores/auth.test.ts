@@ -103,7 +103,7 @@ describe('401 handling', () => {
     useAuthStore.getState().login('t', future())
     server.use(
       http.get('http://localhost:8080/api/clients', () =>
-        HttpResponse.json({ error: 'unauthorized' }, { status: 401 })
+        HttpResponse.json({ detail: 'unauthorized' }, { status: 401 })
       )
     )
 

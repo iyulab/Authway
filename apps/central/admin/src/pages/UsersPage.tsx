@@ -77,8 +77,7 @@ const UsersPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to update user'
       toast.error(`Update failed: ${errorMessage}`)
     },
@@ -95,8 +94,7 @@ const UsersPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to delete user'
       toast.error(`Delete failed: ${errorMessage}`)
     },

@@ -89,7 +89,7 @@ export const handlers = [
     if (user) {
       return HttpResponse.json({ user })
     }
-    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'User not found' }, { status: 404 })
   }),
 
   http.put('http://localhost:8080/api/users/:id', async ({ params, request }) => {
@@ -100,7 +100,7 @@ export const handlers = [
       mockUsers[userIndex] = { ...mockUsers[userIndex], ...body }
       return HttpResponse.json({ message: 'User updated', user: mockUsers[userIndex] })
     }
-    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'User not found' }, { status: 404 })
   }),
 
   http.delete('http://localhost:8080/api/users/:id', ({ params }) => {
@@ -110,7 +110,7 @@ export const handlers = [
       mockUsers.splice(userIndex, 1)
       return HttpResponse.json({ message: 'User deleted' })
     }
-    return HttpResponse.json({ error: 'User not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'User not found' }, { status: 404 })
   }),
 
   // Clients API
@@ -135,7 +135,7 @@ export const handlers = [
     if (client) {
       return HttpResponse.json({ client })
     }
-    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'Client not found' }, { status: 404 })
   }),
 
   http.post('http://localhost:8080/api/clients', async ({ request }) => {
@@ -166,7 +166,7 @@ export const handlers = [
       mockClients[clientIndex] = { ...mockClients[clientIndex], ...body }
       return HttpResponse.json({ message: 'Client updated', client: mockClients[clientIndex] })
     }
-    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'Client not found' }, { status: 404 })
   }),
 
   http.delete('http://localhost:8080/api/clients/:id', ({ params }) => {
@@ -176,7 +176,7 @@ export const handlers = [
       mockClients.splice(clientIndex, 1)
       return HttpResponse.json({ message: 'Client deleted' })
     }
-    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'Client not found' }, { status: 404 })
   }),
 
   http.post('http://localhost:8080/api/clients/:id/regenerate-secret', ({ params }) => {
@@ -191,7 +191,7 @@ export const handlers = [
         }
       })
     }
-    return HttpResponse.json({ error: 'Client not found' }, { status: 404 })
+    return HttpResponse.json({ detail: 'Client not found' }, { status: 404 })
   })
 ]
 

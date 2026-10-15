@@ -71,8 +71,7 @@ const ClientDetailPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to update client'
       toast.error(errorMessage)
     },
@@ -88,8 +87,7 @@ const ClientDetailPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to delete client'
       toast.error(errorMessage)
     },
@@ -106,8 +104,7 @@ const ClientDetailPage: React.FC = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.details ||
+        error.response?.data?.detail ||
         'Failed to regenerate secret'
       toast.error(errorMessage)
     },

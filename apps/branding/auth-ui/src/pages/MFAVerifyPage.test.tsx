@@ -33,7 +33,7 @@ describe('MFAVerifyPage', () => {
       http.post('http://localhost:8080/api/v1/login-flows/:flow/mfa', async ({ request }) => {
         requestPath = new URL(request.url).pathname
         requestBody = await request.json()
-        return HttpResponse.json({ error: 'invalid verification code', code: 'invalid_code' }, { status: 401 })
+        return HttpResponse.json({ detail: 'invalid verification code', code: 'invalid_code' }, { status: 401 })
       })
     )
 

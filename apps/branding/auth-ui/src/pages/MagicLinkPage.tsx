@@ -8,7 +8,7 @@ import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
 interface LinkInfo {
   valid: boolean
   email?: string
-  error?: string
+  detail?: string
 }
 
 // Full class names, so the stylesheet build sees them.
@@ -76,7 +76,7 @@ const MagicLinkPage: React.FC = () => {
       if (data.next === 'email_sent') {
         setIsSent(true)
       } else {
-        setError(data.error || t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
+        setError(data.detail || t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
       }
     } catch {
       setError(t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
@@ -101,7 +101,7 @@ const MagicLinkPage: React.FC = () => {
         navigate(next)
         return
       }
-      setError(data.error || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+      setError(data.detail || t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
     } catch {
       setError(t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
     }
@@ -131,7 +131,7 @@ const MagicLinkPage: React.FC = () => {
         <div className="text-center">
           {cardIcon('red', ERROR_ICON)}
           <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
-          <p className="mt-2 text-sm text-red-600">{error || linkInfo.error}</p>
+          <p className="mt-2 text-sm text-red-600">{error || linkInfo.detail}</p>
           <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
         </div>
       )

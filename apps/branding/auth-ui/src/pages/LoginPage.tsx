@@ -128,9 +128,9 @@ const LoginPage: React.FC = () => {
           return
         }
 
-        if (data.error) {
+        if (data.detail) {
           const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
-          setError(key ? t(key) : data.error)
+          setError(key ? t(key) : data.detail)
         } else {
           setLoginInfo(data)
         }
@@ -186,9 +186,9 @@ const LoginPage: React.FC = () => {
         navigate(next)
       } else if (data.next === 'redirect' && data.redirect_to) {
         followRedirect(data.redirect_to)
-      } else if (data.error) {
+      } else if (data.detail) {
         const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
-        setError(key ? t(key) : data.error)
+        setError(key ? t(key) : data.detail)
       }
     },
     onError: (error) => {

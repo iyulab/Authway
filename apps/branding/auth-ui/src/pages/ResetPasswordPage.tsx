@@ -44,7 +44,7 @@ export default function ResetPasswordPage() {
           setIsTokenValid(true);
           setPasswordLength(Number(data.password_min_length) || LEAST_PASSWORD_LENGTH);
         } else {
-          setError(data.error || t('password:reset.errors.tokenExpired'));
+          setError(data.detail || t('password:reset.errors.tokenExpired'));
         }
       } catch {
         setError(t('password:reset.errors.serverError'));
@@ -102,7 +102,7 @@ export default function ResetPasswordPage() {
         setPasswordLength(inForce);
         setError(t('password:validation.minLength', { length: inForce }));
       } else {
-        setError(data.error || t('password:reset.errors.resetFailed'));
+        setError(data.detail || t('password:reset.errors.resetFailed'));
       }
     } catch {
       setError(t('password:reset.errors.serverError'));

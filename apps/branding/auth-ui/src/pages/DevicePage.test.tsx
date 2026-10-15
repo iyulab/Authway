@@ -53,7 +53,7 @@ describe('DevicePage', () => {
     mockSearchParams.set('flow', 'f-1')
     server.use(
       http.post('http://localhost:8080/api/v1/device-flows/:flow', () =>
-        HttpResponse.json({ error: 'That code is not valid.', code: 'user_code_invalid' }, { status: 400 })),
+        HttpResponse.json({ detail: 'That code is not valid.', code: 'user_code_invalid' }, { status: 400 })),
     )
 
     render(<DevicePage />)
