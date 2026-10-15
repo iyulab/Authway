@@ -2,7 +2,8 @@
 
 An application acts for its signed-in user with the **user's access token** —
 the one it received from the authorization server — as a bearer token. These
-calls need no admin key. [`packages/contract/openapi.yaml`](../../packages/contract/openapi.yaml)
+calls need no admin key. An application that would rather not build these
+screens links its users to [the account screen](#the-account-screen) instead. [`packages/contract/openapi.yaml`](../../packages/contract/openapi.yaml)
 describes the profile calls (sections 1 and 2) and the two-factor calls
 (section 3) under the `account` tag; the sign-out call (section 4) is not part
 of that contract.
@@ -104,10 +105,11 @@ POST /api/v1/users/mfa/setup
 Authorization: Bearer <the user's access token>
 ```
 
-answers `{ "secret", "otpauth_uri", "issuer", "account_name" }`. `secret`
-is the TOTP secret (base32), for typing into an authenticator by hand;
-`otpauth_uri` is the same secret as an `otpauth://` URI — show it as a QR
-code. `account_name` is the user's email address. Nothing is turned on yet,
+answers `{ "secret", "otpauth_uri", "qr_image", "issuer", "account_name" }`.
+`secret` is the TOTP secret (base32), for typing into an authenticator by
+hand; `otpauth_uri` is the same secret as an `otpauth://` URI — show it as a
+QR code, or show `qr_image`, the same URI already drawn as a PNG `data:` URL
+for an `<img>`. `account_name` is the user's email address. Nothing is turned on yet,
 and until it is, each call issues a new secret in place of the previous one.
 Once the second factor is on, `setup` answers `409` (`mfa_already_enabled`):
 the factor in use is not replaced by a call that needs only the user's token.
@@ -237,3 +239,27 @@ server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
 |--------|---------|
 | `401` | No token, or one that is no longer valid |
 | `500` | The sessions could not be ended (`{ "success": false, "error", "guide", "details" }`) — try again |
+
+---
+
+## The account screen
+
+Authway hosts a page where a signed-in user manages their own sign-in —
+for now, turning two-step verification on and off and renewing recovery
+codes. Link to it from your application:
+
+```
+{login screens}/account?client_id=<your application's client_id>
+```
+
+The page signs the user in to their tenant's **account screen client**, a
+public client Authway registers for the tenant the first time one of its
+users arrives (no consent screen; a user with a session signs in without
+seeing anything). It offers a way back to your application — the
+`client_uri` you registered for it. Behind the page is
+`GET /api/v1/account-entry?client_id=…`, which answers with that client and
+your application's name and `client_uri`.
+
+The administration API lists the account screen client with `system: true`
+and refuses to change or delete it (`409 system_client`); it is removed with
+the tenant.

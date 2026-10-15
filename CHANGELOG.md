@@ -2,6 +2,15 @@
 
 ### Added
 
+- **The account screen** — `{login screens}/account?client_id=<an
+  application's client_id>`: a signed-in user turns two-step verification on
+  (QR code, key, code, recovery codes) and off, and renews recovery codes,
+  then goes back to the application (its `client_uri`). The page signs the
+  user in with the tenant's account screen client below. The admin console
+  marks that client as managed by Authway.
+- **`qr_image` in the answer of `POST /api/v1/users/mfa/setup`** — the
+  `otpauth_uri` already drawn as a QR code, a PNG `data:` URL, for a screen
+  without a QR encoder.
 - **The account screen's entry** — `GET /api/v1/account-entry?client_id=<an
   application's client_id>` (public) answers with the client the account
   screen signs a user in with and the application to go back to

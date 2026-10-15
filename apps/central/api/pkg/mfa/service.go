@@ -1,6 +1,10 @@
 package mfa
 
 import (
+	"bytes"
+	"encoding/base64"
+	"image/png"
+
 	"authway/apps/central/api/pkg/apierror"
 	"crypto/rand"
 	"crypto/sha256"
@@ -51,8 +55,11 @@ func NewService(db *gorm.DB, userService user.Service, logger *zap.Logger, issue
 }
 
 type TOTPSetupResponse struct {
-	Secret      string `json:"secret"`
-	OTPAuthURI  string `json:"otpauth_uri"`
+	Secret     string `json:"secret"`
+	OTPAuthURI string `json:"otpauth_uri"`
+	// QRImage is OTPAuthURI drawn as a QR code: a data: URL of a PNG, for a
+	// screen that has no QR encoder of its own.
+	QRImage     string `json:"qr_image"`
 	Issuer      string `json:"issuer"`
 	AccountName string `json:"account_name"`
 }
@@ -113,8 +120,12 @@ func (s *service) SetupTOTP(userID uuid.UUID) (*TOTPSetupResponse, error) {
 	// previous fmt.Sprintf path silently broke for any email containing `+`
 	// or `@` past the first occurrence (e.g. `user+alias@example.com`).
 	qrCodeURL := key.URL()
+	qrImage, err := qrDataURL(key)
+	if err != nil {
+		return nil, err
+	}
 	s.logger.Info("TOTP setup initiated", zap.String("user_id", userID.String()), zap.String("email", u.Email))
-	return &TOTPSetupResponse{Secret: secret, OTPAuthURI: qrCodeURL, Issuer: s.issuer, AccountName: u.Email}, nil
+	return &TOTPSetupResponse{Secret: secret, OTPAuthURI: qrCodeURL, QRImage: qrImage, Issuer: s.issuer, AccountName: u.Email}, nil
 }
 func (s *service) VerifyAndEnable(userID uuid.UUID, code string) (*RecoveryCodesResponse, error) {
 	u, err := s.userService.GetByID(userID)
@@ -341,4 +352,18 @@ func hashCode(code string) string {
 
 func normalizeCode(code string) string {
 	return strings.ToUpper(strings.ReplaceAll(code, "-", ""))
+}
+
+// qrDataURL draws the key's otpauth URI as a 240 px QR code PNG, as a data:
+// URL an <img> shows directly.
+func qrDataURL(key *otp.Key) (string, error) {
+	img, err := key.Image(240, 240)
+	if err != nil {
+		return "", fmt.Errorf("failed to draw the TOTP QR code: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return "", fmt.Errorf("failed to encode the TOTP QR code: %w", err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }

@@ -94,3 +94,15 @@ describe('changing a client', () => {
     expect(update.mock.calls[0][1]).toMatchObject({ audience: [], backchannel_logout_uri: '' })
   })
 })
+
+describe('the account screen client', () => {
+  it('is shown as managed by Authway, without a form to change it or a way to delete it', async () => {
+    vi.spyOn(clientsApi, 'get').mockResolvedValue(answer({ client: { ...existing, name: 'Account', public: true, system: true } }))
+    render(<ClientDetailPage />)
+
+    expect(await screen.findByText('Managed by Authway')).toBeInTheDocument()
+    expect(screen.getByText('System')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /save|update/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /delete client/i })).not.toBeInTheDocument()
+  })
+})

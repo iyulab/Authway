@@ -159,6 +159,7 @@ const ClientDetailPage: React.FC = () => {
               <Badge variant={client.public ? 'info' : 'purple'}>
                 {client.public ? 'Public' : 'Confidential'}
               </Badge>
+              {client.system && <Badge variant="default">System</Badge>}
             </div>
             <p className="text-sm text-gray-500 font-mono mt-1">{client.client_id}</p>
           </div>
@@ -195,6 +196,19 @@ const ClientDetailPage: React.FC = () => {
         </div>
       </Card>
 
+      {client.system ? (
+        <Card>
+          <div className="p-6">
+            <h2 className="text-lg font-medium text-gray-900">Managed by Authway</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              This is the tenant's account screen client, where users manage their own sign-in. Authway registered
+              it the first time a user of this tenant opened that screen. It cannot be changed or deleted here; it is
+              removed with the tenant.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <>
       {/* Edit Form */}
       <Card>
         <div className="px-6 py-4 border-b border-gray-200">
@@ -240,6 +254,8 @@ const ClientDetailPage: React.FC = () => {
           </div>
         </div>
       </Card>
+        </>
+      )}
 
       {/* Delete Confirmation */}
       <ConfirmDialog

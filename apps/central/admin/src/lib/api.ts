@@ -71,6 +71,8 @@ export interface User {
 }
 
 export interface Client {
+  /** Part of Authway — the tenant's account screen client; it cannot be changed or deleted. */
+  system?: boolean
   id: string
   tenant_id: string
   client_id: string

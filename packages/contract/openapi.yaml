@@ -2221,10 +2221,11 @@ components:
   schemas:
     SecondFactorSetup:
       type: object
-      required: [secret, otpauth_uri, issuer, account_name]
+      required: [secret, otpauth_uri, qr_image, issuer, account_name]
       properties:
         secret: { type: string, minLength: 1, description: The TOTP secret (base32), for typing into an authenticator by hand. }
         otpauth_uri: { type: string, minLength: 1, description: 'The same secret as an `otpauth://` URI — show it as a QR code.' }
+        qr_image: { type: string, pattern: '^data:image/png;base64,', description: 'otpauth_uri already drawn as a QR code — a data: URL of a PNG, for a screen without a QR encoder.' }
         issuer: { type: string }
         account_name: { type: string, description: The user's email address. }
 

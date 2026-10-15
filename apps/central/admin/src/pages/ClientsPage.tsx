@@ -120,6 +120,11 @@ const ClientsPage: React.FC = () => {
                       <Badge variant={client.public ? 'info' : 'purple'} size="sm">
                         {client.public ? 'Public' : 'Confidential'}
                       </Badge>
+                      {client.system && (
+                        <Badge variant="default" size="sm">
+                          System
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-gray-500 font-mono">{client.client_id}</p>
                     {client.description && (
