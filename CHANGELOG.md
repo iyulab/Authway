@@ -73,6 +73,8 @@
 
 ### Fixed
 
+- The admin console shows a refusal of a client's settings at the field it
+  names (with its hint), not only in a passing message.
 - The page that carries the browser on after a provider sign-in wrote the
   next address into its script without escaping it; it is now escaped for
   that script.
