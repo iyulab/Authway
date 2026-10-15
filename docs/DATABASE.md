@@ -81,6 +81,9 @@ That makes destructive changes — dropping a column or table, narrowing a type,
 deleting data — a two-step change:
 
 1. Ship application code that no longer reads or writes the column, and deploy it.
+   Search the whole repository for the column's name, not only the
+   application: a deployment or verification script that writes the table with
+   SQL of its own breaks just the same when the column goes.
 2. In a **later** deployment that contains no other application change, ship the
    migration that drops it, and run `check-migration-status` against the target
    before and after. Immediately before that deployment, query what the drop
