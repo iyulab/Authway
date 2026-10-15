@@ -49,6 +49,25 @@ describe('login UI backend routes', () => {
     expect(Array.isArray(body.client?.sign_in_methods)).toBe(true)
   })
 
+  // A client's logo was kept and returned, and no screen showed it: the
+  // sign-in screen now learns it from the flow, and it follows the client.
+  it("names the application's logo in the login flow, and stops when it is cleared", async () => {
+    const logo = 'https://app.example/logo.png'
+    const set = await provider.admin(`/api/v1/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ logo }) })
+    expect(set.status, await set.clone().text()).toBe(200)
+    let res = await fetch(`${provider.config.api}/api/v1/login-flows/${encodeURIComponent(await startFlow())}`)
+    await conform('GET', '/api/v1/login-flows/{flow}', res)
+    expect((await res.json()).client_logo_uri).toBe(logo)
+
+    const refused = await provider.admin(`/api/v1/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ logo: 'http://app.example/logo.png' }) })
+    expect(refused.status).toBe(400)
+
+    const cleared = await provider.admin(`/api/v1/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ logo: '' }) })
+    expect(cleared.status).toBe(200)
+    res = await fetch(`${provider.config.api}/api/v1/login-flows/${encodeURIComponent(await startFlow())}`)
+    expect((await res.json()).client_logo_uri ?? '').toBe('')
+  })
+
   // An application is configured with one address and finds the rest from
   // here; whichever provider it talks to, the issuer named must be the one
   // whose discovery document it then reads.

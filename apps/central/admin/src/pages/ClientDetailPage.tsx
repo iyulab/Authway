@@ -48,6 +48,7 @@ const ClientDetailPage: React.FC = () => {
         description: data.description ?? '',
         // Sent as they stand: '' clears what was there.
         client_uri: (data.client_uri ?? '').trim(),
+        logo: (data.logo ?? '').trim(),
         initiate_login_uri: (data.initiate_login_uri ?? '').trim(),
         redirect_uris: redirectUris,
         post_logout_redirect_uris: postLogoutRedirectUris,

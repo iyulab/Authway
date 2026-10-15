@@ -293,7 +293,9 @@ type CreateClientRequest struct {
 	ClientSecret string `json:"client_secret"` // Optional: Required only for confidential clients (ignored for public clients)
 
 	Description string `json:"description"`
-	Logo        string `json:"logo" validate:"omitempty,url"`
+	// Logo is shown on the sign-in and consent screens: an absolute https
+	// URL, validated in Create.
+	Logo string `json:"logo"`
 	// RedirectURIs is required only for redirect-based grants (authorization_code,
 	// implicit) — see validateClientConfig. A struct tag cannot express that
 	// condition, so the presence rule lives in validation.go — as does the
@@ -423,9 +425,12 @@ func (r *ScopedCreateClientRequest) ToCreateClientRequest(tenantID string) *Crea
 
 // UpdateClientRequest represents the request to update an OAuth client
 type UpdateClientRequest struct {
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Logo         string   `json:"logo" validate:"omitempty,url"`
+	Name string `json:"name"`
+	// Description and Logo change only when named; an empty string clears.
+	Description *string `json:"description"`
+	// Logo is shown on the sign-in and consent screens — validated as an
+	// absolute https URL in Update.
+	Logo         *string  `json:"logo"`
 	RedirectURIs []string `json:"redirect_uris" validate:"omitempty,min=1"`
 	GrantTypes   []string `json:"grant_types" validate:"omitempty,min=1"`
 	Scopes       []string `json:"scopes" validate:"omitempty,min=1"`

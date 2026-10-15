@@ -41,7 +41,7 @@ func (f *loginFlowHydra) client(t *testing.T) *hydra.Client {
 				Skip:           f.skip,
 				Subject:        f.subject,
 				RequestedScope: []string{"openid"},
-				Client:         &hydra.OAuth2Client{ClientID: testClientID, ClientName: "Test App"},
+				Client:         &hydra.OAuth2Client{ClientID: testClientID, ClientName: "Test App", LogoURI: "https://app.example/logo.png"},
 			})
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/requests/login/accept"):
 			f.acceptCount++
@@ -103,6 +103,9 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	}
 	if body["client_name"] != "Test App" {
 		t.Errorf("client_name = %v", body["client_name"])
+	}
+	if body["client_logo_uri"] != "https://app.example/logo.png" {
+		t.Errorf("client_logo_uri = %v, want the client's logo", body["client_logo_uri"])
 	}
 	cl, _ := body["client"].(map[string]any)
 	if cl["client_id"] != testClientID {

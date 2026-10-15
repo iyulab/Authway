@@ -376,6 +376,7 @@ func (h *AuthHandler) GetConsentFlow(c *fiber.Ctx) error {
 		"next":            nextForm,
 		"flow":            challenge,
 		"client_name":     consentReq.Client.ClientName,
+		"client_logo_uri": consentReq.Client.LogoURI,
 		"requested_scope": consentReq.RequestedScope,
 		"user": fiber.Map{
 			"email": user.Email,

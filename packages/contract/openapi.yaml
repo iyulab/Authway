@@ -1275,6 +1275,9 @@ paths:
                 client_uri:
                   description: The application's home page — where such a user goes when there is no `initiate_login_uri`. An absolute https URL; an empty string clears it.
                   type: string
+                logo:
+                  description: The application's logo, shown with its name on the sign-in and consent screens (`logo_uri` in OpenID Connect Dynamic Client Registration). An absolute https URL; an empty string clears it.
+                  type: string
                 backchannel_logout_uri:
                   description: |
                     Where the client's backend is told that a user's session
@@ -1391,6 +1394,9 @@ paths:
                   type: string
                 client_uri:
                   description: The application's home page — where such a user goes when there is no `initiate_login_uri`. An absolute https URL; an empty string clears it.
+                  type: string
+                logo:
+                  description: The application's logo, shown with its name on the sign-in and consent screens (`logo_uri` in OpenID Connect Dynamic Client Registration). An absolute https URL; an empty string clears it.
                   type: string
                 backchannel_logout_uri:
                   description: |
@@ -2562,6 +2568,9 @@ components:
         next: { const: form }
         flow: { type: string }
         client_name: { type: string }
+        client_logo_uri:
+          description: The application's logo (its registered `logo`), to show with its name. Absent or empty when it has none.
+          type: string
         requested_scope: { type: [array, 'null'], items: { type: string } }
         client:
           type: object
@@ -2600,6 +2609,9 @@ components:
         next: { const: form }
         flow: { type: string }
         client_name: { type: string }
+        client_logo_uri:
+          description: The application's logo (its registered `logo`), to show with its name. Absent or empty when it has none.
+          type: string
         requested_scope: { type: [array, 'null'], items: { type: string } }
         user:
           type: object
@@ -3095,6 +3107,9 @@ components:
           type: string
         client_uri:
           description: The application's home page. Empty when none is registered.
+          type: string
+        logo:
+          description: The application's logo, shown on the sign-in and consent screens. Empty when none is registered.
           type: string
         backchannel_logout_uri:
           description: |

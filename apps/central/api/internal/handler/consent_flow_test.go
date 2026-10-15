@@ -30,7 +30,7 @@ func newConsentTestApp(t *testing.T, skip bool) (*fiber.App, *[]string) {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/requests/consent"):
 			_ = json.NewEncoder(w).Encode(hydra.ConsentRequest{
 				Challenge: "cf-1=", Subject: u.ID.String(), RequestedScope: []string{"openid", "email"},
-				Client: &hydra.OAuth2Client{ClientID: testClientID, ClientName: "App"}, Skip: skip,
+				Client: &hydra.OAuth2Client{ClientID: testClientID, ClientName: "App", LogoURI: "https://app.example/logo.png"}, Skip: skip,
 			})
 		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/requests/consent/accept"):
 			calls = append(calls, "accept")
@@ -70,7 +70,7 @@ func TestConsentFlow_AsksWhenTheClientDoesNotSkip(t *testing.T) {
 	app, calls := newConsentTestApp(t, false)
 
 	status, body := doConsent(t, app, "GET", "/consent-flows/cf-1%3D", "")
-	if status != fiber.StatusOK || body["next"] != "form" || body["flow"] != "cf-1=" || body["client_name"] != "App" {
+	if status != fiber.StatusOK || body["next"] != "form" || body["flow"] != "cf-1=" || body["client_name"] != "App" || body["client_logo_uri"] != "https://app.example/logo.png" {
 		t.Fatalf("status %d body %v, want next=form for the decoded flow", status, body)
 	}
 	if len(*calls) != 0 {

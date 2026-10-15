@@ -100,10 +100,13 @@ type OAuth2Client struct {
 	// BackChannelLogoutURI is where the client is told that a session ended
 	// (OpenID Connect Back-Channel Logout). Omitted when empty, which on an
 	// update clears it.
-	BackChannelLogoutURI             string   `json:"backchannel_logout_uri,omitempty"`
+	BackChannelLogoutURI string `json:"backchannel_logout_uri,omitempty"`
 	// ClientURI is the application's home page (OpenID Connect Dynamic
 	// Client Registration).
 	ClientURI string `json:"client_uri,omitempty"`
+	// LogoURI is the application's logo (OpenID Connect Dynamic Client
+	// Registration), which the sign-in and consent screens show.
+	LogoURI                          string   `json:"logo_uri,omitempty"`
 	BackChannelLogoutSessionRequired bool     `json:"backchannel_logout_session_required,omitempty"`
 	GrantTypes                       []string `json:"grant_types"`
 	ResponseTypes                    []string `json:"response_types"`

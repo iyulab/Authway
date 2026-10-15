@@ -70,8 +70,27 @@ func (m *MicrosoftService) ConfiguredFor(clientID string) bool {
 	return err == nil && cfg.ClientID != ""
 }
 
+// GetOAuthConfig returns the client's own Microsoft credentials when it has
+// them enabled, the deployment's otherwise — the same rule as Google and
+// GitHub. A client's own app is asked for its own directory, or "common" when
+// none is set; it does not inherit the deployment's directory.
 func (m *MicrosoftService) GetOAuthConfig(clientID string) (*MicrosoftOAuthConfig, error) {
-	return &MicrosoftOAuthConfig{ClientID: m.config.ClientID, ClientSecret: m.config.ClientSecret, TenantID: m.config.TenantID, RedirectURL: m.config.RedirectURL}, nil
+	central := &MicrosoftOAuthConfig{ClientID: m.config.ClientID, ClientSecret: m.config.ClientSecret, TenantID: m.config.TenantID, RedirectURL: m.config.RedirectURL}
+	if clientID == "" {
+		return central, nil
+	}
+	clientData, err := m.clientService.GetByClientID(clientID)
+	if err != nil {
+		return nil, fmt.Errorf("client not found: %w", err)
+	}
+	if clientData.MicrosoftOAuthEnabled && nonEmpty(clientData.MicrosoftClientID) && nonEmpty(clientData.MicrosoftClientSecret) {
+		own := &MicrosoftOAuthConfig{ClientID: *clientData.MicrosoftClientID, ClientSecret: *clientData.MicrosoftClientSecret, RedirectURL: m.config.RedirectURL}
+		if clientData.MicrosoftTenantID != nil {
+			own.TenantID = *clientData.MicrosoftTenantID
+		}
+		return own, nil
+	}
+	return central, nil
 }
 
 func (m *MicrosoftService) GetAuthURL(state string) string {

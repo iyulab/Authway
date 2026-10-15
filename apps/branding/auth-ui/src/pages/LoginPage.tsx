@@ -9,6 +9,7 @@ import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginBu
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, loginFlowUrl, nextScreen, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
 import i18n from '../i18n'
+import ClientLogo from '../components/ClientLogo'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -53,6 +54,7 @@ interface LoginPageInfo {
   next: 'form'
   flow: string
   client_name: string
+  client_logo_uri?: string
   requested_scope: string[]
   client?: ClientAuthConfig
   hints?: RequestHints
@@ -272,6 +274,7 @@ const LoginPage: React.FC = () => {
           </h2>
           {loginInfo && (
             <div className="mt-2 text-center">
+              <ClientLogo uri={loginInfo.client_logo_uri} name={loginInfo.client_name} />
               <p className="text-sm text-gray-600">
                 {loginInfo.client_name ? (
                   <Trans

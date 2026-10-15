@@ -87,6 +87,7 @@ describe('where users are sent', () => {
     await user.type(screen.getByLabelText('Client Name *'), 'Web App')
     await user.type(screen.getByLabelText('Home Page'), ' https://app.example.com ')
     await user.type(screen.getByLabelText('Sign-In Start URL (Optional)'), 'https://app.example.com/login')
+    await user.type(screen.getByLabelText('Logo URL (Optional)'), 'https://app.example.com/logo.png')
     await user.type(screen.getByLabelText(/^Redirect URIs/), 'https://app.example.com/callback')
     await user.click(screen.getByRole('button', { name: /create/i }))
 
@@ -94,12 +95,13 @@ describe('where users are sent', () => {
     expect(create.mock.calls[0][0]).toMatchObject({
       client_uri: 'https://app.example.com',
       initiate_login_uri: 'https://app.example.com/login',
+      logo: 'https://app.example.com/logo.png',
     })
   })
 
   it('clears them by sending them empty when changing a client', async () => {
     vi.spyOn(clientsApi, 'get').mockResolvedValue(
-      answer({ client: { ...existing, client_uri: 'https://app.example.com', initiate_login_uri: 'https://app.example.com/login' } }),
+      answer({ client: { ...existing, client_uri: 'https://app.example.com', initiate_login_uri: 'https://app.example.com/login', logo: 'https://app.example.com/logo.png' } }),
     )
     const update = vi.spyOn(clientsApi, 'update').mockResolvedValue(answer({ message: 'ok', client: existing }))
     const user = userEvent.setup()
@@ -107,10 +109,11 @@ describe('where users are sent', () => {
 
     await user.clear(await screen.findByLabelText('Home Page'))
     await user.clear(screen.getByLabelText('Sign-In Start URL (Optional)'))
+    await user.clear(screen.getByLabelText('Logo URL (Optional)'))
     await user.click(screen.getByRole('button', { name: /save|update/i }))
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
-    expect(update.mock.calls[0][1]).toMatchObject({ client_uri: '', initiate_login_uri: '' })
+    expect(update.mock.calls[0][1]).toMatchObject({ client_uri: '', initiate_login_uri: '', logo: '' })
   })
 })
 

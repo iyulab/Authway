@@ -96,6 +96,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateApplicationURI("client_uri", req.ClientURI); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateApplicationURI("logo", req.Logo); cerr != nil {
+		return nil, nil, cerr
+	}
 	if cerr := validateSignInMethods(req.EnabledAuthProviders); cerr != nil {
 		return nil, nil, cerr
 	}
@@ -551,7 +554,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	for _, f := range []struct {
 		field string
 		value *string
-	}{{"initiate_login_uri", req.InitiateLoginURI}, {"client_uri", req.ClientURI}} {
+	}{{"initiate_login_uri", req.InitiateLoginURI}, {"client_uri", req.ClientURI}, {"logo", req.Logo}} {
 		if f.value != nil {
 			if cerr := validateApplicationURI(f.field, *f.value); cerr != nil {
 				return nil, SyncStatus{}, cerr
@@ -573,10 +576,11 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	if req.Name != "" {
 		client.Name = req.Name
 	}
-	// Allow clearing description (empty string is valid)
-	client.Description = req.Description
-	if req.Logo != "" {
-		client.Logo = req.Logo
+	if req.Description != nil {
+		client.Description = *req.Description
+	}
+	if req.Logo != nil {
+		client.Logo = *req.Logo
 	}
 
 	// Array fields: update if slice is not nil (allows clearing with empty array)
@@ -957,6 +961,7 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		BackChannelLogoutURI:             c.BackChannelLogoutURI,
 		BackChannelLogoutSessionRequired: c.BackChannelLogoutURI != "",
 		ClientURI:                        c.ClientURI,
+		LogoURI:                          c.Logo,
 		GrantTypes:                       c.GrantTypes,
 		ResponseTypes:                    []string{"code"},
 		Scope:                            strings.Join(c.Scopes, " "),

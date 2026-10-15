@@ -72,14 +72,35 @@ func (a *AppleService) ConfiguredFor(clientID string) bool {
 	return err == nil && cfg.ClientID != ""
 }
 
+// GetOAuthConfig returns the client's own Apple credentials when it has them
+// enabled and complete (service id, team, key id and private key), the
+// deployment's otherwise — the same rule as Google and GitHub.
 func (a *AppleService) GetOAuthConfig(clientID string) (*AppleOAuthConfig, error) {
-	return &AppleOAuthConfig{
+	central := &AppleOAuthConfig{
 		ClientID:    a.config.ClientID,
 		TeamID:      a.config.TeamID,
 		KeyID:       a.config.KeyID,
 		PrivateKey:  a.config.PrivateKey,
 		RedirectURL: a.config.RedirectURL,
-	}, nil
+	}
+	if clientID == "" {
+		return central, nil
+	}
+	clientData, err := a.clientService.GetByClientID(clientID)
+	if err != nil {
+		return nil, fmt.Errorf("client not found: %w", err)
+	}
+	if clientData.AppleOAuthEnabled && nonEmpty(clientData.AppleClientID) && nonEmpty(clientData.AppleTeamID) &&
+		nonEmpty(clientData.AppleKeyID) && nonEmpty(clientData.ApplePrivateKey) {
+		return &AppleOAuthConfig{
+			ClientID:    *clientData.AppleClientID,
+			TeamID:      *clientData.AppleTeamID,
+			KeyID:       *clientData.AppleKeyID,
+			PrivateKey:  *clientData.ApplePrivateKey,
+			RedirectURL: a.config.RedirectURL,
+		}, nil
+	}
+	return central, nil
 }
 
 func (a *AppleService) generateClientSecret(cfg *AppleOAuthConfig) (string, error) {
@@ -113,7 +134,11 @@ func (a *AppleService) GetAuthURL(state string) string {
 }
 
 func (a *AppleService) GetAuthURLForClient(state string, clientID string) string {
-	oauthConfig, _ := a.GetOAuthConfig(clientID)
+	oauthConfig, err := a.GetOAuthConfig(clientID)
+	if err != nil {
+		a.logger.Error("Failed to get OAuth config", zap.Error(err))
+		oauthConfig, _ = a.GetOAuthConfig("")
+	}
 	a.logger.Info("Building Apple OAuth URL", zap.String("apple_client_id", oauthConfig.ClientID))
 	baseURL := "https://appleid.apple.com/auth/authorize"
 	params := url.Values{}

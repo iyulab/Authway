@@ -55,6 +55,30 @@ describe('ConsentPage', () => {
     Array.from(mockSearchParams.keys()).forEach((k) => mockSearchParams.delete(k))
   })
 
+  describe('Application logo', () => {
+    it("shows the application's logo when its registration names one", async () => {
+      server.use(
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () =>
+          HttpResponse.json({ ...mockConsentInfo, client_logo_uri: 'https://app.example/logo.png' })
+        )
+      )
+      render(<ConsentPage />)
+      const logo = await screen.findByRole('img', { name: 'Test Application' })
+      expect(logo).toHaveAttribute('src', 'https://app.example/logo.png')
+    })
+
+    it('shows none for an address that is not https, or none at all', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () =>
+          HttpResponse.json({ ...mockConsentInfo, client_logo_uri: 'javascript:alert(1)' })
+        )
+      )
+      render(<ConsentPage />)
+      await screen.findByText('Test Application')
+      expect(screen.queryByRole('img', { name: 'Test Application' })).not.toBeInTheDocument()
+    })
+  })
+
   describe('Initial Loading and Error States', () => {
     it('shows loading spinner initially', () => {
       render(<ConsentPage />)

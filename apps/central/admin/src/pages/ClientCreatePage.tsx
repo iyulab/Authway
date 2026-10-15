@@ -40,6 +40,7 @@ const ClientCreatePage: React.FC = () => {
         name: data.name,
         description: data.description,
         client_uri: (data.client_uri ?? '').trim() || undefined,
+        logo: (data.logo ?? '').trim() || undefined,
         initiate_login_uri: (data.initiate_login_uri ?? '').trim() || undefined,
         redirect_uris: redirectUris,
         post_logout_redirect_uris:

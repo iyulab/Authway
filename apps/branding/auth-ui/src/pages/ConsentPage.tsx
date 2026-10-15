@@ -3,11 +3,13 @@ import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { flowUrl, followRedirect, submitFlowStep, type FlowStep } from '../utils/loginFlow'
+import ClientLogo from '../components/ClientLogo'
 
 interface ConsentPageInfo {
   next: 'form'
   flow: string
   client_name: string
+  client_logo_uri?: string
   requested_scope: string[]
   user: {
     email: string
@@ -156,6 +158,7 @@ const ConsentPage: React.FC = () => {
             {t('consent:title')}
           </h2>
           <div className="mt-4 text-center">
+            <ClientLogo uri={consentInfo.client_logo_uri} name={consentInfo.client_name} />
             <p className="text-sm text-gray-600">
               {t('consent:greeting', { name: consentInfo.user.name || consentInfo.user.email })}
             </p>

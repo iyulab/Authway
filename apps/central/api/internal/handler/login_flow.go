@@ -49,6 +49,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		"next":            nextForm,
 		"flow":            flow,
 		"client_name":     loginReq.Client.ClientName,
+		"client_logo_uri": loginReq.Client.LogoURI,
 		"requested_scope": loginReq.RequestedScope,
 		"tenant_id":       requestedClient.TenantID.String(),
 		"client": fiber.Map{

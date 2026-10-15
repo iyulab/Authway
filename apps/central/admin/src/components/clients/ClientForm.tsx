@@ -30,7 +30,7 @@ export function usesBrowserRedirect(redirectUris: string): boolean {
     })
 }
 
-/** An absolute https URL without a fragment — what the server accepts as client_uri and initiate_login_uri. */
+/** An absolute https URL without a fragment — what the server accepts as client_uri, initiate_login_uri and logo. */
 export function isApplicationAddress(value: string): boolean {
   try {
     const url = new URL(value)
@@ -47,6 +47,7 @@ export const clientFormSchema = z.object({
   // Addresses the application publishes for users — see the superRefine below.
   client_uri: z.string().optional(),
   initiate_login_uri: z.string().optional(),
+  logo: z.string().optional(),
   // Required only for redirect-based grants — see the superRefine below. A
   // machine-to-machine client (client_credentials only) never redirects, and
   // forcing a dummy URI here pollutes its logout configuration.
@@ -111,10 +112,10 @@ export const clientFormSchema = z.object({
     })
   }
 
-  // Mirrors the server rule (invalid_client_uri, invalid_initiate_login_uri):
-  // users are sent to these addresses, so only an absolute https URL without a
-  // fragment is accepted.
-  for (const field of ['client_uri', 'initiate_login_uri'] as const) {
+  // Mirrors the server rule (invalid_client_uri, invalid_initiate_login_uri,
+  // invalid_logo): users are sent to or shown these addresses, so only an
+  // absolute https URL without a fragment is accepted.
+  for (const field of ['client_uri', 'initiate_login_uri', 'logo'] as const) {
     const address = (data[field] ?? '').trim()
     if (address !== '' && !isApplicationAddress(address)) {
       ctx.addIssue({
@@ -204,6 +205,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           name: initialData.name,
           description: initialData.description || '',
           client_uri: initialData.client_uri || '',
+          logo: initialData.logo || '',
           initiate_login_uri: initialData.initiate_login_uri || '',
           // M2M clients legitimately have no redirect_uris — the API may omit the field.
           redirect_uris: (initialData.redirect_uris || []).join('\n'),
@@ -303,6 +305,14 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           error={errors.client_uri?.message}
         />
       </div>
+
+      <Input
+        {...register('logo')}
+        label="Logo URL (Optional)"
+        placeholder="https://app.example.com/logo.png"
+        helperText="Shown with the application's name on the sign-in and consent screens. https only."
+        error={errors.logo?.message}
+      />
 
       <Textarea
         {...register('description')}

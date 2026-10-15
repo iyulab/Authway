@@ -20,8 +20,24 @@
   `404 not_found`. A failure on Authway's side is `500` — it was `400` (issuing)
   or `404` (revoking). The three endpoints are now in the published contract.
 
+### Added
+
+- **An application's logo on the sign-in and consent screens.** A client's
+  `logo` was kept and returned, and no screen showed it. It is now registered
+  with the authorization server as the client's `logo_uri`, the login and
+  consent flows answer it as `client_logo_uri`, and both screens show it above
+  the application's name. It must be an absolute https URL (`400
+  invalid_logo`); an empty string clears it. The admin console has a field for
+  it. A client that already had a logo shows it once the client is next saved.
+
 ### Fixed
 
+- **A client's own Microsoft and Apple credentials were ignored.** They were
+  accepted, sealed and stored, and sign-in used the deployment's anyway. They
+  are now used the way a client's own Google and GitHub credentials are: when
+  enabled (and, for Apple, complete), otherwise the deployment's.
+- **Changing a client without naming its description cleared it.** Only the
+  fields present change, as documented; an empty string clears.
 - **A client with every sign-in method turned off could be signed in to with
   email and Google.** An empty `enabled_auth_providers` was stored and read
   back as the default. It is now refused (`400
