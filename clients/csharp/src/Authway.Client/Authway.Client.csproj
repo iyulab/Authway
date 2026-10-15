@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>Authway.Client</PackageId>
+    <Description>Client for Authway's administration API — register applications, invite users, read users and their claims, manage webhooks and a tenant's terms — with typed refusals (RFC 9457 problem details) and verification of Standard Webhooks deliveries. Signing users in stays with your framework's OpenID Connect handler.</Description>
+    <PackageTags>authway;oidc;identity;webhooks;standard-webhooks;problem-details</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Authway.Client.Tests" />
+  </ItemGroup>
+
+</Project>

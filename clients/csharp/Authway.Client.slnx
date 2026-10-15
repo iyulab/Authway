@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Authway.Client/Authway.Client.csproj" />
+  <Project Path="tests/Authway.Client.Tests/Authway.Client.Tests.csproj" />
+</Solution>

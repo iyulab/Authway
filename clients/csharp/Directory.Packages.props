@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- The package itself depends on nothing; these are the tests'. -->
+  <ItemGroup>
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
+  </ItemGroup>
+
+</Project>
