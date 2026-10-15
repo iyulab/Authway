@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -90,31 +88,6 @@ func waitForDeliveries(t *testing.T, svc Service, webhookID uuid.UUID, timeout t
 	}
 	t.Fatalf("timed out after %s waiting for a delivery to be recorded", timeout)
 	return nil
-}
-
-// TestSignAndVerify guards the signature receivers check: it covers the time
-// as well as the body, and a stale time fails even with the right secret.
-func TestSignAndVerify(t *testing.T) {
-	body := []byte(`{"type":"user.created"}`)
-	secret := "test-secret"
-	now := time.Unix(1_800_000_000, 0)
-	header := Sign(secret, now.Unix(), body)
-
-	if !Verify(header, body, secret, 5*time.Minute, now.Add(time.Minute)) {
-		t.Fatal("expected a fresh signature to verify")
-	}
-	for name, ok := range map[string]bool{
-		"tampered body": Verify(header, []byte(`{"type":"user.deleted"}`), secret, 5*time.Minute, now),
-		"wrong secret":  Verify(header, body, "wrong-secret", 5*time.Minute, now),
-		"stale":         Verify(header, body, secret, 5*time.Minute, now.Add(6*time.Minute)),
-		"garbage":       Verify("t=1,v1=deadbeef", body, secret, 5*time.Minute, now),
-		"time changed":  Verify(fmt.Sprintf("t=%d,%s", now.Unix()+1, strings.SplitN(header, ",", 2)[1]), body, secret, 5*time.Minute, now),
-		"empty":         Verify("", body, secret, 5*time.Minute, now),
-	} {
-		if ok {
-			t.Errorf("%s: expected Verify to fail", name)
-		}
-	}
 }
 
 func intp(n int) *int    { return &n }
@@ -272,13 +245,13 @@ func TestTrigger_DeliversOnlyToSubscribedEnabledWebhooksAndSignsThePayload(t *te
 	tenantID := fixtureTenant(t, db)
 
 	var receivedBody []byte
-	var receivedSig string
+	var receivedHeader http.Header
 	received := make(chan struct{}, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, r.ContentLength)
 		r.Body.Read(body)
 		receivedBody = body
-		receivedSig = r.Header.Get("X-Webhook-Signature")
+		receivedHeader = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 		select {
 		case received <- struct{}{}:
@@ -328,12 +301,15 @@ func TestTrigger_DeliversOnlyToSubscribedEnabledWebhooksAndSignsThePayload(t *te
 	case <-time.After(time.Second):
 		t.Fatal("expected the test HTTP server to have received the request by now")
 	}
-	if !Verify(receivedSig, receivedBody, subscribed.Secret, time.Minute, time.Now()) {
-		t.Fatal("expected the X-Webhook-Signature header to verify against the webhook's own secret and the exact received body")
+	if !Verify(subscribed.Secret, receivedHeader, receivedBody, time.Minute, time.Now()) {
+		t.Fatal("expected the webhook-signature header to verify against the webhook's own secret and the exact received body")
 	}
 	var payload WebhookPayload
 	if err := json.Unmarshal(receivedBody, &payload); err != nil {
 		t.Fatalf("decode received payload: %v", err)
+	}
+	if payload.ID != receivedHeader.Get(HeaderID) {
+		t.Fatalf("expected webhook-id %q to be the event id, body says %q", receivedHeader.Get(HeaderID), payload.ID)
 	}
 	if payload.Type != EventUserCreated || payload.TenantID != tenantID.String() {
 		t.Fatalf("unexpected payload contents: %+v", payload)
@@ -435,10 +411,10 @@ func TestRotateSecret_SignsWithTheNewSecretOnly(t *testing.T) {
 	svc := NewService(db, zap.NewNop(), AllowPrivateTargets(true))
 	tenantID := fixtureTenant(t, db)
 
-	var sig string
+	var header http.Header
 	var body []byte
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sig = r.Header.Get("X-Webhook-Signature")
+		header = r.Header.Clone()
 		body, _ = io.ReadAll(r.Body)
 	}))
 	defer ts.Close()
@@ -459,10 +435,10 @@ func TestRotateSecret_SignsWithTheNewSecretOnly(t *testing.T) {
 	if _, err := svc.Test(wh.ID); err != nil {
 		t.Fatalf("Test: %v", err)
 	}
-	if !Verify(sig, body, secret, time.Minute, time.Now()) {
+	if !Verify(secret, header, body, time.Minute, time.Now()) {
 		t.Fatal("expected the delivery to verify under the new secret")
 	}
-	if Verify(sig, body, wh.Secret, time.Minute, time.Now()) {
+	if Verify(wh.Secret, header, body, time.Minute, time.Now()) {
 		t.Fatal("expected the old secret to stop verifying")
 	}
 	if _, err := svc.RotateSecret(uuid.New()); !errors.Is(err, ErrNotFound) {

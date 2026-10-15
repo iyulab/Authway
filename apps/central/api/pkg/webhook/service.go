@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,12 +177,14 @@ func validateTimeout(n int) error {
 	return nil
 }
 
+// generateSecret issues a signing secret: 32 random key bytes in the Standard
+// Webhooks form, "whsec_<base64>".
 func generateSecret() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	return secretPrefix + base64.StdEncoding.EncodeToString(key), nil
 }
 
 func (s *service) Create(tenantID uuid.UUID, req *CreateWebhookRequest) (*Webhook, error) {
@@ -340,14 +343,14 @@ func (s *service) Test(id uuid.UUID) (*WebhookDelivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, err := buildPayload(*webhook, EventTypeTest, map[string]any{
+	payload, msgID, err := buildPayload(*webhook, EventTypeTest, map[string]any{
 		"test":    true,
 		"message": "This is a test webhook delivery",
 	})
 	if err != nil {
 		return nil, err
 	}
-	delivery := s.attempt(*webhook, EventTypeTest, payload, 1)
+	delivery := s.attempt(*webhook, EventTypeTest, msgID, payload, 1)
 	return &delivery, nil
 }
 
@@ -360,27 +363,29 @@ func containsEvent(events []string, event string) bool {
 	return false
 }
 
-// buildPayload builds the body once per event, so every attempt carries the
-// same event id; each attempt signs it afresh with its own time.
-func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, error) {
+// buildPayload builds the body once per event and returns it with the event's
+// id, so every attempt carries the same id (the body's and webhook-id); each
+// attempt signs it afresh with its own time.
+func buildPayload(webhook Webhook, eventType EventType, data any) ([]byte, string, error) {
+	id := uuid.New().String()
 	payload, err := json.Marshal(WebhookPayload{
-		ID:        uuid.New().String(),
+		ID:        id,
 		Type:      eventType,
 		Timestamp: time.Now().UTC(),
 		TenantID:  webhook.TenantID.String(),
 		Data:      data,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal webhook payload: %w", err)
+		return nil, "", fmt.Errorf("failed to marshal webhook payload: %w", err)
 	}
-	return payload, nil
+	return payload, id, nil
 }
 
 // deliver queues the first attempt at webhook; up to RetryCount more follow,
 // each 1, 4, 9, … seconds after the one before, stopping at the first 2xx
 // answer.
 func (s *service) deliver(webhook Webhook, eventType EventType, data any) {
-	payload, err := buildPayload(webhook, eventType, data)
+	payload, msgID, err := buildPayload(webhook, eventType, data)
 	if err != nil {
 		s.logger.Error("Failed to build webhook payload", zap.Error(err))
 		return
@@ -388,7 +393,7 @@ func (s *service) deliver(webhook Webhook, eventType EventType, data any) {
 	fields := []zap.Field{zap.String("webhook_id", webhook.ID.String()), zap.String("event", string(eventType))}
 	attempts := 1 + webhook.RetryCount
 	err = s.queue.Submit(func(attempt int) time.Duration {
-		if s.attempt(webhook, eventType, payload, attempt).Success {
+		if s.attempt(webhook, eventType, msgID, payload, attempt).Success {
 			s.logger.Info("Webhook delivered", append(fields, zap.Int("attempt", attempt))...)
 			return workqueue.Done
 		}
@@ -407,7 +412,7 @@ func (s *service) deliver(webhook Webhook, eventType EventType, data any) {
 
 // attempt posts the payload once and records the outcome. It returns the
 // recorded row, so the caller sees the id the database gave it.
-func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, n int) WebhookDelivery {
+func (s *service) attempt(webhook Webhook, eventType EventType, msgID string, payload []byte, n int) WebhookDelivery {
 	delivery := WebhookDelivery{
 		WebhookID:   webhook.ID,
 		EventType:   string(eventType),
@@ -415,7 +420,7 @@ func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, 
 		Attempt:     n,
 		DeliveredAt: time.Now(),
 	}
-	s.post(&delivery, webhook, eventType, payload)
+	s.post(&delivery, webhook, msgID, payload)
 	if err := s.db.Create(&delivery).Error; err != nil {
 		s.logger.Error("Failed to record webhook delivery", zap.Error(err), zap.String("webhook_id", webhook.ID.String()))
 	}
@@ -423,7 +428,13 @@ func (s *service) attempt(webhook Webhook, eventType EventType, payload []byte, 
 }
 
 // post sends the request and fills in the delivery's outcome.
-func (s *service) post(delivery *WebhookDelivery, webhook Webhook, eventType EventType, payload []byte) {
+func (s *service) post(delivery *WebhookDelivery, webhook Webhook, msgID string, payload []byte) {
+	now := time.Now().Unix()
+	sig, err := Sign(webhook.Secret, msgID, now, payload)
+	if err != nil {
+		delivery.ErrorMessage = err.Error()
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(webhook.TimeoutSecs)*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(payload))
@@ -432,9 +443,9 @@ func (s *service) post(delivery *WebhookDelivery, webhook Webhook, eventType Eve
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Webhook-ID", webhook.ID.String())
-	req.Header.Set("X-Webhook-Signature", Sign(webhook.Secret, time.Now().Unix(), payload))
-	req.Header.Set("X-Webhook-Event", string(eventType))
+	req.Header.Set(HeaderID, msgID)
+	req.Header.Set(HeaderTimestamp, strconv.FormatInt(now, 10))
+	req.Header.Set(HeaderSignature, sig)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		delivery.ErrorMessage = err.Error()

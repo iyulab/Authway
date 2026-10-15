@@ -50,9 +50,13 @@ The `201` answer carries the webhook **and its signing secret**:
 ```json
 {
   "webhook": { "id": "…", "name": "user sync", "enabled": true, "…": "…" },
-  "secret": "4f1c…"
+  "secret": "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw…"
 }
 ```
+
+The secret is in the [Standard Webhooks](https://www.standardwebhooks.com)
+form — `whsec_` followed by the base64 of the key bytes — so a Standard
+Webhooks library takes it as it is.
 
 This is the only time the secret is shown. Store it where your receiver can
 read it. If it is lost or exposed, issue a new one:
@@ -71,9 +75,9 @@ immediately.
 ```http
 POST /hooks/authway
 Content-Type: application/json
-X-Webhook-ID: <webhook id>
-X-Webhook-Event: user.created
-X-Webhook-Signature: t=1791518472,v1=5d41402abc4b2a76b9719d911017c592…
+webhook-id: b2c6…
+webhook-timestamp: 1791518472
+webhook-signature: v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=
 
 {
   "id": "b2c6…",
@@ -84,8 +88,9 @@ X-Webhook-Signature: t=1791518472,v1=5d41402abc4b2a76b9719d911017c592…
 }
 ```
 
-`id` is unique per event. Retries of the same event carry the same `id`, so
-use it to ignore a delivery you have already processed.
+`id` is unique per event, and `webhook-id` carries the same value. Retries of
+the same event carry the same id, so use it to ignore a delivery you have
+already processed. The event's type is the body's `type`.
 
 ### Events
 
@@ -130,29 +135,52 @@ a prompt to synchronize, not as the only record. The audit log
 
 ## 3. Verifying the signature
 
-`X-Webhook-Signature` carries `t`, the Unix time the delivery was signed, and
-`v1`, the hex HMAC-SHA256 of `<t>.<raw request body>` keyed with the
-webhook's secret. To verify:
+Deliveries are signed as [Standard Webhooks](https://www.standardwebhooks.com)
+specifies, so any of its libraries verifies them — give it the secret, the
+three `webhook-*` headers and the raw body:
 
-1. Split the header on `,` and each part on the first `=`; read `t` and `v1`.
-2. Compute `HMAC-SHA256(secret, t + "." + body)` over the **raw bytes** of the
-   body, before any JSON parsing, and hex-encode it.
-3. Compare it with `v1` in constant time.
-4. Reject the delivery if `t` is more than five minutes from your clock — a
-   captured delivery cannot be replayed later.
+```js
+import { Webhook } from 'standardwebhooks'
+
+// throws if the delivery is not genuine or is more than five minutes old
+const event = new Webhook(secret).verify(rawBody, headers)
+```
+
+Without a library:
+
+1. Take the key: the base64 after `whsec_`, decoded to bytes.
+2. Compute `HMAC-SHA256(key, "<webhook-id>.<webhook-timestamp>.<body>")` over
+   the **raw bytes** of the body, before any JSON parsing, and base64-encode it.
+3. `webhook-signature` lists space-separated signatures, each `v1,<base64>`.
+   Accept the delivery if one of them equals yours, compared in constant time.
+4. Reject it if `webhook-timestamp` is more than five minutes from your clock —
+   a captured delivery cannot be replayed later.
 
 ```js
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-export function verify(rawBody, header, secret, toleranceSecs = 300) {
-  const parts = Object.fromEntries(header.split(',').map((p) => p.split(/=(.*)/s, 2)))
-  const t = Number(parts.t)
-  if (!Number.isInteger(t) || Math.abs(Date.now() / 1000 - t) > toleranceSecs) return false
-  const expected = createHmac('sha256', secret).update(`${t}.`).update(rawBody).digest()
-  const given = Buffer.from(parts.v1 ?? '', 'hex')
-  return given.length === expected.length && timingSafeEqual(given, expected)
+export function verify(rawBody, headers, secret, toleranceSecs = 300) {
+  const id = headers['webhook-id']
+  const t = Number(headers['webhook-timestamp'])
+  if (!id || !Number.isInteger(t) || Math.abs(Date.now() / 1000 - t) > toleranceSecs) return false
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
+  const expected = createHmac('sha256', key).update(`${id}.${t}.`).update(rawBody).digest()
+  return (headers['webhook-signature'] ?? '').split(' ').some((sig) => {
+    const [version, value] = sig.split(',')
+    const given = Buffer.from(value ?? '', 'base64')
+    return version === 'v1' && given.length === expected.length && timingSafeEqual(given, expected)
+  })
 }
 ```
+
+### From the previous signature
+
+Before this form, deliveries carried `X-Webhook-Signature: t=<time>,v1=<hex>`
+(with `X-Webhook-ID` naming the webhook and `X-Webhook-Event` the type) and
+secrets were 64 hex characters. Those headers are no longer sent. A secret
+issued then still works: the server now holds it as
+`whsec_` + base64(<the 64 characters>) — the same key bytes — so write it that
+way in your receiver, or rotate to get a new one.
 
 ---
 

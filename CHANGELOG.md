@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+### Changed
+
+- **Breaking — webhook deliveries are signed as Standard Webhooks specifies**
+  (https://www.standardwebhooks.com), so any of its libraries verifies them.
+  A delivery carries `webhook-id` (the event's id, the same on every retry and
+  equal to the body's `id`), `webhook-timestamp` and `webhook-signature`
+  (`v1,<base64 HMAC-SHA256 of "<id>.<timestamp>.<body>">`, space-separated
+  when there are several). `X-Webhook-Signature`, `X-Webhook-ID` and
+  `X-Webhook-Event` are no longer sent — the event's type is the body's
+  `type`. Signing secrets are issued as `whsec_<base64>`; a secret issued
+  before (64 hex characters) is converted in place to
+  `whsec_` + base64(<those characters>) — the same key bytes — so a receiver
+  keeps it by writing it that way, or rotates. The contract describes the
+  delivery as an OpenAPI `webhooks` entry. Migration 037.
+
 ## [0.15.0] - 2026-10-15
 
 > Minor. New: a tenant can name documents — terms of service, a privacy

@@ -3,8 +3,10 @@ package webhook
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -110,47 +112,72 @@ type WebhookPayload struct {
 	Data      any       `json:"data"`
 }
 
-// Sign returns the X-Webhook-Signature value for a body sent at t:
-// "t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">". Signing the time
-// with the body lets a receiver refuse a delivery replayed later.
-func Sign(secret string, t int64, body []byte) string {
-	return fmt.Sprintf("t=%d,v1=%s", t, signature(secret, t, body))
-}
+// The headers every delivery carries, as Standard Webhooks names them
+// (https://www.standardwebhooks.com). webhook-id is the event's id and stays
+// the same across retries; webhook-timestamp is when this attempt was signed.
+const (
+	HeaderID        = "webhook-id"
+	HeaderTimestamp = "webhook-timestamp"
+	HeaderSignature = "webhook-signature"
+)
 
-func signature(secret string, t int64, body []byte) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	fmt.Fprintf(h, "%d.", t)
-	h.Write(body)
-	return hex.EncodeToString(h.Sum(nil))
-}
+// secretPrefix marks a signing secret: "whsec_" followed by the base64 of the
+// HMAC key.
+const secretPrefix = "whsec_"
 
-// Verify reports whether header is a valid signature of body under secret,
-// made within tolerance of now. It is what a receiver written in Go runs.
-func Verify(header string, body []byte, secret string, tolerance time.Duration, now time.Time) bool {
-	var t int64
-	var v1 string
-	for _, part := range strings.Split(header, ",") {
-		k, v, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "t":
-			n, err := strconv.ParseInt(v, 10, 64)
-			if err != nil {
-				return false
-			}
-			t = n
-		case "v1":
-			v1 = v
-		}
+// signingKey decodes a signing secret into its key bytes. Like the reference
+// libraries it accepts the secret with or without the prefix.
+func signingKey(secret string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(secret, secretPrefix))
+	if err != nil || len(key) == 0 {
+		return nil, errors.New("webhook signing secret is not whsec_<base64>")
 	}
-	if t == 0 || v1 == "" {
+	return key, nil
+}
+
+// signature is base64(HMAC-SHA256(key, "<msgID>.<t>.<body>")).
+func signature(key []byte, msgID string, t int64, body []byte) string {
+	h := hmac.New(sha256.New, key)
+	fmt.Fprintf(h, "%s.%d.", msgID, t)
+	h.Write(body)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+// Sign returns the webhook-signature value for a body with id msgID sent at t:
+// "v1,<signature>". Signing the id and the time with the body lets a receiver
+// refuse a delivery replayed later or moved onto another event.
+func Sign(secret, msgID string, t int64, body []byte) (string, error) {
+	key, err := signingKey(secret)
+	if err != nil {
+		return "", err
+	}
+	return "v1," + signature(key, msgID, t, body), nil
+}
+
+// Verify reports whether the Standard Webhooks headers in h sign body under
+// secret, with a timestamp within tolerance of now. The signature header may
+// list several space-separated signatures (as during a secret change); one
+// that matches is enough. It is what a receiver written in Go runs.
+func Verify(secret string, h http.Header, body []byte, tolerance time.Duration, now time.Time) bool {
+	key, err := signingKey(secret)
+	if err != nil {
+		return false
+	}
+	msgID := h.Get(HeaderID)
+	t, err := strconv.ParseInt(h.Get(HeaderTimestamp), 10, 64)
+	if msgID == "" || err != nil {
 		return false
 	}
 	age := now.Sub(time.Unix(t, 0))
 	if age > tolerance || age < -tolerance {
 		return false
 	}
-	return hmac.Equal([]byte(signature(secret, t, body)), []byte(v1))
+	want := signature(key, msgID, t, body)
+	for _, sig := range strings.Fields(h.Get(HeaderSignature)) {
+		version, value, ok := strings.Cut(sig, ",")
+		if ok && version == "v1" && hmac.Equal([]byte(value), []byte(want)) {
+			return true
+		}
+	}
+	return false
 }

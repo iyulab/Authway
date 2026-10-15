@@ -29,7 +29,8 @@ describe('admin API: managing webhooks', () => {
     const created = (await res.json()) as { webhook: Webhook; secret: string }
     webhook = created.webhook
     expect(webhook).toMatchObject({ name, url, events: ['user.created'], enabled: false, retry_count: 0, timeout_secs: 1 })
-    expect(created.secret).toMatch(/^[0-9a-f]{32,}$/)
+    // Standard Webhooks form: whsec_ + base64 of the key bytes (24–64 of them).
+    expect(created.secret).toMatch(/^whsec_[A-Za-z0-9+/]{32,}={0,2}$/)
     expect(webhook).not.toHaveProperty('secret')
   })
 
@@ -40,7 +41,7 @@ describe('admin API: managing webhooks', () => {
     const a = ((await first.json()) as { secret: string }).secret
     const second = await provider.admin(`/api/v1/webhooks/${webhook.id}/rotate-secret`, { method: 'POST' })
     const b = ((await second.json()) as { secret: string }).secret
-    expect(a).toMatch(/^[0-9a-f]{32,}$/)
+    expect(a).toMatch(/^whsec_[A-Za-z0-9+/]{32,}={0,2}$/)
     expect(b).not.toBe(a)
 
     const read = await provider.admin(`/api/v1/webhooks/${webhook.id}`)

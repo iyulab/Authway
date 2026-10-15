@@ -1425,7 +1425,11 @@ paths:
                   webhook: { $ref: '#/components/schemas/Webhook' }
                   secret:
                     type: string
-                    description: Signs every delivery; see docs/api/webhooks.md. Not shown again — rotate to replace it.
+                    description: |
+                      Signs every delivery (Standard Webhooks — see the `event`
+                      webhook below): "whsec_" followed by the base64 of the key
+                      bytes. Not shown again — rotate to replace it.
+                    pattern: '^whsec_[A-Za-z0-9+/]+={0,2}$'
                   message: { type: string }
         '400':
           description: Invalid value (code invalid_request), or no tenant named (code tenant_required)
@@ -1565,7 +1569,7 @@ paths:
                 type: object
                 required: [secret]
                 properties:
-                  secret: { type: string }
+                  secret: { type: string, pattern: '^whsec_[A-Za-z0-9+/]+={0,2}$', description: 'Same form as the secret a webhook is created with.' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
@@ -1969,6 +1973,45 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+
+webhooks:
+  event:
+    post:
+      summary: A delivery of one event to a registered webhook
+      description: |
+        Signed as Standard Webhooks specifies (https://www.standardwebhooks.com),
+        so any of its libraries verifies a delivery with the webhook's secret.
+        The signed content is "<webhook-id>.<webhook-timestamp>.<raw body>";
+        verify against the body exactly as received. A retry of the same event
+        carries the same webhook-id (also the body's `id`) and a new timestamp
+        and signature. A 2xx answer ends the retries; redirects are not
+        followed.
+      parameters:
+        - name: webhook-id
+          in: header
+          required: true
+          description: The event's id — the same on every retry of it. Use it to ignore a delivery already processed.
+          schema: { type: string }
+        - name: webhook-timestamp
+          in: header
+          required: true
+          description: Unix time, in seconds, this attempt was signed. Refuse one far from your clock (the reference libraries allow five minutes).
+          schema: { type: string, pattern: '^[0-9]+$' }
+        - name: webhook-signature
+          in: header
+          required: true
+          description: |
+            Space-separated signatures, each "v1,<base64 HMAC-SHA256>". One
+            that matches is enough.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEventPayload' }
+      responses:
+        '200':
+          description: Any 2xx answer means delivered.
 
 components:
   securitySchemes:
