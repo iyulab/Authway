@@ -269,6 +269,9 @@ func (h *EmailHandler) VerifyResetToken(c *fiber.Ctx) error {
 	// is submitted; the screen is told what every tenant asks.
 	least := user.MinPasswordLength
 	if account, err := h.userSvc.GetByID(reset.UserID); err == nil {
+		if !account.Active {
+			return refuseSuspendedReset(c)
+		}
 		least = h.userSvc.LeastPasswordLength(account.TenantID)
 	}
 
@@ -313,6 +316,9 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	resetUser, resetUserErr := h.userSvc.GetByID(reset.UserID)
 	if resetUserErr != nil {
 		h.logger.Warn("Failed to load user for password_reset audit", zap.Error(resetUserErr))
+	}
+	if resetUser != nil && !resetUser.Active {
+		return refuseSuspendedReset(c)
 	}
 
 	// Update user password
@@ -367,4 +373,11 @@ func (h *EmailHandler) RegisterRoutes(router fiber.Router) {
 		email.Get("/verify-reset-token", h.VerifyResetToken)
 		email.Post("/reset-password", h.ResetPassword)
 	}
+}
+
+// refuseSuspendedReset answers a reset link for an account an administrator
+// has suspended — one sent before the suspension. Holding the link proves the
+// address, so the refusal says why, as signing in does; the link stays unused.
+func refuseSuspendedReset(c *fiber.Ctx) error {
+	return apierror.Refuse(c, http.StatusForbidden, "account_suspended", "This account is suspended")
 }

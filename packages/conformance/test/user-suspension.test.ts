@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
+import { waitForLink } from '../src/mail.js'
 import { randomToken } from '../src/pkce.js'
 import { Provider, REDIRECT_URI, type TestClient, type TestUser } from '../src/provider.js'
 
@@ -209,5 +210,55 @@ describe('mail for a suspended user', () => {
     // Mail is handed over asynchronously; give it the time a sent one takes.
     await new Promise((r) => setTimeout(r, 3000))
     expect(await mailTo(user.email)).toBe(before)
+  })
+})
+
+// A reset link sent before the suspension does not change the password while
+// it lasts: holding it proves the address, so it is told why, as signing in is.
+describe('a reset link sent before a suspension', () => {
+  let sub: string | undefined
+  afterAll(async () => {
+    if (sub) await provider.deleteUser(sub)
+  })
+
+  it('is refused with account_suspended, and the password is kept', async () => {
+    const user = await provider.inviteAndAccept()
+    const asked = await fetch(`${config.api}/api/v1/email/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email }),
+    })
+    expect(asked.status).toBe(200)
+    const token = (await waitForLink(config.mailApi, user.email, '/reset-password')).searchParams.get('token')!
+
+    const listed = await provider.admin('/api/v1/users?limit=100')
+    const found = ((await listed.json()) as { users: Array<{ id: string; email: string }> }).users.find((u) => u.email === user.email)
+    sub = found?.id
+    expect(sub).toBeTruthy()
+    const suspended = await provider.admin(`/api/v1/users/${sub}`, { method: 'PUT', body: JSON.stringify({ active: false }) })
+    expect(suspended.status).toBe(200)
+
+    const checked = await fetch(`${config.api}/api/v1/email/verify-reset-token?token=${encodeURIComponent(token)}`)
+    await conform('GET', '/api/v1/email/verify-reset-token', checked.clone())
+    expect(checked.status).toBe(403)
+    expect(((await checked.json()) as { code: string }).code).toBe('account_suspended')
+
+    const reset = await fetch(`${config.api}/api/v1/email/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: `Changed-${randomToken(12)}` }),
+    })
+    await conform('POST', '/api/v1/email/reset-password', reset.clone())
+    expect(reset.status).toBe(403)
+    expect(((await reset.json()) as { code: string }).code).toBe('account_suspended')
+
+    // Lifted, the account signs in with the password it had.
+    expect((await provider.admin(`/api/v1/users/${sub}`, { method: 'PUT', body: JSON.stringify({ active: true }) })).status).toBe(200)
+    const client = await provider.createPublicClient()
+    try {
+      expect((await provider.login(client, user)).kind).toBe('code')
+    } finally {
+      await provider.deleteClient(client)
+    }
   })
 })

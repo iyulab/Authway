@@ -101,7 +101,8 @@ everything that asks the provider about them — Authway's own endpoints,
 userinfo and token introspection; only an API that verifies a JWT access token
 itself keeps accepting it until it expires. While suspended, the account is sent
 no password reset, sign-in link or verification mail; those requests answer as
-they do for an address with no account.
+they do for an address with no account. A reset link sent before the suspension
+is refused with `403 account_suspended` and leaves the password as it was.
 
 ---
 

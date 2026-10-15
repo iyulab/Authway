@@ -793,6 +793,8 @@ paths:
                   message: { type: string }
                   password_min_length: { $ref: '#/components/schemas/PasswordMinLengthInForce' }
         '400': { $ref: '#/components/responses/Error' }
+        # The link was sent before an administrator suspended the account (code account_suspended).
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/email/reset-password:
     post:
@@ -810,6 +812,8 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Message' }
         '400': { $ref: '#/components/responses/Error' }
+        # The account is suspended (code account_suspended); the password is unchanged.
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/invitations/token/{token}:
     get:

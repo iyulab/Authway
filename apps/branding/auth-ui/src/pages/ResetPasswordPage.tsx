@@ -43,6 +43,8 @@ export default function ResetPasswordPage() {
         if (response.ok && data.valid) {
           setIsTokenValid(true);
           setPasswordLength(Number(data.password_min_length) || LEAST_PASSWORD_LENGTH);
+        } else if (data.code === 'account_suspended') {
+          setError(t('auth:errors.accountSuspended'));
         } else {
           setError(data.detail || t('password:reset.errors.tokenExpired'));
         }
@@ -101,6 +103,8 @@ export default function ResetPasswordPage() {
         const inForce = Number(data.min_length) || passwordLength;
         setPasswordLength(inForce);
         setError(t('password:validation.minLength', { length: inForce }));
+      } else if (data.code === 'account_suspended') {
+        setError(t('auth:errors.accountSuspended'));
       } else {
         setError(data.detail || t('password:reset.errors.resetFailed'));
       }
