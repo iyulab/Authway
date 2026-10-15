@@ -99,7 +99,9 @@ suspension is lifted (`"active": true`). The account, its connections and
 second factor are kept. Access tokens already issued are refused at once by
 everything that asks the provider about them — Authway's own endpoints,
 userinfo and token introspection; only an API that verifies a JWT access token
-itself keeps accepting it until it expires.
+itself keeps accepting it until it expires. While suspended, the account is sent
+no password reset, sign-in link or verification mail; those requests answer as
+they do for an address with no account.
 
 ---
 

@@ -152,3 +152,62 @@ describe("a suspended user's access tokens", () => {
     })
   }
 })
+
+// A suspended account is sent no password reset and no sign-in link: it could
+// not use either. The answers are the ones any address gets, so they say
+// nothing about the account.
+describe('mail for a suspended user', () => {
+  let client: TestClient
+  let user: TestUser
+  let sub: string | undefined
+
+  beforeAll(async () => {
+    client = await provider.createPublicClient({ signInMethods: ['email', 'magic_link'] })
+    user = await provider.inviteAndAccept()
+  })
+
+  afterAll(async () => {
+    if (sub) await provider.deleteUser(sub)
+    if (client) await provider.deleteClient(client)
+  })
+
+  const mailTo = async (address: string): Promise<number> => {
+    const res = await fetch(`${config.mailApi}/api/v2/search?kind=to&query=${encodeURIComponent(address)}`)
+    return ((await res.json()) as { total: number }).total
+  }
+
+  it('sends it neither a password reset nor a sign-in link', async () => {
+    const signedIn = await provider.login(client, user)
+    if (signedIn.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(signedIn)}`)
+    sub = signedIn.sub
+    const suspended = await provider.admin(`/api/v1/users/${sub}`, { method: 'PUT', body: JSON.stringify({ active: false }) })
+    expect(suspended.status).toBe(200)
+    const before = await mailTo(user.email)
+
+    const reset = await fetch(`${config.api}/api/v1/email/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email }),
+    })
+    const resetForNobody = await fetch(`${config.api}/api/v1/email/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `nobody-${randomToken(6)}@example.test` }),
+    })
+    expect(reset.status).toBe(200)
+    expect(await reset.text()).toBe(await resetForNobody.text())
+
+    const attempt = await provider.startLogin(client)
+    const link = await attempt.browser.fetch(provider.loginFlowUrl(attempt.flow, '/magic-link'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email }),
+    })
+    expect(link.status).toBe(200)
+    expect(((await link.json()) as { next: string }).next).toBe('email_sent')
+
+    // Mail is handed over asynchronously; give it the time a sent one takes.
+    await new Promise((r) => setTimeout(r, 3000))
+    expect(await mailTo(user.email)).toBe(before)
+  })
+})

@@ -166,7 +166,16 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 	}
 	expiresAt := time.Now().Add(s.tokenExpiry)
 	tokenType := TokenTypeLogin
-	if _, err := s.userService.GetByEmailAndTenant(tenantID, email); err != nil {
+	if existing, err := s.userService.GetByEmailAndTenant(tenantID, email); err == nil && !existing.Active {
+		// A suspended account could not sign in with the link; it is sent
+		// nothing, and the answer is the one every address gets.
+		s.logger.Warn("Magic link suppressed for a suspended account",
+			zap.String("user_id", existing.ID.String()), zap.String("tenant_id", tenantID.String()))
+		return &MagicLinkResponse{
+			Message:   "Magic link sent to your email",
+			ExpiresAt: expiresAt,
+		}, nil
+	} else if err != nil {
 		// No user yet — this link would provision one, which the
 		// invitation-only policy allows solely for an invited address.
 		if !s.mayProvision(tenantID, email) {

@@ -37,7 +37,8 @@
   registered for back-channel logout are told) and refuses their sign-in with
   `403 account_suspended`, by every way of signing in, once they have proved
   who they are; `true` lifts it. The account, its connections and second
-  factor are kept. New events `user.suspended` and `user.reactivated` (audit
+  factor are kept. A suspended account is sent no password reset, sign-in link
+  or verification mail. New events `user.suspended` and `user.reactivated` (audit
   and webhooks). The admin console suspends a user after asking and lifts a
   suspension; the sign-in screen says the account is suspended. `active` was
   returned before and meant nothing — every account was active.

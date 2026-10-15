@@ -116,8 +116,10 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 		return apierror.Invalid(c, err)
 	}
 
+	// No mail for an account that is verified already or suspended; the answer
+	// is the same either way, so it says nothing about the account.
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
-	if err != nil || usr.EmailVerified {
+	if err != nil || usr.EmailVerified || !usr.Active {
 		return c.JSON(fiber.Map{"message": verificationRequested})
 	}
 
@@ -213,8 +215,10 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 		return apierror.Invalid(c, err)
 	}
 
+	// A suspended account is sent nothing — it could not sign in with the new
+	// password — and gets the same answer as an address with no account.
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
-	if err != nil {
+	if err != nil || !usr.Active {
 		return c.JSON(fiber.Map{"message": passwordResetRequested})
 	}
 
