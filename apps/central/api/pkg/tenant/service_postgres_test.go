@@ -165,9 +165,10 @@ func TestUpdateTenant_UpdatesFields(t *testing.T) {
 	t.Cleanup(func() { db.Exec(`DELETE FROM tenants WHERE id = ?`, tn.ID) })
 
 	inactive := false
+	desc := "updated description"
 	updated, err := svc.UpdateTenant(tn.ID, UpdateTenantRequest{
 		Name:        "Renamed " + slug,
-		Description: "updated description",
+		Description: &desc,
 		Active:      &inactive,
 	})
 	if err != nil {
@@ -181,6 +182,15 @@ func TestUpdateTenant_UpdatesFields(t *testing.T) {
 	}
 	if updated.Active {
 		t.Error("expected Active to be false after explicit update")
+	}
+
+	// Not named: left as it is. Named empty: cleared — it could not be.
+	if again, _ := svc.UpdateTenant(tn.ID, UpdateTenantRequest{Name: "Again " + slug}); again.Description != desc {
+		t.Errorf("an update that did not name the description changed it to %q", again.Description)
+	}
+	empty := ""
+	if cleared, _ := svc.UpdateTenant(tn.ID, UpdateTenantRequest{Description: &empty}); cleared.Description != "" {
+		t.Errorf("Description = %q after clearing", cleared.Description)
 	}
 }
 

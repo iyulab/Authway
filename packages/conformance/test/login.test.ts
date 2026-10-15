@@ -108,10 +108,28 @@ describe('password login through the authorization-code flow', () => {
     subjects.add(outcome.sub)
     if (!outcome.tokens.id_token) throw new Error('no id_token to hint the logout with')
 
+    // The same user signed out through the API in the scenario before.
+    const signOuts = async (): Promise<number> => {
+      const res = await provider.admin(`/api/v1/audit/logs?action=user.logout&resource_id=${outcome.sub}&limit=20`)
+      expect(res.status).toBe(200)
+      return ((await res.json()) as { logs: unknown[] }).logs.length
+    }
+    const before = await signOuts()
+
     const landed = await provider.rpInitiatedLogout(outcome.browser, outcome.tokens.id_token)
     expect(`${landed.origin}${landed.pathname}`).toBe(POST_LOGOUT_REDIRECT_URI)
 
     const after = await provider.userinfo(outcome.tokens.access_token)
     expect(after.status).toBe(401)
+
+    // Signing out through the screen is the same event as through the API
+    // (user.logout — the audit entry the webhook event follows); it was
+    // recorded only for the API. The entry is written asynchronously.
+    let recorded = 0
+    for (let i = 0; i < 40 && recorded === 0; i++) {
+      recorded = (await signOuts()) - before
+      if (recorded === 0) await new Promise((r) => setTimeout(r, 250))
+    }
+    expect(recorded).toBe(1)
   })
 })

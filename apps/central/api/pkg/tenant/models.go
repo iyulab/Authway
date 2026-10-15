@@ -168,8 +168,9 @@ type CreateTenantRequest struct {
 
 // UpdateTenantRequest represents the request to update a tenant
 type UpdateTenantRequest struct {
-	Name         string          `json:"name" validate:"omitempty,min=2,max=255"`
-	Description  string          `json:"description" validate:"max=1000"`
+	Name string `json:"name" validate:"omitempty,min=2,max=255"`
+	// Description changes only when named; an empty string clears it.
+	Description  *string         `json:"description" validate:"omitempty,max=1000"`
 	Settings     *TenantSettings `json:"settings"`
 	Logo         string          `json:"logo" validate:"omitempty,url"`
 	PrimaryColor string          `json:"primary_color" validate:"omitempty,hexcolor"`

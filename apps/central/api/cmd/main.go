@@ -336,7 +336,7 @@ func main() {
 	clientHandler := handler.NewClientHandler(services, zapLogger, cfg, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService)
 	docsHandler := handler.NewDocsHandler(zapLogger)
-	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, zapLogger)
+	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
 	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)
 

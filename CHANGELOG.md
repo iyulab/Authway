@@ -37,7 +37,16 @@
   are now used the way a client's own Google and GitHub credentials are: when
   enabled (and, for Apple, complete), otherwise the deployment's.
 - **Changing a client without naming its description cleared it.** Only the
-  fields present change, as documented; an empty string clears.
+  fields present change, as documented; an empty string clears. A tenant's
+  description, the other way round, could not be cleared; an empty string now
+  clears it.
+- **Signing out through the logout screen was not recorded.** The `user.logout`
+  audit entry, and the webhook event that follows it, came only from `POST
+  /api/v1/logout`; signing out through OpenID Connect logout — the way most
+  users do — now records the same.
+- The admin console can change a tenant's name, description and settings
+  (password length, session length, allowed email domains, sign-up mode); they
+  could be set only when the tenant was created.
 - **A client with every sign-in method turned off could be signed in to with
   email and Google.** An empty `enabled_auth_providers` was stored and read
   back as the default. It is now refused (`400

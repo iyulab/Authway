@@ -46,4 +46,37 @@ describe('settings', () => {
     await user.click(confirm)
     await waitFor(() => expect(error).toHaveBeenCalledWith('사용자가 남아 있어 지울 수 없습니다. 먼저 사용자를 지우세요.'))
   })
+
+  it("changes the tenant's settings, sending them whole, and clears the description", async () => {
+    const user = userEvent.setup()
+    const tenant = {
+      id: 't1', name: 'Tenant', slug: 'tenant', active: true, description: 'old',
+      settings: { password_min_length: 10, session_timeout: 60, allowed_domains: ['a.example'], signup_mode: 'invite_only' },
+    }
+    vi.spyOn(tenantsApi, 'get').mockResolvedValue(answer(tenant))
+    const update = vi.spyOn(tenantsApi, 'update').mockResolvedValue(answer({ ...tenant, description: '' }))
+    render(<SettingsPage />)
+
+    const length = await screen.findByLabelText('비밀번호 최소 길이')
+    expect(length).toHaveValue('10')
+    await user.clear(length)
+    await user.type(length, '7')
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+    await user.clear(length)
+    await user.type(length, '12')
+    await user.type(screen.getByLabelText('허용 이메일 도메인'), '{Enter}B.example')
+    await user.selectOptions(screen.getByLabelText('가입 방식'), 'open')
+    await user.clear(screen.getByLabelText('설명'))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]).toEqual([
+      't1',
+      {
+        name: 'Tenant',
+        description: '',
+        settings: { password_min_length: 12, session_timeout: 60, allowed_domains: ['a.example', 'b.example'], signup_mode: 'open' },
+      },
+    ])
+  })
 })

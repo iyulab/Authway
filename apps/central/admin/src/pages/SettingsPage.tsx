@@ -15,6 +15,7 @@ import { tenantsApi, authApi, healthApi, capabilitiesApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input } from '@/components/ui'
 import { getConfig } from '../config'
+import TenantSettingsForm from '@/components/settings/TenantSettingsForm'
 
 // Why the API refused to delete the tenant (its 409/403 codes), in the console's words.
 const DELETE_REFUSALS: Record<string, string> = {
@@ -199,6 +200,21 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 테넌트 설정 */}
+      {selectedTenant && (
+        <div className="bg-white shadow-sm rounded-lg">
+          <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">테넌트 설정</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              이 테넌트의 사용자에게 적용되는 규칙입니다.
+            </p>
+          </div>
+          <div className="px-4 py-5 sm:px-6">
+            <TenantSettingsForm />
           </div>
         </div>
       )}

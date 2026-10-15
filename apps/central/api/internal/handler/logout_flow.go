@@ -14,12 +14,20 @@ import (
 // requested post_logout_redirect_uri against the URIs registered for the
 // client, and it sends the browser there once the flow is accepted.
 type LogoutFlowHandler struct {
-	hydra  *hydra.Client
-	logger *zap.Logger
+	hydra    *hydra.Client
+	signOuts SignOutRecorder
+	logger   *zap.Logger
 }
 
-func NewLogoutFlowHandler(hydraClient *hydra.Client, logger *zap.Logger) *LogoutFlowHandler {
-	return &LogoutFlowHandler{hydra: hydraClient, logger: logger}
+// SignOutRecorder records that a user signed out (the user.logout audit
+// entry, and the webhook event that follows it). subject is the
+// authorization server's subject, the user's id.
+type SignOutRecorder interface {
+	RecordSignOut(c *fiber.Ctx, subject string)
+}
+
+func NewLogoutFlowHandler(hydraClient *hydra.Client, signOuts SignOutRecorder, logger *zap.Logger) *LogoutFlowHandler {
+	return &LogoutFlowHandler{hydra: hydraClient, signOuts: signOuts, logger: logger}
 }
 
 // CompleteLogout accepts a logout flow and revokes the user's sessions so
@@ -49,6 +57,11 @@ func (h *LogoutFlowHandler) CompleteLogout(c *fiber.Ctx) error {
 	if logoutReq.Subject != "" {
 		if err := h.hydra.RevokeUserSessions(logoutReq.Subject); err != nil {
 			h.logger.Error("Failed to revoke user sessions during logout", zap.String("subject", logoutReq.Subject), zap.Error(err))
+		}
+		// The user signed out the way most do — through the screen — and
+		// that is the same event as the sign-out API's.
+		if h.signOuts != nil {
+			h.signOuts.RecordSignOut(c, logoutReq.Subject)
 		}
 	}
 	return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": resp.RedirectTo})

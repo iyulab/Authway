@@ -74,6 +74,19 @@ func (h *AuthHandler) logUserAudit(c *fiber.Ctx, u *user.User, action audit.Audi
 	h.auditService.LogAsync(entry)
 }
 
+// RecordSignOut records that the user named by subject (the authorization
+// server's subject, the user's id) signed out: the user.logout audit entry,
+// from which the webhook event follows. Unknown subjects record nothing.
+func (h *AuthHandler) RecordSignOut(c *fiber.Ctx, subject string) {
+	id, err := uuid.Parse(subject)
+	if err != nil {
+		return
+	}
+	if u, err := h.userService.GetByID(id); err == nil {
+		h.logUserAudit(c, u, audit.ActionUserLogout, nil)
+	}
+}
+
 // logAuthFailure emits a sync audit entry for login failures. Sync so buffer
 // overflow cannot swallow security events.
 func (h *AuthHandler) logAuthFailure(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction, attemptedEmail, reason string, extra map[string]any) {
@@ -617,9 +630,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	h.logger.Info("User sessions revoked successfully",
 		zap.String("subject", subject))
 
-	if logoutUser, getErr := h.userService.GetByID(userID); getErr == nil {
-		h.logUserAudit(c, logoutUser, audit.ActionUserLogout, nil)
-	}
+	h.RecordSignOut(c, userID.String())
 
 	response := LogoutResponse{
 		Success: true,

@@ -968,7 +968,7 @@ paths:
               description: Only the fields present change; settings, when present, replaces the whole object.
               properties:
                 name: { type: string, minLength: 2, maxLength: 255 }
-                description: { type: string }
+                description: { type: string, maxLength: 1000, description: An empty string clears it. }
                 settings: { $ref: '#/components/schemas/TenantSettings' }
                 logo: { type: string, description: Kept and returned as given; left as it is when not named. }
                 primary_color: { type: string, description: 'A hex color. Kept and returned as given; left as it is when not named.' }

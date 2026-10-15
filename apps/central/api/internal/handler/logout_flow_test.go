@@ -24,6 +24,14 @@ type fakeHydraLogout struct {
 	revokedLogin   string
 	revokedConsent string
 	consentQuery   string
+	signOuts       recordedSignOuts
+}
+
+// recordedSignOuts keeps the subjects a logout recorded as signed out.
+type recordedSignOuts struct{ subjects []string }
+
+func (r *recordedSignOuts) RecordSignOut(_ *fiber.Ctx, subject string) {
+	r.subjects = append(r.subjects, subject)
 }
 
 func (f *fakeHydraLogout) server(t *testing.T) *httptest.Server {
@@ -76,7 +84,7 @@ func runLogout(t *testing.T, f *fakeHydraLogout, flow string) (int, map[string]a
 	t.Helper()
 	srv := f.server(t)
 	t.Cleanup(srv.Close)
-	h := NewLogoutFlowHandler(hydra.NewClient(srv.URL), zap.NewNop())
+	h := NewLogoutFlowHandler(hydra.NewClient(srv.URL), &f.signOuts, zap.NewNop())
 	app := fiber.New()
 	app.Post("/logout-flows/:flow", h.CompleteLogout)
 	resp, err := app.Test(httptest.NewRequest("POST", "/logout-flows/"+flow, nil))
@@ -106,6 +114,11 @@ func TestLogoutFlow_RevokesSessionsAfterAccept(t *testing.T) {
 	}
 	if f.acceptBody != "" {
 		t.Errorf("accept sent body %q; Hydra takes none and decides the destination itself", f.acceptBody)
+	}
+	// Signing out through the screen is the same event as through the API:
+	// it was audited (and announced to webhooks) only on the API.
+	if len(f.signOuts.subjects) != 1 || f.signOuts.subjects[0] != "user-123" {
+		t.Errorf("recorded sign-outs %v, want [user-123]", f.signOuts.subjects)
 	}
 }
 

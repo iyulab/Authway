@@ -141,8 +141,8 @@ func (s *Service) UpdateTenant(id uuid.UUID, req UpdateTenantRequest) (*Tenant, 
 	if req.Name != "" {
 		tenant.Name = req.Name
 	}
-	if req.Description != "" {
-		tenant.Description = req.Description
+	if req.Description != nil {
+		tenant.Description = *req.Description
 	}
 	if req.Settings != nil {
 		tenant.Settings = *req.Settings
