@@ -61,6 +61,9 @@
 
 ### Fixed
 
+- The page that carries the browser on after a provider sign-in wrote the
+  next address into its script without escaping it; it is now escaped for
+  that script.
 - **A client's own Microsoft and Apple credentials were ignored.** They were
   accepted, sealed and stored, and sign-in used the deployment's anyway. They
   are now used the way a client's own Google and GitHub credentials are: when

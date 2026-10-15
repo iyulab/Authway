@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"html/template"
 	"net/url"
 	"strings"
 
@@ -425,9 +427,11 @@ func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow stri
 	return s.renderRedirectPage(c, step.RedirectTo)
 }
 
-// renderRedirectPage renders an HTML page with JavaScript redirect
-func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) error {
-	html := `<!DOCTYPE html>
+// redirectPage carries the browser on to where the authorization server said
+// to go next. The address is placed by html/template, which escapes it for the
+// script it sits in: it comes from the authorization server, but carries
+// values the original authorization request chose.
+var redirectPage = template.Must(template.New("redirect").Parse(`<!DOCTYPE html>
 <html>
 <head>
     <title>Redirecting...</title>
@@ -445,11 +449,17 @@ func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) erro
         }
     </style>
     <script>
-        window.location.href = "` + redirectTo + `";
+        window.location.href = {{.}};
     </script>
 </body>
-</html>`
+</html>`))
 
+// renderRedirectPage renders an HTML page with JavaScript redirect
+func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) error {
+	var page bytes.Buffer
+	if err := redirectPage.Execute(&page, redirectTo); err != nil {
+		return err
+	}
 	c.Set("Content-Type", "text/html; charset=utf-8")
-	return c.SendString(html)
+	return c.Send(page.Bytes())
 }
