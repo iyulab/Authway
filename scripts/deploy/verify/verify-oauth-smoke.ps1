@@ -20,8 +20,8 @@
 # 사용:
 #   verify/verify-oauth-smoke.ps1 -Target staging -Tenant <검증용 테넌트 UUID>
 #   verify/verify-oauth-smoke.ps1 -Target prod -Tenant <검증용 테넌트 UUID> -SkipAuditSmoke
-#   verify/verify-oauth-smoke.ps1 -Target staging -WithTerms
-#     — 약관 단계까지: 임시 테넌트를 만들어(실제 사용자가 있는 테넌트에 문서를 올리지
+#   verify/verify-oauth-smoke.ps1 -Target staging [-WithTerms]
+#     — 약관 단계까지(-Tenant 를 주지 않으면 이것이 기본): 임시 테넌트를 만들어(실제 사용자가 있는 테넌트에 문서를 올리지
 #       않으려고) 문서 둘을 올리고, 로그인이 `next: terms` 로 멈추는지 → 동의 →
 #       동의 기록 → 나머지 전 구간. 끝나면 테넌트까지 지운다. -Tenant 는 무시된다.
 # ============================================================
@@ -105,9 +105,30 @@ if (-not (Initialize-PsqlPath)) {
     exit 1
 }
 
-if (-not $WithTerms -and -not $Tenant) {
-    Write-Host "❌ -Tenant 가 필요하다(또는 -WithTerms)" -ForegroundColor Red
-    exit 1
+# 테넌트를 주지 않으면 임시 테넌트로(-WithTerms) — 실제 사용자가 있는 테넌트에 검증용 행을
+# 만들지 않고, 끝나면 테넌트째 지운다.
+if (-not $Tenant) { $WithTerms = $true }
+
+# 이전 실행이 끊겨 finally 정리가 돌지 않았으면 검증용 자원이 남는다. 지우지는 않고 알린다 —
+# 같은 이름 꼴의 자원이 다른 실행에서 진행 중일 수 있다.
+$leftoverQuery = @"
+SELECT 'tenants', count(*) FROM tenants WHERE slug LIKE 'verify-terms-%' AND deleted_at IS NULL
+UNION ALL SELECT 'users', count(*) FROM users WHERE email LIKE 'verify-oauth-smoke-%@authway.invalid' AND deleted_at IS NULL
+UNION ALL SELECT 'clients', count(*) FROM clients WHERE name LIKE 'verify-oauth-smoke-%' AND deleted_at IS NULL;
+"@
+$leftover = Invoke-FastQuery -Query $leftoverQuery -EnvVars $envVars
+if (-not $leftover.Success) {
+    Write-Host "⚠️  남은 검증 자원 조회 실패: $($leftover.Output)" -ForegroundColor Yellow
+} else {
+    $found = @()
+    foreach ($line in ($leftover.Output -split "`n")) {
+        $parts = $line.Trim() -split '\|'
+        if ($parts.Length -eq 2 -and [int]$parts[1] -gt 0) { $found += "$($parts[0]) $($parts[1])" }
+    }
+    if ($found.Count -gt 0) {
+        Write-Host "⚠️  이전 실행이 남긴 검증 자원: $($found -join ', ')" -ForegroundColor Yellow
+        Write-Host "   (테넌트 slug 'verify-terms-*', 사용자 'verify-oauth-smoke-*@authway.invalid', 클라이언트 이름 'verify-oauth-smoke-*' — 진행 중인 다른 실행이 없으면 지울 것)" -ForegroundColor Yellow
+    }
 }
 
 # 관리 API 호출(JSON 본문은 파일로 — Windows curl 의 따옴표 처리 회피).
