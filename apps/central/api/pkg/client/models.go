@@ -21,19 +21,15 @@ type Client struct {
 	// ClientSecretHash is what the secret is checked against (see secret.go).
 	// The authorization server authenticates the client at the token
 	// endpoint with its own copy; this one lets the API recognise the client.
-	ClientSecretHash string `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
-	Name             string `json:"name" gorm:"not null"`
-	Description      string `json:"description"`
-	// Website is retired (migration 039 moved its values into ClientURI). It is
-	// mapped read-only only until the migration that drops the column ships in
-	// a deployment of its own; nothing reads it.
-	Website      *string        `json:"-" gorm:"column:website;->"`
-	Logo         string         `json:"logo"`
-	RedirectURIs pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
-	GrantTypes   pq.StringArray `json:"grant_types" gorm:"type:text[]"`
-	Scopes       pq.StringArray `json:"scopes" gorm:"type:text[]"`
-	Public       bool           `json:"public" gorm:"default:false"`
-	Active       bool           `json:"active"`
+	ClientSecretHash string         `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
+	Name             string         `json:"name" gorm:"not null"`
+	Description      string         `json:"description"`
+	Logo             string         `json:"logo"`
+	RedirectURIs     pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
+	GrantTypes       pq.StringArray `json:"grant_types" gorm:"type:text[]"`
+	Scopes           pq.StringArray `json:"scopes" gorm:"type:text[]"`
+	Public           bool           `json:"public" gorm:"default:false"`
+	Active           bool           `json:"active"`
 	// System marks an application Authway itself owns — the account screen's
 	// client, one per tenant (see EnsureAccountClient). The administration API
 	// refuses to change or delete it.

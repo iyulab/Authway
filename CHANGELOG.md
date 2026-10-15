@@ -32,7 +32,7 @@
   longer reads, stores or returns it — a `website` sent on create or update is
   ignored. Migration 039 moves each stored value that is a valid `client_uri`
   (an absolute `https` URL without a fragment) into `client_uri` where that is
-  still empty; the column itself is dropped by a later migration.
+  still empty; migration 040 then drops the column.
 - A refusal no longer carries an extension member whose value is an empty
   string (such as `"hint": ""`).
 

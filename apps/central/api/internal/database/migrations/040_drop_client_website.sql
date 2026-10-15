@@ -1,0 +1,27 @@
+-- ============================================================
+-- Migration 040: Drop clients.website
+-- ============================================================
+-- An application's home page is client_uri. Migration 039 moved each website
+-- value that was a valid client_uri into client_uri, and the application
+-- stopped reading and writing website in that same deployment; it only kept
+-- the column mapped, read-only, until this migration.
+--
+-- What it deletes: on every deployment checked before this migration was
+-- applied, each non-empty website equalled the row's client_uri (039 had
+-- moved it), so nothing is lost. Check yours first if 039 may have left
+-- values behind (not https, or the row already had a client_uri):
+--   SELECT id, website, client_uri FROM clients
+--    WHERE coalesce(website, '') <> '' AND website <> client_uri;
+--
+-- Destructive, so it ships in a deployment of its own, after the application
+-- that stopped using the column.
+--
+-- There are no down migrations. To have the column back as it was defined
+-- (the values are gone):
+--   ALTER TABLE clients ADD COLUMN website TEXT;
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction.
+-- ============================================================
+
+ALTER TABLE clients DROP COLUMN IF EXISTS website;
