@@ -36,11 +36,6 @@ type Invitation struct {
 	// invitations rather than destroying them.
 	InviterID *uuid.UUID `json:"inviter_id" gorm:"type:uuid"`
 	Email     string     `json:"email" gorm:"size:255;not null;index"`
-	// Role decided nothing: it was kept and returned, and no code read it —
-	// an invitation gives no role or permission. It stays mapped, read-only,
-	// until a migration drops the column.
-	// TODO: drop invitations.role, then this field.
-	Role string `json:"-" gorm:"->;column:role"`
 	// TokenHash is the SHA-256 hex digest of the invitation token. The
 	// plaintext never touches the database — an invitation token grants
 	// account-creation capability on its own, so a DB read must not yield a

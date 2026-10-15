@@ -91,6 +91,14 @@ Doing both at once leaves no version of the application to roll back to: the
 previous image still expects the column. Keep the deployment that drops it free of
 other changes so that a problem after it can only have one cause.
 
+While the deployment that drops a column switches over, the instances of the
+previous version that are still serving fail their queries on that table: the
+database driver keeps prepared statements per connection, and PostgreSQL
+refuses a cached statement whose result columns changed (`cached plan must not
+change result type`). They recover only by being replaced, so drop columns at a
+quiet time and let the switch finish. A previous version started afresh after
+the drop is unaffected — rolling back still works.
+
 Before a destructive migration in production, confirm a restorable backup exists.
 If reversal SQL is worth writing down, keep it with the change description, not in
 the migrations directory — a `*_rollback.sql` there shares its migration's version

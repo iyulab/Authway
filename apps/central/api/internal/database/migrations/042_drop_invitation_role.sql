@@ -1,0 +1,26 @@
+-- ============================================================
+-- Migration 042: Drop invitations.role
+-- ============================================================
+-- An invitation gives no role or permission: the role was kept and returned,
+-- and nothing read it. The application stopped reading and writing it in the
+-- previous deployment and only kept it mapped, read-only, until this
+-- migration.
+--
+-- What it deletes: on every deployment checked before this migration was
+-- applied, each row held the value the API set (member) or one the admin
+-- console had sent (user) — values nothing ever acted on. Check yours first
+-- if it may differ:
+--   SELECT role, count(*) FROM invitations GROUP BY 1;
+--
+-- Destructive, so it ships in a deployment of its own, after the application
+-- that stopped using the column.
+--
+-- There are no down migrations. To have the column back as it was defined
+-- (the values are gone):
+--   ALTER TABLE invitations ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'user';
+--
+-- NOTE: No BEGIN/COMMIT here. RunMigrations wraps the whole run in a single
+-- outer transaction.
+-- ============================================================
+
+ALTER TABLE invitations DROP COLUMN IF EXISTS role;

@@ -24,8 +24,8 @@ func TestBackfillTokenHashes_PreservesRedeemability(t *testing.T) {
 	plaintext := "legacy-plaintext-token-" + uuid.New().String()
 	id := uuid.New()
 	if err := db.Exec(
-		`INSERT INTO invitations (id, tenant_id, email, role, token_hash, status, expires_at, created_at, updated_at)
-		 VALUES (?, ?, ?, 'member', ?, 'pending', ?, NOW(), NOW())`,
+		`INSERT INTO invitations (id, tenant_id, email, token_hash, status, expires_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 'pending', ?, NOW(), NOW())`,
 		id, tn.ID, email, plaintext, time.Now().Add(time.Hour),
 	).Error; err != nil {
 		t.Fatalf("seed legacy row: %v", err)

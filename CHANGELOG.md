@@ -7,8 +7,7 @@
   those). It is no longer accepted, stored or returned; one sent is ignored.
   The admin console no longer offers a role, nor an expiry it did not apply
   (an invitation is valid for 7 days), and its invitation list shows the
-  application each invitation is for. The column stays until a later
-  migration drops it.
+  application each invitation is for. Migration 042 drops the column.
 - **Service credential refusals name their reason.** `POST
   /api/v1/tenants/{id}/service-clients` answers `404 not_found` for a tenant
   that does not exist or is inactive (a scope a service credential may not

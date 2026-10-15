@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 	"testing"
 
 	"authway/apps/central/api/internal/database"
@@ -148,12 +147,6 @@ func TestCreate_SystemActor_BootstrapsEmptyTenant(t *testing.T) {
 	}
 	if inv.TenantName != tn.Name {
 		t.Errorf("TenantName = %q, want %q", inv.TenantName, tn.Name)
-	}
-	// role decides nothing: the API neither writes nor returns it, and a
-	// write must not name the column a later migration drops.
-	stmt := db.Session(&gorm.Session{DryRun: true}).Create(&Invitation{TenantID: tn.ID, Email: "x@example.com", TokenHash: "h", ExpiresAt: inv.ExpiresAt}).Statement
-	if sql := stmt.SQL.String(); strings.Contains(sql, `"role"`) {
-		t.Errorf("an invitation write names the retired role column: %s", sql)
 	}
 
 	// The NULL must have reached the column, not just the struct.
