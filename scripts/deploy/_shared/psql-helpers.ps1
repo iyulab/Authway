@@ -77,7 +77,9 @@ function Invoke-FastQuery {
 
         try {
             # psql 직접 호출 (PATH에 있으므로)
-            $result = psql -t -A -q -f $tempFile 2>&1
+            # ON_ERROR_STOP: without it psql runs a file to the end and exits 0
+            # even when a statement in it failed, so a failed write read as done.
+            $result = psql -v ON_ERROR_STOP=1 -t -A -q -f $tempFile 2>&1
             $success = ($LASTEXITCODE -eq 0)
 
             return @{

@@ -224,8 +224,8 @@ try {
     #     dogfooding 세션과 동일하게 DB 직접 INSERT로 우회) ---
     Write-Host "2️⃣  검증용 user 생성 ($verifyEmail)" -ForegroundColor Yellow
     $insertUserQuery = @"
-INSERT INTO users (id, tenant_id, email, password_hash, name, email_verified, active, provider)
-VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'post-deploy-verify', true, true, 'local');
+INSERT INTO users (id, tenant_id, email, password_hash, name, email_verified, active)
+VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'post-deploy-verify', true, true);
 "@
     $insertResult = Invoke-FastQuery -Query $insertUserQuery -EnvVars $envVars
     if (-not $insertResult.Success) {
