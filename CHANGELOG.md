@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-15
+
+> Minor, no breaking change. The account screen's second round: a user
+> changes their own password (or sets a first one) and removes the links to
+> sign-in providers.
+
 ### Added
 
 - **A signed-in user changes their own password** — `POST
