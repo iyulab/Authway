@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
+import { randomToken } from '../src/pkce.js'
 import { Provider, type TestClient } from '../src/provider.js'
 
 const provider = new Provider(loadConfig())
@@ -140,5 +141,60 @@ describe('admin API: managing clients', () => {
     await conform('POST', '/api/v1/clients/{id}/regenerate-secret', res)
     expect(res.status).toBe(400)
     expect(((await res.json()) as { code: string }).code).toBe('public_client_has_no_secret')
+  })
+})
+
+// A client_id the caller chooses is the client's name at the authorization
+// server: one that is taken is refused rather than answered with the client
+// already under it, and one that was deleted can be registered again.
+describe('admin API: a chosen client_id', () => {
+  const clientId = `conformance-chosen-${randomToken(6)}`
+  const register = async (secret: string) =>
+    provider.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: await provider.tenantId(),
+        name: clientId,
+        client_id: clientId,
+        client_secret: secret,
+        grant_types: ['client_credentials'],
+        scopes: ['openid'],
+      }),
+    })
+  const token = async (secret: string) => {
+    const { token_endpoint } = await provider.discovery()
+    return fetch(token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: secret }),
+    })
+  }
+  let id: string | undefined
+
+  afterAll(async () => {
+    if (id) await provider.admin(`/api/v1/clients/${id}`, { method: 'DELETE' })
+  })
+
+  it('is refused while it is registered, and can be registered again once deleted', async () => {
+    const first = `first-${randomToken(24)}`
+    const created = await register(first)
+    await conform('POST', '/api/v1/clients', created)
+    expect(created.status).toBe(201)
+    id = ((await created.json()) as ClientBody).client.id
+    expect((await token(first)).status).toBe(200)
+
+    const taken = await register(`second-${randomToken(24)}`)
+    await conform('POST', '/api/v1/clients', taken)
+    expect(taken.status).toBe(409)
+    expect(await taken.json()).toMatchObject({ code: 'client_id_taken', field: 'client_id' })
+    expect((await token(first)).status).toBe(200)
+
+    expect((await provider.admin(`/api/v1/clients/${id}`, { method: 'DELETE' })).status).toBe(200)
+    const again = `again-${randomToken(24)}`
+    const recreated = await register(again)
+    expect(recreated.status).toBe(201)
+    id = ((await recreated.json()) as ClientBody).client.id
+    expect((await token(again)).status).toBe(200)
+    expect((await token(first)).status).toBe(401)
   })
 })

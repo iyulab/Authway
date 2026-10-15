@@ -102,6 +102,21 @@ describe('password login through the authorization-code flow', () => {
     expect(after.status).toBe(401)
   })
 
+  it('answers signing out everywhere with no address to go to, whatever the body names', async () => {
+    const outcome = await provider.login(client, user)
+    if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)
+    subjects.add(outcome.sub)
+
+    const res = await fetch(`${provider.config.api}/api/v1/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${outcome.tokens.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_logout_redirect_uri: 'https://elsewhere.invalid/', state: 'x' }),
+    })
+    await conform('POST', '/api/v1/logout', res)
+    expect(res.status).toBe(200)
+    expect(await res.json()).not.toHaveProperty('redirect_url')
+  })
+
   it('signs a user out through RP-initiated logout and invalidates their tokens', async () => {
     const outcome = await provider.login(client, user)
     if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)

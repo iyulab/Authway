@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
@@ -196,57 +197,30 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		}
 	}
 
-	// Check if client already exists with this client_id (including soft-deleted ones)
+	// A client_id the caller chose may be in use. One that is registered is
+	// refused: answering with it would hand back credentials it does not have
+	// and ignore what the request says. One that was deleted is gone from the
+	// authorization server, and its row stays only because deletion is soft —
+	// it is removed so the new client is registered from the request, whole.
 	if req.ClientID != "" {
-		var existingClient Client
-		err := s.db.Unscoped().Where("client_id = ?", clientID).First(&existingClient).Error
-		if err == nil {
-			// Client exists (either active or soft-deleted)
-			if existingClient.DeletedAt.Valid {
-				// Client was soft-deleted, restore it
-				s.logger.Info("Client was soft-deleted, restoring it",
-					zap.String("client_id", clientID),
-					zap.String("tenant_id", tenantID.String()))
-
-				// Restore the client by clearing deleted_at
-				if err := s.db.Unscoped().Model(&existingClient).Update("deleted_at", nil).Error; err != nil {
-					return nil, nil, fmt.Errorf("failed to restore client: %w", err)
-				}
-
-				// Update other fields if needed
-				existingClient.Name = req.Name
-				existingClient.Description = req.Description
-				existingClient.RedirectURIs = nonNilURIs(req.RedirectURIs) // NOT NULL column; see Create
-				existingClient.Active = true
-
-				// Apply smart defaults for logout redirect URIs on restore
-				if len(req.PostLogoutRedirectURIs) > 0 {
-					existingClient.PostLogoutRedirectURIs = req.PostLogoutRedirectURIs
-				} else if len(req.RedirectURIs) > 0 {
-					existingClient.PostLogoutRedirectURIs = req.RedirectURIs
-				}
-
-				if err := s.db.Save(&existingClient).Error; err != nil {
-					return nil, nil, fmt.Errorf("failed to update restored client: %w", err)
-				}
-			} else {
-				// Client is active, just return it
-				s.logger.Info("Client already exists, returning existing client",
-					zap.String("client_id", clientID),
-					zap.String("tenant_id", tenantID.String()))
+		var existing Client
+		err := s.db.Unscoped().Where("client_id = ?", clientID).First(&existing).Error
+		switch {
+		case err == nil && !existing.DeletedAt.Valid:
+			return nil, nil, &apierror.Refusal{
+				Status:  http.StatusConflict,
+				Code:    "client_id_taken",
+				Field:   "client_id",
+				Message: "a client with this client_id is already registered",
+				Hint:    "Choose another client_id, or omit it and let Authway generate one.",
 			}
-
-			credentials := &ClientCredentials{
-				ClientID:     existingClient.ClientID,
-				ClientSecret: clientSecret, // Return the secret (empty for public clients)
+		case err == nil:
+			if err := s.db.Unscoped().Delete(&existing).Error; err != nil {
+				return nil, nil, fmt.Errorf("failed to remove the deleted client: %w", err)
 			}
-
-			return &existingClient, credentials, nil
-		} else if err != gorm.ErrRecordNotFound {
-			// Real database error
+		case !errors.Is(err, gorm.ErrRecordNotFound):
 			return nil, nil, fmt.Errorf("failed to check existing client: %w", err)
 		}
-		// Client doesn't exist, proceed with creation
 	}
 
 	// The secret is returned to the caller once and registered with the

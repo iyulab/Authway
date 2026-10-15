@@ -579,20 +579,12 @@ func (h *AuthHandler) RejectConsent(c *fiber.Ctx) error {
 	})
 }
 
-// LogoutRequest for direct logout API.
-// NOTE: the subject is NEVER taken from the body — it is derived from the
-// validated bearer token by the jwtAuth middleware. Only non-security-sensitive
-// redirect parameters are accepted here.
-type LogoutRequest struct {
-	PostLogoutRedirectURI string `json:"post_logout_redirect_uri"` // Optional: Where to redirect after logout
-	State                 string `json:"state"`                    // Optional: State parameter for redirect
-}
-
-// LogoutResponse for logout API response
+// LogoutResponse for logout API response. Where the application goes next is
+// its own to decide: an address taken from the request and answered back
+// unchecked would be one a caller could point anywhere.
 type LogoutResponse struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message"`
-	RedirectURL string `json:"redirect_url,omitempty"` // URL to redirect to (if post_logout_redirect_uri provided)
+	Success bool   `json:"success"`
+	Message string `json:"message"`
 }
 
 // Logout revokes all OAuth2 sessions for the AUTHENTICATED user (direct
@@ -610,10 +602,6 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		return apierror.RefuseWith(c, fiber.StatusUnauthorized, apierror.CodeForStatus(fiber.StatusUnauthorized), "Unauthorized", fiber.Map{"hint": "Send a valid 'Authorization: Bearer <access_token>' header."})
 	}
 	subject := userID.String()
-
-	// Body is optional and carries only non-security-sensitive redirect params.
-	var req LogoutRequest
-	_ = c.BodyParser(&req)
 
 	// Direct session revocation via Hydra Admin API — revokes every OAuth2
 	// session for the authenticated subject only.
@@ -634,21 +622,10 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	h.RecordSignOut(c, userID.String())
 
-	response := LogoutResponse{
+	return c.JSON(LogoutResponse{
 		Success: true,
 		Message: "Logout successful - all sessions revoked",
-	}
-
-	// If post_logout_redirect_uri is provided, include it in response
-	if req.PostLogoutRedirectURI != "" {
-		redirectURL := req.PostLogoutRedirectURI
-		if req.State != "" {
-			redirectURL += "?state=" + req.State
-		}
-		response.RedirectURL = redirectURL
-	}
-
-	return c.JSON(response)
+	})
 }
 
 // NOTE: The public self-registration endpoint (RegisterRequest + Register) was

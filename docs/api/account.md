@@ -303,13 +303,12 @@ On `200` the answer is `{ "success": true, "message" }`; discard the tokens
 you hold. The user is always the one the token belongs to — the body cannot
 name another.
 
-This is an API call, not a browser redirect: it answers JSON and sends the
-browser nowhere. A JSON body is optional: with `post_logout_redirect_uri` (and
-optionally `state`) the answer also carries `redirect_url` — that address as
-given, with `?state=…` appended when `state` is sent — for the application to
-navigate to. To sign
-the user out through the browser instead, send it to the authorization
-server's `end_session_endpoint` ([logout flow](login-flows.md#logout)).
+This is an API call, not a browser redirect: it takes no body, answers JSON
+and sends the browser nowhere — where the application goes next is its own to
+decide. To sign the user out through the browser instead, send it to the
+authorization server's `end_session_endpoint`
+([logout flow](login-flows.md#logout)), which checks the address it returns to
+against the client's registered `post_logout_redirect_uris`.
 
 | Status | Meaning |
 |--------|---------|
