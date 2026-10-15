@@ -426,3 +426,26 @@ describe('ClientForm — a client keeps a way to sign in', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 })
+
+// The server refuses some input only it can judge (a grant it does not serve, a
+// key address that is private). The refusal names the field; the form shows it
+// there rather than only in a passing toast.
+describe('ClientForm — a refusal from the server', () => {
+  it('is shown at the field it names', async () => {
+    renderForm({
+      serverError: {
+        field: 'redirect_uris',
+        detail: '"app://x#y" is not a usable redirect URI',
+        hint: 'Use an absolute URI without a fragment.',
+      },
+    })
+    expect(
+      await screen.findByText('"app://x#y" is not a usable redirect URI Use an absolute URI without a fragment.')
+    ).toBeInTheDocument()
+  })
+
+  it('names nothing on the form when the field is not one of its own', async () => {
+    renderForm({ serverError: { field: 'client_secret', detail: 'Not this form' } })
+    await waitFor(() => expect(screen.queryByText('Not this form')).not.toBeInTheDocument())
+  })
+})

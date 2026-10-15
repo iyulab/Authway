@@ -11,7 +11,7 @@ import {
 import { clientsApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Card, Modal } from '@/components/ui'
-import { ClientForm, ClientFormData, lines } from '@/components/clients'
+import { ClientForm, ClientFormData, ClientFormServerError, lines } from '@/components/clients'
 
 const ClientCreatePage: React.FC = () => {
   const navigate = useNavigate()
@@ -115,6 +115,7 @@ const ClientCreatePage: React.FC = () => {
         </div>
         <div className="p-6">
           <ClientForm
+            serverError={(createMutation.error as { response?: { data?: ClientFormServerError } } | null)?.response?.data}
             onSubmit={(data) => createMutation.mutate(data)}
             onCancel={() => navigate('/clients')}
             isSubmitting={createMutation.isPending}

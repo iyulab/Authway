@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -175,8 +175,17 @@ export const AVAILABLE_AUTH_PROVIDERS = [
   { value: 'apple', label: 'Apple' },
 ]
 
+/** A refusal from the server that names the field it is about (RFC 9457 with `field`). */
+export interface ClientFormServerError {
+  field?: string
+  detail?: string
+  hint?: string
+}
+
 export interface ClientFormProps {
   initialData?: Client
+  /** The server's refusal of the last submission; shown at the field it names. */
+  serverError?: ClientFormServerError | null
   onSubmit: (data: ClientFormData) => void
   onCancel: () => void
   isSubmitting?: boolean
@@ -185,6 +194,7 @@ export interface ClientFormProps {
 
 export const ClientForm: React.FC<ClientFormProps> = ({
   initialData,
+  serverError,
   onSubmit,
   onCancel,
   isSubmitting = false,
@@ -195,6 +205,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
     handleSubmit,
     formState: { errors },
     setValue,
+    setError,
     watch,
   } = useForm<ClientFormData>({
     resolver: zodResolver(clientFormSchema),
@@ -231,6 +242,14 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           access_token_strategy: '',
         },
   })
+
+  // A refusal that names one of this form's fields is shown at that field.
+  useEffect(() => {
+    const field = serverError?.field
+    if (!field || !(field in clientFormSchema.shape)) return
+    const message = [serverError.detail, serverError.hint].filter(Boolean).join(' ')
+    setError(field as keyof ClientFormData, { type: 'server', message: message || 'Refused by the server' }, { shouldFocus: true })
+  }, [serverError, setError])
 
   const grantTypes = watch('grant_types') || []
   const scopes = watch('scopes') || []

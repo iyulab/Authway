@@ -12,7 +12,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { clientsApi } from '@/lib/api'
 import { Button, Card, Loading, Badge, ConfirmDialog, Modal } from '@/components/ui'
-import { ClientForm, ClientFormData, lines } from '@/components/clients'
+import { ClientForm, ClientFormData, ClientFormServerError, lines } from '@/components/clients'
 
 const ClientDetailPage: React.FC = () => {
   const { clientId } = useParams<{ clientId: string }>()
@@ -223,6 +223,7 @@ const ClientDetailPage: React.FC = () => {
         <div className="p-6">
           <ClientForm
             initialData={client}
+            serverError={(updateMutation.error as { response?: { data?: ClientFormServerError } } | null)?.response?.data}
             onSubmit={(data) => updateMutation.mutate(data)}
             onCancel={() => navigate('/clients')}
             isSubmitting={updateMutation.isPending}
