@@ -107,8 +107,12 @@ func (h *Handler) ListInvitations(c *fiber.Ctx) error {
 		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "status must be one of pending, accepted, declined, expired, revoked")
 	}
 	limit := c.QueryInt("limit", 20)
-	if limit < 1 || limit > 100 {
+	switch {
+	case limit < 1:
 		limit = 20
+	case limit > 100:
+		// A page holds at most 100; asking for more gets the most, not the default.
+		limit = 100
 	}
 	offset := c.QueryInt("offset", 0)
 	if offset < 0 {

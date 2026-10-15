@@ -64,7 +64,8 @@ export const clientFormSchema = z.object({
   scopes: z.array(z.string()).min(1, 'At least one Scope is required'),
   public: z.boolean(),
   // Authentication Provider Settings
-  enabled_auth_providers: z.array(z.string()).optional(),
+  // A client nobody can sign in to is refused by the API (invalid_enabled_auth_providers).
+  enabled_auth_providers: z.array(z.string()).min(1, 'Choose at least one way to sign in').optional(),
   allow_email_login: z.boolean().optional(),
   // Consent Flow Configuration
   skip_consent: z.boolean().optional(),

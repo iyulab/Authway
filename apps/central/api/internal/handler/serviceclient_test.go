@@ -169,8 +169,13 @@ func TestServiceClientHandler_List_ClampsOutOfRangeLimit(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if gotLimit != 20 {
-		t.Fatalf("limit = %d, want clamped default 20 for an out-of-range request", gotLimit)
+	if gotLimit != 100 {
+		t.Fatalf("limit = %d, want 100 — a page holds at most 100, and asking for more gets the most", gotLimit)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("GET", "/api/v1/tenants/"+uuid.New().String()+"/service-clients?limit=0", nil))
+	if err != nil || resp.StatusCode != fiber.StatusOK || gotLimit != 20 {
+		t.Fatalf("limit=0: status %v err %v limit %d, want the default 20", resp.StatusCode, err, gotLimit)
 	}
 }
 

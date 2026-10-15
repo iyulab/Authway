@@ -17,6 +17,18 @@
 
 ### Fixed
 
+- **A client with every sign-in method turned off could be signed in to with
+  email and Google.** An empty `enabled_auth_providers` was stored and read
+  back as the default. It is now refused (`400
+  invalid_enabled_auth_providers`, as is a name that is not a sign-in method),
+  and the admin console asks for at least one.
+- **Lists past the page size.** `limit` above 100 gave 20 rows instead of 100
+  (clients, users, service credentials, invitations); it now gives 100. Clients
+  and users are listed newest first — pages had no order and could overlap.
+  The admin console's client list pages, its dashboard counts what the API
+  counts (it counted one page) and shows only what `/health` says (it showed
+  fixed "Connected" states and versions), and the invitation form offers every
+  application rather than the first 20.
 - The admin console's settings page showed values it had not read — an
   environment, an internal address, token lifetimes, a PKCE requirement and
   component versions that were not this deployment's. It now shows the

@@ -96,6 +96,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateApplicationURI("client_uri", req.ClientURI); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateSignInMethods(req.EnabledAuthProviders); cerr != nil {
+		return nil, nil, cerr
+	}
 	if cerr := s.validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
 		return nil, nil, cerr
 	}
@@ -555,6 +558,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 			}
 		}
 	}
+	if cerr := validateSignInMethods(req.EnabledAuthProviders); cerr != nil {
+		return nil, SyncStatus{}, cerr
+	}
 	if req.BackChannelLogoutURI != nil {
 		if cerr := s.validateBackChannelLogoutURI(*req.BackChannelLogoutURI); cerr != nil {
 			return nil, SyncStatus{}, cerr
@@ -651,7 +657,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 
 	// Authentication Provider Settings
-	// EnabledAuthProviders: nil = not provided, empty array = clear all
+	// EnabledAuthProviders: nil = not provided (an empty list is refused above)
 	if req.EnabledAuthProviders != nil {
 		client.EnabledAuthProviders = req.EnabledAuthProviders
 	}
@@ -784,7 +790,7 @@ func (s *service) List(limit, offset int) ([]*Client, int64, error) {
 	}
 
 	// Get clients with pagination
-	if err := s.db.Limit(limit).Offset(offset).Find(&clients).Error; err != nil {
+	if err := s.db.Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&clients).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list clients: %w", err)
 	}
 
@@ -907,7 +913,7 @@ func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*Client,
 	}
 
 	// Get clients with pagination
-	if err := s.db.Where("tenant_id = ?", tenantID).Limit(limit).Offset(offset).Find(&clients).Error; err != nil {
+	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&clients).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list clients: %w", err)
 	}
 

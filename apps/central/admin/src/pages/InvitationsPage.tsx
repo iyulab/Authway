@@ -67,7 +67,7 @@ const InvitationsPage: React.FC = () => {
   // ones that are part of Authway. Loaded when the invite dialog opens.
   const { data: clientsData } = useQuery({
     queryKey: ['clients', selectedTenantId, 'invitable'],
-    queryFn: () => clientsApi.list({ tenant_id: selectedTenantId, limit: 200 }),
+    queryFn: () => clientsApi.list({ tenant_id: selectedTenantId, limit: 100 }),
     enabled: !!selectedTenantId && showCreateModal,
   })
   const applications = (clientsData?.data.clients || []).filter((c) => !c.system)

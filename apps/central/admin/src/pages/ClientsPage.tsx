@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -8,24 +8,28 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { clientsApi, Client } from '@/lib/api'
-import { Button, Loading, EmptyState, Card, Badge } from '@/components/ui'
+import { Button, Loading, EmptyState, Card, Badge, Pagination } from '@/components/ui'
 import { useTenantStore } from '@/stores/tenant'
 
 const ClientsPage: React.FC = () => {
   const navigate = useNavigate()
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
+  const pageSize = 20
+  const [currentPage, setCurrentPage] = useState(1)
 
-  // Fetch clients
+  // A page at a time, newest first.
   const { data: clientsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['clients', selectedTenantId],
-    queryFn: () => clientsApi.list({ tenant_id: selectedTenantId }),
+    queryKey: ['clients', selectedTenantId, currentPage],
+    queryFn: () => clientsApi.list({ tenant_id: selectedTenantId, limit: pageSize, offset: (currentPage - 1) * pageSize }),
     enabled: !!selectedTenantId,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   })
 
   const clients = clientsData?.data.clients || []
+  const total = clientsData?.data.total ?? clients.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   // Show message if no tenant selected
   if (!selectedTenantId) {
@@ -70,7 +74,7 @@ const ClientsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">OAuth Client Management</h1>
           <p className="mt-2 text-sm text-gray-700">
-            {clients.length} OAuth client(s) registered for <span className="font-medium">{selectedTenant?.name}</span>.
+            {total} OAuth client(s) registered for <span className="font-medium">{selectedTenant?.name}</span>.
           </p>
         </div>
         <div className="mt-4 sm:mt-0">
@@ -136,6 +140,15 @@ const ClientsPage: React.FC = () => {
               </button>
             ))}
           </div>
+        )}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={total}
+            itemsPerPage={pageSize}
+            onPageChange={setCurrentPage}
+          />
         )}
       </Card>
     </div>

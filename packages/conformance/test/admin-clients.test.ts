@@ -78,6 +78,30 @@ describe('admin API: managing clients', () => {
     expect(res.status).toBe(400)
   })
 
+  // A client nobody can sign in to is not a configuration; an empty list of
+  // sign-in methods is refused rather than read as some default.
+  it('refuses a client with no way to sign in', async () => {
+    const res = await provider.admin(`/api/v1/clients/${publicClient.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled_auth_providers: [] }),
+    })
+    await conform('PUT', '/api/v1/clients/{id}', res.clone())
+    expect(res.status).toBe(400)
+    const refusal = (await res.json()) as { code: string; field: string }
+    expect(refusal.code).toBe('invalid_enabled_auth_providers')
+    expect(refusal.field).toBe('enabled_auth_providers')
+  })
+
+  // A page holds at most 100 clients: asking for more gets 100, not a silent default.
+  it('answers a page of at most 100, newest first', async () => {
+    const res = await provider.admin(`/api/v1/clients?limit=500`)
+    await conform('GET', '/api/v1/clients', res.clone())
+    const page = (await res.json()) as { limit: number; clients: { created_at: string }[] }
+    expect(page.limit).toBe(100)
+    const times = page.clients.map((c) => Date.parse(c.created_at))
+    expect(times).toEqual([...times].sort((a, b) => b - a))
+  })
+
   it('answers 404 with a code for a client that does not exist', async () => {
     const res = await provider.admin(`/api/v1/clients/${crypto.randomUUID()}`)
     await conform('GET', '/api/v1/clients/{id}', res)

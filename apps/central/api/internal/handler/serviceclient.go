@@ -81,8 +81,12 @@ func (h *ServiceClientHandler) List(c *fiber.Ctx) error {
 	}
 
 	limit, err := strconv.Atoi(c.Query("limit", "20"))
-	if err != nil || limit < 1 || limit > 100 {
+	switch {
+	case err != nil || limit < 1:
 		limit = 20
+	case limit > 100:
+		// A page holds at most 100; asking for more gets the most, not the default.
+		limit = 100
 	}
 	offset, err := strconv.Atoi(c.Query("offset", "0"))
 	if err != nil || offset < 0 {

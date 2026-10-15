@@ -219,7 +219,7 @@ func (s *service) List(limit, offset int) ([]*User, int64, error) {
 	}
 
 	// Get users with pagination
-	if err := s.db.Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+	if err := s.db.Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
 
@@ -394,7 +394,7 @@ func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, i
 	}
 
 	// Get users with pagination
-	if err := s.db.Where("tenant_id = ?", tenantID).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
 

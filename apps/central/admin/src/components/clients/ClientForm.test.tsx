@@ -410,3 +410,19 @@ describe('ClientForm — the home page and the sign-in start URL', () => {
   })
 })
 
+
+describe('ClientForm — a client keeps a way to sign in', () => {
+  it('refuses to save with every sign-in method unchecked', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+    await user.type(screen.getByLabelText('Client Name *'), 'Web App')
+    await user.type(screen.getByPlaceholderText(/callback/i), 'https://app.example/callback')
+    for (const name of [/email/i, /google/i]) {
+      const box = screen.getAllByRole('checkbox', { name }).find((b) => (b as HTMLInputElement).checked)
+      if (box) await user.click(box)
+    }
+    await submit(user)
+    expect(await screen.findByText('Choose at least one way to sign in')).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+})

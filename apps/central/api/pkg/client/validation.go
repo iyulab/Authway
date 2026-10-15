@@ -277,6 +277,28 @@ func validateApplicationURI(field, uri string) *ConfigError {
 	return nil
 }
 
+// signInMethods are the ways of signing in a client can offer.
+var signInMethods = map[string]bool{"email": true, "magic_link": true, "google": true, "github": true, "microsoft": true, "apple": true}
+
+// validateSignInMethods checks a client's enabled_auth_providers when the
+// request names them (nil: not named). An empty list is refused: a client
+// nobody can sign in to is not a configuration, and the stored empty list was
+// read as the default — email and Google — the opposite of what was asked.
+func validateSignInMethods(methods []string) *ConfigError {
+	if methods == nil {
+		return nil
+	}
+	if len(methods) == 0 {
+		return &ConfigError{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: "name at least one way to sign in", Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+	}
+	for _, m := range methods {
+		if !signInMethods[m] {
+			return &ConfigError{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: fmt.Sprintf("%q is not a way to sign in", m), Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+		}
+	}
+	return nil
+}
+
 // maxBackChannelLogoutURILength bounds the logout address.
 const maxBackChannelLogoutURILength = 2048
 

@@ -59,8 +59,12 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	tenantIDStr := c.Query("tenant_id", c.Get("X-Tenant-ID"))
 
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit < 1 || limit > 100 {
+	switch {
+	case err != nil || limit < 1:
 		limit = 20
+	case limit > 100:
+		// A page holds at most 100; asking for more gets the most, not the default.
+		limit = 100
 	}
 
 	offset, err := strconv.Atoi(offsetStr)

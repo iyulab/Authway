@@ -3,10 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import {
   KeyIcon,
   UsersIcon,
-  CheckCircleIcon,
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline'
-import { clientsApi, usersApi, Client, User } from '@/lib/api'
+import { clientsApi, usersApi, healthApi, Client, User } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Loading, Card, EmptyState } from '@/components/ui'
 import {
@@ -22,10 +21,11 @@ const DashboardPage: React.FC = () => {
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
 
-  // Fetch clients for current tenant
+  // The newest few of each, with the totals (the API lists newest first).
+  // Keys of their own: the clients page caches its pages under ['clients', …].
   const { data: clientsData, isLoading: clientsLoading } = useQuery({
-    queryKey: ['clients', selectedTenantId],
-    queryFn: () => clientsApi.list({ limit: 100, tenant_id: selectedTenantId }),
+    queryKey: ['dashboard-clients', selectedTenantId],
+    queryFn: () => clientsApi.list({ limit: 5, tenant_id: selectedTenantId }),
     enabled: !!selectedTenantId,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
@@ -33,25 +33,22 @@ const DashboardPage: React.FC = () => {
 
   // Fetch users for current tenant
   const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ['users', selectedTenantId],
-    queryFn: () => usersApi.list({ limit: 100, tenant_id: selectedTenantId }),
+    queryKey: ['dashboard-users', selectedTenantId],
+    queryFn: () => usersApi.list({ limit: 5, tenant_id: selectedTenantId }),
     enabled: !!selectedTenantId,
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   })
 
-  // Calculate stats for current tenant
-  const stats = useMemo(() => {
-    const clients = clientsData?.data?.clients || []
-    const users = usersData?.data?.users || []
+  const { data: health, isError: healthFailed } = useQuery({
+    queryKey: ['health'],
+    queryFn: () => healthApi.get().then((res) => res.data),
+  })
 
-    return {
-      totalClients: clients.length,
-      activeClients: clients.filter((c: Client) => c.active).length,
-      totalUsers: users.length,
-      activeUsers: users.filter((u: User) => u.active).length,
-    }
-  }, [clientsData, usersData])
+  const stats = {
+    totalClients: clientsData?.data?.total ?? 0,
+    totalUsers: usersData?.data?.total ?? 0,
+  }
 
   // Transform clients to activity items
   const clientActivityItems: ActivityItem[] = useMemo(() => {
@@ -75,17 +72,20 @@ const DashboardPage: React.FC = () => {
       subtitle: user.email,
       icon: UsersIcon,
       iconColor: 'text-blue-500',
-      active: user.active,
     }))
   }, [usersData])
 
-  // System info items
-  const systemInfoItems: SystemInfoItem[] = [
-    { label: 'Server Version', value: 'v1.0.0' },
-    { label: 'Ory Hydra Integration', value: 'Connected', status: 'healthy' },
-    { label: 'Database', value: 'PostgreSQL' },
-    { label: 'Redis Cache', value: 'Connected', status: 'healthy' },
-  ]
+  // What the API says about itself (GET /health) — nothing else is known here.
+  const systemInfoItems: SystemInfoItem[] = healthFailed
+    ? [{ label: 'API', value: 'Not answering', status: 'unhealthy' }]
+    : [
+        { label: 'API', value: health?.status ?? 'Checking…', status: health?.status === 'ok' ? 'healthy' : 'unknown' },
+        { label: 'Deployed version', value: health?.version ?? '-' },
+        {
+          label: 'Database',
+          value: health?.migrations?.length ? `migration ${health.migrations[health.migrations.length - 1]}` : '-',
+        },
+      ]
 
   // Show message if no tenant selected (should not happen in normal flow)
   if (!selectedTenantId) {
@@ -125,30 +125,18 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {/* Stats for current tenant */}
-      <StatCardGrid columns={4}>
+      <StatCardGrid columns={2}>
         <StatCard
-          name="Total Apps (Clients)"
+          name="Apps (Clients)"
           value={stats.totalClients}
           icon={KeyIcon}
           variant="purple"
         />
         <StatCard
-          name="Active Apps"
-          value={stats.activeClients}
-          icon={CheckCircleIcon}
-          variant="green"
-        />
-        <StatCard
-          name="Total Users"
+          name="Users"
           value={stats.totalUsers}
           icon={UsersIcon}
           variant="blue"
-        />
-        <StatCard
-          name="Active Users"
-          value={stats.activeUsers}
-          icon={CheckCircleIcon}
-          variant="green"
         />
       </StatCardGrid>
 
@@ -171,7 +159,7 @@ const DashboardPage: React.FC = () => {
       {/* System Info */}
       <SystemInfoCard
         title="System Information"
-        description="Authway OAuth 2.0 server system status"
+        description="What the API answers at /health"
         items={systemInfoItems}
       />
     </div>
