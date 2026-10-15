@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/go-playground/validator/v10"
@@ -32,21 +33,26 @@ func NewServiceClientHandler(service serviceclient.Service, logger *zap.Logger, 
 func (h *ServiceClientHandler) Create(c *fiber.Ctx) error {
 	tenantID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID")
 	}
 
 	var req serviceclient.CreateServiceClientRequest
 	if err := c.BodyParser(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body")
 	}
 	if err := h.validator.Struct(&req); err != nil {
 		return apierror.Invalid(c, err)
 	}
 
 	sc, creds, err := h.service.Create(tenantID, &req)
-	if err != nil {
+	switch {
+	case errors.Is(err, serviceclient.ErrScopeNotAllowed):
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_scope", err.Error(), fiber.Map{"field": "scopes"})
+	case errors.Is(err, serviceclient.ErrTenantNotFound):
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "Tenant not found or inactive")
+	case err != nil:
 		h.logger.Error("Failed to create service client", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return fiber.NewError(fiber.StatusBadRequest, apierror.Message(err, "failed to create service client"))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "The service client could not be created. Try again shortly.")
 	}
 
 	if h.audit != nil {
@@ -71,7 +77,7 @@ func (h *ServiceClientHandler) Create(c *fiber.Ctx) error {
 func (h *ServiceClientHandler) List(c *fiber.Ctx) error {
 	tenantID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID")
 	}
 
 	limit, err := strconv.Atoi(c.Query("limit", "20"))
@@ -86,7 +92,7 @@ func (h *ServiceClientHandler) List(c *fiber.Ctx) error {
 	scs, total, err := h.service.ListByTenant(tenantID, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to list service clients", zap.Error(err), zap.String("tenant_id", tenantID.String()))
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve service clients")
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "Failed to retrieve service clients")
 	}
 
 	return c.JSON(fiber.Map{
@@ -104,17 +110,20 @@ func (h *ServiceClientHandler) List(c *fiber.Ctx) error {
 func (h *ServiceClientHandler) Revoke(c *fiber.Ctx) error {
 	tenantID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid tenant ID")
 	}
 
 	id, err := uuid.Parse(c.Params("service_client_id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid service client ID")
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "Invalid service client ID")
 	}
 
 	if err := h.service.Revoke(tenantID, id); err != nil {
+		if errors.Is(err, serviceclient.ErrNotFound) {
+			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "Service client not found")
+		}
 		h.logger.Error("Failed to revoke service client", zap.Error(err), zap.String("id", id.String()), zap.String("tenant_id", tenantID.String()))
-		return fiber.NewError(fiber.StatusNotFound, apierror.Message(err, "service client not found"))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "The service client could not be revoked. Try again shortly.")
 	}
 
 	if h.audit != nil {

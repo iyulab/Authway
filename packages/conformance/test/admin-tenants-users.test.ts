@@ -153,3 +153,55 @@ describe('admin API: managing users', () => {
     expect(await code(res)).toBe('not_found')
   })
 })
+
+// A tenant's service credential, and what keeps a tenant from being deleted:
+// a tenant is deleted only once nothing that signs in to it is left.
+describe('admin API: service credentials and deleting a tenant that is not empty', () => {
+  let tenant: Tenant | undefined
+
+  afterAll(async () => {
+    if (tenant) await provider.admin(`/api/v1/tenants/${tenant.id}`, { method: 'DELETE' })
+  })
+
+  it('issues, lists and revokes a service credential; the tenant is deleted only after', async () => {
+    const created = await provider.admin('/api/v1/tenants', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Conformance guarded tenant', slug: `conformance-${randomToken(4).toLowerCase()}` }),
+    })
+    expect(created.status).toBe(201)
+    tenant = (await created.json()) as Tenant
+    const base = `/api/v1/tenants/${tenant.id}/service-clients`
+
+    const refused = await provider.admin(base, { method: 'POST', body: JSON.stringify({ name: 'svc', scopes: ['admin.everything'] }) })
+    await conform('POST', '/api/v1/tenants/{id}/service-clients', refused.clone())
+    expect(refused.status).toBe(400)
+
+    const issued = await provider.admin(base, { method: 'POST', body: JSON.stringify({ name: 'svc', scopes: ['admin.clients:write'] }) })
+    await conform('POST', '/api/v1/tenants/{id}/service-clients', issued.clone())
+    expect(issued.status, await issued.clone().text()).toBe(201)
+    const { service_client: svc, credentials } = (await issued.json()) as { service_client: { id: string; hydra_client_id: string }; credentials: { client_id: string; client_secret: string } }
+    expect(credentials.client_id).toBe(svc.hydra_client_id)
+    expect(credentials.client_secret.length).toBeGreaterThan(0)
+
+    const listed = await provider.admin(base)
+    await conform('GET', '/api/v1/tenants/{id}/service-clients', listed.clone())
+    const page = (await listed.json()) as { service_clients: { id: string }[] }
+    expect(page.service_clients.map((s) => s.id)).toContain(svc.id)
+    expect(JSON.stringify(page)).not.toContain(credentials.client_secret)
+
+    const blocked = await provider.admin(`/api/v1/tenants/${tenant.id}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/tenants/{id}', blocked.clone())
+    expect(blocked.status).toBe(409)
+    expect(await code(blocked)).toBe('tenant_has_service_clients')
+
+    const revoked = await provider.admin(`${base}/${svc.id}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/tenants/{id}/service-clients/{service_client_id}', revoked.clone())
+    expect(revoked.status).toBe(200)
+    const again = await provider.admin(`${base}/${svc.id}-not-a-uuid`, { method: 'DELETE' })
+    expect(again.status).toBe(400)
+
+    const removed = await provider.admin(`/api/v1/tenants/${tenant.id}`, { method: 'DELETE' })
+    expect(removed.status).toBe(204)
+    tenant = undefined
+  })
+})

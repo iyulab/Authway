@@ -272,23 +272,21 @@ func TestServiceClientHandler_Revoke_InvalidServiceClientID(t *testing.T) {
 	}
 }
 
-func TestServiceClientHandler_Revoke_ServiceErrorReturnsNotFound(t *testing.T) {
-	fake := &fakeServiceClientService{
-		revokeFn: func(uuid.UUID, uuid.UUID) error {
-			return errors.New("service client not found")
-		},
-	}
-	h := NewServiceClientHandler(fake, zap.NewNop(), nil)
-
-	app := fiber.New()
-	app.Delete("/api/v1/tenants/:id/service-clients/:service_client_id", h.Revoke)
-
-	req := httptest.NewRequest("DELETE", "/api/v1/tenants/"+uuid.New().String()+"/service-clients/"+uuid.New().String(), nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	if resp.StatusCode != fiber.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
+func TestServiceClientHandler_Revoke_UnknownIsNotFound_OtherFailuresAreNot(t *testing.T) {
+	for err, want := range map[error]int{
+		serviceclient.ErrNotFound:        fiber.StatusNotFound,
+		errors.New("connection refused"): fiber.StatusInternalServerError,
+	} {
+		fake := &fakeServiceClientService{revokeFn: func(uuid.UUID, uuid.UUID) error { return err }}
+		h := NewServiceClientHandler(fake, zap.NewNop(), nil)
+		app := fiber.New()
+		app.Delete("/api/v1/tenants/:id/service-clients/:service_client_id", h.Revoke)
+		resp, testErr := app.Test(httptest.NewRequest("DELETE", "/api/v1/tenants/"+uuid.New().String()+"/service-clients/"+uuid.New().String(), nil))
+		if testErr != nil {
+			t.Fatalf("app.Test: %v", testErr)
+		}
+		if resp.StatusCode != want {
+			t.Errorf("revoke failing with %v: status = %d, want %d", err, resp.StatusCode, want)
+		}
 	}
 }

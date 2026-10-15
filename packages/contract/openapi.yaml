@@ -1010,6 +1010,95 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /api/v1/tenants/{id}/service-clients:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [admin]
+      operationId: createServiceClient
+      summary: Issue the tenant a service credential
+      description: |
+        A credential for the tenant's own backend or provisioning: it gets
+        tokens with the standard client_credentials grant and calls the
+        administration API inside this tenant only, within its scopes —
+        `admin.clients:write` (register clients, a reduced set of fields),
+        `admin.claims:write` (read and write users' claims) and
+        `admin.terms:write` (the tenant's terms documents). The secret is in
+        this answer only.
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: { type: string }
+                scopes:
+                  type: array
+                  minItems: 1
+                  items: { type: string, enum: [admin.clients:write, admin.claims:write, admin.terms:write] }
+      responses:
+        '201':
+          description: Issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service_client, credentials]
+                properties:
+                  message: { type: string }
+                  service_client: { $ref: '#/components/schemas/ServiceClient' }
+                  credentials:
+                    type: object
+                    required: [client_id, client_secret]
+                    properties:
+                      client_id: { type: string }
+                      client_secret: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [admin]
+      operationId: listServiceClients
+      summary: The tenant's service credentials, revoked ones included
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: A page of credentials — never a secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service_clients, total, limit, offset]
+                properties:
+                  service_clients: { type: array, items: { $ref: '#/components/schemas/ServiceClient' } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/tenants/{id}/service-clients/{service_client_id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: service_client_id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [admin]
+      operationId: revokeServiceClient
+      summary: Revoke a service credential
+      description: Its tokens stop working at once. A credential of another tenant is 404.
+      security: [{ adminKey: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /api/v1/tenants/{id}/terms:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -2750,6 +2839,18 @@ components:
           type: object
           additionalProperties: true
 
+    ServiceClient:
+      type: object
+      required: [id, tenant_id, hydra_client_id, name, granted_scopes, created_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        hydra_client_id: { type: string, description: The client_id the credential gets tokens with. }
+        name: { type: string }
+        granted_scopes: { type: array, items: { type: string } }
+        revoked_at: { type: ['null', string] }
+        created_at: { type: string }
+
     OwnProfile:
       type: object
       required: [id, email, email_verified]
@@ -3133,7 +3234,9 @@ components:
             user_already_member, invitation_already_pending,
             invitation_not_pending, email_domain_not_allowed,
             password_too_short, password_too_long, system_client,
-            unknown_client, account_unavailable,
+            unknown_client, account_unavailable, invalid_current_password,
+            insufficient_user_authentication, not_connected,
+            last_sign_in_method, invalid_scope, internal_error,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.
         field: { type: string, description: The request member at fault, when there is one. }

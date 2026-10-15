@@ -11,10 +11,18 @@ import {
   TrashIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi, authApi } from '@/lib/api'
+import { tenantsApi, authApi, healthApi, capabilitiesApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input } from '@/components/ui'
 import { getConfig } from '../config'
+
+// Why the API refused to delete the tenant (its 409/403 codes), in the console's words.
+const DELETE_REFUSALS: Record<string, string> = {
+  tenant_has_users: '사용자가 남아 있어 지울 수 없습니다. 먼저 사용자를 지우세요.',
+  tenant_has_clients: '클라이언트가 남아 있어 지울 수 없습니다. 먼저 클라이언트를 지우세요.',
+  tenant_has_service_clients: '서비스 자격증명이 남아 있어 지울 수 없습니다. 먼저 폐기하세요.',
+  default_tenant_protected: '기본 테넌트는 지울 수 없습니다.',
+}
 
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient()
@@ -33,10 +41,10 @@ const SettingsPage: React.FC = () => {
       // Navigate will happen automatically when tenant is cleared
     },
     onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to delete tenant'
-      toast.error(errorMessage)
+      const code: string | undefined = error.response?.data?.code
+      toast.error(
+        (code && DELETE_REFUSALS[code]) || error.response?.data?.detail || '테넌트를 지우지 못했습니다',
+      )
     },
   })
 
@@ -63,72 +71,63 @@ const SettingsPage: React.FC = () => {
     queryFn: () => authApi.validate().then((res) => res.data.info),
   })
 
-  const settingSections = [
+  // Everything below is read from the deployment itself — the console's own
+  // configuration, the API's /health, and what it says it offers. Nothing is
+  // shown that the console cannot read.
+  const { data: health, isError: healthFailed } = useQuery({
+    queryKey: ['health'],
+    queryFn: () => healthApi.get().then((res) => res.data),
+  })
+  const { data: caps } = useQuery({
+    queryKey: ['capabilities'],
+    queryFn: () => capabilitiesApi.get().then((res) => res.data),
+  })
+
+  const config = getConfig()
+  const yesNo = (on?: boolean) => (on ? '켜짐' : '꺼짐')
+  const settingSections: { id: string; title: string; description: string; icon: typeof CogIcon; settings: { name: string; value: string; description: string; status?: 'success' | 'error' }[] }[] = [
     {
-      id: 'system',
-      title: '시스템 설정',
-      description: 'Authway 시스템 전반적인 설정을 관리합니다.',
+      id: 'addresses',
+      title: '주소',
+      description: '이 콘솔이 쓰는 주소입니다.',
       icon: CogIcon,
       settings: [
-        {
-          name: 'API Base URL',
-          value: getConfig().apiUrl,
-          description: 'Authway API 서버 URL',
-        },
-        {
-          name: 'Environment',
-          value: 'Development',
-          description: '현재 실행 환경',
-        },
+        { name: 'API', value: config.apiUrl, description: 'Authway API — 테넌트·클라이언트·사용자 관리' },
+        { name: '발급자(issuer)', value: config.issuerUrl || '-', description: '앱이 OIDC 설정에 넣는 주소' },
       ],
     },
     {
-      id: 'hydra',
-      title: 'Ory Hydra 연동',
-      description: 'Ory Hydra OAuth2 서버와의 연동 설정을 확인합니다.',
+      id: 'server',
+      title: '서버',
+      description: 'API 가 /health 로 답한 것입니다.',
       icon: ServerIcon,
-      settings: [
-        {
-          name: 'Hydra Public URL',
-          value: getConfig().issuerUrl,
-          description: 'Hydra Public Endpoint (OAuth2 토큰)',
-        },
-        {
-          name: 'Hydra Admin URL',
-          value: 'http://localhost:4445',
-          description: 'Hydra Admin Endpoint (관리 API)',
-        },
-        {
-          name: 'Connection Status',
-          value: '연결됨',
-          description: 'Hydra 서버 연결 상태',
-          status: 'success',
-        },
-      ],
+      settings: healthFailed
+        ? [{ name: '상태', value: '응답 없음', description: 'API 의 /health 를 읽지 못했습니다', status: 'error' }]
+        : [
+            { name: '상태', value: health?.status ?? '확인 중', description: 'API 의 /health', status: health?.status === 'ok' ? 'success' : undefined },
+            { name: '배포 버전', value: health?.version ?? '-', description: '실행 중인 API 이미지' },
+            {
+              name: '데이터베이스',
+              value: health?.migrations?.length ? `migration ${health.migrations[health.migrations.length - 1]}` : '-',
+              description: '이 버전이 가진 마지막 마이그레이션',
+            },
+          ],
     },
     {
-      id: 'security',
-      title: '보안 설정',
-      description: '인증 및 보안 관련 설정을 관리합니다.',
+      id: 'capabilities',
+      title: '이 배포가 제공하는 것',
+      description: 'API 가 GET /api/v1/capabilities 로 답한 것입니다.',
       icon: ShieldCheckIcon,
-      settings: [
-        {
-          name: 'Access Token 만료 시간',
-          value: '15분',
-          description: 'OAuth2 Access Token의 기본 만료 시간',
-        },
-        {
-          name: 'Refresh Token 만료 시간',
-          value: '7일',
-          description: 'OAuth2 Refresh Token의 기본 만료 시간',
-        },
-        {
-          name: 'PKCE 요구',
-          value: '활성화',
-          description: 'Authorization Code Flow에서 PKCE 사용 강제',
-          status: 'success',
-        },
-      ],
+      settings: caps
+        ? [
+            { name: '소셜 로그인', value: caps.providers.length ? caps.providers.join(', ') : '없음', description: '자격증명이 들어 있는 공급자' },
+            { name: '메일 링크 로그인', value: yesNo(caps.magic_link), description: '클라이언트마다 켠다' },
+            { name: '2단계 인증', value: caps.mfa.length ? caps.mfa.join(', ') : '없음', description: '사용자가 계정 화면에서 켠다' },
+            { name: '가입 방식', value: caps.signup_modes.join(', '), description: '테넌트마다 정한다' },
+            { name: '기기 로그인', value: yesNo(caps.device_authorization), description: 'RFC 8628' },
+            { name: '토큰 교환 · CIBA', value: `${yesNo(caps.token_exchange)} · ${yesNo(caps.ciba)}`, description: '아직 없다' },
+          ]
+        : [],
     },
   ]
 
@@ -276,6 +275,11 @@ const SettingsPage: React.FC = () => {
                                 정상
                               </span>
                             )}
+                            {setting.status === 'error' && (
+                              <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                확인 필요
+                              </span>
+                            )}
                           </div>
                           <p className="mt-1 text-xs text-gray-500">
                             {setting.description}
@@ -290,43 +294,6 @@ const SettingsPage: React.FC = () => {
           </div>
         )
       })}
-
-      {/* 버전 정보 */}
-      <div className="bg-white shadow-sm rounded-lg">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-          <div className="flex items-center">
-            <InformationCircleIcon className="h-6 w-6 text-gray-400 mr-3" />
-            <div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                버전 정보
-              </h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                Authway와 관련 컴포넌트의 버전 정보입니다.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="px-4 py-5 sm:px-6">
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Authway</dt>
-              <dd className="mt-1 text-sm text-gray-900 font-mono">v1.0.0-alpha</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Ory Hydra</dt>
-              <dd className="mt-1 text-sm text-gray-900 font-mono">v2.2.0</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Admin Dashboard</dt>
-              <dd className="mt-1 text-sm text-gray-900 font-mono">v1.0.0</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Login UI</dt>
-              <dd className="mt-1 text-sm text-gray-900 font-mono">v1.0.0</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
 
       {/* 도움말 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -378,7 +345,8 @@ const SettingsPage: React.FC = () => {
                   테넌트 삭제
                 </h4>
                 <p className="mt-1 text-sm text-gray-500">
-                  이 테넌트와 관련된 모든 데이터(클라이언트, 사용자 등)가 영구적으로 삭제됩니다.
+                  사용자·클라이언트·서비스 자격증명이 남아 있으면 지울 수 없습니다 — 먼저 그것들을 지우세요. 기본
+                  테넌트는 지울 수 없습니다.
                 </p>
               </div>
               <Button
@@ -414,14 +382,13 @@ const SettingsPage: React.FC = () => {
                 </h3>
                 <div className="mt-2 text-sm text-red-700">
                   <p>
-                    테넌트 <strong className="font-mono">{selectedTenant?.name}</strong>을(를) 삭제하면
-                    다음 데이터가 모두 영구적으로 삭제됩니다:
+                    테넌트 <strong className="font-mono">{selectedTenant?.name}</strong>을(를) 지웁니다. 빈 테넌트만
+                    지워집니다:
                   </p>
                   <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>모든 OAuth2 클라이언트</li>
-                    <li>모든 사용자 계정</li>
-                    <li>모든 세션 및 토큰</li>
-                    <li>관련된 모든 설정</li>
+                    <li>사용자·클라이언트·서비스 자격증명이 남아 있으면 거절됩니다</li>
+                    <li>Authway 가 만든 계정 화면 클라이언트는 함께 지워집니다</li>
+                    <li>약관 문서·설정은 더 쓰이지 않습니다</li>
                   </ul>
                 </div>
               </div>

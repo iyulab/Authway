@@ -3,6 +3,7 @@ package serviceclient
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"gorm.io/gorm"
 
 	"authway/apps/central/api/internal/hydra"
-	"authway/apps/central/api/pkg/apierror"
 )
 
 // allowedScopes is the initial admin-API scope allowlist a service_client
@@ -79,6 +79,15 @@ type service struct {
 	hydraClient *hydra.Client
 }
 
+// ErrScopeNotAllowed is a scope a service credential may not be granted.
+var ErrScopeNotAllowed = errors.New("scope is not allowed for service clients")
+
+// ErrTenantNotFound is a tenant that does not exist or is inactive.
+var ErrTenantNotFound = errors.New("tenant not found or inactive")
+
+// ErrNotFound is a service credential the tenant does not have.
+var ErrNotFound = errors.New("service client not found")
+
 func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) Service {
 	return &service{db: db, logger: logger, hydraClient: hydraClient}
 }
@@ -86,7 +95,7 @@ func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client) Serv
 func (s *service) Create(tenantID uuid.UUID, req *CreateServiceClientRequest) (*ServiceClient, *ClientCredentials, error) {
 	for _, scope := range req.Scopes {
 		if !allowedScopes[scope] {
-			return nil, nil, apierror.NewPublic(fmt.Sprintf("scope %q is not allowed for service clients", scope))
+			return nil, nil, fmt.Errorf("%w: %q", ErrScopeNotAllowed, scope)
 		}
 	}
 
@@ -95,7 +104,7 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateServiceClientRequest) (*
 		return nil, nil, fmt.Errorf("failed to verify tenant: %w", err)
 	}
 	if !tenantExists {
-		return nil, nil, apierror.NewPublic("tenant not found or inactive")
+		return nil, nil, ErrTenantNotFound
 	}
 
 	clientID, err := generateHydraClientID()
@@ -169,7 +178,10 @@ func (s *service) ListByTenant(tenantID uuid.UUID, limit, offset int) ([]*Servic
 func (s *service) Revoke(tenantID, id uuid.UUID) error {
 	var sc ServiceClient
 	if err := s.db.Where("tenant_id = ?", tenantID).First(&sc, "id = ?", id).Error; err != nil {
-		return fmt.Errorf("service client not found: %w", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to find the service client: %w", err)
 	}
 
 	if err := s.db.Model(&sc).Update("revoked_at", gorm.Expr("NOW()")).Error; err != nil {

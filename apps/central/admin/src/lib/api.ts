@@ -192,12 +192,28 @@ export interface Capabilities {
   magic_link: boolean
   mfa: string[]
   signup_modes: string[]
+  account_deletion?: boolean
+  backchannel_logout?: boolean
+  token_introspection?: boolean
+  device_authorization?: boolean
+  terms_acceptance?: boolean
   token_exchange: boolean
   ciba: boolean
 }
 
 export const capabilitiesApi = {
   get: () => api.get<Capabilities>('/api/v1/capabilities'),
+}
+
+/** What the API says about itself (GET /health): the deployed version and the database migrations it ships. */
+export interface Health {
+  status: string
+  version: string
+  migrations?: string[]
+}
+
+export const healthApi = {
+  get: () => api.get<Health>('/health'),
 }
 
 // Clients API

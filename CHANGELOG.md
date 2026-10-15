@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+### Changed
+
+- **Service credential refusals name their reason.** `POST
+  /api/v1/tenants/{id}/service-clients` answers `400 invalid_scope` for a
+  scope a service credential may not have and `404 not_found` for a tenant
+  that does not exist or is inactive; revoking one the tenant does not have is
+  `404 not_found`. A failure on Authway's side is `500` — it was `400` (issuing)
+  or `404` (revoking). The three endpoints are now in the published contract.
+
+### Fixed
+
+- The admin console's settings page showed values it had not read — an
+  environment, an internal address, token lifetimes, a PKCE requirement and
+  component versions that were not this deployment's. It now shows the
+  addresses it uses, the API's `/health` (deployed version, last migration)
+  and what the deployment offers. Deleting a tenant says what it does (only an
+  empty tenant is deleted) and why it was refused.
+
 ## [0.18.0] - 2026-10-15
 
 > Minor, no breaking change. The account screen's second round: a user
