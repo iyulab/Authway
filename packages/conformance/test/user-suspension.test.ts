@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
-import { Provider, type TestClient, type TestUser } from '../src/provider.js'
+import { randomToken } from '../src/pkce.js'
+import { Provider, REDIRECT_URI, type TestClient, type TestUser } from '../src/provider.js'
 
-const provider = new Provider(loadConfig())
+const config = loadConfig()
+const provider = new Provider(config)
 
 const WITH_REFRESH = ['openid', 'profile', 'email', 'offline_access']
 
@@ -65,4 +67,88 @@ describe('suspending a user', () => {
     const after = await provider.login(client, user, { scopes: WITH_REFRESH })
     expect(after.kind).toBe('code')
   })
+})
+
+// An access token issued before the suspension is refused by everything that
+// asks the provider about it — Authway's own endpoints, userinfo and
+// introspection — whichever form it was issued in. Only a resource server
+// that verifies a JWT itself keeps accepting it until it expires.
+describe("a suspended user's access tokens", () => {
+  const cleanup: Array<() => Promise<void>> = []
+  let resourceServer: TestClient & { secret: string }
+
+  beforeAll(async () => {
+    const res = await provider.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: await provider.tenantId(),
+        name: `conformance-rs-${randomToken(4)}`,
+        public: false,
+        grant_types: ['client_credentials'],
+        scopes: ['openid'],
+      }),
+    })
+    expect(res.status, await res.clone().text()).toBe(201)
+    const created = (await res.json()) as { client: { id: string; client_id: string }; credentials: { client_secret: string } }
+    resourceServer = { id: created.client.id, clientId: created.client.client_id, secret: created.credentials.client_secret }
+    cleanup.push(() => provider.deleteClient(resourceServer))
+  })
+
+  afterAll(async () => {
+    for (const done of cleanup.reverse()) await done()
+  })
+
+  const introspect = async (token: string): Promise<boolean> => {
+    const res = await fetch(`${config.api}/api/v1/oauth2/introspect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${encodeURIComponent(resourceServer.clientId)}:${encodeURIComponent(resourceServer.secret)}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({ token }),
+    })
+    expect(res.status).toBe(200)
+    return ((await res.json()) as { active: boolean }).active
+  }
+
+  for (const strategy of ['opaque', 'jwt'] as const) {
+    it(`are refused at once (${strategy} access tokens)`, async () => {
+      const res = await provider.admin('/api/v1/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: await provider.tenantId(),
+          name: `conformance-suspended-${strategy}-${randomToken(4)}`,
+          public: true,
+          redirect_uris: [REDIRECT_URI],
+          allowed_origins: ['http://localhost:9999'],
+          grant_types: ['authorization_code', 'refresh_token'],
+          scopes: ['openid', 'profile', 'email'],
+          access_token_strategy: strategy,
+        }),
+      })
+      expect(res.status, await res.clone().text()).toBe(201)
+      const { client: created } = (await res.json()) as { client: { id: string; client_id: string } }
+      const client: TestClient = { id: created.id, clientId: created.client_id }
+      cleanup.push(() => provider.deleteClient(client))
+
+      const user = await provider.inviteAndAccept()
+      const outcome = await provider.login(client, user)
+      if (outcome.kind !== 'code') throw new Error(`Signing in failed: ${JSON.stringify(outcome)}`)
+      cleanup.push(() => provider.deleteUser(outcome.sub))
+      const token = outcome.tokens.access_token
+      const profile = (): Promise<Response> =>
+        fetch(`${config.api}/api/v1/profile/me`, { headers: { Authorization: `Bearer ${token}` } })
+
+      expect((await profile()).status).toBe(200)
+      expect((await provider.userinfo(token)).status).toBe(200)
+      expect(await introspect(token)).toBe(true)
+
+      const suspended = await provider.admin(`/api/v1/users/${outcome.sub}`, { method: 'PUT', body: JSON.stringify({ active: false }) })
+      expect(suspended.status).toBe(200)
+
+      expect((await profile()).status).toBe(401)
+      expect((await provider.userinfo(token)).status).toBe(401)
+      expect(await introspect(token)).toBe(false)
+    })
+  }
 })

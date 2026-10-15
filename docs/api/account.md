@@ -96,8 +96,10 @@ An administrator can also **suspend** a user instead of deleting them
 way, and signing in is refused with `403 account_suspended` — after the user
 has given the right password or otherwise proved who they are — until the
 suspension is lifted (`"active": true`). The account, its connections and
-second factor are kept. JWT access tokens already issued stay valid until they
-expire.
+second factor are kept. Access tokens already issued are refused at once by
+everything that asks the provider about them — Authway's own endpoints,
+userinfo and token introspection; only an API that verifies a JWT access token
+itself keeps accepting it until it expires.
 
 ---
 

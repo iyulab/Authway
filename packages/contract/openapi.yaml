@@ -2290,8 +2290,10 @@ paths:
                     back-channel logout are told) and signing in is refused
                     with `403 account_suspended` once the user has proved who
                     they are. true lifts the suspension. The account, its
-                    connections and second factor are kept. JWT access tokens
-                    already issued stay valid until they expire. Sent as
+                    connections and second factor are kept. Access tokens
+                    already issued are refused at once by Authway's endpoints,
+                    userinfo and introspection; only a resource server that
+                    verifies a JWT itself accepts one until it expires. Sent as
                     `user.suspended` / `user.reactivated` events.
                   type: boolean
       responses:
