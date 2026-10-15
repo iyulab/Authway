@@ -2,6 +2,16 @@
 
 ### Changed
 
+- **A client's `grant_types` are limited to the grants the provider serves:**
+  `authorization_code`, `refresh_token`, `client_credentials` and
+  `urn:ietf:params:oauth:grant-type:device_code`. Anything else is refused
+  with `400 unsupported_grant_type` — `implicit` (a client is registered for
+  the code response type only, so it never worked), `password` (not offered;
+  RFC 9700 says it must not be used) and unknown names, which were stored and
+  did nothing. The codes `public_client_with_password_grant` and
+  `confidential_client_unsupported_grants` are gone with them. The authorization
+  server's discovery document still lists `implicit` among its grant types; it
+  cannot be configured not to.
 - **A user in the administration API names their connections instead of a
   provider.** `connections` lists the sign-in providers the account is linked
   to; `provider` is gone — it said `local` for every account, since nothing

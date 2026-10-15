@@ -35,6 +35,9 @@ func (e *ConfigError) Error() string {
 func validateClientConfig(public bool, clientSecret string, grantTypes []string, redirectURIs []string, allowedOrigins []string) *ConfigError {
 	gt := normalizeGrantTypes(grantTypes)
 
+	if cerr := validateGrantTypes(gt); cerr != nil {
+		return cerr
+	}
 	if cerr := validateRedirectURIForm(redirectURIs); cerr != nil {
 		return cerr
 	}
@@ -51,24 +54,14 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 			}
 		}
 
-		// Public clients use PKCE — `client_credentials` and `password` grants
-		// require a confidential client.
-		for _, t := range gt {
-			if t == "client_credentials" {
-				return &ConfigError{
-					Code:    "public_client_with_client_credentials",
-					Field:   "grant_types",
-					Message: "Public clients cannot use the client_credentials grant",
-					Hint:    "Machine-to-machine (M2M) clients must be confidential — set public=false.",
-				}
-			}
-			if t == "password" {
-				return &ConfigError{
-					Code:    "public_client_with_password_grant",
-					Field:   "grant_types",
-					Message: "Public clients cannot use the password grant",
-					Hint:    "The password grant requires a confidential client; consider using authorization_code + PKCE instead.",
-				}
+		// Public clients use PKCE — the client_credentials grant requires a
+		// confidential client.
+		if containsAny(gt, "client_credentials") {
+			return &ConfigError{
+				Code:    "public_client_with_client_credentials",
+				Field:   "grant_types",
+				Message: "Public clients cannot use the client_credentials grant",
+				Hint:    "Machine-to-machine (M2M) clients must be confidential — set public=false.",
 			}
 		}
 
@@ -86,18 +79,29 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 	}
 
 	// Confidential clients (server-side web apps, M2M, backend services).
-	// At least one credential-bearing grant must be present, otherwise the
-	// secret is meaningless and the client is mis-typed.
-	if len(gt) > 0 && !containsAny(gt, "authorization_code", "client_credentials", "refresh_token", "password", deviceCodeGrant) {
-		return &ConfigError{
-			Code:    "confidential_client_unsupported_grants",
-			Field:   "grant_types",
-			Message: "Confidential clients must use a credential-bearing grant",
-			Hint:    "Use one of: authorization_code, client_credentials, refresh_token, password, " + deviceCodeGrant + ".",
+	return validateRedirectURIRequirement(gt, redirectURIs)
+}
+
+// supportedGrantTypes are the grants the authorization server serves to a
+// registered client. Others are refused rather than stored: implicit cannot
+// be used (a client is registered for the code response type only), the
+// resource owner password grant is not offered (RFC 9700 §2.4 says it MUST
+// NOT be used), and an unknown name would be kept as configuration that
+// does nothing.
+var supportedGrantTypes = []string{"authorization_code", "refresh_token", "client_credentials", deviceCodeGrant}
+
+func validateGrantTypes(normalizedGrants []string) *ConfigError {
+	for _, g := range normalizedGrants {
+		if !containsAny(supportedGrantTypes, g) {
+			return &ConfigError{
+				Code:    "unsupported_grant_type",
+				Field:   "grant_types",
+				Message: fmt.Sprintf("%q is not a grant this provider offers", g),
+				Hint:    "Use authorization_code (with refresh_token for renewals), client_credentials for machine-to-machine, or " + deviceCodeGrant + " for devices without a browser.",
+			}
 		}
 	}
-
-	return validateRedirectURIRequirement(gt, redirectURIs)
+	return nil
 }
 
 // validateAccessTokenStrategy accepts "" (inherit the deployment-wide strategy)
@@ -135,7 +139,7 @@ func validateAccessTokenStrategy(strategy string) *ConfigError {
 // reported first — those describe *what the client is*, this one only describes
 // what it is missing.
 func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []string) *ConfigError {
-	if !containsAny(normalizedGrants, "authorization_code", "implicit") {
+	if !containsAny(normalizedGrants, "authorization_code") {
 		return nil
 	}
 	if len(redirectURIs) > 0 {
@@ -144,7 +148,7 @@ func validateRedirectURIRequirement(normalizedGrants []string, redirectURIs []st
 	return &ConfigError{
 		Code:    "redirect_grant_without_redirect_uris",
 		Field:   "redirect_uris",
-		Message: "Clients using authorization_code or implicit must declare at least one redirect_uri",
+		Message: "Clients using authorization_code must declare at least one redirect_uri",
 		Hint:    "Add the callback URL the authorization server redirects to (e.g. https://app.example.com/signin-oidc). Machine-to-machine clients using only client_credentials do not need one.",
 	}
 }

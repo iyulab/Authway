@@ -145,10 +145,9 @@ the offending `field`, a human `detail`, and an actionable `hint`.
 |------|---------|-----|
 | `public_client_with_secret` | `public=true` and `client_secret` non-empty | Either remove the secret (use PKCE) or set `public=false` |
 | `public_client_with_client_credentials` | `public=true` and `grant_types` includes `client_credentials` | M2M clients must be confidential |
-| `public_client_with_password_grant` | `public=true` and `grant_types` includes `password` | Use authorization_code + PKCE |
+| `unsupported_grant_type` | A `grant_types` entry is not one the provider offers — `implicit`, `password` and unknown names are refused | Use `authorization_code` (with `refresh_token`), `client_credentials`, or `urn:ietf:params:oauth:grant-type:device_code` |
 | `public_client_missing_allowed_origins` | `public=true` with `authorization_code`, a web redirect URI (`https://…`, or `http://` to a named host such as `localhost`) and no `allowed_origins` | Set `allowed_origins` to the SPA origin(s). A native app needs none — see below |
 | `invalid_redirect_uri` | A `redirect_uris` entry is not an absolute URI, or carries a fragment | Use `https://app.example.com/callback`, `http://127.0.0.1/callback` or `com.example.app:/callback` |
-| `confidential_client_unsupported_grants` | `public=false` with no credential-bearing grant | Use one of: authorization_code, client_credentials, refresh_token, password |
 | `public_client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a public client | A public client uses PKCE; register a confidential client if it can keep a secret |
 | `invalid_initiate_login_uri`, `invalid_client_uri` | The address is not an absolute `https` URL, or has a fragment | Give the application's own https address |
 | `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address (as written, or by what its host name resolves to) | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |

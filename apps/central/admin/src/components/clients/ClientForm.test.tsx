@@ -37,7 +37,7 @@ describe('ClientForm — redirect_uris is conditional on grant type', () => {
 
     expect(
       await screen.findByText(
-        'At least one Redirect URI is required for Authorization Code / Implicit'
+        'At least one Redirect URI is required for Authorization Code'
       )
     ).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()

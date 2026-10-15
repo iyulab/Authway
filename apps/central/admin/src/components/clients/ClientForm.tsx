@@ -76,14 +76,12 @@ export const clientFormSchema = z.object({
 }).superRefine((data, ctx) => {
   // Mirrors the server rule (validateRedirectURIRequirement): redirect_uris is
   // mandatory exactly for the grants that redirect the user-agent back.
-  const redirectsUserAgent = data.grant_types.some(
-    (g) => g === 'authorization_code' || g === 'implicit'
-  )
+  const redirectsUserAgent = data.grant_types.includes('authorization_code')
   if (redirectsUserAgent && data.redirect_uris.trim() === '') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['redirect_uris'],
-      message: 'At least one Redirect URI is required for Authorization Code / Implicit',
+      message: 'At least one Redirect URI is required for Authorization Code',
     })
   }
 
@@ -238,9 +236,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   const scopes = watch('scopes') || []
   const enabledAuthProviders = watch('enabled_auth_providers') || []
   const isPublic = watch('public')
-  const redirectsUserAgent = grantTypes.some(
-    (g) => g === 'authorization_code' || g === 'implicit'
-  )
+  const redirectsUserAgent = grantTypes.includes('authorization_code')
   const needsAllowedOrigins =
     isPublic && grantTypes.includes('authorization_code') && usesBrowserRedirect(watch('redirect_uris') || '')
 
@@ -403,7 +399,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
         {...register('access_token_strategy')}
         label="Access Token Format"
         options={ACCESS_TOKEN_STRATEGIES}
-        helperText="JWT lets a resource server validate this client's tokens offline via OIDC discovery (JWKS) — but a JWT cannot be revoked before it expires. Leave on Default unless an API needs offline validation."
+        helperText="JWT lets a resource server validate this client's tokens offline via OIDC discovery (JWKS) — but a resource server that validates it offline keeps accepting it until it expires, even after the user signs out or is suspended. Leave on Default unless an API needs offline validation."
         error={errors.access_token_strategy?.message}
       />
 

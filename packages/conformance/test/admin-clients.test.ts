@@ -92,6 +92,24 @@ describe('admin API: managing clients', () => {
     expect(refusal.field).toBe('enabled_auth_providers')
   })
 
+  // Only grants the provider serves are kept: implicit cannot be used with a
+  // client registered for the code response type, the password grant is not
+  // offered (RFC 9700), and an unknown name would be configuration that does nothing.
+  it('refuses a grant the provider does not offer', async () => {
+    for (const grant of ['implicit', 'password', 'not-a-grant']) {
+      const res = await provider.admin(`/api/v1/clients/${confidentialClient.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ grant_types: ['authorization_code', grant] }),
+      })
+      await conform('PUT', '/api/v1/clients/{id}', res.clone())
+      expect(res.status, grant).toBe(400)
+      const refusal = (await res.json()) as { code: string; field: string }
+      expect(refusal.code, grant).toBe('unsupported_grant_type')
+      expect(refusal.field).toBe('grant_types')
+    }
+    expect((await read(confidentialClient)).grant_types).not.toContain('implicit')
+  })
+
   // A page holds at most 100 clients: asking for more gets 100, not a silent default.
   it('answers a page of at most 100, newest first', async () => {
     const res = await provider.admin(`/api/v1/clients?limit=500`)

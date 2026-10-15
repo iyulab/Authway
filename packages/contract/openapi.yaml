@@ -1374,7 +1374,7 @@ paths:
                     tokens of that session. An empty string clears it.
                     Offered when capabilities.backchannel_logout is true.
                   type: string
-                grant_types: { type: array, items: { type: string } }
+                grant_types: { type: array, items: { type: string, enum: [authorization_code, refresh_token, client_credentials, 'urn:ietf:params:oauth:grant-type:device_code'] } }
                 scopes: { type: array, items: { type: string } }
                 enabled_auth_providers:
                   description: Sign-in methods to offer — at least one. Left out, email and google. An empty list or an unknown name is 400 invalid_enabled_auth_providers.
@@ -1518,7 +1518,7 @@ paths:
                     Offered when capabilities.backchannel_logout is true.
                   type: string
                 allowed_origins: { type: array, items: { type: string } }
-                grant_types: { type: array, items: { type: string } }
+                grant_types: { type: array, items: { type: string, enum: [authorization_code, refresh_token, client_credentials, 'urn:ietf:params:oauth:grant-type:device_code'] } }
                 scopes: { type: array, items: { type: string } }
                 enabled_auth_providers:
                   description: Left out, unchanged. At least one; an empty list or an unknown name is 400 invalid_enabled_auth_providers.
@@ -3277,7 +3277,7 @@ components:
             server, such as a link-local one (`invalid_backchannel_logout_uri`).
           type: string
         allowed_origins: { type: [array, 'null'], items: { type: string } }
-        grant_types: { type: array, items: { type: string } }
+        grant_types: { type: array, items: { type: string, enum: [authorization_code, refresh_token, client_credentials, 'urn:ietf:params:oauth:grant-type:device_code'] } }
         scopes: { type: array, items: { type: string } }
         enabled_auth_providers: { type: [array, 'null'], items: { type: string } }
         active: { type: boolean }
