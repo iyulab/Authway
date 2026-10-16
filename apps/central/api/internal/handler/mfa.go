@@ -222,13 +222,16 @@ func (h *MFAHandler) refuse(c *fiber.Ctx, userID uuid.UUID, err error, fault str
 	return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", fault)
 }
 
-// factorProof reads the proof of the second factor that comes with a request
-// to change it: {"code": "..."} — a current authenticator code or an unused
-// recovery code.
+// FactorProofRequest is the proof of the second factor that comes with a
+// request to change it: a current authenticator code or an unused recovery
+// code.
+type FactorProofRequest struct {
+	Code string `json:"code"`
+}
+
+// factorProof reads a FactorProofRequest.
 func factorProof(c *fiber.Ctx) string {
-	var body struct {
-		Code string `json:"code"`
-	}
+	var body FactorProofRequest
 	_ = c.BodyParser(&body)
 	return strings.TrimSpace(body.Code)
 }

@@ -105,6 +105,21 @@ describe('token introspection', () => {
     expect(await res.json()).toEqual({ active: false })
   })
 
+  // RFC 7662 section 2.1: the token is in the form body. One in the query
+  // string — where it would sit in every request log — is not read.
+  it('reads the token from the form body, not the query string', async () => {
+    const res = await fetch(`${config.api}${PATH}?token=${encodeURIComponent(accessToken)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${encodeURIComponent(resourceServer.clientId)}:${encodeURIComponent(resourceServer.secret)}`).toString('base64')}`,
+      },
+      body: '',
+    })
+    await conform('POST', PATH, res.clone())
+    expect(res.status).toBe(400)
+  })
+
   it('answers only a confidential client that proves who it is', async () => {
     for (const [id, secret] of [
       [resourceServer.clientId, `${resourceServer.secret}x`],

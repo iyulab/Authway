@@ -110,6 +110,12 @@
 
 ### Fixed
 
+- **Token introspection reads its form body only.** `POST
+  /api/v1/oauth2/introspect` also took `token`, `client_id` and
+  `client_secret` from the query string, where they end up in request logs;
+  RFC 7662 and the contract name the form body. A test now holds every
+  request body the contract declares — JSON or form — to the one the server
+  reads.
 - **The contract names everything a client registration accepts:**
   `description`, `skip_consent` and `skip_logout_consent` on `POST
   /api/v1/clients` were accepted and not declared. A test now holds the

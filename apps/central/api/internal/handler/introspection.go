@@ -44,7 +44,11 @@ var contractClaims = []string{"tenant_id", "email", "name", "auth_time"}
 // expired, revoked, or another tenant's — is answered {"active": false},
 // which does not tell them apart.
 func (h *IntrospectionHandler) Introspect(c *fiber.Ctx) error {
-	id, secret, ok := clientCredentials(c)
+	// Only the form body is read (RFC 7662 section 2.1): a token in the query
+	// string would sit in every log the request passes.
+	var form IntrospectionRequest
+	_ = c.BodyParser(&form)
+	id, secret, ok := clientCredentials(c, form)
 	if !ok {
 		return refuseCaller(c)
 	}
@@ -55,7 +59,7 @@ func (h *IntrospectionHandler) Introspect(c *fiber.Ctx) error {
 		return refuseCaller(c)
 	}
 
-	token := c.FormValue("token")
+	token := form.Token
 	if token == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
@@ -136,10 +140,20 @@ func refuseCaller(c *fiber.Ctx) error {
 	})
 }
 
+// IntrospectionRequest is the form an introspection request carries. The
+// caller's id and secret are in it when it does not send them as HTTP Basic;
+// token_type_hint is accepted and not relied on.
+type IntrospectionRequest struct {
+	Token         string `form:"token"`
+	TokenTypeHint string `form:"token_type_hint"`
+	ClientID      string `form:"client_id"`
+	ClientSecret  string `form:"client_secret"`
+}
+
 // clientCredentials reads a client's id and secret from the Authorization
 // header (client_secret_basic — both parts form-encoded, RFC 6749 §2.3.1) or
 // from the form (client_secret_post).
-func clientCredentials(c *fiber.Ctx) (id, secret string, ok bool) {
+func clientCredentials(c *fiber.Ctx, form IntrospectionRequest) (id, secret string, ok bool) {
 	if header := c.Get(fiber.HeaderAuthorization); strings.HasPrefix(header, "Basic ") {
 		raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(header, "Basic "))
 		if err != nil {
@@ -156,7 +170,7 @@ func clientCredentials(c *fiber.Ctx) (id, secret string, ok bool) {
 			return "", "", false
 		}
 	} else {
-		id, secret = c.FormValue("client_id"), c.FormValue("client_secret")
+		id, secret = form.ClientID, form.ClientSecret
 	}
 	return id, secret, id != "" && secret != ""
 }
