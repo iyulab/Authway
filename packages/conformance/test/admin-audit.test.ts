@@ -6,7 +6,7 @@ import { Provider } from '../src/provider.js'
 
 const provider = new Provider(loadConfig())
 
-type Entry = { id: string; action: string; success: boolean; resource_id: string; resource_type: string; created_at: string }
+type Entry = { id: string; action: string; success: boolean; severity: string; actor_id: string | null; resource_id: string; resource_type: string; created_at: string }
 
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
 
@@ -75,6 +75,15 @@ describe('admin API: reading the audit log', () => {
       // The kind of resource: the entry's own finds it, another does not.
       expect(await find(`resource_type=${entry.resource_type}`)).toHaveLength(1)
       expect(await find(`resource_type=${entry.resource_type === 'user' ? 'client' : 'user'}`)).toHaveLength(0)
+
+      // Its severity, whether it succeeded, and who did it: the entry's own
+      // value finds it, another does not.
+      expect(await find(`severity=${entry.severity}`)).toHaveLength(1)
+      expect(await find(`severity=${entry.severity === 'critical' ? 'info' : 'critical'}`)).toHaveLength(0)
+      expect(await find(`success=${entry.success}`)).toHaveLength(1)
+      expect(await find(`success=${!entry.success}`)).toHaveLength(0)
+      if (entry.actor_id) expect(await find(`actor_id=${entry.actor_id}`)).toHaveLength(1)
+      expect(await find('actor_id=00000000-0000-0000-0000-000000000001')).toHaveLength(0)
 
       // When: a window that ends before the entry, or starts after it, is empty.
       const at = new Date(entry.created_at).getTime()
