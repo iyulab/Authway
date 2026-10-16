@@ -10,6 +10,20 @@ type Entry = { id: string; action: string; success: boolean; resource_id: string
 
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
 
+/**
+ * An entry is written just after the change it records, so a read straight
+ * after may not show it yet: ask until it does, for as long as a busy
+ * provider might take.
+ */
+async function eventually(find: () => Promise<Entry[]>, withinMs = 20_000): Promise<Entry[]> {
+  const deadline = Date.now() + withinMs
+  for (;;) {
+    const entries = await find()
+    if (entries.length > 0 || Date.now() > deadline) return entries
+    await new Promise((r) => setTimeout(r, 250))
+  }
+}
+
 describe('admin API: reading the audit log', () => {
   const name = `conformance-${randomToken(6)}`
   let webhookId: string
@@ -23,15 +37,12 @@ describe('admin API: reading the audit log', () => {
     expect(created.status).toBe(201)
     webhookId = ((await created.json()) as { webhook: { id: string } }).webhook.id
 
-    // The entry is written asynchronously; give it a moment.
-    let entries: Entry[] = []
-    for (let i = 0; i < 20 && entries.length === 0; i++) {
+    const entries = await eventually(async () => {
       const res = await provider.admin(`/api/v1/audit/logs?action=webhook.created&resource_id=${webhookId}&limit=5`)
       await conform('GET', '/api/v1/audit/logs', res)
       expect(res.status).toBe(200)
-      entries = ((await res.json()) as { logs: Entry[] }).logs
-      if (entries.length === 0) await new Promise((r) => setTimeout(r, 250))
-    }
+      return ((await res.json()) as { logs: Entry[] }).logs
+    })
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({ action: 'webhook.created', resource_id: webhookId, success: true })
 
@@ -56,11 +67,7 @@ describe('admin API: reading the audit log', () => {
       return ((await res.json()) as { logs: Entry[] }).logs
     }
     try {
-      let entries: Entry[] = []
-      for (let i = 0; i < 20 && entries.length === 0; i++) {
-        entries = await find('action=webhook.created')
-        if (entries.length === 0) await new Promise((r) => setTimeout(r, 250))
-      }
+      const entries = await eventually(() => find('action=webhook.created'))
       expect(entries).toHaveLength(1)
       const [entry] = entries
       expect(entry.resource_type).toBeTruthy()

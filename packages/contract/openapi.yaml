@@ -2085,7 +2085,9 @@ paths:
       operationId: listAuditLogs
       description: |
         One page of the tenant's audit log, newest first. A filter that is not
-        well formed is refused (code invalid_request), never ignored.
+        well formed is refused (code invalid_request), never ignored. An entry
+        is written just after the change it records, not as part of it: a read
+        made straight after a change may not show it yet.
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
