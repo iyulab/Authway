@@ -56,6 +56,7 @@ func stagingConfig() *Config {
 	c.App.FrontendURL = "https://authway-auth-ui-stg.pages.dev"
 	c.Admin.Password = "a-strong-staging-password"
 	c.Admin.APIKey = "staging-admin-key"
+	c.Hydra.TokenHookKeys = []string{"staging-token-hook-key"}
 	c.Security.TOTPEncryptionKey = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
 	// The deploy sends mail through Sendway (EMAIL_USE_SENDWAY=true).
 	c.Email.UseSendway = true
@@ -79,6 +80,19 @@ func TestValidateRejectsStagingMissingAdminAPIKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "admin.api_key") {
 		t.Errorf("error should name admin.api_key, got: %v", err)
+	}
+}
+
+func TestValidateRejectsStagingMissingTokenHookKey(t *testing.T) {
+	c := stagingConfig()
+	c.Hydra.TokenHookKeys = nil
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("staging must fail closed on a missing token hook key: the authorization server would issue no token")
+	}
+	if !strings.Contains(err.Error(), "AUTHWAY_HYDRA_TOKEN_HOOK_KEY") {
+		t.Errorf("error should name AUTHWAY_HYDRA_TOKEN_HOOK_KEY, got: %v", err)
 	}
 }
 

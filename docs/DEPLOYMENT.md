@@ -130,7 +130,12 @@ presenting the key in `X-Authway-Hook-Key`; the API holds the same key
 address, so the call stays inside the environment; that address may resolve
 to a private one, which `CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES` refuses — the
 hook address, and only it, is listed as the exception. If the hook does not
-answer, the authorization server issues no token.
+answer, the authorization server issues no token — keep the API at one replica
+or more (`--min-replicas 1`): a request made at the authorization server's own
+token endpoint while the API is starting from zero can fail. Requests at the
+API's endpoint start it first. The hook settings go to the public process
+only: the authorization server refuses to start with the hook's key settings
+but no address.
 
 Pass passwords, keys and connection strings with `--secrets` and refer to
 them with `secretref:`. A plain `--env-vars` value is part of the app

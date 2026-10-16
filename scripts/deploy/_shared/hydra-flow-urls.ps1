@@ -46,7 +46,9 @@ function Get-HydraFlowUrls {
 # refuses: the hook, and only the hook, is the exception.
 #
 # The key Hydra presents to the hook is a secret and is not here
-# (publish-hydra.core.ps1).
+# (publish-hydra.core.ps1). The hook settings go to the public app only: Hydra
+# refuses to start with them but without the address, and the admin process
+# issues no tokens.
 # ============================================================
 
 function Get-HydraTokenRoute {
@@ -66,6 +68,9 @@ function Get-HydraTokenRoute {
     return [ordered]@{
         WEBFINGER_OIDC_DISCOVERY_TOKEN_URL     = "$api/oauth2/token"
         OAUTH2_TOKEN_HOOK_URL                  = $hook
+        OAUTH2_TOKEN_HOOK_AUTH_TYPE            = 'api_key'
+        OAUTH2_TOKEN_HOOK_AUTH_CONFIG_NAME     = 'X-Authway-Hook-Key'
+        OAUTH2_TOKEN_HOOK_AUTH_CONFIG_IN       = 'header'
         CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS = $hook
     }
 }

@@ -514,6 +514,11 @@ func (c *Config) Validate() error {
 		if c.Admin.APIKey == "" {
 			errors = append(errors, "CRITICAL: admin.api_key (AUTHWAY_ADMIN_API_KEY) must be set outside development — required for /api/v1/clients/* and other admin endpoints")
 		}
+		// Fail-closed: without the key the token hook is not served, and an
+		// authorization server configured to call it issues no token at all.
+		if len(c.Hydra.TokenHookKeys) == 0 {
+			errors = append(errors, "CRITICAL: AUTHWAY_HYDRA_TOKEN_HOOK_KEY must be set outside development — the authorization server calls the token hook with it before it issues any token")
+		}
 		// Fail-closed: TOTP secrets and provider credentials must be encrypted
 		// at rest. An absent or malformed key would silently fall back to
 		// plaintext storage.

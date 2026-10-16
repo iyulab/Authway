@@ -15,6 +15,7 @@ func productionConfig() *Config {
 	c.App.Environment = "production"
 	c.App.FrontendURL = "https://login.example.com"
 	c.Admin.APIKey = "k"
+	c.Hydra.TokenHookKeys = []string{"h"}
 	c.Security.TOTPEncryptionKey = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
 	c.Email.SMTPHost = "smtp.example.com"
 	return c

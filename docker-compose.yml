@@ -120,6 +120,9 @@ services:
       # API_URL (scripts/deploy/_shared/hydra-flow-urls.ps1).
       WEBFINGER_OIDC_DISCOVERY_TOKEN_URL: http://localhost:8080/oauth2/token
       OAUTH2_TOKEN_HOOK_URL: http://host.docker.internal:8080/internal/token-hook
+      OAUTH2_TOKEN_HOOK_AUTH_TYPE: api_key
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_NAME: X-Authway-Hook-Key
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_IN: header
       OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE: local-development-token-hook-key
       SECRETS_SYSTEM: youReallyNeedToChangeThis
       # Receivers of back-channel logout calls run on this machine here; every

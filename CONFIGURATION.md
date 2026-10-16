@@ -58,7 +58,7 @@ These have development defaults but **MUST** be changed for production:
 | `AUTHWAY_ADMIN_PASSWORD` | Admin console password | `admin123` | **20+ character strong password** |
 | `AUTHWAY_ADMIN_API_KEY` | Key for the management API | Generated in development | **Random key** — the API refuses to start without it |
 | `AUTHWAY_TOTP_ENCRYPTION_KEY` | Encrypts stored two-factor secrets and provider credentials (AES-256-GCM) | None (plaintext, development only) | **Base64 of exactly 32 random bytes** — the API refuses to start without it |
-| `AUTHWAY_HYDRA_TOKEN_HOOK_KEY` | The key the authorization server presents when it calls the token hook (comma-separated: every one is accepted, while it is being changed) | `local-development-token-hook-key` in development | **Random key**, the same as the authorization server's `OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE` — without it the hook is not served and the authorization server issues no token ([DEPLOYMENT.md](docs/DEPLOYMENT.md)) |
+| `AUTHWAY_HYDRA_TOKEN_HOOK_KEY` | The key the authorization server presents when it calls the token hook (comma-separated: every one is accepted, while it is being changed) | `local-development-token-hook-key` in development | **Random key**, the same as the authorization server's `OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE` — the API refuses to start without it: the authorization server would issue no token ([DEPLOYMENT.md](docs/DEPLOYMENT.md)) |
 | `AUTHWAY_APP_ENVIRONMENT` | Environment name | `development` | **Must be `production`** |
 | `AUTHWAY_DATABASE_SSL_MODE` | DB SSL mode | `disable` | **Must be `require`** |
 
