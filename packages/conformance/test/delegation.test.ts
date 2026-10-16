@@ -278,6 +278,45 @@ describe('exchanging a delegation', () => {
     expect(notADelegation.body.error).toBe('invalid_request')
   })
 
+  it('gives an opaque access token whose introspection names the actor', async (ctx) => {
+    if (!offered) ctx.skip()
+    const opaque = await provider.createDelegatingClient()
+    try {
+      const outcome = await provider.login(opaque, user, { scopes: ['openid', 'delegation'] })
+      if (outcome.kind !== 'code') throw new Error('granting the delegation failed')
+      const ownHandle = claimsOf(outcome.tokens.id_token ?? '').delegation_grant as string
+      const { token_endpoint } = await provider.discovery()
+      const res = await fetch(token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: TOKEN_EXCHANGE_GRANT,
+          subject_token: ownHandle,
+          subject_token_type: 'urn:authway:params:oauth:token-type:delegation-grant',
+          client_id: opaque.clientId,
+          client_secret: opaque.secret ?? '',
+        }),
+      })
+      expect(res.status).toBe(200)
+      const { access_token } = (await res.json()) as { access_token: string }
+      expect(access_token.split('.').length).not.toBe(3)
+
+      const introspected = await fetch(`${api}/api/v1/oauth2/introspect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: access_token, client_id: opaque.clientId, client_secret: opaque.secret ?? '' }),
+      })
+      await conform('POST', '/api/v1/oauth2/introspect', introspected.clone())
+      expect(introspected.status).toBe(200)
+      const answer = (await introspected.json()) as Record<string, unknown>
+      expect(answer.active).toBe(true)
+      expect(answer.sub).toBe(outcome.sub)
+      expect(answer.act).toEqual({ sub: opaque.clientId })
+    } finally {
+      await provider.deleteClient(opaque)
+    }
+  })
+
   it('is refused once the delegation is revoked', async (ctx) => {
     if (!offered) ctx.skip()
     const [granted] = await adminDelegations({ client_id: agent.clientId, user_id: sub })

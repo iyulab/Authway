@@ -110,7 +110,11 @@ func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
 	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
 	prepared, refused := h.exchanger.Prepare(c.UserContext(), form, clientID)
 	if refused != nil {
-		h.logExchange(c, nil, clientID, refused.Code)
+		// A refusal of a delegation that exists is recorded against it;
+		// a handle that names none has nothing to record against.
+		if prepared != nil {
+			h.logExchange(c, prepared.Delegation, clientID, refused.Code)
+		}
 		return tokenError(c, refused.Status, refused.Code, refused.Description)
 	}
 	status, headers, body, err := h.send(c, []byte(prepared.Form.Encode()))

@@ -155,7 +155,9 @@ type Exchanged struct {
 // Prepare checks a token exchange request and builds the assertion grant
 // request for it. clientID is the client the request authenticates as — not
 // yet verified: the authorization server verifies it, and the token hook
-// holds the assertion to it.
+// holds the assertion to it. A refusal of a delegation that exists comes with
+// it (Exchanged.Delegation, no Form), so the refusal can be recorded against
+// it.
 func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID string) (*Exchanged, *OAuthError) {
 	if form.Get("subject_token") == "" || form.Get("subject_token_type") != SubjectTokenType {
 		return nil, refuse(400, "invalid_request", "subject_token must be a delegation handle (subject_token_type "+SubjectTokenType+").")
@@ -178,24 +180,25 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 	}
 	// A handle is no use to anyone but the client it was granted to.
 	if d.ClientID != clientID {
-		return nil, refuse(400, "invalid_grant", "The delegation does not exist or was revoked.")
+		return &Exchanged{Delegation: d}, refuse(400, "invalid_grant", "The delegation does not exist or was revoked.")
 	}
+	known := &Exchanged{Delegation: d}
 	if why := d.usable(); why != "" {
-		return nil, refuse(400, "invalid_grant", "The delegation cannot be used now: "+why+".")
+		return known, refuse(400, "invalid_grant", "The delegation cannot be used now: "+why+".")
 	}
 	clientScopes, clientAudience, mayAct, err := x.clients.ExchangeScopes(clientID)
 	if err != nil {
-		return nil, refuse(500, "server_error", "The client could not be read.")
+		return known, refuse(500, "server_error", "The client could not be read.")
 	}
 	if !mayAct {
-		return nil, refuse(400, "unauthorized_client", "The client is not registered for token exchange.")
+		return known, refuse(400, "unauthorized_client", "The client is not registered for token exchange.")
 	}
 	ceiling := intersect(d.Scopes, clientScopes)
 	scopes := ceiling
 	if requested := strings.Fields(form.Get("scope")); len(requested) > 0 {
 		for _, s := range requested {
 			if !slices.Contains(ceiling, s) {
-				return nil, refuse(400, "invalid_scope", fmt.Sprintf("%q is not within what the user delegated.", s))
+				return known, refuse(400, "invalid_scope", fmt.Sprintf("%q is not within what the user delegated.", s))
 			}
 		}
 		scopes = requested
@@ -203,13 +206,13 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 	audiences := form["audience"]
 	for _, a := range audiences {
 		if !slices.Contains(clientAudience, a) {
-			return nil, refuse(400, "invalid_target", fmt.Sprintf("%q is not an audience the client is registered for.", a))
+			return known, refuse(400, "invalid_target", fmt.Sprintf("%q is not an audience the client is registered for.", a))
 		}
 	}
 
 	issuer := x.issuerBase + "/" + clientID
 	if err := x.ensureTrusted(issuer, clientID, clientScopes); err != nil {
-		return nil, refuse(503, "temporarily_unavailable", "The authorization server could not be prepared for the exchange.")
+		return known, refuse(503, "temporarily_unavailable", "The authorization server could not be prepared for the exchange.")
 	}
 	now := time.Now()
 	assertion, err := x.signer.Sign(jwt.MapClaims{
@@ -223,7 +226,7 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 		"exp":           now.Add(time.Minute).Unix(),
 	})
 	if err != nil {
-		return nil, refuse(500, "server_error", "The exchange could not be signed.")
+		return known, refuse(500, "server_error", "The exchange could not be signed.")
 	}
 
 	out := url.Values{}
@@ -296,6 +299,22 @@ func (x *Exchanger) Forget(clientID string) {
 	x.mu.Lock()
 	delete(x.trusted, clientID)
 	x.mu.Unlock()
+}
+
+// Distrust removes the authorization server's trust in a client's issuer —
+// when the client is deleted, so no trust outlives the client it was made for.
+func (x *Exchanger) Distrust(clientID string) error {
+	x.Forget(clientID)
+	existing, err := x.engine.TrustedIssuers(x.issuerBase + "/" + clientID)
+	if err != nil {
+		return err
+	}
+	for _, t := range existing {
+		if err := x.engine.DistrustIssuer(t.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func intersect(a, b []string) []string {

@@ -60,6 +60,8 @@ type service struct {
 	// call (a client's back-channel logout address); names resolves them.
 	outbound outbound.Policy
 	names    outbound.Resolver
+	// onDeleted is told the client_id of each deleted client (OnDeleted).
+	onDeleted func(clientID string)
 }
 
 // Option adjusts a client service.
@@ -69,6 +71,12 @@ type Option func(*service)
 // server call. Without it, only public https addresses.
 func CallableAddresses(policy outbound.Policy) Option {
 	return func(s *service) { s.outbound = policy }
+}
+
+// OnDeleted calls fn with the OAuth client_id of each client deleted, after
+// the deletion — for what was set up elsewhere for that client.
+func OnDeleted(fn func(clientID string)) Option {
+	return func(s *service) { s.onDeleted = fn }
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger, hydraClient *hydra.Client, opts ...Option) Service {
@@ -755,6 +763,9 @@ func (s *service) delete(client *Client) (SyncStatus, error) {
 	s.logger.Info("Client deleted from database",
 		zap.String("id", id.String()),
 		zap.String("hydra_sync_state", syncStatus.State))
+	if s.onDeleted != nil {
+		s.onDeleted(client.ClientID)
+	}
 	return syncStatus, nil
 }
 

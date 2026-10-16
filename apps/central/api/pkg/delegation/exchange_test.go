@@ -46,10 +46,20 @@ func (e *engineTrust) TrustedIssuers(issuer string) ([]hydra.TrustedIssuer, erro
 	return out, nil
 }
 func (e *engineTrust) TrustIssuer(t hydra.TrustedIssuer) error {
+	t.ID = uuid.NewString()
 	e.trusted = append(e.trusted, t)
 	return nil
 }
-func (e *engineTrust) DistrustIssuer(string) error { return nil }
+func (e *engineTrust) DistrustIssuer(id string) error {
+	kept := e.trusted[:0]
+	for _, t := range e.trusted {
+		if t.ID != id {
+			kept = append(kept, t)
+		}
+	}
+	e.trusted = kept
+	return nil
+}
 
 type clientScopes map[string][]string
 
@@ -174,5 +184,35 @@ func TestClientFromRequest(t *testing.T) {
 	}
 	if got := ClientFromRequest("", url.Values{}); got != "" {
 		t.Errorf("none: %q", got)
+	}
+}
+
+// A deleted client's trust at the authorization server goes with it, and the
+// next exchange (were the client to come back) sets it up again.
+func TestDistrust_RemovesTheClientsTrust(t *testing.T) {
+	x, _, trust := newTestExchanger(t)
+	if _, refused := x.Prepare(context.Background(), exchangeForm(nil), "agent"); refused != nil {
+		t.Fatal(refused)
+	}
+	if err := x.Distrust("agent"); err != nil {
+		t.Fatal(err)
+	}
+	if len(trust.trusted) != 0 {
+		t.Fatalf("trust left behind: %+v", trust.trusted)
+	}
+	if _, refused := x.Prepare(context.Background(), exchangeForm(nil), "agent"); refused != nil || len(trust.trusted) != 1 {
+		t.Fatalf("trust not set up again: %v %d", refused, len(trust.trusted))
+	}
+}
+
+// A refusal of a delegation that exists names it, so it can be recorded.
+func TestPrepare_ARefusalOfAKnownDelegationNamesIt(t *testing.T) {
+	x, d, _ := newTestExchanger(t)
+	got, refused := x.Prepare(context.Background(), exchangeForm(map[string]string{"scope": "orders.write"}), "agent")
+	if refused == nil || got == nil || got.Delegation.ID != d.ID || got.Form != nil {
+		t.Fatalf("got %+v, %v", got, refused)
+	}
+	if got, _ := x.Prepare(context.Background(), exchangeForm(map[string]string{"subject_token": "nope"}), "agent"); got != nil {
+		t.Fatal("an unknown handle named a delegation")
 	}
 }

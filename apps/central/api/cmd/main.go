@@ -180,8 +180,20 @@ func main() {
 	// The credentials clients hold at other identity providers are sealed with
 	// the same at-rest key as the second-factor secrets.
 	client.SealSecretsWith(totpCipher)
+	// The token exchange of delegations (set up below, once the client
+	// service exists): a deleted client's trust at the authorization server
+	// goes with it.
+	var exchanger *delegation.Exchanger
 	clientService := client.NewService(db, zapLogger, hydraClient,
-		client.CallableAddresses(outbound.Policy{AllowPrivate: cfg.Security.AllowPrivateTargets}))
+		client.CallableAddresses(outbound.Policy{AllowPrivate: cfg.Security.AllowPrivateTargets}),
+		client.OnDeleted(func(clientID string) {
+			if exchanger == nil {
+				return
+			}
+			if err := exchanger.Distrust(clientID); err != nil {
+				zapLogger.Error("Failed to remove the authorization server's trust for a deleted client", zap.Error(err), zap.String("client_id", clientID))
+			}
+		}))
 	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
 		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
 	}
@@ -377,7 +389,6 @@ func main() {
 	// A client exchanges a delegation there (RFC 8693): the authorization
 	// server issues the token by its assertion grant, on an assertion signed
 	// with a key kept in the database. Without the key, no exchange.
-	var exchanger *delegation.Exchanger
 	if signer, err := delegation.LoadSigner(db, totpCipher); err != nil {
 		zapLogger.Error("Token exchange is off: the delegation signing key could not be loaded", zap.Error(err))
 	} else {
