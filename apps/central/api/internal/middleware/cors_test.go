@@ -26,6 +26,8 @@ func newCORSApp() *fiber.App {
 	app.Use(CORS([]string{consoleOrigin}, func(origin string) bool { return origin == registeredOrigin }))
 	ok := func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) }
 	app.Get("/.well-known/authway-config", ok)
+	app.Get("/.well-known/openid-configuration", ok)
+	app.Get("/.well-known/oauth-authorization-server", ok)
 	app.Get("/api/v1/capabilities", ok)
 	app.Get("/api/v1/profile/me", ok)
 	app.Post("/api/v1/users/mfa/setup", ok)
