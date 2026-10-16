@@ -5,6 +5,7 @@ import { AuthwayClient } from '@authway/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
 import AccountConnections from './AccountConnections'
+import AccountDelegations from './AccountDelegations'
 import { getConfig } from '../config'
 
 /** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
@@ -376,6 +377,7 @@ const AccountPage: React.FC = () => {
       call={call}
       signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
     />
+    <AccountDelegations call={call} />
     </>,
   )
 }
