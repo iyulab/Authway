@@ -90,8 +90,7 @@ func (a *AppleService) GetOAuthConfig(clientID string) (*AppleOAuthConfig, error
 	if err != nil {
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
-	if clientData.AppleOAuthEnabled && nonEmpty(clientData.AppleClientID) && nonEmpty(clientData.AppleTeamID) &&
-		nonEmpty(clientData.AppleKeyID) && nonEmpty(clientData.ApplePrivateKey) {
+	if clientData.UsesOwnApple() {
 		return &AppleOAuthConfig{
 			ClientID:    *clientData.AppleClientID,
 			TeamID:      *clientData.AppleTeamID,

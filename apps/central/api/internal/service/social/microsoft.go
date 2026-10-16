@@ -83,7 +83,7 @@ func (m *MicrosoftService) GetOAuthConfig(clientID string) (*MicrosoftOAuthConfi
 	if err != nil {
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
-	if clientData.MicrosoftOAuthEnabled && nonEmpty(clientData.MicrosoftClientID) && nonEmpty(clientData.MicrosoftClientSecret) {
+	if clientData.UsesOwnMicrosoft() {
 		own := &MicrosoftOAuthConfig{ClientID: *clientData.MicrosoftClientID, ClientSecret: *clientData.MicrosoftClientSecret, RedirectURL: m.config.RedirectURL}
 		if clientData.MicrosoftTenantID != nil {
 			own.TenantID = *clientData.MicrosoftTenantID

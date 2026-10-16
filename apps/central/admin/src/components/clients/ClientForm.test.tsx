@@ -254,10 +254,12 @@ describe('ClientForm — social providers follow the server capabilities', () =>
 
   it('keeps a provider the client has its own credentials for', async () => {
     vi.spyOn(capabilitiesApi, 'get').mockResolvedValue({ data: capabilities } as Awaited<ReturnType<typeof capabilitiesApi.get>>)
-    renderForm({ initialData: { ...baseClient, github_oauth_enabled: true } })
+    renderForm({ initialData: { ...baseClient, github_oauth_enabled: true, apple_oauth_enabled: true } })
 
     await waitFor(() => expect(screen.getByLabelText('Microsoft')).toBeDisabled())
     expect(screen.getByLabelText('GitHub')).toBeEnabled()
+    // Apple and Microsoft follow the same rule as Google and GitHub.
+    expect(screen.getByLabelText('Apple')).toBeEnabled()
   })
 })
 

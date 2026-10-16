@@ -305,16 +305,16 @@ type CreateClientRequest struct {
 	GrantTypes   []string `json:"grant_types" validate:"required,min=1"`
 	Scopes       []string `json:"scopes" validate:"required,min=1"`
 
-	// Google OAuth Settings (optional)
+	// The client's own sign-in provider apps (optional). The four providers
+	// follow one rule — see providers.go.
 	GoogleOAuthEnabled bool   `json:"google_oauth_enabled"`
-	GoogleClientID     string `json:"google_client_id" validate:"required_with=GoogleOAuthEnabled"`
-	GoogleClientSecret string `json:"google_client_secret" validate:"required_with=GoogleOAuthEnabled"`
-	GoogleRedirectURI  string `json:"google_redirect_uri" validate:"required_with=GoogleOAuthEnabled,omitempty,url"`
+	GoogleClientID     string `json:"google_client_id"`
+	GoogleClientSecret string `json:"google_client_secret"`
+	GoogleRedirectURI  string `json:"google_redirect_uri" validate:"omitempty,url"`
 
-	// GitHub OAuth Settings (optional)
 	GithubOAuthEnabled bool   `json:"github_oauth_enabled"`
-	GithubClientID     string `json:"github_client_id" validate:"required_with=GithubOAuthEnabled"`
-	GithubClientSecret string `json:"github_client_secret" validate:"required_with=GithubOAuthEnabled"`
+	GithubClientID     string `json:"github_client_id"`
+	GithubClientSecret string `json:"github_client_secret"`
 
 	// CORS Allowed Origins for browser-based OAuth flows
 	// Required for SPA clients using Authorization Code Flow with PKCE

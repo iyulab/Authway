@@ -199,6 +199,59 @@ describe('admin API: a chosen client_id', () => {
   })
 })
 
+// The application's own sign-in provider apps follow one rule for all four
+// providers: an enabled provider has every credential, judged with what a
+// change leaves as it is; credentials of a provider not enabled are kept.
+describe("admin API: a client's own provider credentials", () => {
+  let id: string | undefined
+
+  afterAll(async () => {
+    if (id) await provider.admin(`/api/v1/clients/${id}`, { method: 'DELETE' })
+  })
+
+  const refusedOn = async (res: Response, field: string) => {
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'incomplete_provider_credentials', field })
+  }
+
+  it('are complete for an enabled provider, when created and when changed', async () => {
+    const register = async (extra: Record<string, unknown>) =>
+      provider.admin('/api/v1/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: await provider.tenantId(),
+          name: `conformance-providers-${randomToken(6)}`,
+          grant_types: ['client_credentials'],
+          scopes: ['openid'],
+          ...extra,
+        }),
+      })
+
+    const incomplete = await register({ apple_oauth_enabled: true, apple_client_id: 'app', apple_team_id: 'T', apple_key_id: 'K' })
+    await conform('POST', '/api/v1/clients', incomplete)
+    await refusedOn(incomplete, 'apple_private_key')
+
+    const kept = await register({ microsoft_client_id: 'app', microsoft_client_secret: 'secret' })
+    await conform('POST', '/api/v1/clients', kept)
+    expect(kept.status).toBe(201)
+    id = ((await kept.json()) as ClientBody).client.id
+
+    const change = (body: Record<string, unknown>) =>
+      provider.admin(`/api/v1/clients/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+
+    const enabled = await change({ microsoft_oauth_enabled: true })
+    await conform('PUT', '/api/v1/clients/{id}', enabled)
+    expect(enabled.status).toBe(200)
+    expect(((await enabled.json()) as ClientBody).client).toMatchObject({ microsoft_oauth_enabled: true })
+
+    const cleared = await change({ microsoft_client_secret: '' })
+    await conform('PUT', '/api/v1/clients/{id}', cleared)
+    await refusedOn(cleared, 'microsoft_client_secret')
+
+    await refusedOn(await change({ github_oauth_enabled: true, github_client_id: 'app' }), 'github_client_secret')
+  })
+})
+
 // A client is registered in the tenant the request is about: the body names
 // it, the X-Tenant-ID header names it, or both name the same one.
 describe('admin API: the tenant a client is registered in', () => {

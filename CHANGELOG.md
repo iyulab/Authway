@@ -2,6 +2,19 @@
 
 ### Changed
 
+- **A client's own sign-in provider apps follow one rule for all four
+  providers.** A provider enabled with `*_oauth_enabled` must have all of its
+  credentials — an id and a secret for Google, GitHub and Microsoft, all four
+  values for Apple — when a client is created and when it is changed (judged
+  with what the change leaves as it is): otherwise `400
+  incomplete_provider_credentials` naming the missing member. Before, only
+  Google and GitHub were checked, only on creation; Microsoft or Apple enabled
+  with a value missing, or a Google or GitHub secret changed to an empty
+  string, silently signed users in with the deployment's app instead.
+  `google_redirect_uri` is no longer required when Google is enabled — without
+  one the deployment's callback is used, as it already was. Credentials given
+  when creating a client for a provider that is not enabled are now kept, as a
+  change keeps them.
 - **A client's `grant_types` are limited to the grants the provider serves:**
   `authorization_code`, `refresh_token`, `client_credentials` and
   `urn:ietf:params:oauth:grant-type:device_code`. Anything else is refused

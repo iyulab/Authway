@@ -317,4 +317,4 @@ authorization request.
 ```
 
 `providers` are the social providers this deployment has credentials for (a
-client may add its own credentials for some of them).
+client may add its own credentials for any of them).

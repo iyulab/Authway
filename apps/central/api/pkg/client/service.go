@@ -261,60 +261,26 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		System:       req.System,
 	}
 
-	// Set Google OAuth if provided
-	if req.GoogleOAuthEnabled {
-		client.GoogleOAuthEnabled = true
-		if req.GoogleClientID != "" {
-			client.GoogleClientID = &req.GoogleClientID
-		}
-		if req.GoogleClientSecret != "" {
-			client.GoogleClientSecret = &req.GoogleClientSecret
-		}
-		if req.GoogleRedirectURI != "" {
-			client.GoogleRedirectURI = &req.GoogleRedirectURI
-		}
-	}
-
-	// Set GitHub OAuth if provided
-	if req.GithubOAuthEnabled {
-		client.GithubOAuthEnabled = true
-		if req.GithubClientID != "" {
-			client.GithubClientID = &req.GithubClientID
-		}
-		if req.GithubClientSecret != "" {
-			client.GithubClientSecret = &req.GithubClientSecret
-		}
-	}
-
-	// Set Microsoft OAuth if provided
-	if req.MicrosoftOAuthEnabled {
-		client.MicrosoftOAuthEnabled = true
-		if req.MicrosoftClientID != "" {
-			client.MicrosoftClientID = &req.MicrosoftClientID
-		}
-		if req.MicrosoftClientSecret != "" {
-			client.MicrosoftClientSecret = &req.MicrosoftClientSecret
-		}
-		if req.MicrosoftTenantID != "" {
-			client.MicrosoftTenantID = &req.MicrosoftTenantID
-		}
-	}
-
-	// Set Apple OAuth if provided
-	if req.AppleOAuthEnabled {
-		client.AppleOAuthEnabled = true
-		if req.AppleClientID != "" {
-			client.AppleClientID = &req.AppleClientID
-		}
-		if req.AppleTeamID != "" {
-			client.AppleTeamID = &req.AppleTeamID
-		}
-		if req.AppleKeyID != "" {
-			client.AppleKeyID = &req.AppleKeyID
-		}
-		if req.ApplePrivateKey != "" {
-			client.ApplePrivateKey = &req.ApplePrivateKey
-		}
+	// The client's own provider apps: what is given is stored, as a change
+	// stores it, and an enabled provider must be complete (providers.go).
+	client.GoogleOAuthEnabled = req.GoogleOAuthEnabled
+	client.GoogleClientID = given(req.GoogleClientID)
+	client.GoogleClientSecret = given(req.GoogleClientSecret)
+	client.GoogleRedirectURI = given(req.GoogleRedirectURI)
+	client.GithubOAuthEnabled = req.GithubOAuthEnabled
+	client.GithubClientID = given(req.GithubClientID)
+	client.GithubClientSecret = given(req.GithubClientSecret)
+	client.MicrosoftOAuthEnabled = req.MicrosoftOAuthEnabled
+	client.MicrosoftClientID = given(req.MicrosoftClientID)
+	client.MicrosoftClientSecret = given(req.MicrosoftClientSecret)
+	client.MicrosoftTenantID = given(req.MicrosoftTenantID)
+	client.AppleOAuthEnabled = req.AppleOAuthEnabled
+	client.AppleClientID = given(req.AppleClientID)
+	client.AppleTeamID = given(req.AppleTeamID)
+	client.AppleKeyID = given(req.AppleKeyID)
+	client.ApplePrivateKey = given(req.ApplePrivateKey)
+	if cerr := validateProviderCredentials(client); cerr != nil {
+		return nil, nil, cerr
 	}
 
 	// Set Authentication Provider Settings
@@ -681,6 +647,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 	if req.ApplePrivateKey != nil {
 		client.ApplePrivateKey = req.ApplePrivateKey
+	}
+	if cerr := validateProviderCredentials(&client); cerr != nil {
+		return nil, SyncStatus{}, cerr
 	}
 
 	// The change is stored and passed on to the authorization server as one

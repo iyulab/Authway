@@ -156,6 +156,7 @@ the offending `field`, a human `detail`, and an actionable `hint`.
 | `invalid_jwks` | A client that authenticates with a key gives neither or both of `jwks` and `jwks_uri`; `jwks` is not a set of 1 to 10 RSA, EC or OKP public keys, or holds a private key; or keys are given to a client that does not authenticate with one | Register the public half only: `{"keys": [{"kty": "RSA", "kid": "…", "n": "…", "e": "AQAB"}]}` |
 | `invalid_jwks_uri` | `jwks_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address | Give the public address the key set is served at |
 | `token_endpoint_auth_method_is_fixed` | An update names a different `token_endpoint_auth_method`, or would make a client that authenticates with a key public | Register a new client and move the application to it |
+| `incomplete_provider_credentials` | A provider is enabled (`google_oauth_enabled` and the like) without all of its credentials — after a change, counting what the change does not name | Give the application's own id and secret (Apple: client id, team id, key id and private key), or set the provider's `*_oauth_enabled` to `false` to use the deployment's |
 | `client_has_no_secret` | `POST /clients/{id}/regenerate-secret` on a client that authenticates with a key | Update `jwks` or `jwks_uri` to change its key |
 
 ### Application-type matrix

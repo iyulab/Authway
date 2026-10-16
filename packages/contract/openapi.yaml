@@ -1378,9 +1378,15 @@ paths:
                   description: |
                     The application signs its users in to Google with its own
                     Google app (the four providers follow one rule): when
-                    enabled and its credentials are set, sign-in with that
-                    provider uses them; otherwise the deployment's. Secrets are
-                    stored sealed and never returned.
+                    enabled, sign-in with that provider uses the application's
+                    credentials, which must then all be set — Google, GitHub
+                    and Microsoft an id and a secret, Apple all four values
+                    (`incomplete_provider_credentials`, field the one missing,
+                    judged with what the request does not change). When not
+                    enabled it uses the deployment's, and credentials given
+                    are kept for when it is. `google_redirect_uri` is optional:
+                    the deployment's callback without one. Secrets are stored
+                    sealed and never returned.
                   type: boolean
                 google_client_id: { type: string }
                 google_client_secret: { type: string, writeOnly: true }
@@ -1392,7 +1398,7 @@ paths:
                 microsoft_client_id: { type: string }
                 microsoft_client_secret: { type: string, writeOnly: true }
                 microsoft_tenant_id: { type: string, description: The app's directory; "common" when not set. }
-                apple_oauth_enabled: { type: boolean, description: Used only when all four Apple values are set. }
+                apple_oauth_enabled: { type: boolean }
                 apple_client_id: { type: string }
                 apple_team_id: { type: string }
                 apple_key_id: { type: string }
@@ -1536,9 +1542,15 @@ paths:
                   description: |
                     The application signs its users in to Google with its own
                     Google app (the four providers follow one rule): when
-                    enabled and its credentials are set, sign-in with that
-                    provider uses them; otherwise the deployment's. Secrets are
-                    stored sealed and never returned.
+                    enabled, sign-in with that provider uses the application's
+                    credentials, which must then all be set — Google, GitHub
+                    and Microsoft an id and a secret, Apple all four values
+                    (`incomplete_provider_credentials`, field the one missing,
+                    judged with what the request does not change). When not
+                    enabled it uses the deployment's, and credentials given
+                    are kept for when it is. `google_redirect_uri` is optional:
+                    the deployment's callback without one. Secrets are stored
+                    sealed and never returned.
                   type: boolean
                 google_client_id: { type: string }
                 google_client_secret: { type: string, writeOnly: true }
@@ -1550,7 +1562,7 @@ paths:
                 microsoft_client_id: { type: string }
                 microsoft_client_secret: { type: string, writeOnly: true }
                 microsoft_tenant_id: { type: string, description: The app's directory; "common" when not set. }
-                apple_oauth_enabled: { type: boolean, description: Used only when all four Apple values are set. }
+                apple_oauth_enabled: { type: boolean }
                 apple_client_id: { type: string }
                 apple_team_id: { type: string }
                 apple_key_id: { type: string }
@@ -3468,6 +3480,7 @@ components:
             insufficient_user_authentication, not_connected,
             last_sign_in_method, invalid_scope, internal_error,
             invalid_enabled_auth_providers, client_id_taken,
+            incomplete_provider_credentials,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.
         field:

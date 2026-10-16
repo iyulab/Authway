@@ -111,7 +111,7 @@ func (g *GoogleService) GetOAuthConfig(clientID string) (*GoogleOAuthConfig, err
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
 
-	if clientData.GoogleOAuthEnabled && clientData.GoogleClientID != nil && clientData.GoogleClientSecret != nil {
+	if clientData.UsesOwnGoogle() {
 		// Use client-specific Google OAuth config
 		redirectURI := g.config.RedirectURL // Default fallback
 		if clientData.GoogleRedirectURI != nil && *clientData.GoogleRedirectURI != "" {

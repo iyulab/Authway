@@ -165,6 +165,3 @@ func setLinkedSubject(u *user.User, provider, subject string) {
 		u.AppleID = &subject
 	}
 }
-
-// nonEmpty reports whether an optional stored credential is set.
-func nonEmpty(s *string) bool { return s != nil && *s != "" }

@@ -79,7 +79,7 @@ func (g *GitHubService) GetOAuthConfig(clientID string) (*GitHubOAuthConfig, err
 	if err != nil {
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
-	if clientData.GithubOAuthEnabled && clientData.GithubClientID != nil && clientData.GithubClientSecret != nil {
+	if clientData.UsesOwnGithub() {
 		return &GitHubOAuthConfig{ClientID: *clientData.GithubClientID, ClientSecret: *clientData.GithubClientSecret, RedirectURL: g.config.RedirectURL}, nil
 	}
 	return &GitHubOAuthConfig{ClientID: g.config.ClientID, ClientSecret: g.config.ClientSecret, RedirectURL: g.config.RedirectURL}, nil

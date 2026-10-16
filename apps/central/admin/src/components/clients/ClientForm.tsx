@@ -257,7 +257,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   }
 
   // A social provider is only worth enabling if someone has credentials for
-  // it: this deployment, or the client itself (its own Google/GitHub app).
+  // it: this deployment, or the client itself (its own provider app — an
+  // enabled one always has its credentials).
   // Until capabilities load — or if they cannot — nothing is disabled; the
   // server refuses an unusable provider at sign-in either way.
   const { data: capabilities } = useQuery({
@@ -268,6 +269,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   const clientHasOwnCredentials: Record<string, boolean> = {
     google: !!initialData?.google_oauth_enabled,
     github: !!initialData?.github_oauth_enabled,
+    microsoft: !!initialData?.microsoft_oauth_enabled,
+    apple: !!initialData?.apple_oauth_enabled,
   }
   const authProviderOptions = AVAILABLE_AUTH_PROVIDERS.map((option) => {
     const unusable =
