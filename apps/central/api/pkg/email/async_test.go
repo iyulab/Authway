@@ -35,12 +35,14 @@ func (s *slowSender) deliver() error {
 	return s.err
 }
 
-func (s *slowSender) SendVerificationEmail(string, string) error  { return s.deliver() }
-func (s *slowSender) SendPasswordResetEmail(string, string) error { return s.deliver() }
+func (s *slowSender) SendVerificationEmail(string, string, string) error  { return s.deliver() }
+func (s *slowSender) SendPasswordResetEmail(string, string, string) error { return s.deliver() }
 func (s *slowSender) SendInvitationEmail(string, string, string, string, string) error {
 	return s.deliver()
 }
-func (s *slowSender) SendMagicLinkEmail(string, string, string, bool) error { return s.deliver() }
+func (s *slowSender) SendMagicLinkEmail(string, string, string, string, bool) error {
+	return s.deliver()
+}
 
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
@@ -59,7 +61,7 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 
 	start := time.Now()
 	for i := 0; i < 5; i++ {
-		if err := a.SendMagicLinkEmail("user@example.com", "https://example.com/link", "BCDF-GHJK", false); err != nil {
+		if err := a.SendMagicLinkEmail("user@example.com", "", "https://example.com/link", "BCDF-GHJK", false); err != nil {
 			t.Fatalf("send %d: %v", i, err)
 		}
 	}
@@ -72,7 +74,7 @@ func TestAsync_ReturnsBeforeTheMailIsSentAndCloseWaitsForIt(t *testing.T) {
 	if err := a.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Close before delivery = %v, want the context's deadline", err)
 	}
-	if err := a.SendMagicLinkEmail("late@example.com", "https://example.com/link", "BCDF-GHJK", false); !errors.Is(err, ErrMailerClosed) {
+	if err := a.SendMagicLinkEmail("late@example.com", "", "https://example.com/link", "BCDF-GHJK", false); !errors.Is(err, ErrMailerClosed) {
 		t.Fatalf("send after Close = %v, want ErrMailerClosed", err)
 	}
 
@@ -96,14 +98,14 @@ func TestAsync_RefusesWhenTheQueueIsFull(t *testing.T) {
 	a := NewAsync(inner, zap.NewNop(), 1, 1)
 	defer func() { close(inner.release); _ = a.Close(context.Background()) }()
 
-	if err := a.SendPasswordResetEmail("a@example.com", "t"); err != nil {
+	if err := a.SendPasswordResetEmail("a@example.com", "", "t"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return inner.active.Load() == 1 }) // the worker holds the first
-	if err := a.SendPasswordResetEmail("b@example.com", "t"); err != nil {
+	if err := a.SendPasswordResetEmail("b@example.com", "", "t"); err != nil {
 		t.Fatalf("second message should wait in the queue: %v", err)
 	}
-	if err := a.SendPasswordResetEmail("c@example.com", "t"); !errors.Is(err, ErrMailQueueFull) {
+	if err := a.SendPasswordResetEmail("c@example.com", "", "t"); !errors.Is(err, ErrMailQueueFull) {
 		t.Fatalf("third message = %v, want ErrMailQueueFull", err)
 	}
 }
@@ -114,7 +116,7 @@ func TestAsync_LogsAFailedSend(t *testing.T) {
 	close(inner.release)
 	a := NewAsync(inner, zap.New(core), 1, 1)
 
-	if err := a.SendPasswordResetEmail("user@example.com", "token"); err != nil {
+	if err := a.SendPasswordResetEmail("user@example.com", "", "token"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	if err := a.Close(context.Background()); err != nil {
@@ -134,7 +136,7 @@ type flakySender struct {
 	calls   atomic.Int32
 }
 
-func (f *flakySender) SendPasswordResetEmail(string, string) error {
+func (f *flakySender) SendPasswordResetEmail(string, string, string) error {
 	if f.calls.Add(1) <= f.fails {
 		return f.failure
 	}
@@ -147,7 +149,7 @@ func TestAsync_RetriesATransientFailure(t *testing.T) {
 	a := NewAsync(inner, zap.New(core), 1, 1)
 	a.retries = []time.Duration{time.Millisecond, time.Millisecond}
 
-	if err := a.SendPasswordResetEmail("user@example.com", "t"); err != nil {
+	if err := a.SendPasswordResetEmail("user@example.com", "", "t"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return inner.calls.Load() >= 3 })
@@ -167,7 +169,7 @@ func TestAsync_DoesNotRetryAPermanentFailure(t *testing.T) {
 	a := NewAsync(inner, zap.NewNop(), 1, 1)
 	a.retries = []time.Duration{time.Millisecond, time.Millisecond}
 
-	_ = a.SendPasswordResetEmail("user@example.com", "t")
+	_ = a.SendPasswordResetEmail("user@example.com", "", "t")
 	_ = a.Close(context.Background())
 	if got := inner.calls.Load(); got != 1 {
 		t.Fatalf("attempts = %d, want 1", got)
@@ -182,7 +184,7 @@ func TestAsync_CloseCutsARetryWaitShort(t *testing.T) {
 	a := NewAsync(inner, zap.New(core), 1, 1)
 	a.retries = []time.Duration{time.Hour}
 
-	_ = a.SendPasswordResetEmail("user@example.com", "t")
+	_ = a.SendPasswordResetEmail("user@example.com", "", "t")
 	waitFor(t, func() bool { return inner.calls.Load() == 1 })
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -202,10 +204,10 @@ type recordingSender struct {
 	links atomic.Int32
 }
 
-func (r *recordingSender) SendPasswordResetEmail(string, string) error {
+func (r *recordingSender) SendPasswordResetEmail(string, string, string) error {
 	return fmt.Errorf("%w: timed out", ErrTransient)
 }
-func (r *recordingSender) SendMagicLinkEmail(string, string, string, bool) error {
+func (r *recordingSender) SendMagicLinkEmail(string, string, string, string, bool) error {
 	r.links.Add(1)
 	return nil
 }
@@ -219,10 +221,10 @@ func TestAsync_AWaitingRetryLeavesTheSenderFree(t *testing.T) {
 	a.retries = []time.Duration{time.Hour}
 	defer func() { _ = a.Close(context.Background()) }()
 
-	if err := a.SendPasswordResetEmail("user@example.com", "t"); err != nil {
+	if err := a.SendPasswordResetEmail("user@example.com", "", "t"); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.SendMagicLinkEmail("other@example.com", "https://example.com/link", "BCDF-GHJK", false); err != nil {
+	if err := a.SendMagicLinkEmail("other@example.com", "", "https://example.com/link", "BCDF-GHJK", false); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return inner.links.Load() == 1 })

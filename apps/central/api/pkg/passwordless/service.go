@@ -21,7 +21,7 @@ import (
 // EmailSender interface for sending emails
 type EmailSender interface {
 	// code is the link's code as the reader types it (XXXX-XXXX).
-	SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error
+	SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error
 }
 
 // InvitationGate reports whether a magic-link sign-in may create a new
@@ -67,13 +67,15 @@ type service struct {
 	frontendURL string
 	codes       crypto.Cipher
 	tokenExpiry time.Duration
+	// organization names a tenant in the mail ("" when it cannot).
+	organization func(tenantID uuid.UUID) string
 }
 
 // NewService wires the passwordless flow. invitations must not be nil — a nil
 // gate is treated as "provisioning denied" rather than "no policy", so a wiring
 // mistake fails closed instead of silently restoring self-registration. codes
 // seals each link's code at rest (the at-rest cipher).
-func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, frontendURL string, codes crypto.Cipher) Service {
+func NewService(db *gorm.DB, userService user.Service, invitations InvitationGate, emailSender EmailSender, logger *zap.Logger, frontendURL string, codes crypto.Cipher, organization func(tenantID uuid.UUID) string) Service {
 	return &service{
 		db:          db,
 		userService: userService,
@@ -83,6 +85,8 @@ func NewService(db *gorm.DB, userService user.Service, invitations InvitationGat
 		frontendURL: frontendURL,
 		codes:       codes,
 		tokenExpiry: 15 * time.Minute,
+
+		organization: organization,
 	}
 }
 
@@ -138,6 +142,14 @@ var errInvalidCode = apierror.NewPublic("this code is not valid; check it, or as
 // mayProvision reports whether a user may be created for this address. It fails
 // closed on a missing gate or a lookup error: the safe answer to "is this
 // address allowed in?" is no.
+// organizationOf is the tenant's name for a mail, or "" without one.
+func (s *service) organizationOf(tenantID uuid.UUID) string {
+	if s.organization == nil {
+		return ""
+	}
+	return s.organization(tenantID)
+}
+
 func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
 	if s.invitations == nil {
 		s.logger.Error("Invitation gate not wired; denying magic-link provisioning")
@@ -230,7 +242,7 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 		isNewUser := tokenType == TokenTypeRegister
 		// A link that could not be handed to the sender gets the same answer
 		// as one that was: the answer must not depend on the address.
-		if err := s.emailSender.SendMagicLinkEmail(email, linkURL, displayCode(code), isNewUser); err != nil {
+		if err := s.emailSender.SendMagicLinkEmail(email, s.organizationOf(tenantID), linkURL, displayCode(code), isNewUser); err != nil {
 			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", email))
 		}
 	}

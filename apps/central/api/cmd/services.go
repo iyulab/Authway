@@ -60,7 +60,7 @@ func InitNewFeatureServices(
 	}
 	// invitationService doubles as the passwordless invitation gate — magic-link
 	// provisioning is allowed only for an invited address (invitation-only).
-	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL, atRest)
+	passwordlessService := passwordless.NewService(db, userService, invitationService, passwordlessEmailAdapter, logger, frontendURL, atRest, tenantService.Name)
 
 	return &NewFeatureServices{
 		AuditService:        auditService,
@@ -135,6 +135,6 @@ type passwordlessEmailAdapterImpl struct {
 	emailService email.EmailService
 }
 
-func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
-	return a.emailService.SendMagicLinkEmail(toEmail, linkURL, code, isNewUser)
+func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+	return a.emailService.SendMagicLinkEmail(toEmail, organization, linkURL, code, isNewUser)
 }

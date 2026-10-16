@@ -53,11 +53,11 @@ func NewService(config Config, logger *zap.Logger) *Service {
 }
 
 // SendVerificationEmail sends an email verification link
-func (s *Service) SendVerificationEmail(toEmail, token string) error {
+func (s *Service) SendVerificationEmail(toEmail, organization, token string) error {
 	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
-	subject := "Authway - 이메일 인증"
-	body, err := renderEmailTemplate("verification", verificationLink)
+	subject := subjectFor("Authway - 이메일 인증", organization)
+	body, err := renderEmailTemplate("verification", organization, verificationLink)
 	if err != nil {
 		return err
 	}
@@ -66,11 +66,11 @@ func (s *Service) SendVerificationEmail(toEmail, token string) error {
 }
 
 // SendPasswordResetEmail sends a password reset link
-func (s *Service) SendPasswordResetEmail(toEmail, token string) error {
+func (s *Service) SendPasswordResetEmail(toEmail, organization, token string) error {
 	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
-	subject := "Authway - 비밀번호 재설정"
-	body, err := renderEmailTemplate("reset", resetLink)
+	subject := subjectFor("Authway - 비밀번호 재설정", organization)
+	body, err := renderEmailTemplate("reset", organization, resetLink)
 	if err != nil {
 		return err
 	}
@@ -90,12 +90,9 @@ func (s *Service) SendInvitationEmail(toEmail, inviterName, tenantName, message,
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via SMTP
-func (s *Service) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
-	subject := "Authway - 로그인 링크"
-	if isNewUser {
-		subject = "Authway - 가입 및 로그인 링크"
-	}
-	body, err := renderMagicLinkTemplate(linkURL, code, isNewUser)
+func (s *Service) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+	subject := subjectFor(magicLinkSubject(isNewUser), organization)
+	body, err := renderMagicLinkTemplate(organization, linkURL, code, isNewUser)
 	if err != nil {
 		return err
 	}
@@ -125,6 +122,34 @@ func (s *Service) sendEmail(to, subject, body string) error {
 // which is the usual way to make a link look like a button in mail.
 const emailButtonTemplate = `{{define "button"}}<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;border-collapse:separate;"><tr><td bgcolor="{{.Color}}" style="background-color:{{.Color}};border-radius:6px;"><a href="{{.Link}}" target="_blank" style="display:inline-block;padding:12px 30px;font-size:16px;font-weight:600;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:6px;background-color:{{.Color}};"><span style="color:#ffffff;">{{.Label}}</span></a></td></tr></table>{{end}}`
 
+// The account a message is about. One address can have accounts in several
+// organizations (tenants); a message about one of them says which.
+const emailOrganizationTemplate = `{{define "organization"}}{{if .}}<p style="background:#EEF2FF;border-radius:4px;padding:10px 12px;color:#3730A3;">이 메일은 <strong>{{.}}</strong> 의 계정에 대한 것입니다.</p>{{end}}{{end}}`
+
+// subjectFor names the organization in a subject, when there is one.
+func subjectFor(subject, organization string) string {
+	if organization == "" {
+		return subject
+	}
+	return subject + " (" + organization + ")"
+}
+
+// organizationLine is the plain-text counterpart of the "organization"
+// template, ending in a blank line; "" without one.
+func organizationLine(organization string) string {
+	if organization == "" {
+		return ""
+	}
+	return "이 메일은 «" + organization + "» 의 계정에 대한 것입니다.\n\n"
+}
+
+func magicLinkSubject(isNewUser bool) string {
+	if isNewUser {
+		return "Authway - 가입 및 로그인 링크"
+	}
+	return "Authway - 로그인 링크"
+}
+
 type emailButton struct {
 	Link  string
 	Label string
@@ -132,7 +157,8 @@ type emailButton struct {
 }
 
 // parseEmailTemplate parses a message template together with the shared
-// button: {{template "button" (button <link> <label> <colour>)}}.
+// button, {{template "button" (button <link> <label> <colour>)}}, and the
+// organization line, {{template "organization" <name>}}.
 func parseEmailTemplate(name, body string) (*template.Template, error) {
 	t := template.New(name).Funcs(template.FuncMap{
 		"button": func(link, label, color string) emailButton {
@@ -142,11 +168,14 @@ func parseEmailTemplate(name, body string) (*template.Template, error) {
 	if _, err := t.Parse(emailButtonTemplate); err != nil {
 		return nil, err
 	}
+	if _, err := t.Parse(emailOrganizationTemplate); err != nil {
+		return nil, err
+	}
 	return t.Parse(body)
 }
 
 // renderEmailTemplate renders the verification or password reset message.
-func renderEmailTemplate(templateType, link string) (string, error) {
+func renderEmailTemplate(templateType, organization, link string) (string, error) {
 	var tmpl string
 	switch templateType {
 	case "verification":
@@ -156,7 +185,7 @@ func renderEmailTemplate(templateType, link string) (string, error) {
 	default:
 		return "", fmt.Errorf("email: no %q template", templateType)
 	}
-	return executeEmailTemplate(templateType, tmpl, map[string]string{"Link": link})
+	return executeEmailTemplate(templateType, tmpl, map[string]string{"Link": link, "Organization": organization})
 }
 
 // executeEmailTemplate renders a message. A message that fails to render is
@@ -213,6 +242,7 @@ func getVerificationTemplate() string {
 <body>
     <div class="container">
         <h1>🔐 Authway 이메일 인증</h1>
+        {{template "organization" .Organization}}
         <p>안녕하세요!</p>
         <p>Authway 회원가입을 환영합니다. 아래 버튼을 클릭하여 이메일 주소를 인증해주세요.</p>
         {{template "button" (button .Link "이메일 인증하기" "#4F46E5")}}
@@ -276,6 +306,7 @@ func getPasswordResetTemplate() string {
 <body>
     <div class="container">
         <h1>🔑 비밀번호 재설정</h1>
+        {{template "organization" .Organization}}
         <p>안녕하세요!</p>
         <p>Authway 계정의 비밀번호 재설정을 요청하셨습니다.</p>
         <p>아래 버튼을 클릭하여 새로운 비밀번호를 설정하세요.</p>
@@ -342,7 +373,7 @@ func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string
 // renderMagicLinkTemplate renders passwordless magic link HTML template. The
 // code does what the link does, typed into the screen that started the
 // sign-in — for a reader on another device than that screen.
-func renderMagicLinkTemplate(linkURL, code string, isNewUser bool) (string, error) {
+func renderMagicLinkTemplate(organization, linkURL, code string, isNewUser bool) (string, error) {
 	headline := "🔗 로그인 링크"
 	intro := "아래 버튼을 클릭하여 Authway에 로그인하세요."
 	if isNewUser {
@@ -367,6 +398,7 @@ func renderMagicLinkTemplate(linkURL, code string, isNewUser bool) (string, erro
 <body>
     <div class="container">
         <h1>{{.Headline}}</h1>
+        {{template "organization" .Organization}}
         <p>{{.Intro}}</p>
         {{template "button" (button .LinkURL "로그인하기" "#4F46E5")}}
         <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
@@ -386,6 +418,8 @@ func renderMagicLinkTemplate(linkURL, code string, isNewUser bool) (string, erro
 		"Intro":    intro,
 		"LinkURL":  linkURL,
 		"Code":     code,
+
+		"Organization": organization,
 	})
 }
 

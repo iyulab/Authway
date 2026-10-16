@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -34,6 +35,9 @@ type EmailHandler struct {
 	validator    *validator.Validate
 	logger       *zap.Logger
 	auditService audit.Service
+	// organization names a tenant in the mail ("" when it cannot): one
+	// address can have accounts in several.
+	organization func(tenantID uuid.UUID) string
 }
 
 // NewEmailHandler creates a new email handler
@@ -46,6 +50,7 @@ func NewEmailHandler(
 	validator *validator.Validate,
 	logger *zap.Logger,
 	auditService audit.Service,
+	organization func(tenantID uuid.UUID) string,
 ) *EmailHandler {
 	return &EmailHandler{
 		emailRepo:    emailRepo,
@@ -56,6 +61,7 @@ func NewEmailHandler(
 		validator:    validator,
 		logger:       logger,
 		auditService: auditService,
+		organization: organization,
 	}
 }
 
@@ -147,7 +153,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	}
 
 	// Send verification email
-	if err := h.emailSvc.SendVerificationEmail(usr.Email, verification.Token); err != nil {
+	if err := h.emailSvc.SendVerificationEmail(usr.Email, h.organizationOf(usr.TenantID), verification.Token); err != nil {
 		h.logger.Error("Failed to send verification email", zap.Error(err))
 	}
 
@@ -244,7 +250,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	// Send reset email
-	if err := h.emailSvc.SendPasswordResetEmail(usr.Email, reset.Token); err != nil {
+	if err := h.emailSvc.SendPasswordResetEmail(usr.Email, h.organizationOf(usr.TenantID), reset.Token); err != nil {
 		h.logger.Error("Failed to send reset email", zap.Error(err))
 	}
 
@@ -386,4 +392,12 @@ func (h *EmailHandler) RegisterRoutes(router fiber.Router) {
 // address, so the refusal says why, as signing in does; the link stays unused.
 func refuseSuspendedReset(c *fiber.Ctx) error {
 	return apierror.Refuse(c, http.StatusForbidden, "account_suspended", "This account is suspended")
+}
+
+// organizationOf is the tenant's name for a mail, or "" without one.
+func (h *EmailHandler) organizationOf(tenantID uuid.UUID) string {
+	if h.organization == nil {
+		return ""
+	}
+	return h.organization(tenantID)
 }

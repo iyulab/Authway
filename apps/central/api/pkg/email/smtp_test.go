@@ -128,7 +128,7 @@ func (f *fakeSMTP) sent() ([]string, string) {
 
 func TestSMTP_SendsAMessageWithTextAndHTMLAndAnEncodedSubject(t *testing.T) {
 	f := startFakeSMTP(t, "250 ok")
-	if err := f.service(t, "").SendMagicLinkEmail("user@example.com", "https://login.example.com/magic-link?token=abc", "BCDF-GHJK", false); err != nil {
+	if err := f.service(t, "").SendMagicLinkEmail("user@example.com", "", "https://login.example.com/magic-link?token=abc", "BCDF-GHJK", false); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	commands, data := f.sent()
@@ -187,7 +187,7 @@ func TestSMTP_SendsAMessageWithTextAndHTMLAndAnEncodedSubject(t *testing.T) {
 
 func TestSMTP_AuthenticatesWhenGivenAUsername(t *testing.T) {
 	f := startFakeSMTP(t, "250 ok", "AUTH PLAIN")
-	if err := f.service(t, "mailer").SendVerificationEmail("user@example.com", "t"); err != nil {
+	if err := f.service(t, "mailer").SendVerificationEmail("user@example.com", "", "t"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	commands, _ := f.sent()
@@ -198,12 +198,12 @@ func TestSMTP_AuthenticatesWhenGivenAUsername(t *testing.T) {
 
 func TestSMTP_ADeferralIsTriedAgainARefusalIsNot(t *testing.T) {
 	deferred := startFakeSMTP(t, "451 try later")
-	err := deferred.service(t, "").SendVerificationEmail("user@example.com", "t")
+	err := deferred.service(t, "").SendVerificationEmail("user@example.com", "", "t")
 	if !errors.Is(err, ErrTransient) {
 		t.Fatalf("4xx: %v, want ErrTransient", err)
 	}
 	refused := startFakeSMTP(t, "550 no such user")
-	err = refused.service(t, "").SendVerificationEmail("user@example.com", "t")
+	err = refused.service(t, "").SendVerificationEmail("user@example.com", "", "t")
 	if err == nil || errors.Is(err, ErrTransient) {
 		t.Fatalf("5xx: %v, want a final failure", err)
 	}
@@ -215,7 +215,7 @@ func TestSMTP_AnUnreachableServerIsTriedAgain(t *testing.T) {
 	ln.Close()
 	s := NewService(Config{SMTPHost: "127.0.0.1", SMTPPort: addr.Port, FromEmail: "a@example.com"}, zap.NewNop())
 	start := time.Now()
-	if err := s.SendVerificationEmail("user@example.com", "t"); !errors.Is(err, ErrTransient) {
+	if err := s.SendVerificationEmail("user@example.com", "", "t"); !errors.Is(err, ErrTransient) {
 		t.Fatalf("closed port: %v, want ErrTransient", err)
 	}
 	if time.Since(start) > 10*time.Second {
@@ -228,7 +228,7 @@ func TestSMTP_RequiredStartTLSIsNotSkipped(t *testing.T) {
 	host, port, _ := net.SplitHostPort(f.addr)
 	p, _ := strconv.Atoi(port)
 	s := NewService(Config{SMTPHost: host, SMTPPort: p, SMTPSecurity: SMTPSecurityStartTLS, FromEmail: "a@example.com"}, zap.NewNop())
-	if err := s.SendVerificationEmail("user@example.com", "t"); err == nil || !strings.Contains(err.Error(), "STARTTLS") {
+	if err := s.SendVerificationEmail("user@example.com", "", "t"); err == nil || !strings.Contains(err.Error(), "STARTTLS") {
 		t.Fatalf("server without STARTTLS: %v, want a refusal", err)
 	}
 	if _, data := f.sent(); data != "" {

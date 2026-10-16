@@ -94,6 +94,16 @@ func (s *Service) GetTenantByID(id uuid.UUID) (*Tenant, error) {
 	return &tenant, nil
 }
 
+// Name is the tenant's name — the organization an account belongs to, as
+// mail to the account names it — or "" when it cannot be read.
+func (s *Service) Name(id uuid.UUID) string {
+	t, err := s.GetTenantByID(id)
+	if err != nil {
+		return ""
+	}
+	return t.Name
+}
+
 // SessionTimeout is how long a sign-in session of the tenant's users lasts
 // (its session_timeout setting), or zero when the tenant has none or cannot
 // be read — the caller then applies its default.

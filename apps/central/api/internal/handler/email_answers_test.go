@@ -26,8 +26,8 @@ import (
 // when its queue is full.
 type refusingMailer struct{ email.EmailService }
 
-func (refusingMailer) SendVerificationEmail(string, string) error  { return email.ErrMailQueueFull }
-func (refusingMailer) SendPasswordResetEmail(string, string) error { return email.ErrMailQueueFull }
+func (refusingMailer) SendVerificationEmail(string, string, string) error  { return email.ErrMailQueueFull }
+func (refusingMailer) SendPasswordResetEmail(string, string, string) error { return email.ErrMailQueueFull }
 
 func emailApp(h *EmailHandler) *fiber.App {
 	app := fiber.New()

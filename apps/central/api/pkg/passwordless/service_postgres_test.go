@@ -27,13 +27,14 @@ import (
 // recover the token a test needs to call VerifyMagicLink/InspectMagicLink
 // with. The outbound link is the only place the plaintext still appears.
 type stubEmailSender struct {
-	lastLinkURL string
-	lastCode    string
-	refuse      error
+	lastLinkURL      string
+	lastCode         string
+	lastOrganization string
+	refuse           error
 }
 
-func (s *stubEmailSender) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
-	s.lastLinkURL, s.lastCode = linkURL, code
+func (s *stubEmailSender) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+	s.lastLinkURL, s.lastCode, s.lastOrganization = linkURL, code, organization
 	return s.refuse
 }
 
@@ -110,7 +111,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewService(db, userService, invService, sender, zap.NewNop(), "http://localhost:3001", cipher)
+	svc := NewService(db, userService, invService, sender, zap.NewNop(), "http://localhost:3001", cipher, tenantService.Name)
 	return &fixture{db: db, svc: svc, invitation: invService, tenant: tn, sender: sender}
 }
 
@@ -241,6 +242,11 @@ func TestSendMagicLink_ExistingUser_IsUnaffected(t *testing.T) {
 	if n := f.linkCount(t, email); n != 1 {
 		t.Fatalf("an existing member must still receive a login link, found %d", n)
 	}
+	// The mail names the organization the account is in: one address can
+	// have accounts in several.
+	if f.sender.lastOrganization != f.tenant.Name {
+		t.Errorf("mail names organization %q, want %q", f.sender.lastOrganization, f.tenant.Name)
+	}
 
 	var tokenType string
 	f.db.Raw(`SELECT token_type FROM magic_link_tokens WHERE tenant_id = ? AND email = ?`, f.tenant.ID, email).Scan(&tokenType)
@@ -366,7 +372,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 func TestMayProvision_FailsClosed(t *testing.T) {
 	f := newFixture(t)
 	userService := user.NewService(f.db, zap.NewNop())
-	ungated := NewService(f.db, userService, nil, nil, zap.NewNop(), "http://localhost:3001", nil).(*service)
+	ungated := NewService(f.db, userService, nil, nil, zap.NewNop(), "http://localhost:3001", nil, nil).(*service)
 
 	if ungated.mayProvision(f.tenant.ID, "anyone@example.com") {
 		t.Error("a missing invitation gate must deny provisioning, not allow it")

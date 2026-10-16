@@ -44,7 +44,7 @@ func TestValidateEmail(t *testing.T) {
 func TestRenderEmailTemplate_EmbedsLinkForBothKnownTypes(t *testing.T) {
 	link := "https://auth.example.com/verify?token=abc123"
 
-	verification := mustRender(t)(renderEmailTemplate("verification", link))
+	verification := mustRender(t)(renderEmailTemplate("verification", "", link))
 	if !strings.Contains(verification, link) {
 		t.Error("expected the verification template to embed the link")
 	}
@@ -52,7 +52,7 @@ func TestRenderEmailTemplate_EmbedsLinkForBothKnownTypes(t *testing.T) {
 		t.Error("expected the verification template to use its own subject-matter heading")
 	}
 
-	reset := mustRender(t)(renderEmailTemplate("reset", link))
+	reset := mustRender(t)(renderEmailTemplate("reset", "", link))
 	if !strings.Contains(reset, link) {
 		t.Error("expected the reset template to embed the link")
 	}
@@ -88,12 +88,12 @@ func TestRenderInvitationTemplate_MessageIsConditional(t *testing.T) {
 func TestRenderMagicLinkTemplate_HeadlineDependsOnIsNewUser(t *testing.T) {
 	link := "https://auth.example.com/magic?token=xyz"
 
-	returning := mustRender(t)(renderMagicLinkTemplate(link, "BCDF-GHJK", false))
+	returning := mustRender(t)(renderMagicLinkTemplate("", link, "BCDF-GHJK", false))
 	if strings.Contains(returning, "환영합니다") {
 		t.Error("expected the returning-user template to not use the welcome-new-user headline")
 	}
 
-	newUser := mustRender(t)(renderMagicLinkTemplate(link, "BCDF-GHJK", true))
+	newUser := mustRender(t)(renderMagicLinkTemplate("", link, "BCDF-GHJK", true))
 	if !strings.Contains(newUser, "환영합니다") {
 		t.Error("expected the new-user template to use the welcome headline")
 	}
@@ -114,10 +114,10 @@ func TestEveryMessageStylesItsButtonInline(t *testing.T) {
 	link := "https://auth.example.com/x?token=abc"
 	must := mustRender(t)
 	messages := map[string]string{
-		"verification": must(renderEmailTemplate("verification", link)),
-		"reset":        must(renderEmailTemplate("reset", link)),
+		"verification": must(renderEmailTemplate("verification", "", link)),
+		"reset":        must(renderEmailTemplate("reset", "", link)),
 		"invitation":   must(renderInvitationTemplate("Alice", "Acme", "", link)),
-		"magic link":   must(renderMagicLinkTemplate(link, "BCDF-GHJK", false)),
+		"magic link":   must(renderMagicLinkTemplate("", link, "BCDF-GHJK", false)),
 	}
 	for name, html := range messages {
 		if strings.Contains(html, `class="button"`) || strings.Contains(html, ".button") {
@@ -146,7 +146,7 @@ func TestEveryMessageStylesItsButtonInline(t *testing.T) {
 // An unknown message type is an error, not an empty message that would
 // still be sent.
 func TestRenderEmailTemplate_RefusesAnUnknownType(t *testing.T) {
-	if html, err := renderEmailTemplate("welcome", "https://x.example"); err == nil || html != "" {
+	if html, err := renderEmailTemplate("welcome", "", "https://x.example"); err == nil || html != "" {
 		t.Fatalf("expected an error and no body, got %q, %v", html, err)
 	}
 }
@@ -160,5 +160,33 @@ func mustRender(t *testing.T) func(string, error) string {
 			t.Fatalf("render: %v", err)
 		}
 		return html
+	}
+}
+
+// One address can have accounts in several organizations; a message about one
+// says which — in the subject, the HTML and the text — and an organization's
+// name is text, never markup.
+func TestMessages_NameTheOrganization(t *testing.T) {
+	link := "https://auth.example.com/x?token=abc"
+	for name, html := range map[string]string{
+		"verification": mustRender(t)(renderEmailTemplate("verification", "Acme <b>Labs</b>", link)),
+		"reset":        mustRender(t)(renderEmailTemplate("reset", "Acme <b>Labs</b>", link)),
+		"magic link":   mustRender(t)(renderMagicLinkTemplate("Acme <b>Labs</b>", link, "BCDF-GHJK", false)),
+	} {
+		if !strings.Contains(html, "Acme &lt;b&gt;Labs&lt;/b&gt;") || strings.Contains(html, "<b>Labs</b>") {
+			t.Errorf("%s: the organization is not named, or not escaped", name)
+		}
+	}
+	if html := mustRender(t)(renderEmailTemplate("reset", "", link)); strings.Contains(html, "의 계정에 대한 것입니다") {
+		t.Error("with no organization the line must be left out")
+	}
+	if got := subjectFor("Authway - 비밀번호 재설정", "Acme"); got != "Authway - 비밀번호 재설정 (Acme)" {
+		t.Errorf("subject = %q", got)
+	}
+	if got := subjectFor("Authway - 비밀번호 재설정", ""); got != "Authway - 비밀번호 재설정" {
+		t.Errorf("subject without an organization = %q", got)
+	}
+	if got := organizationLine("Acme"); !strings.HasPrefix(got, "이 메일은 «Acme»") || !strings.HasSuffix(got, "\n\n") {
+		t.Errorf("text line = %q", got)
 	}
 }

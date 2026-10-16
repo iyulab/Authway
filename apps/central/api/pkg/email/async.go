@@ -90,12 +90,12 @@ func (a *Async) Close(ctx context.Context) error {
 	return a.queue.Close(ctx)
 }
 
-func (a *Async) SendVerificationEmail(toEmail, token string) error {
-	return a.send("verification", toEmail, func() error { return a.inner.SendVerificationEmail(toEmail, token) })
+func (a *Async) SendVerificationEmail(toEmail, organization, token string) error {
+	return a.send("verification", toEmail, func() error { return a.inner.SendVerificationEmail(toEmail, organization, token) })
 }
 
-func (a *Async) SendPasswordResetEmail(toEmail, token string) error {
-	return a.send("password_reset", toEmail, func() error { return a.inner.SendPasswordResetEmail(toEmail, token) })
+func (a *Async) SendPasswordResetEmail(toEmail, organization, token string) error {
+	return a.send("password_reset", toEmail, func() error { return a.inner.SendPasswordResetEmail(toEmail, organization, token) })
 }
 
 func (a *Async) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
@@ -104,6 +104,8 @@ func (a *Async) SendInvitationEmail(toEmail, inviterName, tenantName, message, i
 	})
 }
 
-func (a *Async) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
-	return a.send("magic_link", toEmail, func() error { return a.inner.SendMagicLinkEmail(toEmail, linkURL, code, isNewUser) })
+func (a *Async) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+	return a.send("magic_link", toEmail, func() error {
+		return a.inner.SendMagicLinkEmail(toEmail, organization, linkURL, code, isNewUser)
+	})
 }

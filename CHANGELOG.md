@@ -45,6 +45,10 @@
 
 ### Added
 
+- **Verification, password reset and sign-in link mail name the
+  organization** (tenant) the account is in, in the subject and the message.
+  One address can have accounts in several organizations, and the mail did
+  not say which one it was about.
 - **Refusals of an invitation, a webhook or a tenant's settings name the
   member at fault** in `field`, as refusals of a client's settings did:
   `email` or `client_id` for an invitation, `name`, `url`, `events`,

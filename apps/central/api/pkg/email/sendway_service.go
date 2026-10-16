@@ -89,29 +89,29 @@ func NewSendwayEmailService(config SendwayEmailConfig, logger *zap.Logger) *Send
 }
 
 // SendVerificationEmail sends an email verification link via Sendway.
-func (s *SendwayEmailService) SendVerificationEmail(toEmail, token string) error {
+func (s *SendwayEmailService) SendVerificationEmail(toEmail, organization, token string) error {
 	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
 
-	body := fmt.Sprintf("Authway 이메일 인증\n\n아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", verificationLink)
-	htmlBody, err := renderEmailTemplate("verification", verificationLink)
+	body := fmt.Sprintf("Authway 이메일 인증\n\n%s아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", organizationLine(organization), verificationLink)
+	htmlBody, err := renderEmailTemplate("verification", organization, verificationLink)
 	if err != nil {
 		return err
 	}
 
-	return s.sendEmail(toEmail, "Authway - 이메일 인증", body, htmlBody)
+	return s.sendEmail(toEmail, subjectFor("Authway - 이메일 인증", organization), body, htmlBody)
 }
 
 // SendPasswordResetEmail sends a password reset link via Sendway.
-func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, token string) error {
+func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, organization, token string) error {
 	resetLink := maillink.ResetPassword(s.frontendURL, token)
 
-	body := fmt.Sprintf("Authway 비밀번호 재설정\n\n아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", resetLink)
-	htmlBody, err := renderEmailTemplate("reset", resetLink)
+	body := fmt.Sprintf("Authway 비밀번호 재설정\n\n%s아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", organizationLine(organization), resetLink)
+	htmlBody, err := renderEmailTemplate("reset", organization, resetLink)
 	if err != nil {
 		return err
 	}
 
-	return s.sendEmail(toEmail, "Authway - 비밀번호 재설정", body, htmlBody)
+	return s.sendEmail(toEmail, subjectFor("Authway - 비밀번호 재설정", organization), body, htmlBody)
 }
 
 // SendInvitationEmail sends a tenant invitation link via Sendway.
@@ -133,14 +133,11 @@ func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantNa
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via Sendway.
-func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, linkURL, code string, isNewUser bool) error {
-	subject := "Authway - 로그인 링크"
-	if isNewUser {
-		subject = "Authway - 가입 및 로그인 링크"
-	}
+func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+	subject := subjectFor(magicLinkSubject(isNewUser), organization)
 
-	body := fmt.Sprintf("Authway 매직 링크\n\n아래 링크를 클릭하여 로그인하세요:\n%s\n\n다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 이 코드를 입력하세요: %s\n\n링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", linkURL, code)
-	htmlBody, err := renderMagicLinkTemplate(linkURL, code, isNewUser)
+	body := fmt.Sprintf("Authway 매직 링크\n\n%s아래 링크를 클릭하여 로그인하세요:\n%s\n\n다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 이 코드를 입력하세요: %s\n\n링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", organizationLine(organization), linkURL, code)
+	htmlBody, err := renderMagicLinkTemplate(organization, linkURL, code, isNewUser)
 	if err != nil {
 		return err
 	}
