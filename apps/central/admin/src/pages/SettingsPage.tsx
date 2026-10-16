@@ -13,7 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { tenantsApi, authApi, healthApi, capabilitiesApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
-import { Button, Modal, Input } from '@/components/ui'
+import { Button, Modal, Input, ConfirmDialog } from '@/components/ui'
 import { getConfig } from '../config'
 import TenantSettingsForm from '@/components/settings/TenantSettingsForm'
 
@@ -25,10 +25,17 @@ const DELETE_REFUSALS: Record<string, string> = {
   default_tenant_protected: '기본 테넌트는 지울 수 없습니다.',
 }
 
+// Why the API refused to turn the tenant off or on, in the console's words.
+const ACTIVE_REFUSALS: Record<string, string> = {
+  default_tenant_protected: '기본 테넌트는 끌 수 없습니다.',
+  upstream_sync_failed: '일부 클라이언트를 인가 서버에 반영하지 못했습니다. 같은 작업을 다시 하면 마저 반영됩니다.',
+}
+
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient()
-  const { selectedTenant, clearSelectedTenant } = useTenantStore()
+  const { selectedTenant, setSelectedTenant, clearSelectedTenant } = useTenantStore()
 
+  const [showTurnOffConfirm, setShowTurnOffConfirm] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
@@ -46,6 +53,23 @@ const SettingsPage: React.FC = () => {
       toast.error(
         (code && DELETE_REFUSALS[code]) || error.response?.data?.detail || '테넌트를 지우지 못했습니다',
       )
+    },
+  })
+
+  // Turning the tenant off or on — only `active` is sent. Off, none of its
+  // clients signs anyone in or gets tokens; on, each is as its own setting says.
+  const activeMutation = useMutation({
+    mutationFn: (active: boolean) => tenantsApi.update(selectedTenant!.id, { active }),
+    onSuccess: (res, active) => {
+      setShowTurnOffConfirm(false)
+      setSelectedTenant(res.data)
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      toast.success(active ? '테넌트를 켰습니다' : '테넌트를 껐습니다')
+    },
+    onError: (error: any) => {
+      setShowTurnOffConfirm(false)
+      const code: string | undefined = error.response?.data?.code
+      toast.error((code && ACTIVE_REFUSALS[code]) || error.response?.data?.detail || '테넌트를 바꾸지 못했습니다')
     },
   })
 
@@ -338,7 +362,7 @@ const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Danger Zone - 테넌트 삭제 */}
+      {/* Danger Zone - 테넌트 끄기·삭제 */}
       {selectedTenant && (
         <div className="bg-white shadow-sm rounded-lg border-2 border-red-200">
           <div className="px-4 py-5 sm:px-6 border-b border-red-200 bg-red-50">
@@ -349,9 +373,37 @@ const SettingsPage: React.FC = () => {
                   Danger Zone
                 </h3>
                 <p className="mt-1 max-w-2xl text-sm text-red-600">
-                  이 작업은 되돌릴 수 없습니다. 신중하게 진행하세요.
+                  끄면 그 테넌트의 로그인이 모두 멈춥니다. 삭제는 되돌릴 수 없습니다.
                 </p>
               </div>
+            </div>
+          </div>
+          <div className="px-4 py-5 sm:px-6 border-b border-red-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-medium text-gray-900">
+                  {selectedTenant.active ? '테넌트 끄기' : '테넌트 켜기'}
+                </h4>
+                <p className="mt-1 text-sm text-gray-500">
+                  {selectedTenant.active
+                    ? '이 테넌트의 어떤 클라이언트로도 로그인할 수 없고 토큰도 발급되지 않습니다. 가진 토큰은 끝납니다. 기본 테넌트는 끌 수 없습니다.'
+                    : '각 클라이언트가 자기 설정대로 다시 동작합니다. 꺼져 있던 동안 끝난 세션은 돌아오지 않습니다.'}
+                </p>
+              </div>
+              {selectedTenant.active ? (
+                <Button variant="danger" size="sm" onClick={() => setShowTurnOffConfirm(true)}>
+                  테넌트 끄기
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => activeMutation.mutate(true)}
+                  isLoading={activeMutation.isPending}
+                >
+                  테넌트 켜기
+                </Button>
+              )}
             </div>
           </div>
           <div className="px-4 py-5 sm:px-6">
@@ -377,6 +429,17 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showTurnOffConfirm}
+        onClose={() => setShowTurnOffConfirm(false)}
+        onConfirm={() => activeMutation.mutate(false)}
+        title="테넌트 끄기"
+        message={`"${selectedTenant?.name}" 의 사용자는 어떤 클라이언트로도 로그인할 수 없고, 클라이언트가 가진 토큰은 끝납니다. 다시 켜도 끝난 세션은 돌아오지 않습니다. 계속할까요?`}
+        confirmText="끄기"
+        variant="danger"
+        isLoading={activeMutation.isPending}
+      />
 
       {/* Delete Tenant Modal */}
       <Modal

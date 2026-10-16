@@ -145,6 +145,8 @@
   `client_secret` that did not work. A `client_id` whose client was deleted
   can be registered again: it answered `201` with the old client "restored"
   but not registered with the authorization server, so it could not be used.
+- The admin console turns a tenant off (after asking) and on again from its
+  settings page; the default tenant is refused, as the API refuses it.
 - The admin console shows a refusal of a client's settings at the field it
   names (with its hint), not only in a passing message.
 - The page that carries the browser on after a provider sign-in wrote the

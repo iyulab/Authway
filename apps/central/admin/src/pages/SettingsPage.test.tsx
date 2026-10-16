@@ -47,6 +47,37 @@ describe('settings', () => {
     await waitFor(() => expect(error).toHaveBeenCalledWith('사용자가 남아 있어 지울 수 없습니다. 먼저 사용자를 지우세요.'))
   })
 
+  it('turns the tenant off after asking, and on again', async () => {
+    const user = userEvent.setup()
+    const update = vi
+      .spyOn(tenantsApi, 'update')
+      .mockResolvedValueOnce(answer({ id: 't1', name: 'Tenant', slug: 'tenant', active: false }))
+      .mockResolvedValueOnce(answer({ id: 't1', name: 'Tenant', slug: 'tenant', active: true }))
+    render(<SettingsPage />)
+
+    await user.click(await screen.findByRole('button', { name: '테넌트 끄기' }))
+    expect(update).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '끄기' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('t1', { active: false }))
+    expect(useTenantStore.getState().selectedTenant?.active).toBe(false)
+
+    await user.click(await screen.findByRole('button', { name: '테넌트 켜기' }))
+    await waitFor(() => expect(update).toHaveBeenLastCalledWith('t1', { active: true }))
+    expect(useTenantStore.getState().selectedTenant?.active).toBe(true)
+  })
+
+  it('says the default tenant cannot be turned off', async () => {
+    const user = userEvent.setup()
+    const error = vi.spyOn(toast, 'error')
+    vi.spyOn(tenantsApi, 'update').mockRejectedValue({ response: { status: 403, data: { code: 'default_tenant_protected', detail: 'Cannot deactivate the default tenant' } } })
+    render(<SettingsPage />)
+
+    await user.click(await screen.findByRole('button', { name: '테넌트 끄기' }))
+    await user.click(screen.getByRole('button', { name: '끄기' }))
+    await waitFor(() => expect(error).toHaveBeenCalledWith('기본 테넌트는 끌 수 없습니다.'))
+    expect(useTenantStore.getState().selectedTenant?.active).toBe(true)
+  })
+
   it("changes the tenant's settings, sending them whole, and clears the description", async () => {
     const user = userEvent.setup()
     const tenant = {
