@@ -76,7 +76,7 @@ func validateClientConfig(public bool, clientSecret string, grantTypes []string,
 // resource owner password grant is not offered (RFC 9700 §2.4 says it MUST
 // NOT be used), and an unknown name would be kept as configuration that
 // does nothing.
-var supportedGrantTypes = []string{"authorization_code", "refresh_token", "client_credentials", deviceCodeGrant}
+var supportedGrantTypes = []string{"authorization_code", "refresh_token", "client_credentials", deviceCodeGrant, TokenExchangeGrant}
 
 func validateGrantTypes(normalizedGrants []string) *apierror.Refusal {
 	for _, g := range normalizedGrants {
@@ -85,7 +85,7 @@ func validateGrantTypes(normalizedGrants []string) *apierror.Refusal {
 				Code:    "unsupported_grant_type",
 				Field:   "grant_types",
 				Message: fmt.Sprintf("%q is not a grant this provider offers", g),
-				Hint:    "Use authorization_code (with refresh_token for renewals), client_credentials for machine-to-machine, or " + deviceCodeGrant + " for devices without a browser.",
+				Hint:    "Use authorization_code (with refresh_token for renewals), client_credentials for machine-to-machine, " + deviceCodeGrant + " for devices without a browser, or " + TokenExchangeGrant + " to act for a user who delegated to the client.",
 			}
 		}
 	}
@@ -190,6 +190,43 @@ func usesBrowserRedirect(redirectURIs []string) bool {
 // another screen, and the device polls for its tokens. It needs no redirect
 // URI, and a public client may use it — it is meant for exactly those.
 const deviceCodeGrant = "urn:ietf:params:oauth:grant-type:device_code"
+
+// TokenExchangeGrant (RFC 8693) is how a client acts for a user who is not
+// there: it exchanges the delegation the user granted it for a short-lived
+// access token whose subject is the user and whose actor is the client.
+// Authway answers it at its token endpoint; the authorization server does not
+// know it by this name, so it is not part of the client's registration there.
+const TokenExchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange"
+
+// DelegationScope is the scope a client asks for to be granted a delegation:
+// a user who consents to it lets the client act for them, with the other
+// scopes they consented to, until they revoke it. Only a client that may
+// exchange a delegation (TokenExchangeGrant) may ask for it.
+const DelegationScope = "delegation"
+
+// validateDelegation checks the two halves of acting for a user: the scope a
+// client asks for to be granted a delegation, and the grant it exchanges one
+// with. The client authenticates when it exchanges, so it is confidential.
+func validateDelegation(public bool, grantTypes, scopes []string) *apierror.Refusal {
+	exchanges := containsAny(normalizeGrantTypes(grantTypes), TokenExchangeGrant)
+	if exchanges && public {
+		return &apierror.Refusal{
+			Code:    "public_client_with_token_exchange",
+			Field:   "grant_types",
+			Message: "Public clients cannot use token exchange",
+			Hint:    "A client that acts for a user exchanges the delegation with its own credentials — set public=false.",
+		}
+	}
+	if containsAny(scopes, DelegationScope) && !exchanges {
+		return &apierror.Refusal{
+			Code:    "delegation_without_token_exchange",
+			Field:   "scopes",
+			Message: "The delegation scope needs the token exchange grant",
+			Hint:    "Add " + TokenExchangeGrant + " to grant_types, or remove delegation from scopes.",
+		}
+	}
+	return nil
+}
 
 func normalizeGrantTypes(grantTypes []string) []string {
 	out := make([]string, 0, len(grantTypes))

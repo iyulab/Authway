@@ -21,6 +21,7 @@ import (
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/crypto"
+	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
@@ -332,7 +333,11 @@ func main() {
 		Terms:    termsService,
 	}
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
+	// A consent to a client's delegation scope grants a delegation.
+	delegationService := delegation.NewService(db)
+	delegationHandler := delegation.NewHandler(delegationService, newFeatureServices.AuditService, zapLogger)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
+	authHandler.GrantsDelegations(delegationService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
@@ -433,6 +438,10 @@ func main() {
 	v1.Post("/users/password", jwtAuth, loginRateLimit, authHandler.ChangePassword)
 	v1.Get("/users/connections", jwtAuth, authHandler.ListConnections)
 	v1.Delete("/users/connections/:provider", jwtAuth, authHandler.RemoveConnection)
+	// What the user let clients do for them while they are away, and taking
+	// it back.
+	v1.Get("/users/delegations", jwtAuth, delegationHandler.ListMine)
+	v1.Delete("/users/delegations/:id", jwtAuth, delegationHandler.RevokeMine)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the
@@ -491,6 +500,8 @@ func main() {
 	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, loginRateLimit, mfaHandler.RegenerateRecoveryCodes)
 
 	// User management routes (Admin only)
+	v1.Get("/delegations", adminAuth, delegationHandler.List)
+	v1.Delete("/delegations/:id", adminAuth, delegationHandler.Revoke)
 	v1.Get("/users", adminAuth, userHandler.List)
 	v1.Get("/users/:id", adminAuth, userHandler.Get)
 	v1.Put("/users/:id", adminAuth, userHandler.Update)

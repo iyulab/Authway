@@ -93,6 +93,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateClientConfig(req.Public, req.ClientSecret, req.GrantTypes, req.RedirectURIs, req.AllowedOrigins); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateDelegation(req.Public, req.GrantTypes, req.Scopes); cerr != nil {
+		return nil, nil, cerr
+	}
 	if cerr := validateAccessTokenStrategy(req.AccessTokenStrategy); cerr != nil {
 		return nil, nil, cerr
 	}
@@ -447,6 +450,13 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// doesn't reject toggling a confidential client to public (the secret stays
 	// in the DB but Hydra will be configured with token_endpoint_auth_method=none).
 	if cerr := validateClientConfig(mergedPublic, "", mergedGrants, mergedRedirects, mergedOrigins); cerr != nil {
+		return nil, SyncStatus{}, cerr
+	}
+	mergedScopes := []string(client.Scopes)
+	if req.Scopes != nil {
+		mergedScopes = req.Scopes
+	}
+	if cerr := validateDelegation(mergedPublic, mergedGrants, mergedScopes); cerr != nil {
 		return nil, SyncStatus{}, cerr
 	}
 	if req.AccessTokenStrategy != nil {
@@ -1019,12 +1029,25 @@ const revocationsAtOnce = 16
 // client: none while the client is turned off. The engine checks a client's
 // grants on every token request — a refresh, client credentials, a device
 // code — and an authorization request, so a client registered with none gets
-// nothing from it; the stored grants come back when it is turned on.
+// nothing from it; the stored grants come back when it is turned on. Token
+// exchange is Authway's to answer, not the engine's, so it is not among them.
 func (c *Client) grantsInForce() []string {
 	if !c.Active {
 		return []string{}
 	}
-	return c.GrantTypes
+	grants := make([]string, 0, len(c.GrantTypes))
+	for _, g := range c.GrantTypes {
+		if g != TokenExchangeGrant {
+			grants = append(grants, g)
+		}
+	}
+	return grants
+}
+
+// MayActForUsers reports whether the client may be granted a delegation and
+// exchange it (TokenExchangeGrant, and turned on).
+func (c *Client) MayActForUsers() bool {
+	return c.Active && containsAny([]string(c.GrantTypes), TokenExchangeGrant)
 }
 
 // derefStrategy flattens the optional per-client access token strategy for the

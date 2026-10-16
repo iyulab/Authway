@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
 	"authway/apps/central/api/internal/hydra"
@@ -10,6 +11,7 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/user"
@@ -32,6 +34,13 @@ type AuthHandler struct {
 	authentications *AuthenticationStore
 	signInMethods   SignInMethodSource
 	flows           *signIn
+	delegations     delegation.Service
+}
+
+// GrantsDelegations lets a consent to a client's delegation scope grant a
+// delegation (see delegationFor). Without it the scope grants nothing.
+func (h *AuthHandler) GrantsDelegations(s delegation.Service) {
+	h.delegations = s
 }
 
 // SignInMethodSource says how a client's users can sign in on this
@@ -337,6 +346,66 @@ func grantedAudience(consentReq *hydra.ConsentRequest) []string {
 	return granted
 }
 
+// grantedOf is what a consent grants: the scopes the user approved that the
+// client asked for. The screen sends the approved ones; a scope it sends that
+// was not asked for is not granted.
+func grantedOf(approved, requested []string) []string {
+	granted := make([]string, 0, len(approved))
+	for _, s := range approved {
+		if slices.Contains(requested, s) && !slices.Contains(granted, s) {
+			granted = append(granted, s)
+		}
+	}
+	return granted
+}
+
+// asksForDelegation reports whether a consent request includes the
+// delegation scope.
+func asksForDelegation(consentReq *hydra.ConsentRequest) bool {
+	return slices.Contains(consentReq.RequestedScope, client.DelegationScope)
+}
+
+// delegationFor grants the delegation a consent includes, and returns its
+// handle for the ID token (claim delegation_grant) and the scopes the consent
+// grants. A consent that does not grant the delegation scope grants none; a
+// client that may not act for users (no token exchange, turned off, another
+// tenant's) is not granted the scope at all. The delegation's ceiling is the
+// rest of what the user granted.
+func (h *AuthHandler) delegationFor(c *fiber.Ctx, consentReq *hydra.ConsentRequest, u *user.User, granted []string) (string, []string, error) {
+	if !slices.Contains(granted, client.DelegationScope) {
+		return "", granted, nil
+	}
+	without := slices.DeleteFunc(slices.Clone(granted), func(s string) bool { return s == client.DelegationScope })
+	if h.delegations == nil || consentReq.Client == nil {
+		return "", without, nil
+	}
+	cl, err := h.clientService.GetByClientID(consentReq.Client.ClientID)
+	if err != nil {
+		return "", nil, fmt.Errorf("read the client of a delegation: %w", err)
+	}
+	if !cl.MayActForUsers() || cl.TenantID != u.TenantID {
+		return "", without, nil
+	}
+	handle, g, err := h.delegations.Grant(c.UserContext(), u.TenantID, u.ID, cl.ID, without)
+	if err != nil {
+		return "", nil, fmt.Errorf("grant a delegation: %w", err)
+	}
+	h.logUserAudit(c, u, audit.ActionDelegationGranted, map[string]any{
+		"delegation_id": g.ID.String(),
+		"client_id":     cl.ClientID,
+		"scopes":        without,
+	})
+	return handle, granted, nil
+}
+
+// idTokenWith adds a delegation's handle to the ID token claims.
+func idTokenWith(idToken map[string]any, handle string) map[string]any {
+	if handle != "" {
+		idToken["delegation_grant"] = handle
+	}
+	return idToken
+}
+
 // storedClaims returns the claims stored for u, for the tokens about to be
 // issued. A failure to read them does not fail the consent: the tokens then
 // carry the issuer's claims only.
@@ -448,6 +517,12 @@ func (h *AuthHandler) consentWithoutQuestion(c *fiber.Ctx, challenge string, con
 	if !consentReq.Skip && !skipsQuestion {
 		return "", false, nil
 	}
+	// Letting a client act for the user while they are away is the user's to
+	// grant: a client registered to skip the question still asks it, unless
+	// the user's earlier answer to it is remembered.
+	if !consentReq.Skip && asksForDelegation(consentReq) {
+		return "", false, nil
+	}
 	h.logger.Info("Consent continues without a question",
 		zap.String("client_id", consentReq.Client.ClientID),
 		zap.Bool("remembered", consentReq.Skip),
@@ -456,14 +531,18 @@ func (h *AuthHandler) consentWithoutQuestion(c *fiber.Ctx, challenge string, con
 
 	userClaims := h.storedClaims(c, user)
 	issued := issuedFor(user)
+	handle, granted, err := h.delegationFor(c, consentReq, user, consentReq.RequestedScope)
+	if err != nil {
+		return "", false, err
+	}
 	resp, err := h.hydraClient.AcceptConsentRequest(challenge, &hydra.AcceptConsentRequest{
-		GrantScope:               consentReq.RequestedScope,
+		GrantScope:               granted,
 		GrantAccessTokenAudience: grantedAudience(consentReq),
 		Remember:                 true,
 		RememberFor:              int(autoConsentRememberedFor.Seconds()),
 		Session: &hydra.ConsentSession{
 			AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
-			IDToken:     issued.IDToken(userClaims),
+			IDToken:     idTokenWith(issued.IDToken(userClaims), handle),
 		},
 	})
 	if err != nil {
@@ -511,24 +590,29 @@ func (h *AuthHandler) AcceptConsent(c *fiber.Ctx) error {
 
 	userClaims := h.storedClaims(c, user)
 	issued := issuedFor(user)
+	handle, granted, err := h.delegationFor(c, consentReq, user, grantedOf(req.GrantScope, consentReq.RequestedScope))
+	if err != nil {
+		h.logger.Error("Failed to grant a delegation", zap.Error(err))
+		return apierror.Refuse(c, 500, apierror.CodeForStatus(500), "Failed to record the consent")
+	}
 
 	// Accept consent request
 	audience := grantedAudience(consentReq)
 	acceptBody := &hydra.AcceptConsentRequest{
-		GrantScope:               req.GrantScope,
+		GrantScope:               granted,
 		GrantAccessTokenAudience: audience,
 		Remember:                 req.Remember,
 		RememberFor:              0, // until revoked
 		Session: &hydra.ConsentSession{
 			AccessToken: withSession(issued.AccessToken(userClaims), h.authentications, consentReq.LoginSessionID),
-			IDToken:     issued.IDToken(userClaims),
+			IDToken:     idTokenWith(issued.IDToken(userClaims), handle),
 		},
 	}
 
 	// Log detailed consent request data
 	h.logger.Info("Sending consent accept to Hydra",
 		zap.String("challenge", challenge),
-		zap.Strings("grant_scope", req.GrantScope),
+		zap.Strings("grant_scope", granted),
 		zap.Strings("grant_access_token_audience", audience),
 		zap.Bool("remember", req.Remember),
 		zap.String("user_id", user.ID.String()),

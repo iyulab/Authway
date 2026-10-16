@@ -14,6 +14,7 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/passwordless"
@@ -108,11 +109,24 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		t.Fatalf("seed document for acceptance contract case: %v", err)
 	}
 
+	// A delegation points at a client.
+	cl := &client.Client{ID: uuid.New(), TenantID: tenantID, ClientID: "contract-delegation-" + uuid.New().String()[:8], Name: "contract",
+		RedirectURIs: []string{}, GrantTypes: []string{"authorization_code"}, Scopes: []string{"openid"}}
+	if err := db.Create(cl).Error; err != nil {
+		t.Fatalf("seed client for delegation contract case: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, cl.ID) })
+
 	cases := []struct {
 		name  string
 		row   any
 		table string
 	}{
+		{"delegation_grant", &delegation.Grant{
+			ID: uuid.New(), TenantID: tenantID, UserID: userID, ClientID: cl.ID,
+			Scopes: []string{"openid", "orders.read"}, HandleHash: tokenhash.Hash(uuid.New().String()),
+			CreatedAt: time.Now(), ExpiresAt: &future, RevokedAt: &future,
+		}, "delegation_grants"},
 		{"invitation", &invitation.Invitation{
 			TenantID: tenantID, Email: "c@example.com",
 			TokenHash: tokenhash.Hash(uuid.New().String()), Status: invitation.StatusPending, ExpiresAt: future,
@@ -200,6 +214,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 		"invitations", "magic_link_tokens",
 		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
 		"password_resets", "email_verifications", "service_clients",
+		"delegation_grants",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
 	for _, table := range tables {
@@ -224,6 +239,7 @@ func mappedModels() []any {
 		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
 		&terms.Document{}, &terms.Acceptance{},
+		&delegation.Grant{},
 	}
 }
 

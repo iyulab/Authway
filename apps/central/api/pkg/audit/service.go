@@ -194,6 +194,8 @@ func (s *service) GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]Audi
 		ActionUserDeleted,
 		ActionUserClaimsUpdated,
 		ActionConsentRevoked,
+		ActionDelegationGranted,
+		ActionDelegationRevoked,
 	}
 	var logs []AuditLog
 	if err := s.db.Where("tenant_id = ? AND action IN ? AND created_at >= ?", tenantID, securityActions, since).Order("created_at DESC").Find(&logs).Error; err != nil {

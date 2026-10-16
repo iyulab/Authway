@@ -37,6 +37,8 @@ const (
 	ActionTenantTermsRetired    AuditAction = "tenant.terms_retired"
 	ActionConsentGranted        AuditAction = "consent.granted"
 	ActionConsentRevoked        AuditAction = "consent.revoked"
+	ActionDelegationGranted     AuditAction = "delegation.granted"
+	ActionDelegationRevoked     AuditAction = "delegation.revoked"
 	ActionWebhookCreated        AuditAction = "webhook.created"
 	ActionWebhookUpdated        AuditAction = "webhook.updated"
 	ActionWebhookDeleted        AuditAction = "webhook.deleted"
@@ -90,6 +92,8 @@ var Actions = []struct {
 	{ActionTenantTermsRetired, "A document the tenant's users accept no longer asked for"},
 	{ActionConsentGranted, "Consent granted"},
 	{ActionConsentRevoked, "Consent revoked"},
+	{ActionDelegationGranted, "User let a client act for them while they are away"},
+	{ActionDelegationRevoked, "Delegation to a client revoked"},
 	{ActionWebhookCreated, "Webhook created"},
 	{ActionWebhookUpdated, "Webhook updated"},
 	{ActionWebhookDeleted, "Webhook deleted"},

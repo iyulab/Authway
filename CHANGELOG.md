@@ -61,6 +61,21 @@
 
 ### Added
 
+- **A user can let a client act for them while they are away (delegation).**
+  A confidential client registered with the
+  `urn:ietf:params:oauth:grant-type:token-exchange` grant may ask for the
+  `delegation` scope; a user who consents to it grants the client a
+  delegation, with the other scopes of that consent as its ceiling, and the
+  consent's ID token carries its handle (claim `delegation_grant`, shown only
+  then). A client registered to skip consent still asks for it unless the
+  user's answer is remembered. The user lists and revokes their delegations at
+  `GET/DELETE /api/v1/users/delegations[/{id}]`, an administrator at
+  `GET/DELETE /api/v1/delegations[/{id}]` (by `user_id` or `client_id`);
+  audit actions `delegation.granted` and `delegation.revoked`. A public client
+  with the grant is `400 public_client_with_token_exchange`, the scope without
+  it `400 delegation_without_token_exchange`. Exchanging a delegation for an
+  access token comes next (`capabilities.token_exchange` stays `false` until
+  then). Database migration 044.
 - **Verification, password reset and sign-in link mail name the
   organization** (tenant) the account is in, in the subject and the message.
   One address can have accounts in several organizations, and the mail did
@@ -126,6 +141,9 @@
 
 ### Fixed
 
+- **A consent grants only scopes the client asked for.** The consent screen
+  sends the scopes the user approved; one it sent that the authorization
+  request did not name was granted as well.
 - **A tenant's `logo` and `primary_color` can be cleared.** Changing a
   tenant with an empty string left them as they were; it now clears them, as
   it does a description. A value given is still checked (an absolute URL, a

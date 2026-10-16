@@ -24,6 +24,8 @@ var reserved = map[string]struct{}{
 	"ext": {},
 	// What Authway asserts about the user.
 	"tenant_id": {}, "email": {}, "email_verified": {}, "name": {},
+	// The handle of a delegation the user granted the client (ID token).
+	"delegation_grant": {},
 }
 
 // IsReserved reports whether key names a claim only the issuer may set. Names
