@@ -334,7 +334,15 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
 
     # --- 8. 토큰 교환 ---
     Write-Host "7️⃣  authorization code → access token 교환" -ForegroundColor Yellow
-    $tokenResp = & curl.exe -s -X POST "$issuer/oauth2/token" `
+    # At the token endpoint discovery names, as a client finds it — the API's
+    # front, which passes the grant on to the authorization server.
+    $tokenEndpoint = (& curl.exe -s "$issuer/.well-known/openid-configuration" | ConvertFrom-Json).token_endpoint
+    if (-not $tokenEndpoint) {
+        Write-Host "❌ discovery 에 token_endpoint 가 없음" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   token_endpoint: $tokenEndpoint" -ForegroundColor Gray
+    $tokenResp = & curl.exe -s -X POST $tokenEndpoint `
         -d "grant_type=authorization_code" -d "code=$code" `
         -d "redirect_uri=http://localhost:9999/verify-callback" -d "client_id=$clientId"
     $tokenJson = $tokenResp | ConvertFrom-Json
