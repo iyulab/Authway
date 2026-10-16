@@ -397,7 +397,7 @@ func main() {
 		exchanger = delegation.NewExchanger(delegationService, signer, hydraClient, handler.ClientExchangeScopes(clientService), cfg.App.BaseURL)
 		// A client acting for a user may ask them to approve one action; the
 		// user answers on the login UI's approval screen.
-		exchanger.HandlesApprovals(approvals, handler.ClientExchangeScopes(clientService).(delegation.ClientVerifier), strings.TrimRight(cfg.App.FrontendURL, "/")+"/approve")
+		exchanger.HandlesApprovals(approvals, handler.NewEngineClientAuth(cfg.Hydra.EngineURL(), clientService, redisClient, zapLogger), strings.TrimRight(cfg.App.FrontendURL, "/")+"/approve")
 		tokenEndpoint.ExchangesDelegations(exchanger, newFeatureServices.AuditService)
 	}
 	app.Post("/oauth2/token", tokenEndpoint.Token)

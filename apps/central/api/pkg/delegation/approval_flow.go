@@ -36,15 +36,20 @@ type ApprovalRequested struct {
 	Request *Approval `json:"-"`
 }
 
-// RequestApproval checks an approval request — the client's own credentials,
-// a delegation of the user to it, what it asks for — and records it.
-func (x *Exchanger) RequestApproval(ctx context.Context, form url.Values, clientID, secret string) (*ApprovalRequested, *Standing, *OAuthError) {
+// clientAuthHint is the refusal of a request whose client did not
+// authenticate.
+const clientAuthHint = "Authenticate as a confidential client the way it authenticates at the token endpoint: client_id and client_secret in the form, or a client assertion (private_key_jwt) addressed to the token endpoint."
+
+// RequestApproval checks an approval request — the client's own
+// authentication (authorization is the request's Authorization header), a
+// delegation of the user to it, what it asks for — and records it.
+func (x *Exchanger) RequestApproval(ctx context.Context, form url.Values, authorization string) (*ApprovalRequested, *Standing, *OAuthError) {
 	if !x.OffersApprovals() {
 		return nil, nil, refuse(404, "not_found", "Approval requests are not offered by this deployment.")
 	}
-	row, ok := x.verifier.VerifyClient(clientID, secret)
+	clientID, row, ok := x.verifier.VerifyClient(ctx, authorization, form)
 	if !ok {
-		return nil, nil, refuse(401, "invalid_client", "Authenticate as a confidential client: its id and secret, as HTTP Basic or in the form.")
+		return nil, nil, refuse(401, "invalid_client", clientAuthHint)
 	}
 	if form.Get("subject_token") == "" || form.Get("subject_token_type") != SubjectTokenType {
 		return nil, nil, refuse(400, "invalid_request", "subject_token must be a delegation handle (subject_token_type "+SubjectTokenType+").")
@@ -123,13 +128,13 @@ func (x *Exchanger) RequestApproval(ctx context.Context, form url.Values, client
 // expired — or, once approved, the assertion grant request for the token
 // bound to it (the token hook consumes the approval when the token is
 // issued).
-func (x *Exchanger) PrepareApproved(ctx context.Context, form url.Values, clientID, secret string) (*Exchanged, *OAuthError) {
+func (x *Exchanger) PrepareApproved(ctx context.Context, form url.Values, authorization string) (*Exchanged, *OAuthError) {
 	if !x.OffersApprovals() {
 		return nil, refuse(400, "unsupported_grant_type", "Approval requests are not offered by this deployment.")
 	}
-	row, ok := x.verifier.VerifyClient(clientID, secret)
+	clientID, row, ok := x.verifier.VerifyClient(ctx, authorization, form)
 	if !ok {
-		return nil, refuse(401, "invalid_client", "Authenticate as a confidential client: its id and secret, as HTTP Basic or in the form.")
+		return nil, refuse(401, "invalid_client", clientAuthHint)
 	}
 	if form.Get("auth_req_id") == "" {
 		return nil, refuse(400, "invalid_request", "auth_req_id is required.")

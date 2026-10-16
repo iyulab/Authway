@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { conform } from '../src/contract.js'
 import { loadConfig } from '../src/config.js'
+import { generateKeyPair } from 'jose'
 import { Provider, type TestClient, type TestUser } from '../src/provider.js'
 
 const provider = new Provider(loadConfig())
@@ -35,8 +36,7 @@ describe('approval requests', { timeout: 90_000 }, () => {
         subject_token_type: 'urn:authway:params:oauth:token-type:delegation-grant',
         binding_message: 'Pay 10 EUR to Acme',
         authorization_details: JSON.stringify([{ type: 'payment', ref: 'order-42' }]),
-        client_id: agent.clientId,
-        client_secret: agent.secret ?? '',
+        ...(await provider.clientAuth(agent)),
         ...fields,
       }),
     })
@@ -48,7 +48,7 @@ describe('approval requests', { timeout: 90_000 }, () => {
     const res = await fetch(token_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: APPROVAL_GRANT, auth_req_id: authReqId, client_id: agent.clientId, client_secret: agent.secret ?? '' }),
+      body: new URLSearchParams({ grant_type: APPROVAL_GRANT, auth_req_id: authReqId, ...(await provider.clientAuth(agent)) }),
     })
     return { status: res.status, body: (await res.json()) as Record<string, unknown> }
   }
@@ -165,5 +165,63 @@ describe('approval requests', { timeout: 90_000 }, () => {
     expect((await ask({ scope: 'email' })).body.error).toBe('invalid_scope')
     expect((await ask({ binding_message: '' })).body.error).toBe('invalid_request')
     expect((await ask({ authorization_details: '{"not":"a list"}' })).body.error).toBe('invalid_authorization_details')
+  })
+})
+
+// A client that holds a key rather than a secret asks and polls the way it
+// authenticates at the token endpoint: a signed assertion, each one once.
+describe('approval requests by a client that holds a key', { timeout: 60_000 }, () => {
+  let offered = false
+  let agent: TestClient
+  let handle = ''
+
+  const send = async (url: string, fields: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> => {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields) })
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+  }
+  const request = (auth: Record<string, string>) =>
+    send(`${api}/oauth2/approval-requests`, {
+      subject_token: handle,
+      subject_token_type: 'urn:authway:params:oauth:token-type:delegation-grant',
+      binding_message: 'K-7Q2',
+      ...auth,
+    })
+
+  beforeAll(async () => {
+    const caps = (await (await fetch(`${api}/api/v1/capabilities`)).json()) as { approval_requests?: boolean }
+    offered = caps.approval_requests === true
+    if (!offered) return
+    agent = await provider.createDelegatingClient({ withKey: true })
+    const user = await provider.inviteAndAccept()
+    const outcome = await provider.login(agent, user, { scopes: ['openid', 'profile', 'delegation'] })
+    if (outcome.kind !== 'code') throw new Error(`granting the delegation failed: ${JSON.stringify(outcome)}`)
+    handle = claimsOf(outcome.tokens.id_token ?? '').delegation_grant as string
+  })
+
+  afterAll(async () => {
+    if (agent) await provider.deleteClient(agent)
+  })
+
+  it('are taken with an assertion, and polled with another', async (ctx) => {
+    if (!offered) ctx.skip()
+    const asked = await request(await provider.clientAuth(agent))
+    expect(asked.status, JSON.stringify(asked.body)).toBe(200)
+    const { token_endpoint } = await provider.discovery()
+    const pending = await send(token_endpoint, { grant_type: APPROVAL_GRANT, auth_req_id: asked.body.auth_req_id as string, ...(await provider.clientAuth(agent)) })
+    expect(pending.body.error, JSON.stringify(pending.body)).toBe('authorization_pending')
+  })
+
+  it('refuse an assertion used before, or signed with another key', async (ctx) => {
+    if (!offered) ctx.skip()
+    const auth = await provider.clientAuth(agent)
+    expect((await request(auth)).status).toBe(200)
+    const replayed = await request(auth)
+    expect(replayed.status).toBe(401)
+    expect(replayed.body.error).toBe('invalid_client')
+
+    const { privateKey } = await generateKeyPair('RS256')
+    const forged = await request(await provider.clientAuth(agent, { privateKey, kid: agent.key!.kid }))
+    expect(forged.status).toBe(401)
+    expect(forged.body.error).toBe('invalid_client')
   })
 })

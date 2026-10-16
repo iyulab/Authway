@@ -17,7 +17,6 @@ import (
 	"authway/apps/central/api/pkg/delegation"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -124,8 +123,8 @@ func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
 // token bound to it.
 func (h *TokenEndpoint) approved(c *fiber.Ctx) error {
 	form, _ := url.ParseQuery(string(c.Body()))
-	clientID, secret := delegation.ClientCredentialsFromRequest(c.Get(fiber.HeaderAuthorization), form)
-	prepared, refused := h.exchanger.PrepareApproved(c.UserContext(), form, clientID, secret)
+	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	prepared, refused := h.exchanger.PrepareApproved(c.UserContext(), form, c.Get(fiber.HeaderAuthorization))
 	// Waiting is the ordinary answer of a poll, not a failure worth a record.
 	if refused != nil && (refused.Code == "authorization_pending" || refused.Code == "slow_down") {
 		return tokenError(c, refused.Status, refused.Code, refused.Description)
@@ -267,8 +266,8 @@ func tokenError(c *fiber.Ctx, status int, code, description string) error {
 // which the client brings to the user by its own means.
 func (h *TokenEndpoint) ApprovalRequests(c *fiber.Ctx) error {
 	form, _ := url.ParseQuery(string(c.Body()))
-	clientID, secret := delegation.ClientCredentialsFromRequest(c.Get(fiber.HeaderAuthorization), form)
-	answer, d, refused := h.exchanger.RequestApproval(c.UserContext(), form, clientID, secret)
+	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	answer, d, refused := h.exchanger.RequestApproval(c.UserContext(), form, c.Get(fiber.HeaderAuthorization))
 	if refused != nil {
 		if refused.Code == "invalid_client" {
 			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="approval-requests"`)
@@ -300,18 +299,6 @@ func ClientExchangeScopes(clients client.Service) delegation.ClientScopes {
 }
 
 type clientExchangeScopes struct{ clients client.Service }
-
-// VerifyClient checks a confidential client's id and secret.
-func (s clientExchangeScopes) VerifyClient(clientID, secret string) (uuid.UUID, bool) {
-	if clientID == "" || secret == "" {
-		return uuid.Nil, false
-	}
-	cl, err := s.clients.ValidateClient(clientID, secret)
-	if err != nil || cl == nil || cl.Public {
-		return uuid.Nil, false
-	}
-	return cl.ID, true
-}
 
 func (s clientExchangeScopes) ExchangeScopes(clientID string) ([]string, []string, bool, error) {
 	cl, err := s.clients.GetByClientID(clientID)

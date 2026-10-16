@@ -93,9 +93,11 @@
 - **The account screen lists the apps acting for the user** (their
   delegations) and revokes one after a confirmation.
 - **A client acting for a user can ask them to approve one action while they
-  are away.** `POST /oauth2/approval-requests` (form; the client's id and
-  secret; `subject_token` the delegation handle; `binding_message`, shown to
-  the user; optional `scope`, `authorization_details` — RFC 9396 shape, kept
+  are away.** `POST /oauth2/approval-requests` (form; the client
+  authenticates as at the token endpoint — `client_secret_post`, or
+  `private_key_jwt` with an assertion addressed to the token endpoint, each
+  assertion once; `subject_token` the delegation handle; `binding_message`, a
+  short code the user compares with the client's own screen; optional `scope`, `authorization_details` — RFC 9396 shape, kept
   as given — and `requested_expiry`, 30 to 600 seconds) answers `auth_req_id`,
   `approve_url`, `expires_in` and `interval`. The user answers at
   `/api/v1/users/approvals/{id}` (`approve`/`deny`) with a token of the

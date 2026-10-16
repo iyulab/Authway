@@ -1,3 +1,4 @@
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import type { ConformanceConfig } from './config.js'
 import { Browser } from './browser.js'
 import { conform } from './contract.js'
@@ -22,6 +23,8 @@ export interface TestClient {
   clientId: string
   /** A confidential client's secret, sent in the token request body (client_secret_post). */
   secret?: string
+  /** A confidential client's key, when it authenticates with a signed assertion (private_key_jwt) instead. */
+  key?: { privateKey: CryptoKey; kid: string }
   /** Where the client is registered to receive its code, when not REDIRECT_URI. */
   redirectUri?: string
 }
@@ -212,10 +215,15 @@ export class Provider {
    * the token exchange grant and the delegation scope, beside a sign-in of its
    * own (authorization code).
    */
-  async createDelegatingClient(options: { skipConsent?: boolean; jwtAccessTokens?: boolean; audience?: string[] } = {}): Promise<TestClient> {
+  async createDelegatingClient(options: { skipConsent?: boolean; jwtAccessTokens?: boolean; audience?: string[]; withKey?: boolean } = {}): Promise<TestClient> {
+    const pair = options.withKey ? await generateKeyPair('RS256', { extractable: true }) : null
+    const kid = `k-${randomToken(4)}`
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
+        ...(pair
+          ? { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ ...(await exportJWK(pair.publicKey)), kid, use: 'sig', alg: 'RS256' }] } }
+          : {}),
         ...(options.skipConsent ? { skip_consent: true } : {}),
         ...(options.jwtAccessTokens ? { access_token_strategy: 'jwt' } : {}),
         ...(options.audience ? { audience: options.audience } : {}),
@@ -230,8 +238,31 @@ export class Provider {
     await conform('POST', '/api/v1/clients', res)
     const text = await res.text()
     if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
-    const { client, credentials } = JSON.parse(text) as { client: { id: string; client_id: string }; credentials: { client_secret: string } }
-    return { id: client.id, clientId: client.client_id, secret: credentials.client_secret }
+    const { client, credentials } = JSON.parse(text) as { client: { id: string; client_id: string }; credentials?: { client_secret?: string } }
+    if (pair) return { id: client.id, clientId: client.client_id, key: { privateKey: pair.privateKey, kid } }
+    return { id: client.id, clientId: client.client_id, secret: credentials?.client_secret }
+  }
+
+  /**
+   * How a confidential client authenticates in a token request body: its
+   * secret, or a fresh assertion signed with its key and addressed to the
+   * token endpoint (each assertion is used once). Nothing for a public client.
+   */
+  async clientAuth(client: TestClient, key: { privateKey: CryptoKey; kid: string } | undefined = client.key): Promise<Record<string, string>> {
+    if (key) {
+      const { token_endpoint } = await this.discovery()
+      const assertion = await new SignJWT({})
+        .setProtectedHeader({ alg: 'RS256', kid: key.kid })
+        .setIssuer(client.clientId)
+        .setSubject(client.clientId)
+        .setAudience(token_endpoint)
+        .setJti(randomToken(16))
+        .setIssuedAt()
+        .setExpirationTime('2m')
+        .sign(key.privateKey)
+      return { client_id: client.clientId, client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: assertion }
+    }
+    return { client_id: client.clientId, ...(client.secret ? { client_secret: client.secret } : {}) }
   }
 
   /**
@@ -785,9 +816,8 @@ export class Provider {
         grant_type: 'authorization_code',
         code,
         redirect_uri: client.redirectUri ?? REDIRECT_URI,
-        client_id: client.clientId,
         code_verifier: pkce.verifier,
-        ...(client.secret ? { client_secret: client.secret } : {}),
+        ...(await this.clientAuth(client)),
       }),
     })
     if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`)

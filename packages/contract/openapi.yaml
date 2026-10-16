@@ -3254,10 +3254,14 @@ components:
       description: |
         What a client acting for the user (see Delegation) asks the user to
         approve while they are away. The client asks at
-        `POST /oauth2/approval-requests` (form; its id and secret;
+        `POST /oauth2/approval-requests` (form; authenticated as at the
+        token endpoint — `client_secret_post`, or `private_key_jwt` with an
+        assertion addressed to the token endpoint, each assertion used once;
         `subject_token` the delegation handle and `subject_token_type`
         `urn:authway:params:oauth:token-type:delegation-grant`;
-        `binding_message` up to 200 characters, shown to the user; optional
+        `binding_message` up to 200 characters, shown to the user — a short
+        code to compare with the client's own screen, not a description of
+        the action, which `authorization_details` binds; optional
         `scope` within the delegation, `authorization_details` — a JSON array
         of objects with a `type` (RFC 9396), kept and put in the token as
         given — and `requested_expiry`, 30 to 600 seconds, 300 by default). It
@@ -3265,7 +3269,7 @@ components:
         the client brings to the user by its own means), `expires_in` and
         `interval`. The client polls the token endpoint with `grant_type`
         `urn:authway:params:oauth:grant-type:approval`, `auth_req_id` and its
-        id and secret: `authorization_pending` while the user has not
+        authentication: `authorization_pending` while the user has not
         answered, `slow_down` when asked within `interval`, `access_denied`,
         `expired_token`, and once approved one access token (RFC 8693 answer
         shape, at most 5 minutes, no refresh token) with `sub` the user,

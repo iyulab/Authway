@@ -148,11 +148,13 @@ type ClientScopes interface {
 	ExchangeScopes(clientID string) (scopes []string, audience []string, mayAct bool, err error)
 }
 
-// ClientVerifier checks a confidential client's own credentials, for the
-// requests Authway answers without the authorization server (an approval
-// request and its polling), and names the client's row.
+// ClientVerifier checks a confidential client's own authentication, for the
+// requests Authway answers itself (an approval request and its polling):
+// whatever the token endpoint accepts — a secret, or a client assertion —
+// from the request's Authorization header and form. It names the client and
+// its row.
 type ClientVerifier interface {
-	VerifyClient(clientID, secret string) (row uuid.UUID, ok bool)
+	VerifyClient(ctx context.Context, authorization string, form url.Values) (clientID string, row uuid.UUID, ok bool)
 }
 
 // NewExchanger returns an Exchanger. apiURL is this API's public address.
@@ -457,24 +459,4 @@ func ClientFromRequest(authorization string, form url.Values) string {
 		}
 	}
 	return ""
-}
-
-// ClientCredentialsFromRequest is the id and secret a request authenticates a
-// client with: HTTP Basic (RFC 6749 section 2.3.1, form-encoded parts) or
-// client_id and client_secret in the form.
-func ClientCredentialsFromRequest(authorization string, form url.Values) (id, secret string) {
-	if strings.HasPrefix(strings.ToLower(authorization), "basic ") {
-		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(authorization[6:]))
-		if err != nil {
-			return "", ""
-		}
-		idPart, secretPart, ok := strings.Cut(string(raw), ":")
-		if !ok {
-			return "", ""
-		}
-		id, _ = url.QueryUnescape(idPart)
-		secret, _ = url.QueryUnescape(secretPart)
-		return id, secret
-	}
-	return form.Get("client_id"), form.Get("client_secret")
 }
