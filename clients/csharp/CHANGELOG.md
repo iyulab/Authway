@@ -3,7 +3,7 @@
 All notable changes to `Authway.Client` are recorded here. The package follows its own version line, apart from the
 Authway service.
 
-## Unreleased
+## 0.1.0 — 2026-10-16
 
 ### Added
 
