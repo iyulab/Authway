@@ -110,6 +110,10 @@
 
 ### Fixed
 
+- **A webhook whose host name resolves to a local or private address is
+  refused when it is registered or changed** (`400`, `field: url`), as one
+  named by such an address was. It was accepted and every delivery to it
+  failed.
 - **Token introspection reads its form body only.** `POST
   /api/v1/oauth2/introspect` also took `token`, `client_id` and
   `client_secret` from the query string, where they end up in request logs;

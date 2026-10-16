@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -63,6 +64,8 @@ type service struct {
 	logger     *zap.Logger
 	httpClient *http.Client
 	policy     outbound.Policy
+	// names looks up a receiver's host when it is registered.
+	names outbound.Resolver
 	// Deliveries run on a bounded queue: an event as frequent as a sign-in
 	// must not start a goroutine per receiver, and a receiver that keeps
 	// failing must not hold one through its retry waits.
@@ -78,7 +81,10 @@ const (
 // Option configures a webhook service.
 type Option func(*options)
 
-type options struct{ policy outbound.Policy }
+type options struct {
+	policy outbound.Policy
+	names  outbound.Resolver
+}
 
 // AllowPrivateTargets lets deliveries reach this host and private networks —
 // for local development, where receivers run on the same machine.
@@ -87,7 +93,7 @@ func AllowPrivateTargets(allow bool) Option {
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
-	var o options
+	o := options{names: net.DefaultResolver}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -96,6 +102,7 @@ func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
 		logger:     logger,
 		httpClient: deliveryClient(o.policy),
 		policy:     o.policy,
+		names:      o.names,
 		queue:      workqueue.New(deliveryWorkers, deliveryQueue),
 	}
 }
@@ -134,9 +141,10 @@ func validateName(name string) error {
 	return nil
 }
 
-// validateURL refuses what is plainly not deliverable. A host named by a
-// local or private address is refused here for a clear answer; a hostname
-// that resolves to one is refused when the delivery connects.
+// validateURL refuses what is plainly not deliverable. A host that is, or
+// resolves to, a local or private address is refused here for a clear
+// answer; since a name can resolve differently later, a delivery checks again
+// when it connects.
 func (s *service) validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -145,7 +153,11 @@ func (s *service) validateURL(raw string) error {
 	if len(raw) > 2048 {
 		return apierror.RejectField("url", "url must be at most 2048 characters")
 	}
-	if s.policy.RefusesHost(u.Hostname()) {
+	names := s.names
+	if names == nil {
+		names = net.DefaultResolver
+	}
+	if s.policy.RefusesName(context.Background(), names, u.Hostname()) {
 		return apierror.RejectField("url", "url must not point at a local or private address")
 	}
 	return nil
