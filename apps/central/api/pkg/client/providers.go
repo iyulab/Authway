@@ -12,20 +12,21 @@ import "authway/apps/central/api/pkg/apierror"
 // redirect URI is not among them: without one, the deployment's callback is
 // used.
 var providerCredentials = []struct {
-	enabled string
-	fields  []string
-	values  func(c *Client) (bool, []*string)
+	provider string
+	enabled  string
+	fields   []string
+	values   func(c *Client) (bool, []*string)
 }{
-	{"google_oauth_enabled", []string{"google_client_id", "google_client_secret"}, func(c *Client) (bool, []*string) {
+	{"google", "google_oauth_enabled", []string{"google_client_id", "google_client_secret"}, func(c *Client) (bool, []*string) {
 		return c.GoogleOAuthEnabled, []*string{c.GoogleClientID, c.GoogleClientSecret}
 	}},
-	{"github_oauth_enabled", []string{"github_client_id", "github_client_secret"}, func(c *Client) (bool, []*string) {
+	{"github", "github_oauth_enabled", []string{"github_client_id", "github_client_secret"}, func(c *Client) (bool, []*string) {
 		return c.GithubOAuthEnabled, []*string{c.GithubClientID, c.GithubClientSecret}
 	}},
-	{"microsoft_oauth_enabled", []string{"microsoft_client_id", "microsoft_client_secret"}, func(c *Client) (bool, []*string) {
+	{"microsoft", "microsoft_oauth_enabled", []string{"microsoft_client_id", "microsoft_client_secret"}, func(c *Client) (bool, []*string) {
 		return c.MicrosoftOAuthEnabled, []*string{c.MicrosoftClientID, c.MicrosoftClientSecret}
 	}},
-	{"apple_oauth_enabled", []string{"apple_client_id", "apple_team_id", "apple_key_id", "apple_private_key"}, func(c *Client) (bool, []*string) {
+	{"apple", "apple_oauth_enabled", []string{"apple_client_id", "apple_team_id", "apple_key_id", "apple_private_key"}, func(c *Client) (bool, []*string) {
 		return c.AppleOAuthEnabled, []*string{c.AppleClientID, c.AppleTeamID, c.AppleKeyID, c.ApplePrivateKey}
 	}},
 }
@@ -51,14 +52,19 @@ func complete(values []*string) bool {
 
 // UsesOwnGoogle and its three siblings report whether sign-in with the
 // provider uses the client's own app rather than the deployment's.
-func (c *Client) UsesOwnGoogle() bool    { return c.usesOwn(0) }
-func (c *Client) UsesOwnGithub() bool    { return c.usesOwn(1) }
-func (c *Client) UsesOwnMicrosoft() bool { return c.usesOwn(2) }
-func (c *Client) UsesOwnApple() bool     { return c.usesOwn(3) }
+func (c *Client) UsesOwnGoogle() bool    { return c.usesOwn("google") }
+func (c *Client) UsesOwnGithub() bool    { return c.usesOwn("github") }
+func (c *Client) UsesOwnMicrosoft() bool { return c.usesOwn("microsoft") }
+func (c *Client) UsesOwnApple() bool     { return c.usesOwn("apple") }
 
-func (c *Client) usesOwn(i int) bool {
-	enabled, values := providerCredentials[i].values(c)
-	return enabled && complete(values)
+func (c *Client) usesOwn(provider string) bool {
+	for _, p := range providerCredentials {
+		if p.provider == provider {
+			enabled, values := p.values(c)
+			return enabled && complete(values)
+		}
+	}
+	return false
 }
 
 // validateProviderCredentials refuses a client — as it would be stored, so
