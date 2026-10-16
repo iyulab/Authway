@@ -335,7 +335,7 @@ func main() {
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
 	// A consent to a client's delegation scope grants a delegation.
 	delegationService := delegation.NewService(db)
-	delegationHandler := delegation.NewHandler(delegationService, newFeatureServices.AuditService, zapLogger)
+	delegationHandler := delegation.NewHandler(delegationService, hydraClient, newFeatureServices.AuditService, zapLogger)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
 	authHandler.GrantsDelegations(delegationService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)

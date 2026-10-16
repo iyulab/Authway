@@ -587,13 +587,18 @@ paths:
       summary: Stop a client from acting for the user
       description: |
         The client can no longer exchange the delegation; access tokens
-        already exchanged run out within their lifetime. Another user's
-        delegation, or one not in force, is `404 not_found`.
+        already exchanged run out within their lifetime. The user's
+        remembered consent to the client is withdrawn with it — with the
+        client's refresh tokens for the user — so the client asks again before
+        it is granted another. Another user's delegation, or one not in force,
+        is `404 not_found`; `502 authorization_server_unavailable` leaves the
+        delegation as it was.
       security: [{ userToken: [] }]
       responses:
         '204': { description: Revoked }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
 
   /api/v1/users/mfa/setup:
     post:
@@ -1918,14 +1923,16 @@ paths:
       operationId: revokeDelegation
       summary: Stop a client from acting for a user
       description: |
-        As the user's own revocation. One of another tenant than the one the
-        request names, or one not in force, is `404 not_found`.
+        As the user's own revocation (revokeOwnDelegation), the remembered
+        consent included. One of another tenant than the one the request
+        names, or one not in force, is `404 not_found`.
       security: [{ adminKey: [] }]
       parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
       responses:
         '204': { description: Revoked }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks:
     get:

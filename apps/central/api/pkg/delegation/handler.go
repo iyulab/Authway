@@ -16,14 +16,22 @@ import (
 // key or the console session) and to the user who granted them (with their
 // own access token).
 type Handler struct {
-	service Service
-	audit   audit.Service
-	logger  *zap.Logger
+	service  Service
+	consents ConsentRevoker
+	audit    audit.Service
+	logger   *zap.Logger
+}
+
+// ConsentRevoker withdraws what a user granted a client at the
+// authorization server: the remembered consent (and with it the client's
+// refresh tokens for the user).
+type ConsentRevoker interface {
+	RevokeClientConsent(subject, clientID string) error
 }
 
 // NewHandler returns a Handler. auditService may be nil.
-func NewHandler(service Service, auditService audit.Service, logger *zap.Logger) *Handler {
-	return &Handler{service: service, audit: auditService, logger: logger}
+func NewHandler(service Service, consents ConsentRevoker, auditService audit.Service, logger *zap.Logger) *Handler {
+	return &Handler{service: service, consents: consents, audit: auditService, logger: logger}
 }
 
 // List handles GET /api/v1/delegations: the tenant's delegations in force,
@@ -108,7 +116,17 @@ func (h *Handler) find(c *fiber.Ctx) (*View, error) {
 	return v, nil
 }
 
+// revoke ends a delegation. The user's remembered consent to the client goes
+// first: while it stands, the client's next sign-in for the user would be
+// granted the delegation scope again without asking. If it cannot be
+// withdrawn, the delegation stays, and the caller can try again.
 func (h *Handler) revoke(c *fiber.Ctx, v *View, by string) error {
+	if h.consents != nil {
+		if err := h.consents.RevokeClientConsent(v.UserID.String(), v.ClientID); err != nil {
+			h.logger.Error("Failed to withdraw the consent behind a delegation", zap.Error(err), zap.String("delegation_id", v.ID.String()))
+			return apierror.Refuse(c, fiber.StatusBadGateway, "authorization_server_unavailable", "The delegation could not be revoked. Try again shortly.")
+		}
+	}
 	err := h.service.Revoke(c.Context(), v.ID)
 	switch {
 	case errors.Is(err, ErrNotFound):
