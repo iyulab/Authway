@@ -20,7 +20,12 @@ export interface Discovery {
 export interface TestClient {
   id: string
   clientId: string
+  /** A confidential client's secret, sent in the token request body (client_secret_post). */
+  secret?: string
 }
+
+/** The grant a client exchanges a delegation with (RFC 8693). */
+export const TOKEN_EXCHANGE_GRANT = 'urn:ietf:params:oauth:grant-type:token-exchange'
 
 export interface TestUser {
   email: string
@@ -41,6 +46,7 @@ export interface Tokens {
   /** Present when the client may use the refresh_token grant and the request asked for offline_access. */
   refresh_token?: string
   token_type: string
+  scope?: string
 }
 
 /** An authorization request waiting at the login screen. */
@@ -197,6 +203,31 @@ export class Provider {
     if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
     const { client } = JSON.parse(text) as { client: { id: string; client_id: string } }
     return { id: client.id, clientId: client.client_id }
+  }
+
+  /**
+   * Registers a confidential client that may act for users who delegate to it:
+   * the token exchange grant and the delegation scope, beside a sign-in of its
+   * own (authorization code).
+   */
+  async createDelegatingClient(options: { skipConsent?: boolean } = {}): Promise<TestClient> {
+    const res = await this.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(options.skipConsent ? { skip_consent: true } : {}),
+        tenant_id: await this.tenantId(),
+        name: `conformance-agent-${randomToken(4)}`,
+        public: false,
+        redirect_uris: [REDIRECT_URI],
+        grant_types: ['authorization_code', TOKEN_EXCHANGE_GRANT],
+        scopes: ['openid', 'profile', 'email', 'delegation'],
+      }),
+    })
+    await conform('POST', '/api/v1/clients', res)
+    const text = await res.text()
+    if (!res.ok) throw new Error(`Creating client failed: ${res.status} ${text}`)
+    const { client, credentials } = JSON.parse(text) as { client: { id: string; client_id: string }; credentials: { client_secret: string } }
+    return { id: client.id, clientId: client.client_id, secret: credentials.client_secret }
   }
 
   async deleteClient(client: TestClient): Promise<void> {
@@ -739,6 +770,7 @@ export class Provider {
         redirect_uri: REDIRECT_URI,
         client_id: client.clientId,
         code_verifier: pkce.verifier,
+        ...(client.secret ? { client_secret: client.secret } : {}),
       }),
     })
     if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`)

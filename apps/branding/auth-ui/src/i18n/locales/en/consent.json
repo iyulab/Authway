@@ -27,6 +27,10 @@
     "offline_access": {
       "name": "Offline Access",
       "description": "Access your information even when you are offline."
+    },
+    "delegation": {
+      "name": "Act for you while you are away",
+      "description": "{{clientName}} can act for you when you are not signed in, with the other permissions above, until you revoke it in your account."
     }
   },
   "errors": {

@@ -588,9 +588,9 @@ paths:
       description: |
         The client can no longer exchange the delegation; access tokens
         already exchanged run out within their lifetime. The user's
-        remembered consent to the client is withdrawn with it — with the
-        client's refresh tokens for the user — so the client asks again before
-        it is granted another. Another user's delegation, or one not in force,
+        remembered consent to the client is withdrawn with it, and with that
+        the client's tokens for the user (access and refresh), so the client
+        asks again before it is granted another. Another user's delegation, or one not in force,
         is `404 not_found`; `502 authorization_server_unavailable` leaves the
         delegation as it was.
       security: [{ userToken: [] }]

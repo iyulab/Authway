@@ -27,6 +27,10 @@
     "offline_access": {
       "name": "오프라인 접근",
       "description": "사용자가 오프라인일 때도 정보에 접근할 수 있습니다."
+    },
+    "delegation": {
+      "name": "자리에 없을 때 대신 처리",
+      "description": "{{clientName}}이(가) 로그인하지 않은 동안에도 위의 다른 권한으로 사용자를 대신해 동작합니다. 계정에서 철회할 때까지 유지됩니다."
     }
   },
   "errors": {

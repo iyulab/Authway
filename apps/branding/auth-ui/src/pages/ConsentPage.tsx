@@ -187,7 +187,7 @@ const ConsentPage: React.FC = () => {
                 const scopeInfo = t(`consent:scopes.${scope}.name`, { defaultValue: '' })
                   ? {
                       name: t(`consent:scopes.${scope}.name`),
-                      description: t(`consent:scopes.${scope}.description`),
+                      description: t(`consent:scopes.${scope}.description`, { clientName: consentInfo.client_name }),
                     }
                   : {
                       name: scope,

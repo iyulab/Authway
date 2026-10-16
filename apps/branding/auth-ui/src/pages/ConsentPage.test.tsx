@@ -55,6 +55,21 @@ describe('ConsentPage', () => {
     Array.from(mockSearchParams.keys()).forEach((k) => mockSearchParams.delete(k))
   })
 
+  describe('Delegation', () => {
+    it('says, naming the application, that it will act for the user while they are away', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/v1/consent-flows/:flow', () =>
+          HttpResponse.json({ ...mockConsentInfo, requested_scope: ['openid', 'delegation'] })
+        )
+      )
+      render(<ConsentPage />)
+      await waitFor(() => {
+        expect(screen.getByText('자리에 없을 때 대신 처리')).toBeInTheDocument()
+      })
+      expect(screen.getByText(/^Test Application이\(가\) 로그인하지 않은 동안에도/)).toBeInTheDocument()
+    })
+  })
+
   describe('Application logo', () => {
     it("shows the application's logo when its registration names one", async () => {
       server.use(

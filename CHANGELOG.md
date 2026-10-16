@@ -71,9 +71,9 @@
   user's answer is remembered. The user lists and revokes their delegations at
   `GET/DELETE /api/v1/users/delegations[/{id}]`, an administrator at
   `GET/DELETE /api/v1/delegations[/{id}]` (by `user_id` or `client_id`).
-  Revoking one withdraws the user's remembered consent to the client too (and
-  its refresh tokens for the user), so the client asks before it is granted
-  another;
+  Revoking one withdraws the user's remembered consent to the client too, and
+  with it the client's tokens for the user, so the client asks before it is
+  granted another;
   audit actions `delegation.granted` and `delegation.revoked`. A public client
   with the grant is `400 public_client_with_token_exchange`, the scope without
   it `400 delegation_without_token_exchange`. Exchanging a delegation for an

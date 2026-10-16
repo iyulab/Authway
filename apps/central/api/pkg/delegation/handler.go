@@ -24,7 +24,7 @@ type Handler struct {
 
 // ConsentRevoker withdraws what a user granted a client at the
 // authorization server: the remembered consent (and with it the client's
-// refresh tokens for the user).
+// tokens for the user).
 type ConsentRevoker interface {
 	RevokeClientConsent(subject, clientID string) error
 }
