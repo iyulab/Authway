@@ -95,6 +95,7 @@
   credentials and device code included — and the tokens it holds end
   (introspection answers them inactive; its users' refresh tokens are
   revoked). Turned on again it works as before, without the sessions it had.
+  The admin console turns a client off (after asking) and on again.
 - **Registering a client under a `client_id` that is taken is refused** with
   `409 client_id_taken` (`field: client_id`). It answered `201` with the
   client already registered under it — ignoring the request, and with a

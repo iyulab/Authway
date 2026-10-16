@@ -136,6 +136,31 @@ describe('changing a client', () => {
   })
 })
 
+describe('turning a client off', () => {
+  it('asks first, then sends only active: false', async () => {
+    vi.spyOn(clientsApi, 'get').mockResolvedValue(answer({ client: existing }))
+    const update = vi.spyOn(clientsApi, 'update').mockResolvedValue(answer({ message: 'ok', client: existing }))
+    const user = userEvent.setup()
+    render(<ClientDetailPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Turn Off' }))
+    expect(update).not.toHaveBeenCalled()
+    const confirm = screen.getAllByRole('button', { name: 'Turn Off' }).at(-1)!
+    await user.click(confirm)
+    await waitFor(() => expect(update).toHaveBeenCalledWith('c1', { active: false }))
+  })
+
+  it('turns a client that is off back on', async () => {
+    vi.spyOn(clientsApi, 'get').mockResolvedValue(answer({ client: { ...existing, active: false } }))
+    const update = vi.spyOn(clientsApi, 'update').mockResolvedValue(answer({ message: 'ok', client: existing }))
+    const user = userEvent.setup()
+    render(<ClientDetailPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Turn On' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('c1', { active: true }))
+  })
+})
+
 describe('the account screen client', () => {
   it('is shown as managed by Authway, without a form to change it or a way to delete it', async () => {
     vi.spyOn(clientsApi, 'get').mockResolvedValue(answer({ client: { ...existing, name: 'Account', public: true, system: true } }))

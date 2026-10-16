@@ -21,6 +21,7 @@ const ClientDetailPage: React.FC = () => {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
+  const [showTurnOffConfirm, setShowTurnOffConfirm] = useState(false)
   const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [credentials, setCredentials] = useState<{ client_id: string; client_secret: string } | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -77,6 +78,20 @@ const ClientDetailPage: React.FC = () => {
         error.response?.data?.detail ||
         'Failed to update client'
       toast.error(errorMessage)
+    },
+  })
+
+  // Turning the client off or on — only `active` is sent.
+  const activeMutation = useMutation({
+    mutationFn: (active: boolean) => clientsApi.update(clientId!, { active }),
+    onSuccess: (_, active) => {
+      setShowTurnOffConfirm(false)
+      queryClient.invalidateQueries({ queryKey: ['client', clientId] })
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      toast.success(active ? 'Client turned on' : 'Client turned off')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to change the client')
     },
   })
 
@@ -240,7 +255,28 @@ const ClientDetailPage: React.FC = () => {
             <h2 className="text-lg font-medium text-red-900">Danger Zone</h2>
           </div>
         </div>
-        <div className="p-6">
+        <div className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-900">
+                {client.active ? 'Turn this client off' : 'Turn this client on'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {client.active
+                  ? 'No one can sign in to it and it gets no tokens until it is turned on again. The tokens it holds end.'
+                  : 'Users can sign in to it again. The sessions it had before it was turned off stay ended.'}
+              </p>
+            </div>
+            {client.active ? (
+              <Button variant="danger" onClick={() => setShowTurnOffConfirm(true)}>
+                Turn Off
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => activeMutation.mutate(true)} isLoading={activeMutation.isPending}>
+                Turn On
+              </Button>
+            )}
+          </div>
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-gray-900">Delete this client</h3>
@@ -260,6 +296,18 @@ const ClientDetailPage: React.FC = () => {
       </Card>
         </>
       )}
+
+      {/* Turn Off Confirmation */}
+      <ConfirmDialog
+        isOpen={showTurnOffConfirm}
+        onClose={() => setShowTurnOffConfirm(false)}
+        onConfirm={() => activeMutation.mutate(false)}
+        title="Turn Client Off"
+        message={`No one will be able to sign in to "${client.name}", and it will get no tokens. The tokens it holds end, and its users' sessions stay ended when it is turned on again. Continue?`}
+        confirmText="Turn Off"
+        variant="danger"
+        isLoading={activeMutation.isPending}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog
