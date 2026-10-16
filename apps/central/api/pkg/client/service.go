@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/apierror"
@@ -931,19 +932,20 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		Audience:               nonNil(c.Audience),
 		// The logout token names the session (sid), which is what an
 		// application has from the ID token to match it against.
-		BackChannelLogoutURI:             c.BackChannelLogoutURI,
-		BackChannelLogoutSessionRequired: c.BackChannelLogoutURI != "",
-		ClientURI:                        c.ClientURI,
-		LogoURI:                          c.Logo,
-		GrantTypes:                       c.grantsInForce(),
-		ResponseTypes:                    []string{"code"},
-		Scope:                            strings.Join(c.Scopes, " "),
-		TokenEndpointAuthMethod:          authMethod,
-		JWKS:                             c.registeredKeys(),
-		JWKSURI:                          c.JWKSURI,
-		SkipConsent:                      c.SkipConsent,
-		SkipLogoutConsent:                c.SkipLogoutConsent,
-		AccessTokenStrategy:              derefStrategy(c.AccessTokenStrategy),
+		BackChannelLogoutURI:              c.BackChannelLogoutURI,
+		BackChannelLogoutSessionRequired:  c.BackChannelLogoutURI != "",
+		ClientURI:                         c.ClientURI,
+		LogoURI:                           c.Logo,
+		GrantTypes:                        c.grantsInForce(),
+		JWTBearerGrantAccessTokenLifespan: c.exchangedTokenLifespan(),
+		ResponseTypes:                     []string{"code"},
+		Scope:                             strings.Join(c.Scopes, " "),
+		TokenEndpointAuthMethod:           authMethod,
+		JWKS:                              c.registeredKeys(),
+		JWKSURI:                           c.JWKSURI,
+		SkipConsent:                       c.SkipConsent,
+		SkipLogoutConsent:                 c.SkipLogoutConsent,
+		AccessTokenStrategy:               derefStrategy(c.AccessTokenStrategy),
 	}
 }
 
@@ -1030,18 +1032,37 @@ const revocationsAtOnce = 16
 // grants on every token request — a refresh, client credentials, a device
 // code — and an authorization request, so a client registered with none gets
 // nothing from it; the stored grants come back when it is turned on. Token
-// exchange is Authway's to answer, not the engine's, so it is not among them.
+// exchange is Authway's to answer: the engine does not know it by that name,
+// and issues the exchanged token by its assertion grant (RFC 7523) on an
+// assertion Authway signs — so a client that exchanges has that grant there
+// instead.
 func (c *Client) grantsInForce() []string {
 	if !c.Active {
 		return []string{}
 	}
 	grants := make([]string, 0, len(c.GrantTypes))
 	for _, g := range c.GrantTypes {
-		if g != TokenExchangeGrant {
-			grants = append(grants, g)
+		if g == TokenExchangeGrant {
+			g = hydra.JWTBearerGrant
 		}
+		grants = append(grants, g)
 	}
 	return grants
+}
+
+// ExchangedTokenLifetime is how long an access token a client exchanges a
+// delegation for lasts. It has no refresh token: a revoked delegation ends
+// everywhere within this.
+const ExchangedTokenLifetime = 5 * time.Minute
+
+// exchangedTokenLifespan is ExchangedTokenLifetime for the engine's
+// registration of a client that exchanges, and "" (the engine's default) for
+// any other.
+func (c *Client) exchangedTokenLifespan() string {
+	if !containsAny([]string(c.GrantTypes), TokenExchangeGrant) {
+		return ""
+	}
+	return ExchangedTokenLifetime.String()
 }
 
 // MayActForUsers reports whether the client may be granted a delegation and

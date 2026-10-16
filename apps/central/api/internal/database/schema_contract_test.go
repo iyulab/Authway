@@ -122,6 +122,9 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		row   any
 		table string
 	}{
+		{"delegation_signing_key", &delegation.SigningKey{
+			KID: "contract-" + uuid.New().String(), PrivateKey: "sealed", CreatedAt: time.Now(),
+		}, "delegation_signing_keys"},
 		{"delegation_grant", &delegation.Grant{
 			ID: uuid.New(), TenantID: tenantID, UserID: userID, ClientID: cl.ID,
 			Scopes: []string{"openid", "orders.read"}, HandleHash: tokenhash.Hash(uuid.New().String()),
@@ -214,7 +217,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 		"invitations", "magic_link_tokens",
 		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
 		"password_resets", "email_verifications", "service_clients",
-		"delegation_grants",
+		"delegation_grants", "delegation_signing_keys",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
 	for _, table := range tables {
@@ -239,7 +242,7 @@ func mappedModels() []any {
 		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
 		&terms.Document{}, &terms.Acceptance{},
-		&delegation.Grant{},
+		&delegation.Grant{}, &delegation.SigningKey{},
 	}
 }
 

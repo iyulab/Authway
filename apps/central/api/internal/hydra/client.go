@@ -132,6 +132,99 @@ type OAuth2Client struct {
 	// and client update is a PUT full-replace, so omitting the field resets a
 	// previously-pinned client back to inheriting.
 	AccessTokenStrategy string `json:"access_token_strategy,omitempty"`
+
+	// JWTBearerGrantAccessTokenLifespan is how long an access token issued to
+	// the client by the assertion grant (RFC 7523) lasts, e.g. "5m0s". Empty:
+	// the engine's default.
+	JWTBearerGrantAccessTokenLifespan string `json:"jwt_bearer_grant_access_token_lifespan,omitempty"`
+}
+
+// JWTBearerGrant is the assertion grant (RFC 7523) the engine issues tokens
+// by when it trusts the assertion's issuer.
+const JWTBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+
+// TrustedIssuer is an issuer whose assertions the engine accepts for the
+// assertion grant: its key, the scopes it may ask for, until when.
+type TrustedIssuer struct {
+	ID              string          `json:"id,omitempty"`
+	Issuer          string          `json:"issuer"`
+	AllowAnySubject bool            `json:"allow_any_subject"`
+	Scope           []string        `json:"scope"`
+	JWK             json.RawMessage `json:"jwk,omitempty"`
+	PublicKey       *struct {
+		KeyID string `json:"kid"`
+	} `json:"public_key,omitempty"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// KeyID is the id of the trusted key.
+func (t TrustedIssuer) KeyID() string {
+	if t.PublicKey == nil {
+		return ""
+	}
+	return t.PublicKey.KeyID
+}
+
+// TrustedIssuers lists the engine's trust in one issuer.
+func (c *Client) TrustedIssuers(issuer string) ([]TrustedIssuer, error) {
+	resp, err := c.client.Get(c.AdminURL + "/admin/trust/grants/jwt-bearer/issuers?issuer=" + url.QueryEscape(issuer))
+	if err != nil {
+		return nil, fmt.Errorf("list trusted issuers: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("list trusted issuers: status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var out []TrustedIssuer
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("list trusted issuers: %w", err)
+	}
+	// The engine filters by issuer; a listing that answers more is not
+	// trusted to be about this one.
+	mine := out[:0]
+	for _, t := range out {
+		if t.Issuer == issuer {
+			mine = append(mine, t)
+		}
+	}
+	return mine, nil
+}
+
+// TrustIssuer makes the engine accept assertions t's key signs.
+func (c *Client) TrustIssuer(t TrustedIssuer) error {
+	body, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Post(c.AdminURL+"/admin/trust/grants/jwt-bearer/issuers", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("trust issuer: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("trust issuer: status=%d body=%s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// DistrustIssuer removes one trust relationship.
+func (c *Client) DistrustIssuer(id string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.AdminURL+"/admin/trust/grants/jwt-bearer/issuers/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("distrust issuer: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("distrust issuer: status=%d body=%s", resp.StatusCode, string(b))
+	}
+	return nil
 }
 
 func (c *Client) CreateOAuth2Client(client *OAuth2Client) (*OAuth2Client, error) {

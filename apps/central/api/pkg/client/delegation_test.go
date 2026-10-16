@@ -3,6 +3,8 @@ package client
 import (
 	"slices"
 	"testing"
+
+	"authway/apps/central/api/internal/hydra"
 )
 
 func TestValidateDelegation(t *testing.T) {
@@ -35,12 +37,18 @@ func TestValidateDelegation(t *testing.T) {
 	}
 }
 
-// The authorization server does not know token exchange by that name: it is
-// answered by Authway, so it never reaches the client's registration there.
-func TestGrantsInForceLeaveTokenExchangeToAuthway(t *testing.T) {
+// The authorization server does not know token exchange by that name: it
+// issues the exchanged token by its assertion grant, for five minutes.
+func TestGrantsInForceGiveTheEngineTheAssertionGrantForTokenExchange(t *testing.T) {
 	c := &Client{Active: true, GrantTypes: []string{"authorization_code", TokenExchangeGrant, "refresh_token"}}
-	if got := c.grantsInForce(); !slices.Equal(got, []string{"authorization_code", "refresh_token"}) {
+	if got := c.grantsInForce(); !slices.Equal(got, []string{"authorization_code", hydra.JWTBearerGrant, "refresh_token"}) {
 		t.Fatalf("grants in force = %v", got)
+	}
+	if got := c.exchangedTokenLifespan(); got != "5m0s" {
+		t.Fatalf("lifespan = %q, want 5m0s", got)
+	}
+	if got := (&Client{GrantTypes: []string{"authorization_code"}}).exchangedTokenLifespan(); got != "" {
+		t.Fatalf("a client that does not exchange keeps the engine's lifespan, got %q", got)
 	}
 	if !c.MayActForUsers() {
 		t.Fatal("an active client with the exchange grant may act for users")
