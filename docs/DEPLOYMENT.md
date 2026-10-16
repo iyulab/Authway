@@ -112,8 +112,25 @@ az containerapp create \
     URLS_SELF_ISSUER="https://oauth.authway.in" \
     URLS_LOGIN="https://api.authway.in/login" \
     URLS_CONSENT="https://api.authway.in/consent" \
-    URLS_LOGOUT="https://api.authway.in/logout"
+    URLS_LOGOUT="https://api.authway.in/logout"     WEBFINGER_OIDC_DISCOVERY_TOKEN_URL="https://api.authway.in/oauth2/token"     OAUTH2_TOKEN_HOOK_URL="https://<api app address>/internal/token-hook"     CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS="https://<api app address>/internal/token-hook"     OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE=secretref:token-hook-key
 ```
+
+(plus `--secrets token-hook-key="<openssl rand -hex 32>"`, and the settings
+every deployment shares from `configs/hydra.shared.env`.)
+
+**Token endpoint and token hook.** Discovery's `token_endpoint` is the API's
+`/oauth2/token`: the API passes every grant the authorization server knows on
+to it unchanged (body, client authentication, answer) and answers the grants
+Authway assembles itself. A client that signs an assertion
+(`private_key_jwt`) addresses it to that URL; the authorization server
+accepts it because it is the token endpoint its discovery names. Before it
+issues any token the authorization server calls the API's token hook,
+presenting the key in `X-Authway-Hook-Key`; the API holds the same key
+(`AUTHWAY_HYDRA_TOKEN_HOOK_KEY`). The hook address is the API's Container Apps
+address, so the call stays inside the environment; that address may resolve
+to a private one, which `CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES` refuses — the
+hook address, and only it, is listed as the exception. If the hook does not
+answer, the authorization server issues no token.
 
 Pass passwords, keys and connection strings with `--secrets` and refer to
 them with `secretref:`. A plain `--env-vars` value is part of the app
@@ -152,8 +169,13 @@ az containerapp create \
     AUTHWAY_ADMIN_API_KEY=secretref:admin-api-key \
     AUTHWAY_TOTP_ENCRYPTION_KEY=secretref:totp-encryption-key \
     AUTHWAY_HYDRA_ADMIN_URL="http://authway-hydra:4445" \
-    AUTHWAY_HYDRA_PUBLIC_URL="https://oauth.authway.in"
+    AUTHWAY_HYDRA_PUBLIC_URL="https://oauth.authway.in"     AUTHWAY_HYDRA_PUBLIC_BACKEND_URL="https://<hydra public app address>"     AUTHWAY_HYDRA_TOKEN_HOOK_KEY=secretref:token-hook-key
 ```
+
+`AUTHWAY_HYDRA_PUBLIC_BACKEND_URL` is where the API passes token requests to
+the authorization server — its Container Apps address, not the public one, so
+a token request does not leave the environment and come back through what
+stands in front of it.
 
 Redis and the auth UI address are required as well — the full list, and what
 the API refuses to start without, is in [CONFIGURATION.md](../CONFIGURATION.md).
@@ -348,8 +370,10 @@ AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
 DATABASE_URL=postgres://user:password@host:5432/authway?sslmode=require
 HYDRA_ADMIN_URL=http://hydra:4445
 HYDRA_PUBLIC_URL=https://oauth.authway.in
+AUTHWAY_HYDRA_TOKEN_HOOK_KEY=<the key the authorization server presents to the token hook>
 
 # Optional
+AUTHWAY_HYDRA_PUBLIC_BACKEND_URL=https://<hydra public app address>   # default: HYDRA_PUBLIC_URL
 PORT=8080
 LOG_LEVEL=info
 AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
@@ -365,6 +389,10 @@ URLS_SELF_ISSUER=https://oauth.authway.in
 URLS_LOGIN=https://api.authway.in/login      # the API hands the login UI an opaque flow id
 URLS_CONSENT=https://api.authway.in/consent
 URLS_LOGOUT=https://api.authway.in/logout
+WEBFINGER_OIDC_DISCOVERY_TOKEN_URL=https://api.authway.in/oauth2/token   # the API's token endpoint
+OAUTH2_TOKEN_HOOK_URL=https://<api app address>/internal/token-hook
+CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS=https://<api app address>/internal/token-hook
+OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE=<the same key as the API's AUTHWAY_HYDRA_TOKEN_HOOK_KEY>
 
 # Optional
 LOG_LEVEL=info
@@ -447,6 +475,7 @@ Each secret can be changed on its own. What a change costs differs:
 | `AUTHWAY_ADMIN_PASSWORD` | The people who sign in to the admin console | Set and redeploy. |
 | `AUTHWAY_TOTP_ENCRYPTION_KEY` | Nobody — it seals values at rest | Change it with the previous key listed, then remove that ([CONFIGURATION.md](../CONFIGURATION.md)). Nothing sealed is lost. |
 | Database password | The API and both authorization server processes (their `DSN`) | Below. |
+| Token hook key (`AUTHWAY_HYDRA_TOKEN_HOOK_KEY`) | The authorization server's public process (`OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE`) | The API accepts every key in a comma-separated list: deploy the API with `<new>,<old>`, then the authorization server with `<new>`, then the API with `<new>`. No token request fails on the way. |
 | Redis password | The API | Set and redeploy; or move to a new instance ([Moving to another instance](#moving-to-another-instance)). |
 | Authorization server `SECRETS_SYSTEM` | The authorization server's own stored keys and issued tokens | Below — in stages. |
 

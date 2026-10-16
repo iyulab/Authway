@@ -41,7 +41,7 @@ try {
     # 실패하므로 여기서 함께 막는다.
     # 아래 비밀로 넣는 값(데이터베이스·Redis 비밀번호, 관리자 비밀번호)도 비어 있으면
     # 비밀을 쓸 수 없으므로 함께 막는다.
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTHWAY_ADMIN_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD', 'AUTHWAY_REDIS_PASSWORD')
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('ADMIN_API_KEY', 'AUTHWAY_TOTP_ENCRYPTION_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTHWAY_ADMIN_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD', 'AUTHWAY_REDIS_PASSWORD', 'AUTHWAY_HYDRA_TOKEN_HOOK_KEY', 'HYDRA_PUBLIC_INTERNAL_URL')
 
     Set-AzureSubscription -EnvVars $envVars
 } catch {
@@ -129,6 +129,7 @@ try {
         'database-password'     = $envVars['AUTHWAY_DATABASE_PASSWORD']
         'redis-password'        = $envVars['AUTHWAY_REDIS_PASSWORD']
         'google-client-secret'  = $envVars['GOOGLE_CLIENT_SECRET']
+        'token-hook-key'        = $envVars['AUTHWAY_HYDRA_TOKEN_HOOK_KEY']
     }
     # While the at-rest key is being changed, the keys it replaced
     # (comma-separated). The API reseals what they sealed at startup; once its
@@ -186,6 +187,8 @@ try {
             "AUTHWAY_REDIS_TLS_ENABLED=$($envVars['AUTHWAY_REDIS_TLS_ENABLED'])" `
             "AUTHWAY_HYDRA_ADMIN_URL=$($envVars['HYDRA_ADMIN_INTERNAL_URL'])" `
             "AUTHWAY_HYDRA_PUBLIC_URL=$($envVars['HYDRA_ISSUER'])" `
+            "AUTHWAY_HYDRA_PUBLIC_BACKEND_URL=$($envVars['HYDRA_PUBLIC_INTERNAL_URL'])" `
+            "AUTHWAY_HYDRA_TOKEN_HOOK_KEY=secretref:token-hook-key" `
             "AUTHWAY_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
             "AUTHWAY_ADMIN_API_KEY=secretref:admin-api-key" `
             "AUTHWAY_TOTP_ENCRYPTION_KEY=secretref:totp-encryption-key" `

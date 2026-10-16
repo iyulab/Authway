@@ -113,6 +113,31 @@ type CORSConfig struct {
 type HydraConfig struct {
 	AdminURL  string `mapstructure:"admin_url"`
 	PublicURL string `mapstructure:"public_url"`
+	// PublicBackendURL is where this API reaches the authorization server's
+	// public endpoints when it passes a token request on
+	// (AUTHWAY_HYDRA_PUBLIC_BACKEND_URL) — an address inside the deployment's
+	// network, so the call does not leave it and come back through whatever
+	// stands in front of the public address. Empty: PublicURL.
+	PublicBackendURL string `mapstructure:"public_backend_url"`
+	// TokenHookKeys are the keys the authorization server may present when it
+	// calls the token hook (AUTHWAY_HYDRA_TOKEN_HOOK_KEY, comma-separated —
+	// more than one while the key is being changed). None: the hook is not
+	// served, and an authorization server configured to call it cannot issue
+	// tokens.
+	TokenHookKeys []string `mapstructure:"-"`
+}
+
+// DevelopmentTokenHookKey is the token hook key of local development: the
+// value docker-compose.yml gives the local authorization server.
+const DevelopmentTokenHookKey = "local-development-token-hook-key"
+
+// EngineURL is where this API reaches the authorization server's public
+// endpoints.
+func (h HydraConfig) EngineURL() string {
+	if h.PublicBackendURL != "" {
+		return h.PublicBackendURL
+	}
+	return h.PublicURL
 }
 
 type EmailConfig struct {
@@ -292,6 +317,14 @@ func Load() (*Config, error) {
 	if publicURL := os.Getenv("AUTHWAY_HYDRA_PUBLIC_URL"); publicURL != "" {
 		config.Hydra.PublicURL = publicURL
 	}
+	if backendURL := os.Getenv("AUTHWAY_HYDRA_PUBLIC_BACKEND_URL"); backendURL != "" {
+		config.Hydra.PublicBackendURL = backendURL
+	}
+	for _, k := range strings.Split(os.Getenv("AUTHWAY_HYDRA_TOKEN_HOOK_KEY"), ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			config.Hydra.TokenHookKeys = append(config.Hydra.TokenHookKeys, k)
+		}
+	}
 
 	// Manual override for Database config (Viper AutomaticEnv doesn't always work well)
 	if host := os.Getenv("AUTHWAY_DATABASE_HOST"); host != "" {
@@ -356,6 +389,12 @@ func Load() (*Config, error) {
 	// validation (below) to force explicit keys instead of silently minting
 	// ephemeral ones that a peer service can't know.
 	if IsDevelopment(config.App.Environment) {
+		// The local authorization server (docker-compose.yml) presents this
+		// key when it calls the token hook, so `go run` works against it
+		// without setup. It guards nothing outside one machine.
+		if len(config.Hydra.TokenHookKeys) == 0 {
+			config.Hydra.TokenHookKeys = []string{DevelopmentTokenHookKey}
+		}
 		if config.Admin.APIKey == "" {
 			key, err := generateRandomKey(32)
 			if err != nil {

@@ -75,11 +75,12 @@ provision a new one.
 
 ## 2. Getting an access token
 
-Use the standard OAuth2 `client_credentials` grant against Hydra's **public**
-token endpoint (not the Authway API, and not Hydra's admin endpoint):
+Use the standard OAuth2 `client_credentials` grant at the token endpoint that
+discovery names (`token_endpoint` in
+`{issuer}/.well-known/openid-configuration`):
 
 ```http
-POST {hydra_public_url}/oauth2/token
+POST {token_endpoint}
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=client_credentials
@@ -88,9 +89,9 @@ grant_type=client_credentials
 &scope=admin.clients:write
 ```
 
-`hydra_public_url` is the same Hydra public URL Authway itself uses for
-authorization-code flows (`AUTHWAY_HYDRA_PUBLIC_URL`, default
-`http://localhost:4444` in local/dev setups). The service client was
+`token_endpoint` is the Authway API's `/oauth2/token` (`http://localhost:8080/oauth2/token`
+in local setups), which passes the grant on to the authorization server. Read
+it from discovery rather than writing it down. The service client was
 registered in Hydra with `token_endpoint_auth_method: client_secret_post`
 (provisioning step 1), so `client_id`/`client_secret` go in the form body as
 shown above — not as an HTTP Basic `Authorization` header. Hydra returns a

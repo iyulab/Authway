@@ -14,8 +14,9 @@
 
 # Names that hold a secret: *_PASSWORD, *_KEY(S), *_SECRET, and the
 # authorization server's DSN (it embeds the database password) and
-# SECRETS_* (its system and cookie secrets).
-$script:SecretEnvNamePattern = '(_PASSWORD|_KEYS?|_SECRET)$|^DSN$|^SECRETS_'
+# SECRETS_* (its system and cookie secrets), and the key it presents to the
+# token hook.
+$script:SecretEnvNamePattern = '(_PASSWORD|_KEYS?|_SECRET)$|^DSN$|^SECRETS_|^OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE$'
 
 function Set-ContainerAppSecrets {
     param(

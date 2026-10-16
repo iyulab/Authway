@@ -131,11 +131,41 @@ if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
     }
 }
 
+# The token endpoint discovery names and the token hook, on the public app.
+if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
+    Write-Host "🔍 public ($publicApp) — 토큰 끝점·토큰 훅" -ForegroundColor Gray
+    $expected = Get-HydraTokenRoute -EnvVars $envVars
+    $raw = az containerapp show -n $publicApp -g $resourceGroup `
+        --query "properties.template.containers[0].env" `
+        -o json --only-show-errors 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ public: az containerapp show 실패 — $raw" -ForegroundColor Red
+        $failed = $true
+    } else {
+        $entries = @{}
+        foreach ($e in ($raw | ConvertFrom-Json)) { $entries[$e.name] = $e }
+        foreach ($name in $expected.Keys) {
+            if ($entries[$name].value -ne $expected[$name]) {
+                Write-Host "❌ public: $name = '$($entries[$name].value)' (기대: '$($expected[$name])')" -ForegroundColor Red
+                $failed = $true
+            } else {
+                Write-Host "✅ public: $name = $($expected[$name])" -ForegroundColor Green
+            }
+        }
+        if ($entries['OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE'].secretRef -ne 'token-hook-key') {
+            Write-Host "❌ public: OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE 가 secretref:token-hook-key 가 아님" -ForegroundColor Red
+            $failed = $true
+        } else {
+            Write-Host "✅ public: OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE = secretref:token-hook-key" -ForegroundColor Green
+        }
+    }
+}
+
 Write-Host ""
 if ($failed) {
     Write-Host "❌ Hydra env 검증 실패 — 위 항목 참조. 배포가 configs/hydra.shared.env 보다 앞서 나갔거나(재배포 필요) 인자 전개가 깨진 것." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 공유 설정 전부·비밀은 secretref, public 흐름 URL 4종)" -ForegroundColor Green
+Write-Host "✅ Hydra env 검증 통과 (public·admin 양쪽 공유 설정 전부·비밀은 secretref, public 흐름 URL·토큰 끝점·토큰 훅)" -ForegroundColor Green
 exit 0

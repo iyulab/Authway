@@ -26,7 +26,7 @@ $SharedDir = Split-Path -Parent $LibDir
 
 try {
     $envVars = Get-DeployEnv -Target $Target
-    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD')
+    Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD', 'AUTHWAY_HYDRA_TOKEN_HOOK_KEY')
     Set-AzureSubscription -EnvVars $envVars
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
@@ -39,9 +39,13 @@ $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 
 # Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1), and
 # the settings every deployment shares (configs/hydra.shared.env, see
-# hydra-shared-env.ps1) — token shape, what discovery advertises, lifetimes.
+# hydra-shared-env.ps1) — token shape, what discovery advertises, lifetimes —
+# and where the token endpoint and the token hook are (Get-HydraTokenRoute).
+# The public app issues tokens, so only it calls the hook and holds its key.
 try {
     $FlowUrlEnv = @((Get-HydraFlowUrls -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+    $FlowUrlEnv += @((Get-HydraTokenRoute -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+    $FlowUrlEnv += 'OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE=secretref:token-hook-key'
     $SharedEnv = @((Get-HydraSharedEnv -EnvVars $envVars).GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
 } catch {
     Write-Host "❌ preflight 실패: $_" -ForegroundColor Red
@@ -64,6 +68,7 @@ try {
     if ($UpdateEnvOnly) {
         Write-Host "🔧 환경 변수만 업데이트합니다..." -ForegroundColor Yellow
         Write-Host ""
+        Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -Secrets ([ordered]@{ 'token-hook-key' = $envVars['AUTHWAY_HYDRA_TOKEN_HOOK_KEY'] })
 
         az containerapp update `
             --name $CONTAINER_APP_HYDRA `
@@ -119,7 +124,10 @@ try {
         }
         Write-Host "🔐 Container App 비밀 반영 중: $($hydraSecrets.Keys -join ', ')" -ForegroundColor Yellow
         $revisionBefore = Get-LatestRevisionName -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP
-        Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -Secrets $hydraSecrets
+        $publicSecrets = [ordered]@{}
+        foreach ($k in $hydraSecrets.Keys) { $publicSecrets[$k] = $hydraSecrets[$k] }
+        $publicSecrets['token-hook-key'] = $envVars['AUTHWAY_HYDRA_TOKEN_HOOK_KEY']
+        Set-ContainerAppSecrets -App $CONTAINER_APP_HYDRA -ResourceGroup $RESOURCE_GROUP -Secrets $publicSecrets
 
         # Hydra entrypoint를 매 배포마다 명시. args를 토큰 단위로 분리하여 az CLI parsing bug 회피
         # (--args "-c" 패턴은 az CLI가 -c를 자신의 옵션으로 파싱하여 실패함).

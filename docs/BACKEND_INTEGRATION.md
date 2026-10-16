@@ -761,8 +761,8 @@ Use frontend to login and get access token, or use curl:
 # Login via Authway (returns authorization code)
 curl "http://localhost:4444/oauth2/auth?client_id=your-client-id&response_type=code&redirect_uri=http://localhost:3000&scope=openid%20profile%20email&audience=api"
 
-# Exchange code for token
-curl -X POST "http://localhost:4444/oauth2/token" \
+# Exchange code for token, at the token_endpoint discovery names
+curl -X POST "http://localhost:8080/oauth2/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code&code=YOUR_CODE&redirect_uri=http://localhost:3000&client_id=your-client-id&code_verifier=YOUR_VERIFIER"
 ```

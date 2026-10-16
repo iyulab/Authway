@@ -365,6 +365,16 @@ func main() {
 	app.Post("/auth/apple/callback", socialHandler.AppleCallback) // Apple uses POST with form_post response mode
 	app.Get("/auth/apple/callback", socialHandler.AppleCallback)
 
+	// The token endpoint discovery advertises: it passes every grant the
+	// authorization server knows on to it unchanged, and answers the ones
+	// Authway assembles itself.
+	app.Post("/oauth2/token", handler.NewTokenEndpoint(cfg.Hydra.EngineURL(), zapLogger).Token)
+	// The authorization server calls this before it issues a token. Served
+	// only when the deployment set the key the authorization server presents.
+	if len(cfg.Hydra.TokenHookKeys) > 0 {
+		app.Post("/internal/token-hook", handler.NewTokenHook(cfg.Hydra.TokenHookKeys).Hook)
+	}
+
 	// API routes
 	// API v1 routes
 	v1 := app.Group("/api/v1")

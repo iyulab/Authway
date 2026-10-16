@@ -113,6 +113,14 @@ services:
       URLS_DEVICE_VERIFICATION: http://localhost:8080/device
       URLS_DEVICE_SUCCESS: http://localhost:3001/device/done
       URLS_ERROR: http://localhost:3001/error
+      # Discovery names the API's token endpoint, which passes every grant
+      # Hydra knows on to it; Hydra calls the API's token hook before it
+      # issues a token, with the key the API uses in development
+      # (config.DevelopmentTokenHookKey). Deployments derive the same from
+      # API_URL (scripts/deploy/_shared/hydra-flow-urls.ps1).
+      WEBFINGER_OIDC_DISCOVERY_TOKEN_URL: http://localhost:8080/oauth2/token
+      OAUTH2_TOKEN_HOOK_URL: http://host.docker.internal:8080/internal/token-hook
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE: local-development-token-hook-key
       SECRETS_SYSTEM: youReallyNeedToChangeThis
       # Receivers of back-channel logout calls run on this machine here; every
       # other deployment keeps the shared setting, which refuses them.
@@ -129,6 +137,9 @@ services:
     ports:
       - "4444:4444" # Public API
       - "4445:4445" # Admin API
+    # The API runs on the host (see the top of this file).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: serve all --dev
     depends_on:
       hydra-migrate:

@@ -37,6 +37,16 @@ var publicDocuments = []string{
 	"/api/v1/capabilities",
 }
 
+// clientAuthenticatedPaths are called by OAuth clients, which authenticate
+// themselves in the request (a secret, a signed assertion, or PKCE for a
+// public client). A browser application on any origin exchanges its code at
+// the token endpoint, as it did when the authorization server answered there
+// directly — it admits every origin too. No cookies: a browser session
+// authenticates nothing here.
+var clientAuthenticatedPaths = []string{
+	"/oauth2/token",
+}
+
 // userTokenPaths are the routes a signed-in user calls with their own access
 // token. A browser application reaches them from the origins registered on
 // its client.
@@ -50,6 +60,7 @@ var userTokenPaths = []string{
 // CORS decides which pages may call the API from a browser:
 //
 //   - the public documents, from any origin;
+//   - the token endpoint, from any origin, without cookies;
 //   - everything, with cookies, from the deployment's own origins (its login
 //     screens and console);
 //   - the routes a user calls with their own access token, without cookies,
@@ -77,7 +88,7 @@ func CORS(deploymentOrigins []string, registered func(origin string) bool) fiber
 		}
 		path := c.Path()
 		switch {
-		case matchesAny(path, publicDocuments):
+		case matchesAny(path, publicDocuments), matchesAny(path, clientAuthenticatedPaths):
 			return admitOrigin(c, "*")
 		case registered != nil && matchesAny(path, userTokenPaths) && registered(origin):
 			return admitOrigin(c, origin)

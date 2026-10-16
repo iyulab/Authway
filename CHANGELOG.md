@@ -2,6 +2,22 @@
 
 ### Changed
 
+- **Discovery's `token_endpoint` is the API's `/oauth2/token`.** It passes
+  every grant the authorization server serves on to it unchanged — the body,
+  the client's authentication (a secret, a signed assertion, PKCE), the answer
+  and its errors — and answers `unsupported_grant_type` for token exchange
+  (RFC 8693), which it will assemble itself. A client that reads the endpoint
+  from discovery, as the SDKs do, follows on its own; one that wrote down the
+  authorization server's address keeps working there. A client that signs an
+  assertion (`private_key_jwt`) may address it to either. A page on any origin
+  can read the endpoint's answer, as before. Deployments set the authorization
+  server's `WEBFINGER_OIDC_DISCOVERY_TOKEN_URL` and the token hook below
+  ([DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+- **The authorization server calls the API before it issues a token** (its
+  token hook, `POST /internal/token-hook`, with the key in
+  `X-Authway-Hook-Key`; the API holds it as `AUTHWAY_HYDRA_TOKEN_HOOK_KEY`).
+  It changes no token yet. Without the hook answering, no token is issued.
+
 - **A client's own sign-in provider apps follow one rule for all four
   providers.** A provider enabled with `*_oauth_enabled` must have all of its
   credentials — an id and a secret for Google, GitHub and Microsoft, all four

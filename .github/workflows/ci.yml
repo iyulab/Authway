@@ -152,6 +152,8 @@ jobs:
 
     env:
       ADMIN_API_KEY: ci-conformance-admin-key
+      # The key Hydra presents when it calls the API's token hook.
+      TOKEN_HOOK_KEY: ci-conformance-token-hook-key
 
     steps:
       - uses: actions/checkout@v7
@@ -187,6 +189,9 @@ jobs:
             -e URLS_LOGOUT=http://localhost:8080/logout \
             -e URLS_DEVICE_VERIFICATION=http://localhost:8080/device \
             -e URLS_DEVICE_SUCCESS=http://localhost:3001/device/done \
+            -e WEBFINGER_OIDC_DISCOVERY_TOKEN_URL=http://localhost:8080/oauth2/token \
+            -e OAUTH2_TOKEN_HOOK_URL=http://localhost:8080/internal/token-hook \
+            -e OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE="$TOKEN_HOOK_KEY" \
             -e CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false \
             oryd/hydra:v26.2.0 serve all --dev
           for _ in $(seq 1 60); do
@@ -209,6 +214,7 @@ jobs:
           AUTHWAY_EMAIL_SMTP_HOST: localhost
           AUTHWAY_EMAIL_SMTP_PORT: '1025'
           AUTHWAY_ADMIN_API_KEY: ${{ env.ADMIN_API_KEY }}
+          AUTHWAY_HYDRA_TOKEN_HOOK_KEY: ${{ env.TOKEN_HOOK_KEY }}
           # The suite's back-channel logout receiver listens on this machine.
           AUTHWAY_ALLOW_PRIVATE_TARGETS: 'true'
           # Sign-in through Google is pointed at the stand-in provider the

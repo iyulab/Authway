@@ -57,6 +57,29 @@ describe('browser applications and their origins', () => {
     }
   })
 
+  // A browser application exchanges its code at the token endpoint discovery
+  // names (PKCE, no secret). The origin decides nothing there — the client
+  // authenticates in the request — so a page on any origin reads the answer,
+  // a refusal included.
+  it('lets a page on any origin read what the token endpoint answers', async () => {
+    const { token_endpoint } = await provider.discovery()
+    const pre = await fetch(token_endpoint, {
+      method: 'OPTIONS',
+      headers: { Origin: stranger, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+    })
+    expect(pre.status).toBeLessThan(300)
+    expect([stranger, '*']).toContain(pre.headers.get('access-control-allow-origin'))
+
+    const res = await fetch(token_endpoint, {
+      method: 'POST',
+      headers: { Origin: stranger, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: 'not-a-code', client_id: client.clientId, redirect_uri: `${registered}/callback`, code_verifier: randomToken(43) }),
+    })
+    expect(res.status).toBe(400)
+    expect([stranger, '*']).toContain(res.headers.get('access-control-allow-origin'))
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_grant')
+  })
+
   it("lets a registered origin call the routes a user calls with their own token", async () => {
     for (const [path, method] of [
       ['/api/v1/profile/me', 'GET'],

@@ -32,6 +32,7 @@ func newCORSApp() *fiber.App {
 	app.Post("/api/v1/logout", ok)
 	app.Post("/api/v1/logout-flows/:id/accept", ok)
 	app.Get("/api/v1/webhooks", ok)
+	app.Post("/oauth2/token", ok)
 	return app
 }
 
@@ -141,6 +142,26 @@ func TestCORS_AnUnregisteredOriginReachesOnlyThePublicDocuments(t *testing.T) {
 		if resp.Header.Get("Access-Control-Allow-Credentials") != "" {
 			t.Errorf("%s: a public document must not allow credentials", path)
 		}
+	}
+}
+
+func TestCORS_AnyOriginExchangesAtTheTokenEndpointWithoutCookies(t *testing.T) {
+	app := newCORSApp()
+	resp := preflight(t, app, fiber.MethodPost, "/oauth2/token", strangerOrigin)
+	if resp.StatusCode != fiber.StatusNoContent || resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("preflight: status %d origin %q, want 204 from any origin", resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
+	}
+	req := httptest.NewRequest(fiber.MethodPost, "/oauth2/token", nil)
+	req.Header.Set("Origin", strangerOrigin)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK || resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("POST: status %d origin %q, want 200 readable from any origin", resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
+	}
+	if resp.Header.Get("Access-Control-Allow-Credentials") != "" {
+		t.Error("the token endpoint must not allow credentials")
 	}
 }
 
