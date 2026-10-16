@@ -98,11 +98,15 @@ func (f *fakeUserService) GetByID(id uuid.UUID) (*user.User, error) {
 	}
 	return nil, fmt.Errorf("user not found")
 }
-func (f *fakeUserService) GetByEmailUnscoped(email string) (*user.User, error) {
+func (f *fakeUserService) GetSoleAccountByEmail(email string) (*user.User, error) {
+	var found []*user.User
 	for _, u := range f.users {
 		if u.Email == email {
-			return u, nil
+			found = append(found, u)
 		}
+	}
+	if len(found) == 1 {
+		return found[0], nil
 	}
 	return nil, fmt.Errorf("user not found")
 }

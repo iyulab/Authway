@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -32,15 +33,12 @@ func TestResolveUserByEmail_ScopesByClientTenant(t *testing.T) {
 	}
 }
 
-// TestResolveUserByEmail_FallsBackToUnscopedWhenNoClientID covers the entry
+// TestResolveUserByEmail_WithoutClientIDFindsTheOnlyAccount covers the entry
 // points that have no OAuth context at all (a bookmarked reset-password
-// link) — client_id is optional, and omitting it must not error, only
-// forgo tenant scoping.
-func TestResolveUserByEmail_FallsBackToUnscopedWhenNoClientID(t *testing.T) {
+// link): an address with one account resolves to it.
+func TestResolveUserByEmail_WithoutClientIDFindsTheOnlyAccount(t *testing.T) {
 	solo := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "solo@example.com"}
-	users := newFakeUserService(solo)
-	clients := newFakeClientService()
-	h := &EmailHandler{userSvc: users, clientSvc: clients, logger: zap.NewNop()}
+	h := &EmailHandler{userSvc: newFakeUserService(solo), clientSvc: newFakeClientService(), logger: zap.NewNop()}
 
 	got, err := h.resolveUserByEmail("", "solo@example.com")
 	if err != nil {
@@ -51,21 +49,26 @@ func TestResolveUserByEmail_FallsBackToUnscopedWhenNoClientID(t *testing.T) {
 	}
 }
 
-// TestResolveUserByEmail_UnknownClientIDFallsBackToUnscoped covers a
-// caller-supplied client_id that this API no longer (or never did)
-// recognize — must degrade to the pre-fix unscoped behavior rather than
-// hard-failing the whole request.
-func TestResolveUserByEmail_UnknownClientIDFallsBackToUnscoped(t *testing.T) {
-	solo := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "solo@example.com"}
-	users := newFakeUserService(solo)
-	clients := newFakeClientService() // no clients registered
-	h := &EmailHandler{userSvc: users, clientSvc: clients, logger: zap.NewNop()}
+// TestResolveUserByEmail_WithoutClientIDPicksNoneOfSeveral: an address with
+// accounts in more than one tenant names none of them by itself — mail for an
+// account picked at random would reset or verify the wrong one.
+func TestResolveUserByEmail_WithoutClientIDPicksNoneOfSeveral(t *testing.T) {
+	a := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
+	b := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "shared@example.com"}
+	h := &EmailHandler{userSvc: newFakeUserService(a, b), clientSvc: newFakeClientService(), logger: zap.NewNop()}
 
-	got, err := h.resolveUserByEmail("no-such-client", "solo@example.com")
-	if err != nil {
-		t.Fatalf("resolveUserByEmail: %v", err)
+	if got, err := h.resolveUserByEmail("", "shared@example.com"); err == nil {
+		t.Fatalf("resolved %s, want no account", got.ID)
 	}
-	if got.ID != solo.ID {
-		t.Errorf("resolved user = %s, want %s", got.ID, solo.ID)
+}
+
+// TestResolveUserByEmail_UnknownClientIDIsRefused: a client_id that names no
+// client does not fall back to a lookup across tenants.
+func TestResolveUserByEmail_UnknownClientIDIsRefused(t *testing.T) {
+	solo := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "solo@example.com"}
+	h := &EmailHandler{userSvc: newFakeUserService(solo), clientSvc: newFakeClientService(), logger: zap.NewNop()}
+
+	if _, err := h.resolveUserByEmail("no-such-client", "solo@example.com"); !errors.Is(err, errUnknownClient) {
+		t.Fatalf("err = %v, want errUnknownClient", err)
 	}
 }

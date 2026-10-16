@@ -59,24 +59,32 @@ func NewEmailHandler(
 	}
 }
 
+// errUnknownClient is a client_id that names no registered client.
+var errUnknownClient = errors.New("client_id names no registered client")
+
 // resolveUserByEmail looks up the user for a self-service email flow
-// (verification resend, password reset). When clientID is present, it scopes
-// the lookup to that client's tenant (mirroring AuthHandler.Login's
-// GetByClientID → GetByEmailAndTenant pattern) so a same-email user in a
-// different tenant can never be matched. When clientID is empty — the caller
-// has no OAuth context, e.g. a bookmarked link — it falls back to the
-// unscoped lookup, same as before this tenant-scoping was added.
+// (verification resend, password reset). With a client_id, the lookup is
+// scoped to that client's tenant, so a same-address account in another tenant
+// is never matched; a client_id that names no client is errUnknownClient.
+// Without one — the caller has no OAuth context, e.g. a bookmarked link — the
+// account is found only when the address has exactly one: with accounts in
+// several tenants there is no telling which is meant, and none is sent mail.
 func (h *EmailHandler) resolveUserByEmail(clientID, emailAddr string) (*user.User, error) {
 	if clientID == "" {
-		return h.userSvc.GetByEmailUnscoped(emailAddr)
+		return h.userSvc.GetSoleAccountByEmail(emailAddr)
 	}
 	requestedClient, err := h.clientSvc.GetByClientID(clientID)
 	if err != nil {
-		h.logger.Warn("email flow: unknown client_id, falling back to unscoped lookup",
-			zap.String("client_id", clientID), zap.Error(err))
-		return h.userSvc.GetByEmailUnscoped(emailAddr)
+		return nil, errUnknownClient
 	}
 	return h.userSvc.GetByEmailAndTenant(requestedClient.TenantID, emailAddr)
+}
+
+// refuseUnknownClient answers a request whose client_id names no client. The
+// client_id is the application's public name, so saying so tells nothing about
+// any account.
+func refuseUnknownClient(c *fiber.Ctx) error {
+	return apierror.RefuseWith(c, http.StatusBadRequest, "unknown_client", "client_id names no registered application", fiber.Map{"field": "client_id"})
 }
 
 // logUserAudit records an audit entry for a user self-service flow (anonymous
@@ -119,6 +127,9 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	// No mail for an account that is verified already or suspended; the answer
 	// is the same either way, so it says nothing about the account.
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
+	if errors.Is(err, errUnknownClient) {
+		return refuseUnknownClient(c)
+	}
 	if err != nil || usr.EmailVerified || !usr.Active {
 		return c.JSON(fiber.Map{"message": verificationRequested})
 	}
@@ -218,6 +229,9 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	// A suspended account is sent nothing — it could not sign in with the new
 	// password — and gets the same answer as an address with no account.
 	usr, err := h.resolveUserByEmail(req.ClientID, req.Email)
+	if errors.Is(err, errUnknownClient) {
+		return refuseUnknownClient(c)
+	}
 	if err != nil || !usr.Active {
 		return c.JSON(fiber.Map{"message": passwordResetRequested})
 	}

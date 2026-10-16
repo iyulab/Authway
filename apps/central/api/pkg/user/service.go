@@ -17,16 +17,13 @@ import (
 type Service interface {
 	Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error)
 	GetByID(id uuid.UUID) (*User, error)
-	// GetByEmailUnscoped matches globally, across every tenant, in undefined
-	// order when the same email exists in more than one tenant
-	// (idx_users_tenant_email allows it). Renamed from GetByEmail after a
-	// "Deprecated" comment alone still let a live auth path ship unscoped —
-	// the unsafe name is now the only spelling, so grep for it finds every
-	// caller. Only apps/central/api/internal/handler/email.go still calls
-	// it, because those two endpoints have no tenant context to scope by
-	// (an open API-contract decision) — everywhere else, use
+	// GetSoleAccountByEmail returns the account with this address when there
+	// is exactly one, across every tenant. The same address may have an
+	// account in more than one tenant (idx_users_tenant_email allows it);
+	// then there is no telling which one is meant, and it answers not found.
+	// For a request with no tenant to scope by — everywhere else, use
 	// GetByEmailAndTenant.
-	GetByEmailUnscoped(email string) (*User, error)
+	GetSoleAccountByEmail(email string) (*User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
 	// GetByProviderSubject finds the account in a tenant that signs in with a
 	// provider's account (subject is the provider's own identifier for it).
@@ -157,15 +154,15 @@ func (s *service) GetByID(id uuid.UUID) (*User, error) {
 	return &user, nil
 }
 
-func (s *service) GetByEmailUnscoped(email string) (*User, error) {
-	var user User
-	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, apierror.NewPublic("user not found")
-		}
+func (s *service) GetSoleAccountByEmail(email string) (*User, error) {
+	var users []User
+	if err := s.db.Where("email = ?", email).Limit(2).Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	return &user, nil
+	if len(users) != 1 {
+		return nil, apierror.NewPublic("user not found")
+	}
+	return &users[0], nil
 }
 
 func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {

@@ -56,7 +56,7 @@ func newTestService(t *testing.T, db *gorm.DB) (Service, *tenant.Service) {
 }
 
 // TestCreateUser_TenantScopedUniqueness guards the documented contract (see
-// GetByEmailUnscoped's doc comment): the same email may exist in more than
+// GetSoleAccountByEmail's doc comment): the same email may exist in more than
 // one tenant, but not twice within the same tenant.
 func TestCreateUser_TenantScopedUniqueness(t *testing.T) {
 	db := setupPostgres(t)

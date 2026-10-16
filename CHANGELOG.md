@@ -88,6 +88,14 @@
 
 ### Fixed
 
+- **A password reset or verification request finds the right account or
+  none.** A `client_id` that names no application fell back to a lookup across
+  every tenant; it is now refused with `400 unknown_client` (`field:
+  client_id`). Without a `client_id`, an address with accounts in more than one
+  tenant was matched to one of them at random — the mail could reset or verify
+  the wrong account; such an address is now sent nothing (the answer is the
+  same, so it says nothing about the accounts). The sign-in screen's links
+  carry the `client_id`.
 - **A client is registered in the tenant the request is about.** `POST
   /api/v1/clients` took the tenant from the body's `tenant_id` and ignored the
   `X-Tenant-ID` header, so a request about one tenant could register a client

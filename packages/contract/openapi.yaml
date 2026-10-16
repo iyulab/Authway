@@ -2557,7 +2557,14 @@ components:
             required: [email]
             properties:
               email: { type: string }
-              client_id: { type: string, description: Scopes the lookup to the client's tenant. }
+              client_id:
+                type: string
+                description: |
+                  Scopes the lookup to the client's tenant. One that names no
+                  client is 400 unknown_client (field client_id). Left out,
+                  the address is looked up across tenants, and is sent mail
+                  only when it has an account in exactly one — with accounts
+                  in several, the request does not say which is meant.
     SecondFactor:
       required: true
       content:

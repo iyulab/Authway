@@ -200,6 +200,15 @@ describe('login UI backend routes', () => {
     expect(res.status).toBe(200)
   })
 
+  it('refuses a mail request that names an application it does not have, rather than look across tenants', async () => {
+    for (const path of ['/api/v1/email/forgot-password', '/api/v1/email/send-verification'] as const) {
+      const res = await fetch(`${provider.config.api}${path}`, json({ email: nobody(), client_id: `none-${randomToken(6)}` }))
+      await conform('POST', path, res)
+      expect(res.status, path).toBe(400)
+      expect(await res.json(), path).toMatchObject({ code: 'unknown_client', field: 'client_id' })
+    }
+  })
+
   it('refuses tokens it did not issue', async () => {
     const bogus = randomToken(8)
     const checks: [string, string, Response][] = [
