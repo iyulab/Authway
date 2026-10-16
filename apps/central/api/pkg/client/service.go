@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"net"
 	"net/http"
 	"strings"
@@ -1034,13 +1035,25 @@ func (s *service) endTokens(client *Client) error {
 	if err := s.db.Table("users").Where("tenant_id = ?", client.TenantID).Pluck("id", &subjects).Error; err != nil {
 		return fmt.Errorf("failed to list the tenant's users: %w", err)
 	}
+	// One call per user (the engine has no call for a client's consents), so
+	// a few at a time: a tenant of thousands of users takes seconds, not
+	// minutes.
+	var g errgroup.Group
+	g.SetLimit(revocationsAtOnce)
 	for _, subject := range subjects {
-		if err := s.hydraClient.RevokeClientConsent(subject.String(), client.ClientID); err != nil {
-			return fmt.Errorf("failed to revoke a consent: %w", err)
-		}
+		g.Go(func() error {
+			if err := s.hydraClient.RevokeClientConsent(subject.String(), client.ClientID); err != nil {
+				return fmt.Errorf("failed to revoke a consent: %w", err)
+			}
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
+
+// revocationsAtOnce bounds the calls endTokens makes to the authorization
+// server at the same time.
+const revocationsAtOnce = 16
 
 // grantsInForce are the grants the authorization server is to serve the
 // client: none while the client is turned off. The engine checks a client's
