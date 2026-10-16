@@ -1302,6 +1302,14 @@ paths:
                     the same tenant (400 invalid_request, field tenant_id).
                     Naming neither is 400 tenant_required.
                 name: { type: string }
+                description: { type: string }
+                skip_consent:
+                  description: |
+                    The client is the tenant's own application: its users are
+                    not asked for consent. A user who arrives at any other
+                    client is asked, signed in already or not.
+                  type: boolean
+                skip_logout_consent: { type: boolean, description: Its users are not asked to confirm signing out. }
                 client_id:
                   type: string
                   description: |

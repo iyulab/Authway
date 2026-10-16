@@ -67,7 +67,6 @@ export const clientFormSchema = z.object({
   // Authentication Provider Settings
   // A client nobody can sign in to is refused by the API (invalid_enabled_auth_providers).
   enabled_auth_providers: z.array(z.string()).min(1, 'Choose at least one way to sign in').optional(),
-  allow_email_login: z.boolean().optional(),
   // Consent Flow Configuration
   skip_consent: z.boolean().optional(),
   skip_logout_consent: z.boolean().optional(),
@@ -219,7 +218,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           scopes: initialData.scopes,
           public: initialData.public,
           enabled_auth_providers: initialData.enabled_auth_providers || ['email', 'google'],
-          allow_email_login: initialData.allow_email_login ?? true,
           access_token_strategy: initialData.access_token_strategy || '',
           skip_consent: initialData.skip_consent || false,
           skip_logout_consent: initialData.skip_logout_consent || false,
@@ -229,7 +227,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           scopes: ['openid'],
           public: false,
           enabled_auth_providers: ['email', 'google'],
-          allow_email_login: true,
           skip_consent: false,
           skip_logout_consent: false,
           access_token_strategy: '',
@@ -453,13 +450,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({
           error={errors.enabled_auth_providers?.message}
         />
 
-        <div className="mt-4 space-y-3">
-          <Checkbox
-            {...register('allow_email_login')}
-            label="Allow Email/Password Login"
-            description="Allow existing users to login with email and password."
-          />
-        </div>
       </div>
 
       {/* Buttons */}

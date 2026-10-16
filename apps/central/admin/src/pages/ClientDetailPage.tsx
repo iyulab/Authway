@@ -61,7 +61,6 @@ const ClientDetailPage: React.FC = () => {
         scopes: data.scopes,
         public: data.public,
         enabled_auth_providers: data.enabled_auth_providers || ['email', 'google'],
-        allow_email_login: data.allow_email_login ?? true,
         skip_consent: data.skip_consent ?? false,
         skip_logout_consent: data.skip_logout_consent ?? false,
         // '' is meaningful on update: it clears the pin and restores inheritance.

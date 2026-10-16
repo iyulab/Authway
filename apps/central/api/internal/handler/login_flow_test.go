@@ -81,7 +81,6 @@ func TestGetLoginFlow_ReturnsSignInOptions(t *testing.T) {
 	c := &client.Client{
 		ID: uuid.New(), TenantID: tenantID, ClientID: testClientID, Active: true,
 		EnabledAuthProviders: []string{"email", "github"},
-		AllowEmailLogin:      true,
 		GithubOAuthEnabled:   true,
 	}
 	h := &loginFlowHydra{}

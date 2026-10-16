@@ -324,12 +324,6 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	} else {
 		client.EnabledAuthProviders = []string{"email", "google"}
 	}
-	// AllowEmailLogin: default to true
-	if req.AllowEmailLogin != nil {
-		client.AllowEmailLogin = *req.AllowEmailLogin
-	} else {
-		client.AllowEmailLogin = true
-	}
 
 	// Set allowed origins for CORS validation
 	if len(req.AllowedOrigins) > 0 {
@@ -656,9 +650,6 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	// EnabledAuthProviders: nil = not provided (an empty list is refused above)
 	if req.EnabledAuthProviders != nil {
 		client.EnabledAuthProviders = req.EnabledAuthProviders
-	}
-	if req.AllowEmailLogin != nil {
-		client.AllowEmailLogin = *req.AllowEmailLogin
 	}
 
 	// Microsoft OAuth settings

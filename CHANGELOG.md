@@ -62,6 +62,11 @@
 
 ### Removed
 
+- `allow_email_login` on a client — a second switch for password sign-in
+  beside `"email"` in `enabled_auth_providers`, which it is now alone (every
+  client had both on). It was not in the contract; it is no longer accepted or
+  returned, and the admin console no longer shows it. The column goes in a
+  later migration.
 - `post_logout_redirect_uri` and `state` on `POST /api/v1/logout`, and the
   `redirect_url` it answered. The address was answered back as sent, checked
   against nothing — an application that navigated to it went wherever the
@@ -88,6 +93,10 @@
 
 ### Fixed
 
+- **The contract names everything a client registration accepts:**
+  `description`, `skip_consent` and `skip_logout_consent` on `POST
+  /api/v1/clients` were accepted and not declared. A test now holds the
+  request bodies of client registration and change to the contract.
 - **A password reset or verification request finds the right account or
   none.** A `client_id` that names no application fell back to a lookup across
   every tenant; it is now refused with `400 unknown_client` (`field:

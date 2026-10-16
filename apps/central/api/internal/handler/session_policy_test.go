@@ -171,7 +171,7 @@ func newSessionFlowApp(t *testing.T, h *sessionHydra, u *user.User, clients ...*
 // user gets the form.
 func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
-	c := &client.Client{Active: true, ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID, AllowEmailLogin: true}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
 	request := func(requestURL string) *sessionHydra {
 		return &sessionHydra{login: hydra.LoginRequest{
 			Challenge: "flow-1", Skip: true, Subject: u.ID.String(), RequestURL: requestURL,

@@ -21,15 +21,20 @@ type Client struct {
 	// ClientSecretHash is what the secret is checked against (see secret.go).
 	// The authorization server authenticates the client at the token
 	// endpoint with its own copy; this one lets the API recognise the client.
-	ClientSecretHash string         `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
-	Name             string         `json:"name" gorm:"not null"`
-	Description      string         `json:"description"`
-	Logo             string         `json:"logo"`
-	RedirectURIs     pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
-	GrantTypes       pq.StringArray `json:"grant_types" gorm:"type:text[]"`
-	Scopes           pq.StringArray `json:"scopes" gorm:"type:text[]"`
-	Public           bool           `json:"public" gorm:"default:false"`
-	Active           bool           `json:"active"`
+	ClientSecretHash string `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
+	// AllowEmailLogin was a second switch for password sign-in beside "email"
+	// in EnabledAuthProviders, outside the contract; nothing reads it now. It
+	// stays mapped, read only, until the column is dropped (docs/DATABASE.md
+	// «Changes that cannot be undone»): TODO(drop): remove with the migration.
+	AllowEmailLogin bool           `json:"-" gorm:"column:allow_email_login;->"`
+	Name            string         `json:"name" gorm:"not null"`
+	Description     string         `json:"description"`
+	Logo            string         `json:"logo"`
+	RedirectURIs    pq.StringArray `json:"redirect_uris" gorm:"type:text[]"`
+	GrantTypes      pq.StringArray `json:"grant_types" gorm:"type:text[]"`
+	Scopes          pq.StringArray `json:"scopes" gorm:"type:text[]"`
+	Public          bool           `json:"public" gorm:"default:false"`
+	Active          bool           `json:"active"`
 	// System marks an application Authway itself owns — the account screen's
 	// client, one per tenant (see EnsureAccountClient). The administration API
 	// refuses to change or delete it.
@@ -84,7 +89,6 @@ type Client struct {
 	// Authentication Provider Settings
 	// Controls which authentication methods are available for this client
 	EnabledAuthProviders pq.StringArray `json:"enabled_auth_providers" gorm:"type:text[];column:enabled_auth_providers;default:'{email,google}'"`
-	AllowEmailLogin      bool           `json:"allow_email_login" gorm:"column:allow_email_login"`
 
 	// Consent Flow Configuration
 	// SkipConsent bypasses the OAuth consent screen; SkipLogoutConsent bypasses
@@ -172,7 +176,6 @@ type PublicClient struct {
 
 	// Authentication Provider Settings
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailLogin      bool     `json:"allow_email_login"`
 
 	// Access Token Format (null = inherit the deployment-wide strategy)
 	AccessTokenStrategy *string `json:"access_token_strategy"`
@@ -200,7 +203,6 @@ var defaultSignInMethods = []string{"email", "google"}
 
 // AllowsSignInMethod reports whether users of this client may sign in with
 // method: "email" (password) or a social provider name such as "google".
-// Password sign-in additionally requires AllowEmailLogin.
 func (c *Client) AllowsSignInMethod(method string) bool {
 	methods := []string(c.EnabledAuthProviders)
 	if len(methods) == 0 {
@@ -212,9 +214,6 @@ func (c *Client) AllowsSignInMethod(method string) bool {
 			listed = true
 			break
 		}
-	}
-	if method == "email" {
-		return listed && c.AllowEmailLogin
 	}
 	return listed
 }
@@ -258,7 +257,6 @@ func (c *Client) ToPublic() PublicClient {
 
 		// Auth provider settings
 		EnabledAuthProviders: c.EnabledAuthProviders,
-		AllowEmailLogin:      c.AllowEmailLogin,
 
 		AccessTokenStrategy: c.AccessTokenStrategy,
 		SkipConsent:         c.SkipConsent,
@@ -351,7 +349,6 @@ type CreateClientRequest struct {
 	// Authentication Provider Settings
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailLogin      *bool    `json:"allow_email_login"` // Pointer to use default if not provided
 
 	// Consent Flow Configuration (default: false — consent/logout screens shown)
 	SkipConsent       bool `json:"skip_consent"`
@@ -477,7 +474,6 @@ type UpdateClientRequest struct {
 	// EnabledAuthProviders: array of provider names (email, google, github, microsoft, apple)
 	// Empty array means "clear all", nil means "not provided"
 	EnabledAuthProviders []string `json:"enabled_auth_providers"`
-	AllowEmailLogin      *bool    `json:"allow_email_login"`
 
 	// Consent Flow Configuration (pointer: nil = not provided, allows explicit false)
 	SkipConsent       *bool `json:"skip_consent"`
