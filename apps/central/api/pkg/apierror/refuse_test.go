@@ -148,9 +148,10 @@ func TestWrite_CarriesFieldAndHint(t *testing.T) {
 // the ones whose standards define it (OAuth 2.0 error responses).
 func TestNoHandlerWritesTheErrorMemberItself(t *testing.T) {
 	allowed := map[string]string{
-		"internal/handler/introspection.go": "RFC 7662 / RFC 6749 5.2 error response",
-		"internal/hydra/client.go":          "the authorization server's own OAuth error response",
-		"internal/handler/social.go":        "an audit log detail, not a response",
+		"internal/handler/introspection.go":  "RFC 7662 / RFC 6749 5.2 error response",
+		"internal/handler/token_endpoint.go": "RFC 6749 5.2 error response at the token endpoint",
+		"internal/hydra/client.go":           "the authorization server's own OAuth error response",
+		"internal/handler/social.go":         "an audit log detail, not a response",
 	}
 	root := filepath.Join("..", "..")
 	member := regexp.MustCompile(`"error"\s*:\s*[^{\s]`)
