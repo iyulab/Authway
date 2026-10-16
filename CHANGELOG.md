@@ -88,6 +88,8 @@
   `invalid_grant`. `capabilities.token_exchange` is `true`; audit action
   `delegation.exchanged`. Deployments add `act` to the authorization server's
   top-level claims (shared settings).
+- **The account screen lists the apps acting for the user** (their
+  delegations) and revokes one after a confirmation.
 - **Verification, password reset and sign-in link mail name the
   organization** (tenant) the account is in, in the subject and the message.
   One address can have accounts in several organizations, and the mail did
