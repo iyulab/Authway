@@ -2,6 +2,10 @@
 
 ### Changed
 
+- **A sign-in through another provider continues with a redirect** (`303 See
+  Other`) instead of a page whose script navigated onward. Nothing to change
+  for applications; a page that blocks scripts no longer stalls there.
+
 - **Discovery's `token_endpoint` is the API's `/oauth2/token`.** It passes
   every grant the authorization server serves on to it unchanged — the body,
   the client's authentication (a secret, a signed assertion, PKCE), the answer

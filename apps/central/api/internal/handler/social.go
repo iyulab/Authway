@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"html/template"
 	"net/url"
 	"strings"
 
@@ -424,42 +422,8 @@ func (s *SocialHandler) finishSignIn(c *fiber.Ctx, provider, clientID, flow stri
 	s.logger.Info("Social sign-in successful",
 		zap.String("user_id", u.ID.String()), zap.String("provider", provider))
 	s.logSocialLogin(c, u, method, flow, clientID)
-	return s.renderRedirectPage(c, step.RedirectTo)
-}
-
-// redirectPage carries the browser on to where the authorization server said
-// to go next. The address is placed by html/template, which escapes it for the
-// script it sits in: it comes from the authorization server, but carries
-// values the original authorization request chose.
-var redirectPage = template.Must(template.New("redirect").Parse(`<!DOCTYPE html>
-<html>
-<head>
-    <title>Redirecting...</title>
-    <meta charset="utf-8">
-</head>
-<body>
-    <div style="text-align: center; padding: 50px; font-family: sans-serif;">
-        <div style="font-size: 18px; color: #666; margin-bottom: 20px;">로그인 처리 중...</div>
-        <div style="width: 40px; height: 40px; margin: 0 auto; border: 4px solid #f3f3f3; border-top: 4px solid #4F46E5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-    </div>
-    <style>
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-    <script>
-        window.location.href = {{.}};
-    </script>
-</body>
-</html>`))
-
-// renderRedirectPage renders an HTML page with JavaScript redirect
-func (s *SocialHandler) renderRedirectPage(c *fiber.Ctx, redirectTo string) error {
-	var page bytes.Buffer
-	if err := redirectPage.Execute(&page, redirectTo); err != nil {
-		return err
-	}
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return c.Send(page.Bytes())
+	// See Other: a provider that answers by form post (Apple) is followed with
+	// a GET, as every other one is. The authorization server's cookies are
+	// SameSite=Lax, which a top-level GET carries.
+	return c.Redirect(step.RedirectTo, fiber.StatusSeeOther)
 }

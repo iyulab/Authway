@@ -129,8 +129,8 @@ func TestProviderSignIn_AUserWithoutASecondFactorIsSignedIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusOK || *acceptCount != 1 {
-		t.Fatalf("status %d accepted=%d, want the page that continues to the application", resp.StatusCode, *acceptCount)
+	if resp.StatusCode != fiber.StatusSeeOther || resp.Header.Get("Location") == "" || *acceptCount != 1 {
+		t.Fatalf("status %d location %q accepted=%d, want a redirect onward to the application", resp.StatusCode, resp.Header.Get("Location"), *acceptCount)
 	}
 	wantAcceptedAMR(t, "fed")
 	if users.signIns != 1 {
