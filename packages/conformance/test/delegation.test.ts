@@ -243,7 +243,9 @@ describe('exchanging a delegation', () => {
     expect(claims.act).toEqual({ sub: agent.clientId })
     expect(claims.tenant_id).toBe(await provider.tenantId())
     expect(claims.aud as string[]).toContain(AUDIENCE)
-    expect((claims.exp as number) - (claims.iat as number)).toBeLessThanOrEqual(300)
+    // Five minutes; the timestamps are whole seconds, which can round the
+    // difference up by one.
+    expect((claims.exp as number) - (claims.iat as number)).toBeLessThanOrEqual(301)
     expect(String(claims.scope).split(' ').sort()).toEqual(['openid', 'profile'])
   })
 
@@ -314,6 +316,22 @@ describe('exchanging a delegation', () => {
       expect(answer.act).toEqual({ sub: opaque.clientId })
     } finally {
       await provider.deleteClient(opaque)
+    }
+  })
+
+  it("gives a token that cannot manage the user's account", async (ctx) => {
+    if (!offered) ctx.skip()
+    const { status, body } = await exchange(agent, {})
+    expect(status, JSON.stringify(body)).toBe(200)
+    const token = body.access_token as string
+    for (const [method, path] of [
+      ['GET', '/api/v1/users/delegations'],
+      ['POST', '/api/v1/users/mfa/setup'],
+      ['GET', '/api/v1/profile/me'],
+    ] as const) {
+      const res = await fetch(`${api}${path}`, { method, headers: { Authorization: `Bearer ${token}` } })
+      expect(res.status, `${method} ${path}`).toBe(403)
+      expect(((await res.json()) as { code: string }).code, `${method} ${path}`).toBe('delegated_token')
     }
   })
 

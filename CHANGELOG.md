@@ -87,7 +87,9 @@
   client's, or one of a suspended user or a turned-off tenant or client is
   `invalid_grant`. `capabilities.token_exchange` is `true`; audit action
   `delegation.exchanged`. Deployments add `act` to the authorization server's
-  top-level claims (shared settings).
+  top-level claims (shared settings). Such a token is the client's, not the user's: the
+  user's own account routes (`/api/v1/profile/*`, `/api/v1/users/*`,
+  `/api/v1/logout`) refuse it with `403 delegated_token`.
 - **The account screen lists the apps acting for the user** (their
   delegations) and revokes one after a confirmation.
 - **Verification, password reset and sign-in link mail name the

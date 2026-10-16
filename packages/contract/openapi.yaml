@@ -2623,6 +2623,9 @@ components:
         An access token issued to the user by the authorization server. Its
         auth_time claim says when the user of the session it came from last
         signed in; a token refreshed later keeps that time. See TokenClaims.
+        A token a client was issued to act for the user (it names the client in
+        `act` — see Delegation) is not the user's: these routes refuse it with
+        `403 delegated_token`.
 
   parameters:
     StrictSync:

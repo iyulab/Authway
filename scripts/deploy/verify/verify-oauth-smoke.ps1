@@ -459,6 +459,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
             '--data-urlencode', 'subject_token_type=urn:authway:params:oauth:token-type:delegation-grant',
             '--data-urlencode', "client_id=$clientId",
             '--data-urlencode', "client_secret=$clientSecret")
+        # 수명 5 분 — 시각이 초 단위라 차이가 1 초 올라갈 수 있다(아래 301).
         $exResp = & curl.exe @exchangeArgs
         $ex = $exResp | ConvertFrom-Json
         if (-not $ex.access_token -or $ex.issued_token_type -ne 'urn:ietf:params:oauth:token-type:access_token' -or $ex.refresh_token) {
@@ -469,7 +470,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         $xb64 = $xParts[1].Replace('-', '+').Replace('_', '/')
         $xb64 += '=' * ((4 - $xb64.Length % 4) % 4)
         $x = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($xb64)) | ConvertFrom-Json
-        if ($x.sub -ne $claims.sub -or $x.act.sub -ne $clientId -or $x.tenant_id -ne $Tenant -or ($x.exp - $x.iat) -gt 300) {
+        if ($x.sub -ne $claims.sub -or $x.act.sub -ne $clientId -or $x.tenant_id -ne $Tenant -or ($x.exp - $x.iat) -gt 301) {
             Write-Host "❌ 교환된 토큰의 클레임이 다름 (sub='$($x.sub)' act.sub='$($x.act.sub)' tenant_id='$($x.tenant_id)' 수명=$($x.exp - $x.iat)) — 토큰 훅 판정·top-level act 설정 확인" -ForegroundColor Red
             exit 1
         }
