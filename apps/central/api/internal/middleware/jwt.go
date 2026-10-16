@@ -47,7 +47,7 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// branch that decoded JWTs locally without checking the signature
 		// accepted ANY base64-encoded payload as authentication, allowing
 		// trivial token forgery for `sub` and `tenant_id` claims.
-		userID, tenantID, authTime, sessionID, delegated, err := introspectToken(token, hydraClient, logger)
+		found, err := introspectToken(token, hydraClient, logger)
 		if err != nil {
 			logger.Error("Token introspection failed", zap.Error(err))
 			c.Set(fiber.HeaderWWWAuthenticate, `Bearer error="invalid_token"`)
@@ -58,11 +58,12 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// the client's work, not for managing the account: the client could
 		// otherwise enrol its own second factor, or revoke what the user
 		// granted.
-		if delegated {
+		if found.delegated {
 			c.Set(fiber.HeaderWWWAuthenticate, `Bearer error="insufficient_scope"`)
 			return apierror.Refuse(c, fiber.StatusForbidden, "delegated_token", "A token a client holds to act for the user cannot manage the user's account.")
 		}
 
+		userID, tenantID, authTime, sessionID := found.userID, found.tenantID, found.authTime, found.sessionID
 		// If tenant_id is not in token (nil), look it up from user
 		if tenantID == uuid.Nil && database != nil {
 			var user struct {
@@ -80,6 +81,8 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		c.Locals("user_id", userID)
 		c.Locals("tenant_id", tenantID)
 		c.Locals("access_token", token)
+		// The client the token was issued to.
+		c.Locals("client_id", found.clientID)
 		// When the user of the session this token came from last proved who
 		// they are; absent when that is not known.
 		if !authTime.IsZero() {
@@ -105,20 +108,31 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 // Hydra's introspection performs full signature/expiration/active checks for
 // both token formats, so this is the only safe validation path — local JWT
 // decode-without-verify is NEVER acceptable in this codebase.
-func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (uuid.UUID, uuid.UUID, time.Time, string, bool, error) {
+// introspected is what a user's access token says.
+type introspected struct {
+	userID, tenantID uuid.UUID
+	authTime         time.Time
+	sessionID        string
+	clientID         string
+	// delegated is true for a token a client was issued to act for the user
+	// (it names the actor, act).
+	delegated bool
+}
+
+func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (*introspected, error) {
 	introspectResp, err := hydraClient.IntrospectToken(token)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, time.Time{}, "", false, err
+		return nil, err
 	}
 
 	if !introspectResp.Active {
-		return uuid.Nil, uuid.Nil, time.Time{}, "", false, fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Token is not active")
 	}
 
 	// Extract user_id from subject
 	userID, err := uuid.Parse(introspectResp.Subject)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, time.Time{}, "", false, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
+		return nil, fiber.NewError(fiber.StatusUnauthorized, "Invalid user ID in token")
 	}
 
 	// Extract tenant_id from ext claims
@@ -144,7 +158,10 @@ func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger
 	// A token exchanged for a delegation names its actor (act).
 	_, delegated := introspectResp.Ext["act"]
 
-	return userID, tenantID, authTime, sessionID, delegated, nil
+	return &introspected{
+		userID: userID, tenantID: tenantID, authTime: authTime, sessionID: sessionID,
+		clientID: introspectResp.ClientID, delegated: delegated,
+	}, nil
 }
 
 // (Removed: extractClaimsFromToken — it decoded JWTs without verifying their

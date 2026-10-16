@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -347,6 +348,7 @@ func main() {
 	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
 	// A consent to a client's delegation scope grants a delegation.
 	delegationService := delegation.NewService(db)
+	approvals := delegation.NewApprovals(db)
 	delegationHandler := delegation.NewHandler(delegationService, hydraClient, newFeatureServices.AuditService, zapLogger)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
 	authHandler.GrantsDelegations(delegationService)
@@ -393,9 +395,15 @@ func main() {
 		zapLogger.Error("Token exchange is off: the delegation signing key could not be loaded", zap.Error(err))
 	} else {
 		exchanger = delegation.NewExchanger(delegationService, signer, hydraClient, handler.ClientExchangeScopes(clientService), cfg.App.BaseURL)
+		// A client acting for a user may ask them to approve one action; the
+		// user answers on the login UI's approval screen.
+		exchanger.HandlesApprovals(approvals, handler.ClientExchangeScopes(clientService).(delegation.ClientVerifier), strings.TrimRight(cfg.App.FrontendURL, "/")+"/approve")
 		tokenEndpoint.ExchangesDelegations(exchanger, newFeatureServices.AuditService)
 	}
 	app.Post("/oauth2/token", tokenEndpoint.Token)
+	if exchanger.OffersApprovals() {
+		app.Post("/oauth2/approval-requests", tokenEndpoint.ApprovalRequests)
+	}
 	// The authorization server calls this before it issues a token. Served
 	// only when the deployment set the key the authorization server presents.
 	if len(cfg.Hydra.TokenHookKeys) > 0 {
@@ -413,6 +421,9 @@ func main() {
 	capabilities := handler.NewCapabilitiesHandler(socialHandler)
 	if exchanger != nil {
 		capabilities.ExchangesDelegations()
+	}
+	if exchanger.OffersApprovals() {
+		capabilities.TakesApprovalRequests()
 	}
 	v1.Get("/capabilities", capabilities.Get)
 	v1.Get("/account-entry", handler.NewAccountEntryHandler(clientService, cfg.App.FrontendURL, zapLogger).Get)
@@ -468,6 +479,12 @@ func main() {
 	// it back.
 	v1.Get("/users/delegations", jwtAuth, delegationHandler.ListMine)
 	v1.Delete("/users/delegations/:id", jwtAuth, delegationHandler.RevokeMine)
+	// What a client asks the user to approve, and the user's answer — on the
+	// approval screen (the account application's token only).
+	approvalHandler := handler.NewApprovalHandler(approvals, clientService, newFeatureServices.AuditService, zapLogger)
+	v1.Get("/users/approvals/:id", jwtAuth, approvalHandler.Get)
+	v1.Post("/users/approvals/:id/approve", jwtAuth, approvalHandler.Approve)
+	v1.Post("/users/approvals/:id/deny", jwtAuth, approvalHandler.Deny)
 
 	// Logout route - direct session revocation.
 	// Requires a valid bearer token: the subject to revoke is taken from the

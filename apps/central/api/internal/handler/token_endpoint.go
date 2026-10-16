@@ -17,6 +17,7 @@ import (
 	"authway/apps/central/api/pkg/delegation"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -93,11 +94,17 @@ var returnedResponseHeaders = []string{
 func (h *TokenEndpoint) Token(c *fiber.Ctx) error {
 	// Anything that is not a token exchange is the authorization server's to
 	// judge, a malformed request included.
-	if grantType(c) == grantTypeTokenExchange {
+	switch grantType(c) {
+	case grantTypeTokenExchange:
 		if h.exchanger == nil {
 			return tokenError(c, fiber.StatusBadRequest, "unsupported_grant_type", "Token exchange is not offered by this deployment.")
 		}
 		return h.exchange(c)
+	case delegation.ApprovalGrant:
+		if !h.exchanger.OffersApprovals() {
+			return tokenError(c, fiber.StatusBadRequest, "unsupported_grant_type", "Approval requests are not offered by this deployment.")
+		}
+		return h.approved(c)
 	}
 	return h.forward(c, c.Body())
 }
@@ -109,11 +116,31 @@ func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
 	form, _ := url.ParseQuery(string(c.Body()))
 	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
 	prepared, refused := h.exchanger.Prepare(c.UserContext(), form, clientID)
+	return h.issue(c, prepared, refused, clientID, audit.ActionDelegationExchanged)
+}
+
+// approved answers a poll of an approval request (delegation.ApprovalGrant):
+// a refusal while it is pending, denied or expired, and once approved the
+// token bound to it.
+func (h *TokenEndpoint) approved(c *fiber.Ctx) error {
+	form, _ := url.ParseQuery(string(c.Body()))
+	clientID, secret := delegation.ClientCredentialsFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	prepared, refused := h.exchanger.PrepareApproved(c.UserContext(), form, clientID, secret)
+	// Waiting is the ordinary answer of a poll, not a failure worth a record.
+	if refused != nil && (refused.Code == "authorization_pending" || refused.Code == "slow_down") {
+		return tokenError(c, refused.Status, refused.Code, refused.Description)
+	}
+	return h.issue(c, prepared, refused, clientID, audit.ActionApprovalExchanged)
+}
+
+// issue sends a prepared assertion grant request to the authorization server
+// and answers in the shape of RFC 8693 section 2.2, recording action.
+func (h *TokenEndpoint) issue(c *fiber.Ctx, prepared *delegation.Exchanged, refused *delegation.OAuthError, clientID string, action audit.AuditAction) error {
 	if refused != nil {
 		// A refusal of a delegation that exists is recorded against it;
 		// a handle that names none has nothing to record against.
 		if prepared != nil {
-			h.logExchange(c, prepared.Delegation, clientID, refused.Code)
+			h.logExchange(c, action, prepared.Delegation, clientID, refused.Code)
 		}
 		return tokenError(c, refused.Status, refused.Code, refused.Description)
 	}
@@ -131,7 +158,7 @@ func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
 		if engineErr.Error == "invalid_grant" || engineErr.Error == "invalid_scope" {
 			h.exchanger.Forget(clientID)
 		}
-		h.logExchange(c, prepared.Delegation, clientID, engineErr.Error)
+		h.logExchange(c, action, prepared.Delegation, clientID, engineErr.Error)
 		return h.relay(c, status, headers, body)
 	}
 	var issued map[string]any
@@ -140,19 +167,19 @@ func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
 	}
 	issued["issued_token_type"] = delegation.AccessTokenType
 	delete(issued, "refresh_token")
-	h.logExchange(c, prepared.Delegation, clientID, "")
+	h.logExchange(c, action, prepared.Delegation, clientID, "")
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	c.Set(fiber.HeaderPragma, "no-cache")
 	return c.Status(fiber.StatusOK).JSON(issued)
 }
 
-// logExchange records an exchange: delegation.exchanged, failed when refused
-// is the refusal's code.
-func (h *TokenEndpoint) logExchange(c *fiber.Ctx, d *delegation.Standing, clientID, refused string) {
+// logExchange records an exchange as action, failed when refused is the
+// refusal's code.
+func (h *TokenEndpoint) logExchange(c *fiber.Ctx, action audit.AuditAction, d *delegation.Standing, clientID, refused string) {
 	if h.audit == nil || d == nil {
 		return
 	}
-	entry := audit.EntryFromFiber(c, d.TenantID, audit.ActionDelegationExchanged, "delegation", d.ID.String())
+	entry := audit.EntryFromFiber(c, d.TenantID, action, "delegation", d.ID.String())
 	entry.ActorType = "client"
 	entry.ActorID = nil
 	entry.ActorEmail = ""
@@ -234,6 +261,38 @@ func tokenError(c *fiber.Ctx, status int, code, description string) error {
 	return c.Status(status).JSON(fiber.Map{"error": code, "error_description": description})
 }
 
+// ApprovalRequests serves POST /oauth2/approval-requests: a client acting for
+// a user asks the user to approve one action (delegation.RequestApproval).
+// It answers the polling secret and the address of the approval screen,
+// which the client brings to the user by its own means.
+func (h *TokenEndpoint) ApprovalRequests(c *fiber.Ctx) error {
+	form, _ := url.ParseQuery(string(c.Body()))
+	clientID, secret := delegation.ClientCredentialsFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	answer, d, refused := h.exchanger.RequestApproval(c.UserContext(), form, clientID, secret)
+	if refused != nil {
+		if refused.Code == "invalid_client" {
+			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="approval-requests"`)
+		}
+		if d != nil {
+			h.logExchange(c, audit.ActionApprovalRequested, d, clientID, refused.Code)
+		}
+		return tokenError(c, refused.Status, refused.Code, refused.Description)
+	}
+	if h.audit != nil {
+		entry := audit.EntryFromFiber(c, d.TenantID, audit.ActionApprovalRequested, "approval_request", answer.Request.ID.String())
+		entry.ActorType = "client"
+		entry.ActorID = nil
+		entry.ActorEmail = ""
+		entry.Details["client_id"] = clientID
+		entry.Details["user_id"] = d.UserID.String()
+		entry.Details["delegation_id"] = d.ID.String()
+		h.audit.LogAsync(entry)
+	}
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	c.Set(fiber.HeaderPragma, "no-cache")
+	return c.JSON(answer)
+}
+
 // ClientExchangeScopes reads from the client registrations what a client may
 // be granted by an exchange (delegation.ClientScopes).
 func ClientExchangeScopes(clients client.Service) delegation.ClientScopes {
@@ -241,6 +300,18 @@ func ClientExchangeScopes(clients client.Service) delegation.ClientScopes {
 }
 
 type clientExchangeScopes struct{ clients client.Service }
+
+// VerifyClient checks a confidential client's id and secret.
+func (s clientExchangeScopes) VerifyClient(clientID, secret string) (uuid.UUID, bool) {
+	if clientID == "" || secret == "" {
+		return uuid.Nil, false
+	}
+	cl, err := s.clients.ValidateClient(clientID, secret)
+	if err != nil || cl == nil || cl.Public {
+		return uuid.Nil, false
+	}
+	return cl.ID, true
+}
 
 func (s clientExchangeScopes) ExchangeScopes(clientID string) ([]string, []string, bool, error) {
 	cl, err := s.clients.GetByClientID(clientID)

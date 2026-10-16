@@ -3,6 +3,7 @@ package delegation
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -116,7 +117,23 @@ type Exchanger struct {
 
 	mu      sync.Mutex
 	trusted map[string]string // client_id -> what its trust was made for
+
+	approvals  *Approvals
+	verifier   ClientVerifier
+	approveURL string // the approval screen; ?request=<id> is added
 }
+
+// HandlesApprovals has the exchanger take approval requests (a client asks
+// the user to approve one action) and issue a token bound to an approval.
+// approveURL is the approval screen of the login UI.
+func (x *Exchanger) HandlesApprovals(a *Approvals, verifier ClientVerifier, approveURL string) {
+	x.approvals = a
+	x.verifier = verifier
+	x.approveURL = approveURL
+}
+
+// OffersApprovals reports whether approval requests are taken.
+func (x *Exchanger) OffersApprovals() bool { return x != nil && x.approvals != nil }
 
 // TrustKeeper is the authorization server's trust in assertion issuers.
 type TrustKeeper interface {
@@ -129,6 +146,13 @@ type TrustKeeper interface {
 // users.
 type ClientScopes interface {
 	ExchangeScopes(clientID string) (scopes []string, audience []string, mayAct bool, err error)
+}
+
+// ClientVerifier checks a confidential client's own credentials, for the
+// requests Authway answers without the authorization server (an approval
+// request and its polling), and names the client's row.
+type ClientVerifier interface {
+	VerifyClient(clientID, secret string) (row uuid.UUID, ok bool)
 }
 
 // NewExchanger returns an Exchanger. apiURL is this API's public address.
@@ -210,12 +234,23 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 		}
 	}
 
+	out, refused := x.engineForm(d, clientID, clientScopes, scopes, audiences, form, "")
+	if refused != nil {
+		return known, refused
+	}
+	return &Exchanged{Form: out, Delegation: d}, nil
+}
+
+// engineForm builds the assertion grant request for d: an assertion Authway
+// signs (naming the approval, when the token is bound to one), the scopes and
+// audiences, and the client's own authentication as it sent it.
+func (x *Exchanger) engineForm(d *Standing, clientID string, clientScopes, scopes, audiences []string, form url.Values, approvalID string) (url.Values, *OAuthError) {
 	issuer := x.issuerBase + "/" + clientID
 	if err := x.ensureTrusted(issuer, clientID, clientScopes); err != nil {
-		return known, refuse(503, "temporarily_unavailable", "The authorization server could not be prepared for the exchange.")
+		return nil, refuse(503, "temporarily_unavailable", "The authorization server could not be prepared for the exchange.")
 	}
 	now := time.Now()
-	assertion, err := x.signer.Sign(jwt.MapClaims{
+	claims := jwt.MapClaims{
 		"iss":           issuer,
 		"sub":           d.UserID.String(),
 		"aud":           x.audience,
@@ -224,9 +259,13 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 		"jti":           uuid.NewString(),
 		"iat":           now.Unix(),
 		"exp":           now.Add(time.Minute).Unix(),
-	})
+	}
+	if approvalID != "" {
+		claims["approval_id"] = approvalID
+	}
+	assertion, err := x.signer.Sign(claims)
 	if err != nil {
-		return known, refuse(500, "server_error", "The exchange could not be signed.")
+		return nil, refuse(500, "server_error", "The exchange could not be signed.")
 	}
 
 	out := url.Values{}
@@ -242,7 +281,7 @@ func (x *Exchanger) Prepare(ctx context.Context, form url.Values, clientID strin
 			out.Set(k, v)
 		}
 	}
-	return &Exchanged{Form: out, Delegation: d}, nil
+	return out, nil
 }
 
 // ensureTrusted makes the authorization server trust the signing key for the
@@ -363,10 +402,33 @@ func (x *Exchanger) Judge(ctx context.Context, assertion, clientID string) HookA
 	if why := d.usable(); why != "" {
 		return HookAnswer{Refuse: why}
 	}
-	return HookAnswer{Claims: map[string]any{
+	out := map[string]any{
 		"act":       map[string]any{"sub": clientID},
 		"tenant_id": d.TenantID.String(),
-	}}
+	}
+	// A token bound to an approval is issued once, and carries what was
+	// approved.
+	if raw, ok := claims["approval_id"].(string); ok {
+		if x.approvals == nil {
+			return HookAnswer{Refuse: "approvals are not offered"}
+		}
+		approvalID, err := uuid.Parse(raw)
+		if err != nil {
+			return HookAnswer{Refuse: "the assertion names no approval"}
+		}
+		approved, ok, err := x.approvals.Consume(ctx, approvalID, d.ID)
+		if err != nil || !ok {
+			return HookAnswer{Refuse: "the approval is not approved, or its token was issued already"}
+		}
+		out["approval"] = map[string]any{"id": approved.ID.String()}
+		if approved.AuthorizationDetails != nil {
+			var details any
+			if json.Unmarshal([]byte(*approved.AuthorizationDetails), &details) == nil {
+				out["authorization_details"] = details
+			}
+		}
+	}
+	return HookAnswer{Claims: out}
 }
 
 // ClientFromRequest is the client a token request says it authenticates as:
@@ -395,4 +457,24 @@ func ClientFromRequest(authorization string, form url.Values) string {
 		}
 	}
 	return ""
+}
+
+// ClientCredentialsFromRequest is the id and secret a request authenticates a
+// client with: HTTP Basic (RFC 6749 section 2.3.1, form-encoded parts) or
+// client_id and client_secret in the form.
+func ClientCredentialsFromRequest(authorization string, form url.Values) (id, secret string) {
+	if strings.HasPrefix(strings.ToLower(authorization), "basic ") {
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(authorization[6:]))
+		if err != nil {
+			return "", ""
+		}
+		idPart, secretPart, ok := strings.Cut(string(raw), ":")
+		if !ok {
+			return "", ""
+		}
+		id, _ = url.QueryUnescape(idPart)
+		secret, _ = url.QueryUnescape(secretPart)
+		return id, secret
+	}
+	return form.Get("client_id"), form.Get("client_secret")
 }

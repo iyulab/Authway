@@ -22,6 +22,8 @@ export interface TestClient {
   clientId: string
   /** A confidential client's secret, sent in the token request body (client_secret_post). */
   secret?: string
+  /** Where the client is registered to receive its code, when not REDIRECT_URI. */
+  redirectUri?: string
 }
 
 /** The grant a client exchanges a delegation with (RFC 8693). */
@@ -232,6 +234,19 @@ export class Provider {
     return { id: client.id, clientId: client.client_id, secret: credentials.client_secret }
   }
 
+  /**
+   * The tenant's account application — the client the account and approval
+   * screens sign users in with — as the account entry names it for an
+   * application of the tenant.
+   */
+  async accountClient(of: TestClient): Promise<TestClient> {
+    const res = await fetch(`${this.config.api}/api/v1/account-entry?client_id=${encodeURIComponent(of.clientId)}`)
+    await conform('GET', '/api/v1/account-entry', res.clone())
+    if (!res.ok) throw new Error(`Account entry failed: ${res.status} ${await res.text()}`)
+    const { client_id, redirect_uri } = (await res.json()) as { client_id: string; redirect_uri: string }
+    return { id: '', clientId: client_id, redirectUri: redirect_uri }
+  }
+
   async deleteClient(client: TestClient): Promise<void> {
     await conform('DELETE', '/api/v1/clients/{id}', await this.admin(`/api/v1/clients/${client.id}`, { method: 'DELETE' }))
   }
@@ -423,7 +438,7 @@ export class Provider {
     authorize.search = new URLSearchParams({
       client_id: client.clientId,
       response_type: 'code',
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: client.redirectUri ?? REDIRECT_URI,
       scope: scopes.join(' '),
       state: randomToken(),
       nonce: randomToken(),
@@ -769,7 +784,7 @@ export class Provider {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: client.redirectUri ?? REDIRECT_URI,
         client_id: client.clientId,
         code_verifier: pkce.verifier,
         ...(client.secret ? { client_secret: client.secret } : {}),

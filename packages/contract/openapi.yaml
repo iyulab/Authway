@@ -600,6 +600,62 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '502': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/approvals/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [account]
+      operationId: getOwnApprovalRequest
+      summary: What a client asks the user to approve, for the approval screen
+      description: Another user's request is `404 not_found`.
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/approvals/{id}/approve:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [account]
+      operationId: approveOwnApprovalRequest
+      summary: The user approves what the client asked
+      description: |
+        The user's own act at the provider: it takes a token issued to the
+        deployment's account application (another application's token is
+        `403 account_application_required`) and a recent sign-in (`401
+        insufficient_user_authentication` with `max_age` otherwise). A request
+        answered already or expired is `409 approval_settled`.
+      security: [{ userToken: [] }]
+      responses:
+        '204': { description: Approved }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/approvals/{id}/deny:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [account]
+      operationId: denyOwnApprovalRequest
+      summary: The user denies what the client asked
+      description: As approveOwnApprovalRequest.
+      security: [{ userToken: [] }]
+      responses:
+        '204': { description: Denied }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
   /api/v1/users/mfa/setup:
     post:
       tags: [account]
@@ -3194,6 +3250,40 @@ components:
         created_at: { type: string }
         updated_at: { type: string }
 
+    ApprovalRequest:
+      description: |
+        What a client acting for the user (see Delegation) asks the user to
+        approve while they are away. The client asks at
+        `POST /oauth2/approval-requests` (form; its id and secret;
+        `subject_token` the delegation handle and `subject_token_type`
+        `urn:authway:params:oauth:token-type:delegation-grant`;
+        `binding_message` up to 200 characters, shown to the user; optional
+        `scope` within the delegation, `authorization_details` — a JSON array
+        of objects with a `type` (RFC 9396), kept and put in the token as
+        given — and `requested_expiry`, 30 to 600 seconds, 300 by default). It
+        is answered `auth_req_id`, `approve_url` (the approval screen, which
+        the client brings to the user by its own means), `expires_in` and
+        `interval`. The client polls the token endpoint with `grant_type`
+        `urn:authway:params:oauth:grant-type:approval`, `auth_req_id` and its
+        id and secret: `authorization_pending` while the user has not
+        answered, `slow_down` when asked within `interval`, `access_denied`,
+        `expired_token`, and once approved one access token (RFC 8693 answer
+        shape, at most 5 minutes, no refresh token) with `sub` the user,
+        `act.sub` the client, `approval.id` and `authorization_details`. It is
+        issued once; a later poll is `invalid_grant`. Offered when
+        capabilities.approval_requests is true.
+      type: object
+      required: [id, client_id, client_name, binding_message, scopes, status, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string }
+        client_name: { type: string }
+        binding_message: { type: string }
+        scopes: { type: array, items: { type: string } }
+        authorization_details: { type: array, items: { type: object } }
+        status: { type: string, enum: [pending, approved, denied, expired, consumed] }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
     Delegation:
       description: |
         What a user lets a client do for them while they are away: granted by
@@ -3502,7 +3592,7 @@ components:
 
     Capabilities:
       type: object
-      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, device_authorization, terms_acceptance, token_exchange, ciba]
+      required: [multi_tenant, providers, magic_link, mfa, signup_modes, account_deletion, custom_claims, backchannel_logout, token_introspection, device_authorization, terms_acceptance, token_exchange, approval_requests, ciba]
       properties:
         multi_tenant: { type: boolean }
         providers:
@@ -3560,6 +3650,9 @@ components:
             user's tenant; introspection answers `act` too. A handle another
             client presents, one revoked, or one of a suspended user, a turned
             off tenant or client is `invalid_grant`.
+          type: boolean
+        approval_requests:
+          description: A client acting for a user may ask them to approve one action while they are away (see ApprovalRequest).
           type: boolean
         ciba: { type: boolean }
 

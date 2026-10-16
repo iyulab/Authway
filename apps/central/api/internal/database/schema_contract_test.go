@@ -116,6 +116,15 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 		t.Fatalf("seed client for delegation contract case: %v", err)
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM clients WHERE id = ?`, cl.ID) })
+	// An approval request points at a delegation.
+	grant := &delegation.Grant{
+		ID: uuid.New(), TenantID: tenantID, UserID: userID, ClientID: cl.ID,
+		Scopes: []string{"orders.read"}, HandleHash: tokenhash.Hash(uuid.New().String()), CreatedAt: time.Now(),
+	}
+	if err := db.Create(grant).Error; err != nil {
+		t.Fatalf("seed delegation for approval contract case: %v", err)
+	}
+	details := `[{"type":"payment","ref":"r-1"}]`
 
 	cases := []struct {
 		name  string
@@ -130,6 +139,12 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 			Scopes: []string{"openid", "orders.read"}, HandleHash: tokenhash.Hash(uuid.New().String()),
 			CreatedAt: time.Now(), ExpiresAt: &future, RevokedAt: &future,
 		}, "delegation_grants"},
+		{"approval_request", &delegation.Approval{
+			ID: uuid.New(), TenantID: tenantID, UserID: userID, ClientID: cl.ID, DelegationID: grant.ID,
+			AuthReqHash: tokenhash.Hash(uuid.New().String()), BindingMessage: "Pay 10 EUR to Acme",
+			Scopes: []string{"orders.read"}, AuthorizationDetails: &details, Status: delegation.ApprovalApproved,
+			CreatedAt: time.Now(), ExpiresAt: future, DecidedAt: &future, ConsumedAt: &future, LastPolledAt: &future,
+		}, "approval_requests"},
 		{"invitation", &invitation.Invitation{
 			TenantID: tenantID, Email: "c@example.com",
 			TokenHash: tokenhash.Hash(uuid.New().String()), Status: invitation.StatusPending, ExpiresAt: future,
@@ -217,7 +232,7 @@ func TestNoModelMapsToAMissingTable(t *testing.T) {
 		"invitations", "magic_link_tokens",
 		"webhooks", "webhook_deliveries", "user_claims", "audit_logs",
 		"password_resets", "email_verifications", "service_clients",
-		"delegation_grants", "delegation_signing_keys",
+		"delegation_grants", "delegation_signing_keys", "approval_requests",
 		// Retired: linked_accounts. Do not re-add without a migration.
 	}
 	for _, table := range tables {
@@ -242,7 +257,7 @@ func mappedModels() []any {
 		&tenant.Tenant{}, &user.User{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
 		&terms.Document{}, &terms.Acceptance{},
-		&delegation.Grant{}, &delegation.SigningKey{},
+		&delegation.Grant{}, &delegation.SigningKey{}, &delegation.Approval{},
 	}
 }
 

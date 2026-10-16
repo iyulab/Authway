@@ -92,6 +92,24 @@
   `/api/v1/logout`) refuse it with `403 delegated_token`.
 - **The account screen lists the apps acting for the user** (their
   delegations) and revokes one after a confirmation.
+- **A client acting for a user can ask them to approve one action while they
+  are away.** `POST /oauth2/approval-requests` (form; the client's id and
+  secret; `subject_token` the delegation handle; `binding_message`, shown to
+  the user; optional `scope`, `authorization_details` — RFC 9396 shape, kept
+  as given — and `requested_expiry`, 30 to 600 seconds) answers `auth_req_id`,
+  `approve_url`, `expires_in` and `interval`. The user answers at
+  `/api/v1/users/approvals/{id}` (`approve`/`deny`) with a token of the
+  deployment's account application and a recent sign-in. The client polls the
+  token endpoint with `grant_type=urn:authway:params:oauth:grant-type:approval`
+  (`authorization_pending`, `slow_down`, `access_denied`, `expired_token`) and
+  receives one access token bound to the approval: `approval.id` and
+  `authorization_details` beside `sub` and `act`, at most five minutes, no
+  refresh token. Not OpenID CIBA (no ID token; `capabilities.ciba` stays
+  `false`); `capabilities.approval_requests` says it is offered. Audit actions
+  `approval.requested`, `approval.approved`, `approval.denied`,
+  `approval.exchanged`. Database migration 046; the authorization server's
+  top-level claims gain `approval` and `authorization_details` (shared
+  settings).
 - **Verification, password reset and sign-in link mail name the
   organization** (tenant) the account is in, in the subject and the message.
   One address can have accounts in several organizations, and the mail did

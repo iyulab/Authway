@@ -14,6 +14,14 @@ type CapabilitiesHandler struct {
 	social *SocialHandler
 	// exchanges is whether a client can exchange a delegation (RFC 8693).
 	exchanges bool
+	// approvals is whether a client can ask a user to approve an action.
+	approvals bool
+}
+
+// TakesApprovalRequests reports approval_requests as offered.
+func (h *CapabilitiesHandler) TakesApprovalRequests() *CapabilitiesHandler {
+	h.approvals = true
+	return h
 }
 
 // ExchangesDelegations reports token_exchange as offered.
@@ -54,7 +62,12 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - token_exchange: a client a user granted a delegation exchanges it at
 //     the token endpoint for an access token whose subject is the user and
 //     whose actor (act) is the client (RFC 8693)
-//   - ciba: decoupled approval (OpenID CIBA) — not offered
+//   - approval_requests: a client acting for a user asks them to approve one
+//     action while they are away (POST /oauth2/approval-requests); the user
+//     answers on the approval screen, and the client polls the token endpoint
+//     for a token bound to the approval
+//   - ciba: decoupled approval in the shape of OpenID CIBA (with an ID token)
+//     — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"multi_tenant":         true,
@@ -69,6 +82,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"device_authorization": true,
 		"terms_acceptance":     true,
 		"token_exchange":       h.exchanges,
+		"approval_requests":    h.approvals,
 		"ciba":                 false,
 	})
 }
