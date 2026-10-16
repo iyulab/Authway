@@ -17,6 +17,16 @@ type Handler struct {
 	validate     *validator.Validate
 	auditService audit.Service
 	onDeleted    []func(uuid.UUID) error
+	onTurned     []func(uuid.UUID, bool) error
+}
+
+// OnTurned runs f after an update names whether a tenant is on — for what
+// follows from it that this package does not own, such as the tenant's
+// clients at the authorization server. It runs whenever the update names
+// `active`, changed or not, so repeating a request finishes what a failure
+// left undone.
+func (h *Handler) OnTurned(f func(tenantID uuid.UUID, on bool) error) {
+	h.onTurned = append(h.onTurned, f)
 }
 
 // OnDeleted runs f after a tenant is deleted — for what goes with it that this
@@ -180,6 +190,19 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 		}
 	}
 	h.logAudit(c, tenant.ID, audit.ActionTenantUpdated, tenant.ID.String(), auditDetails)
+
+	if req.Active != nil {
+		for _, f := range h.onTurned {
+			if err := f(tenant.ID, tenant.Active); err != nil {
+				if logger, ok := c.Locals("logger").(*zap.Logger); ok {
+					logger.Error("A tenant's applications were not all brought in line with it", zap.String("tenant_id", tenant.ID.String()), zap.Error(err))
+				}
+				return apierror.RefuseWith(c, fiber.StatusBadGateway, "upstream_sync_failed",
+					"The tenant was saved, but not every one of its applications was brought in line at the authorization server.",
+					fiber.Map{"hint": "Send the same request again."})
+			}
+		}
+	}
 
 	return c.JSON(tenant.ToPublic())
 }

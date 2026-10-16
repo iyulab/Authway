@@ -96,6 +96,12 @@
   (introspection answers them inactive; its users' refresh tokens are
   revoked). Turned on again it works as before, without the sessions it had.
   The admin console turns a client off (after asking) and on again.
+- **A tenant turned off (`active: false`) turns off its clients.** It only
+  stopped new clients being registered; its users still signed in and its
+  clients still got tokens. Now every client of the tenant behaves as a client
+  turned off; turned on again, each is as its own `active` says. If not every
+  client could be brought in line at the authorization server, the update
+  answers `502 upstream_sync_failed` — the same request finishes it.
 - **Registering a client under a `client_id` that is taken is refused** with
   `409 client_id_taken` (`field: client_id`). It answered `201` with the
   client already registered under it — ignoring the request, and with a

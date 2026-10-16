@@ -190,6 +190,10 @@ func (f *fakeClientService) GetByClientID(clientID string) (*client.Client, erro
 	}
 	return nil, fmt.Errorf("client not found")
 }
+func (f *fakeClientService) InForce(c *client.Client) bool { return c.Active }
+func (f *fakeClientService) TenantTurned(uuid.UUID, bool) error {
+	return fmt.Errorf("not implemented")
+}
 func (f *fakeClientService) GetByTenant(uuid.UUID, int, int) ([]*client.Client, int64, error) {
 	return nil, 0, fmt.Errorf("not implemented")
 }

@@ -339,3 +339,7 @@ without deleting it:
 
 `"active": true` turns it on again. Users sign in to it as before; the
 sessions it had stay ended.
+
+Turning a tenant off (`PUT /api/v1/tenants/{id}` with `"active": false`)
+does the same to every client of the tenant; turned on again, each client is
+as its own `active` says.

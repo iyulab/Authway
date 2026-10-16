@@ -489,6 +489,7 @@ func main() {
 	// Tenant Management API routes (Admin only)
 	tenantHandler := tenant.NewHandler(tenantService, validate, newFeatureServices.AuditService)
 	tenantHandler.OnDeleted(clientService.DeleteSystemClients)
+	tenantHandler.OnTurned(clientService.TenantTurned)
 	tenantHandler.RegisterRoutes(app, adminAuth)
 
 	// Service client provisioning — admin-only, since

@@ -41,6 +41,13 @@ type Service interface {
 	// DeleteSystemClients removes the clients Authway registered for a
 	// tenant, when the tenant is deleted.
 	DeleteSystemClients(tenantID uuid.UUID) error
+	// InForce reports whether a client may be used: it is on, and so is its
+	// tenant.
+	InForce(c *Client) bool
+	// TenantTurned registers the tenant's clients with the authorization
+	// server anew after the tenant was turned off or on; turned off, it also
+	// ends their tokens.
+	TenantTurned(tenantID uuid.UUID, on bool) error
 }
 
 type service struct {
@@ -368,7 +375,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	}
 
 	// Register client in Hydra
-	hydraClient := client.hydraRegistration(clientSecret)
+	hydraClient := s.registration(client, clientSecret)
 
 	_, err = s.hydraClient.CreateOAuth2Client(hydraClient)
 	if err != nil {
@@ -698,7 +705,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		}
 		// No secret is sent: the authorization server keeps the one it has
 		// when an update names none (measured against v26.2.0).
-		_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, client.hydraRegistration(""))
+		_, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, s.registration(&client, ""))
 		var refused *hydra.ClientRefusedError
 		if errors.As(errHydra, &refused) {
 			refusal = refusedByAuthorizationServer(refused)
@@ -857,7 +864,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	}
 
 	// Update secret in Hydra
-	hydraUpdate := client.hydraRegistration(newSecret)
+	hydraUpdate := s.registration(client, newSecret)
 
 	syncStatus := SyncStatus{State: SyncStateOK}
 	if _, errHydra := s.hydraClient.UpdateOAuth2Client(client.ClientID, hydraUpdate); errHydra != nil {
@@ -967,6 +974,54 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		SkipLogoutConsent:                c.SkipLogoutConsent,
 		AccessTokenStrategy:              derefStrategy(c.AccessTokenStrategy),
 	}
+}
+
+// tenantOn reports whether a tenant is on. A tenant that cannot be read is
+// taken as on: what decides is the client's own state, and the error shows
+// where the tenant is needed next.
+func (s *service) tenantOn(tenantID uuid.UUID) bool {
+	var active []bool
+	if err := s.db.Table("tenants").Where("id = ?", tenantID).Pluck("active", &active).Error; err != nil || len(active) == 0 {
+		return true
+	}
+	return active[0]
+}
+
+func (s *service) InForce(c *Client) bool {
+	return c.Active && s.tenantOn(c.TenantID)
+}
+
+// registration is what the authorization server is to hold for c: the
+// client's own registration, with no grants while its tenant is off.
+func (s *service) registration(c *Client, secret string) *hydra.OAuth2Client {
+	reg := c.hydraRegistration(secret)
+	if !s.tenantOn(c.TenantID) {
+		reg.GrantTypes = []string{}
+	}
+	return reg
+}
+
+func (s *service) TenantTurned(tenantID uuid.UUID, on bool) error {
+	var clients []*Client
+	if err := s.db.Where("tenant_id = ?", tenantID).Find(&clients).Error; err != nil {
+		return fmt.Errorf("failed to list the tenant's clients: %w", err)
+	}
+	var firstErr error
+	for _, c := range clients {
+		if _, err := s.hydraClient.UpdateOAuth2Client(c.ClientID, s.registration(c, "")); err != nil {
+			s.logger.Warn("Failed to register a client anew after its tenant was turned", zap.Error(err), zap.String("client_id", c.ClientID))
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if !on && c.Active {
+			if err := s.endTokens(c); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
 }
 
 // endTokens ends the tokens issued to a client: its access tokens, and what

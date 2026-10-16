@@ -1027,7 +1027,17 @@ paths:
                 settings: { $ref: '#/components/schemas/TenantSettings' }
                 logo: { type: string, description: Kept and returned as given; left as it is when not named. }
                 primary_color: { type: string, description: 'A hex color. Kept and returned as given; left as it is when not named.' }
-                active: { type: boolean }
+                active:
+                  type: boolean
+                  description: |
+                    false turns the tenant off, and with it every client of
+                    the tenant, as a client's own active: false does (see
+                    updateClient): no one signs in to them, they get no token,
+                    and the tokens they hold end. true turns it on again; each
+                    client is then as its own active says. Naming active
+                    brings the tenant's clients in line again even when it
+                    does not change, so a request that answered 502 can be
+                    repeated.
       responses:
         '200':
           description: Updated
@@ -1042,6 +1052,14 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '502':
+          description: |
+            The tenant was saved, but not every one of its clients was brought
+            in line at the authorization server (code upstream_sync_failed).
+            Send the same request again.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [admin]
       operationId: deleteTenant

@@ -37,7 +37,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 			zap.String("client_id", loginReq.Client.ClientID), zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusBadRequest, "client_not_registered", "This application is not registered with Authway.")
 	}
-	if !requestedClient.Active {
+	if !h.clientService.InForce(requestedClient) {
 		resp, err := h.hydraClient.RejectLoginRequest(flow, "unauthorized_client", clientTurnedOff)
 		if err != nil {
 			return respondFlowLookupError(c, err)
@@ -80,7 +80,7 @@ func (h *AuthHandler) consentForClientTurnedOff(challenge string, consentReq *hy
 		return "", false, nil
 	}
 	client, err := h.clientService.GetByClientID(consentReq.Client.ClientID)
-	if err != nil || client.Active {
+	if err != nil || h.clientService.InForce(client) {
 		return "", false, nil
 	}
 	resp, err := h.hydraClient.RejectConsentRequest(challenge, "unauthorized_client", clientTurnedOff)
@@ -131,7 +131,7 @@ func (h *AuthHandler) LoginWithoutScreen(c *fiber.Ctx, flow string) (string, boo
 	if err != nil {
 		return "", false
 	}
-	if !requestedClient.Active {
+	if !h.clientService.InForce(requestedClient) {
 		resp, err := h.hydraClient.RejectLoginRequest(flow, "unauthorized_client", clientTurnedOff)
 		if err != nil {
 			return "", false

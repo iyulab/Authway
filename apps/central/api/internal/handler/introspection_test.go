@@ -43,6 +43,8 @@ func (c *introspectingClients) ValidateClient(id, secret string) (*client.Client
 	return found, nil
 }
 
+func (c *introspectingClients) InForce(found *client.Client) bool { return found.Active }
+
 func (c *introspectingClients) GetByClientID(id string) (*client.Client, error) {
 	if found, ok := c.clients[id]; ok {
 		return found, nil
