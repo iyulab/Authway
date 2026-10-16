@@ -282,7 +282,9 @@ type CreateClientRequest struct {
 	// body cannot carry it.
 	System bool `json:"-"`
 
-	TenantID string `json:"tenant_id" validate:"required,uuid"` // Required
+	// TenantID names the tenant in the body; the X-Tenant-ID header may name
+	// it instead, and when both do they must agree (the handler settles it).
+	TenantID string `json:"tenant_id" validate:"omitempty,uuid"`
 	Name     string `json:"name" validate:"required"`
 	Public   bool   `json:"public"` // true: Public client (SPA, Mobile), false: Confidential client (Backend)
 

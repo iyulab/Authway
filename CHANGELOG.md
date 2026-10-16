@@ -88,6 +88,13 @@
 
 ### Fixed
 
+- **A client is registered in the tenant the request is about.** `POST
+  /api/v1/clients` took the tenant from the body's `tenant_id` and ignored the
+  `X-Tenant-ID` header, so a request about one tenant could register a client
+  in another. Now either names the tenant (`tenant_id` is no longer required
+  when the header is sent), and two that disagree are refused with `400
+  invalid_request` (`field: tenant_id`); naming neither is `400
+  tenant_required`.
 - **A client turned off (`active: false`) is off.** It was stored and shown,
   and nothing read it: users still signed in to the client and it still got
   tokens. Now no one signs in to it (the application is handed

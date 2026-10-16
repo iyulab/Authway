@@ -198,3 +198,28 @@ describe('admin API: a chosen client_id', () => {
     expect((await token(first)).status).toBe(401)
   })
 })
+
+// A client is registered in the tenant the request is about: the body names
+// it, the X-Tenant-ID header names it, or both name the same one.
+describe('admin API: the tenant a client is registered in', () => {
+  const body = (extra: Record<string, unknown>) =>
+    JSON.stringify({ name: `conformance-${randomToken(4)}`, grant_types: ['client_credentials'], scopes: ['openid'], ...extra })
+
+  it('takes the tenant from the header when the body names none, and refuses two that disagree', async () => {
+    const tenantId = await provider.tenantId()
+    const fromHeader = await provider.admin('/api/v1/clients', { method: 'POST', body: body({}) })
+    await conform('POST', '/api/v1/clients', fromHeader)
+    expect(fromHeader.status, await fromHeader.clone().text()).toBe(201)
+    const created = ((await fromHeader.json()) as ClientBody).client
+    expect(created.tenant_id).toBe(tenantId)
+    await provider.admin(`/api/v1/clients/${created.id}`, { method: 'DELETE' })
+
+    const disagree = await provider.admin('/api/v1/clients', {
+      method: 'POST',
+      body: body({ tenant_id: '00000000-0000-4000-8000-000000000000' }),
+    })
+    await conform('POST', '/api/v1/clients', disagree)
+    expect(disagree.status).toBe(400)
+    expect(await disagree.json()).toMatchObject({ code: 'invalid_request', field: 'tenant_id' })
+  })
+})

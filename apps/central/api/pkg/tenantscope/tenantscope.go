@@ -20,8 +20,8 @@ const LocalKey = "tenant_id"
 // cross-origin requests, so the CORS policy has to allow it.
 const Header = "X-Tenant-ID"
 
-// named returns the tenant the request names and whether it names one.
-func named(c *fiber.Ctx) (uuid.UUID, bool, error) {
+// Named returns the tenant the request names and whether it names one.
+func Named(c *fiber.Ctx) (uuid.UUID, bool, error) {
 	switch v := c.Locals(LocalKey).(type) {
 	case uuid.UUID:
 		if v != uuid.Nil {
@@ -43,7 +43,7 @@ func named(c *fiber.Ctx) (uuid.UUID, bool, error) {
 // as-is: 400 tenant_required when none is named, 400 invalid_request when the
 // value is not a tenant id.
 func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
-	id, ok, err := named(c)
+	id, ok, err := Named(c)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -60,7 +60,7 @@ func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
 // nothing about other tenants. A request that names no tenant is admitted:
 // the admin key and the admin console session administer every tenant.
 func Admit(c *fiber.Ctx, owner uuid.UUID, notFound string) error {
-	id, ok, err := named(c)
+	id, ok, err := Named(c)
 	if err != nil {
 		return err
 	}

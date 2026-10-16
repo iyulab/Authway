@@ -4,6 +4,7 @@ import (
 	"authway/apps/central/api/pkg/tenantscope"
 	"errors"
 	"strconv"
+	"strings"
 
 	"authway/apps/central/api/internal/service"
 	"authway/apps/central/api/pkg/apierror"
@@ -127,6 +128,24 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 
 	if err := h.validator.Struct(&req); err != nil {
 		return apierror.Invalid(c, err)
+	}
+	// The tenant is named in the body, by the X-Tenant-ID header as for the
+	// tenant's other admin calls, or by both — and then they agree: a client
+	// is never registered in a tenant other than the one the request is about.
+	named, ok, err := tenantscope.Named(c)
+	if err != nil {
+		return err
+	}
+	switch {
+	case ok && req.TenantID == "":
+		req.TenantID = named.String()
+	case ok && !strings.EqualFold(req.TenantID, named.String()):
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request",
+			"tenant_id names a different tenant than the "+tenantscope.Header+" header",
+			fiber.Map{"field": "tenant_id", "hint": "Name the tenant once, or name the same one in both."})
+	case !ok && req.TenantID == "":
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "tenant_required",
+			"name the tenant with tenant_id or the "+tenantscope.Header+" header", fiber.Map{"field": "tenant_id"})
 	}
 
 	newClient, credentials, err := h.services.ClientService.Create(&req)

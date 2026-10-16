@@ -1292,9 +1292,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [tenant_id, name, grant_types, scopes]
+              required: [name, grant_types, scopes]
               properties:
-                tenant_id: { type: string }
+                tenant_id:
+                  type: string
+                  description: |
+                    The tenant to register the client in. The X-Tenant-ID
+                    header may name it instead; when both do they must name
+                    the same tenant (400 invalid_request, field tenant_id).
+                    Naming neither is 400 tenant_required.
                 name: { type: string }
                 client_id:
                   type: string
