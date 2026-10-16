@@ -311,10 +311,20 @@ leaves where the client runs.
   and `client_assertion=<JWT>`. The JWT has `iss` and `sub` equal to the
   `client_id`, `aud` equal to the token endpoint's URL, a `jti` used once and
   an `exp` a few minutes ahead, and names its key in the `kid` header.
+- **The algorithm.** The provider checks a client's assertions with one
+  algorithm, `token_endpoint_auth_signing_alg` (RS256, RS384, RS512, PS256,
+  PS384, PS512, ES256, ES384, ES512). Left out, it is taken from the keys:
+  their `alg` when they name one, else RS256 for an RSA key and ES256, ES384
+  or ES512 for a P-256, P-384 or P-521 key — so the keys of one client sign
+  with one algorithm. With `jwks_uri` it is RS256 unless named, and the keys
+  served there carry `"use": "sig"`. Ed25519 keys are not taken.
 - **Changing the key:** `PUT /clients/{id}` with a new `jwks` (or
   `jwks_uri`) replaces the set. To change keys without a gap, register the
   new key alongside the old one, move the client to it, then remove the old
-  one. An assertion signed with a key no longer registered is refused.
+  one. An assertion signed with a key no longer registered is refused. The
+  algorithm is taken from the new keys again unless
+  `token_endpoint_auth_signing_alg` is given beside them (or alone, checked
+  against the keys the client has).
 - How a client authenticates is decided when it is registered. To move an
   application from a secret to a key, register a new client.
 - The method is offered where the provider's discovery document lists

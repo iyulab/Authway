@@ -2,6 +2,7 @@ package client
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -126,7 +127,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := s.validateBackChannelLogoutURI(req.BackChannelLogoutURI); cerr != nil {
 		return nil, nil, cerr
 	}
-	registeredKeys, cerr := s.validateAuthentication(req.Public, req.TokenEndpointAuthMethod, req.JWKS, req.JWKSURI)
+	registered, cerr := s.validateAuthentication(req.Public, req.TokenEndpointAuthMethod, req.JWKS, req.JWKSURI, req.TokenEndpointAuthSigningAlg)
 	if cerr != nil {
 		return nil, nil, cerr
 	}
@@ -314,8 +315,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	client.ClientURI = req.ClientURI
 	if keyAuth {
 		client.TokenEndpointAuthMethod = AuthMethodPrivateKeyJWT
-		client.JWKS = registeredKeys
+		client.JWKS = registered.Keys
 		client.JWKSURI = req.JWKSURI
+		client.TokenEndpointAuthSigningAlg = registered.Alg
 	}
 
 	// Logout Redirect Policy Configuration (Smart Defaults)
@@ -487,8 +489,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 			Hint:    "Register a new client with the method wanted and move the application to it.",
 		}
 	}
-	replacesKeys := len(req.JWKS) > 0 || req.JWKSURI != nil
-	var replacedKeys, replacedKeysURI string
+	replacesKeys := len(req.JWKS) > 0 || req.JWKSURI != nil || req.TokenEndpointAuthSigningAlg != nil
+	var replaced Authentication
+	var replacedKeysURI string
 	if replacesKeys {
 		if mergedPublic != client.Public || !client.AuthenticatesWithKey() {
 			return nil, SyncStatus{}, &apierror.Refusal{
@@ -498,11 +501,20 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 				Hint:    jwksHint,
 			}
 		}
-		if req.JWKSURI != nil {
+		// An algorithm given alone is checked against the keys the client has.
+		keys := req.JWKS
+		switch {
+		case req.JWKSURI != nil:
 			replacedKeysURI = *req.JWKSURI
+		case len(req.JWKS) == 0:
+			keys, replacedKeysURI = json.RawMessage(client.JWKS), client.JWKSURI
+		}
+		var alg string
+		if req.TokenEndpointAuthSigningAlg != nil {
+			alg = *req.TokenEndpointAuthSigningAlg
 		}
 		var cerr *apierror.Refusal
-		if replacedKeys, cerr = s.validateAuthentication(false, AuthMethodPrivateKeyJWT, req.JWKS, replacedKeysURI); cerr != nil {
+		if replaced, cerr = s.validateAuthentication(false, AuthMethodPrivateKeyJWT, keys, replacedKeysURI, alg); cerr != nil {
 			return nil, SyncStatus{}, cerr
 		}
 	} else if client.AuthenticatesWithKey() && mergedPublic {
@@ -601,8 +613,9 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		client.Audience = req.Audience
 	}
 	if replacesKeys {
-		client.JWKS = replacedKeys
+		client.JWKS = replaced.Keys
 		client.JWKSURI = replacedKeysURI
+		client.TokenEndpointAuthSigningAlg = replaced.Alg
 	}
 	if req.InitiateLoginURI != nil {
 		client.InitiateLoginURI = *req.InitiateLoginURI
@@ -952,6 +965,7 @@ func (c *Client) hydraRegistration(secret string) *hydra.OAuth2Client {
 		ResponseTypes:                     []string{"code"},
 		Scope:                             strings.Join(c.Scopes, " "),
 		TokenEndpointAuthMethod:           authMethod,
+		TokenEndpointAuthSigningAlg:       c.AssertionAlg(),
 		JWKS:                              c.registeredKeys(),
 		JWKSURI:                           c.JWKSURI,
 		SkipConsent:                       c.SkipConsent,

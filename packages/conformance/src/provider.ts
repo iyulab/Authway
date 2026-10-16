@@ -216,13 +216,13 @@ export class Provider {
    * own (authorization code).
    */
   async createDelegatingClient(options: { skipConsent?: boolean; jwtAccessTokens?: boolean; audience?: string[]; withKey?: boolean } = {}): Promise<TestClient> {
-    const pair = options.withKey ? await generateKeyPair('RS256', { extractable: true }) : null
+    const pair = options.withKey ? await generateKeyPair('ES256', { extractable: true }) : null
     const kid = `k-${randomToken(4)}`
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
         ...(pair
-          ? { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ ...(await exportJWK(pair.publicKey)), kid, use: 'sig', alg: 'RS256' }] } }
+          ? { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ ...(await exportJWK(pair.publicKey)), kid }] } }
           : {}),
         ...(options.skipConsent ? { skip_consent: true } : {}),
         ...(options.jwtAccessTokens ? { access_token_strategy: 'jwt' } : {}),
@@ -252,7 +252,7 @@ export class Provider {
     if (key) {
       const { token_endpoint } = await this.discovery()
       const assertion = await new SignJWT({})
-        .setProtectedHeader({ alg: 'RS256', kid: key.kid })
+        .setProtectedHeader({ alg: 'ES256', kid: key.kid })
         .setIssuer(client.clientId)
         .setSubject(client.clientId)
         .setAudience(token_endpoint)

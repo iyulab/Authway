@@ -177,6 +177,21 @@
 
 ### Fixed
 
+- **A client that holds an EC key can authenticate with it.** A
+  `private_key_jwt` client registered with an EC (or any non-RS256) key was
+  accepted, and every assertion it signed was refused: the authorization
+  server was told no algorithm and checked RS256 only. The registration now
+  carries `token_endpoint_auth_signing_alg` (RFC 7591) — named, or taken from
+  the keys — and the answer says it. Keys that sign with different
+  algorithms, an algorithm the keys do not sign with, a key whose `use` is not
+  `sig`, and Ed25519 keys (which the authorization server does not take) are
+  refused at registration (`invalid_token_endpoint_auth_signing_alg`,
+  `invalid_jwks`). A key registered without `use` is sent marked for
+  signatures. Clients registered before keep RS256. Database migration 047.
+- **A token request that authenticates in two ways, or names two clients, is
+  refused.** HTTP Basic beside a client assertion or a form secret, a
+  `client_id` that differs from the client authenticating, or an assertion
+  whose issuer and subject differ.
 - **A consent grants only scopes the client asked for.** The consent screen
   sends the scopes the user approved; one it sent that the authorization
   request did not name was granted as well.

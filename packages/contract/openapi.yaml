@@ -1455,12 +1455,26 @@ paths:
                     provider's discovery document lists the method.
                   type: string
                   enum: [client_secret_post, private_key_jwt, none]
+                token_endpoint_auth_signing_alg:
+                  description: |
+                    The algorithm a `private_key_jwt` client signs its
+                    assertion with (RFC 7591) — the provider checks it with
+                    this one only. Left out, it is taken from the keys: their
+                    `alg` when they name one, else RS256 for an RSA key and
+                    ES256 / ES384 / ES512 for a P-256 / P-384 / P-521 key;
+                    RS256 for keys fetched from `jwks_uri`. Refused
+                    (`invalid_token_endpoint_auth_signing_alg`) when the keys
+                    do not sign with it, when they sign with different ones,
+                    or for a client that has a secret.
+                  type: string
+                  enum: [RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512]
                 jwks: { $ref: '#/components/schemas/ClientKeySet' }
                 jwks_uri:
                   description: |
                     Where the provider fetches the client's key set, in place
                     of `jwks`: a public https address (a local or private one
-                    is refused, `invalid_jwks_uri`).
+                    is refused, `invalid_jwks_uri`). The keys served there
+                    are marked for signatures (`use: sig`).
                   type: string
                 initiate_login_uri:
                   description: |
@@ -1619,6 +1633,14 @@ paths:
                     (`token_endpoint_auth_method_is_fixed`).
                   type: string
                   enum: [client_secret_post, private_key_jwt, none]
+                token_endpoint_auth_signing_alg:
+                  description: |
+                    The algorithm the client signs its assertion with, checked
+                    against its keys — the new ones when given beside them,
+                    else those it has. Keys replaced without it take it from
+                    the keys again.
+                  type: string
+                  enum: [RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512]
                 jwks: { $ref: '#/components/schemas/ClientKeySet' }
                 jwks_uri:
                   description: |
@@ -3486,7 +3508,10 @@ components:
       description: |
         The public keys of a client that authenticates with a key
         (`token_endpoint_auth_method: private_key_jwt`): a JSON Web Key Set of
-        1 to 10 RSA, EC or OKP keys. A private key is refused
+        1 to 10 RSA or EC (P-256, P-384, P-521) keys that sign with one
+        algorithm (see `token_endpoint_auth_signing_alg`). A key's `use`,
+        when given, is `sig`; its `alg`, when given, is one its type signs
+        with. Ed25519 keys are not taken. A private key is refused
         (`invalid_jwks`) — and, having been sent, is to be considered
         disclosed.
       type: object
@@ -3500,7 +3525,7 @@ components:
             type: object
             required: [kty]
             properties:
-              kty: { type: string, enum: [RSA, EC, OKP] }
+              kty: { type: string, enum: [RSA, EC] }
               kid: { type: string }
               use: { type: string }
               alg: { type: string }
@@ -3526,6 +3551,10 @@ components:
           description: How the client authenticates at the token endpoint.
           type: string
           enum: [client_secret_post, private_key_jwt, none]
+        token_endpoint_auth_signing_alg:
+          description: The algorithm a `private_key_jwt` client signs its assertion with; absent for any other client.
+          type: string
+          enum: [RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512]
         jwks: { $ref: '#/components/schemas/ClientKeySet' }
         jwks_uri: { type: string, description: Where the client's key set is fetched, when it is not registered as `jwks`. }
         audience:

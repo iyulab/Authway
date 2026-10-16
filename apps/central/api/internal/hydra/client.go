@@ -112,6 +112,10 @@ type OAuth2Client struct {
 	ResponseTypes                    []string `json:"response_types"`
 	Scope                            string   `json:"scope"`
 	TokenEndpointAuthMethod          string   `json:"token_endpoint_auth_method"`
+	// TokenEndpointAuthSigningAlg is the one algorithm a private_key_jwt
+	// client's assertion is checked with; the server takes RS256 when it is
+	// omitted.
+	TokenEndpointAuthSigningAlg string `json:"token_endpoint_auth_signing_alg,omitempty"`
 	// JWKS / JWKSURI are the public keys of a client that authenticates with
 	// a signed assertion (private_key_jwt). Omitted when empty, which on an
 	// update clears them.

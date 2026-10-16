@@ -219,7 +219,7 @@ describe('approval requests by a client that holds a key', { timeout: 60_000 }, 
     expect(replayed.status).toBe(401)
     expect(replayed.body.error).toBe('invalid_client')
 
-    const { privateKey } = await generateKeyPair('RS256')
+    const { privateKey } = await generateKeyPair('ES256')
     const forged = await request(await provider.clientAuth(agent, { privateKey, kid: agent.key!.kid }))
     expect(forged.status).toBe(401)
     expect(forged.body.error).toBe('invalid_client')

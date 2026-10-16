@@ -11,9 +11,10 @@ type Created = { client: { id: string; client_id: string; token_endpoint_auth_me
 type Refusal = { code: string; field?: string }
 
 /** A key pair, and its public half as the registration takes it. */
-const newKey = async (kid: string) => {
-  const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
-  return { privateKey, kid, publicJwk: { ...(await exportJWK(publicKey)), kid, use: 'sig', alg: 'RS256' } as JWK, privateJwk: await exportJWK(privateKey) }
+const newKey = async (kid: string, alg = 'RS256') => {
+  const { publicKey, privateKey } = await generateKeyPair(alg, { extractable: true })
+  const bareJwk = { ...(await exportJWK(publicKey)), kid } as JWK
+  return { privateKey, kid, alg, bareJwk, publicJwk: { ...bareJwk, use: 'sig', alg } as JWK, privateJwk: await exportJWK(privateKey) }
 }
 
 // A client that can keep a key proves who it is at the token endpoint with a
@@ -49,10 +50,10 @@ describe('clients: authenticating with a key instead of a secret', () => {
   }
 
   /** Asks the token endpoint for a token, authenticating with an assertion signed by `key`. */
-  const tokenWith = async (clientId: string, key: { privateKey: CryptoKey | Uint8Array; kid: string }) => {
+  const tokenWith = async (clientId: string, key: { privateKey: CryptoKey | Uint8Array; kid: string; alg?: string }) => {
     const { token_endpoint } = await provider.discovery()
     const assertion = await new SignJWT({})
-      .setProtectedHeader({ alg: 'RS256', kid: key.kid })
+      .setProtectedHeader({ alg: key.alg ?? 'RS256', kid: key.kid })
       .setIssuer(clientId)
       .setSubject(clientId)
       .setAudience(token_endpoint)
@@ -113,6 +114,43 @@ describe('clients: authenticating with a key instead of a secret', () => {
     const old = await tokenWith(client.client_id, first)
     expect([400, 401]).toContain(old.status)
     expect(((await old.json()) as { access_token?: string }).access_token).toBeUndefined()
+  })
+
+  it('signs with the algorithm its keys sign with: an EC key, a key that names none, a named one', async () => {
+    const ec = await newKey('ec', 'ES256')
+    const byEc = await registered({ token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [ec.bareJwk] } })
+    expect(byEc.client).toMatchObject({ token_endpoint_auth_signing_alg: 'ES256' })
+    const issued = await tokenWith(byEc.client.client_id, ec)
+    expect(issued.status, await issued.clone().text()).toBe(200)
+
+    const rsa = await newKey('rsa')
+    const byRsa = await registered({ token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [rsa.bareJwk] } })
+    expect(byRsa.client).toMatchObject({ token_endpoint_auth_signing_alg: 'RS256' })
+    expect((await tokenWith(byRsa.client.client_id, rsa)).status).toBe(200)
+
+    const pss = await newKey('pss', 'PS256')
+    const byPss = await registered({ token_endpoint_auth_method: 'private_key_jwt', token_endpoint_auth_signing_alg: 'PS256', jwks: { keys: [pss.bareJwk] } })
+    expect((await tokenWith(byPss.client.client_id, pss)).status).toBe(200)
+    // Checked with that one only.
+    const rs = await tokenWith(byPss.client.client_id, { ...pss, alg: 'RS256', privateKey: (await newKey('pss')).privateKey })
+    expect([400, 401]).toContain(rs.status)
+  })
+
+  it('refuses keys that sign with different algorithms, or an algorithm they do not sign with', async () => {
+    const ec = await newKey('ec', 'ES256')
+    const rsa = await newKey('rsa')
+    for (const [what, body, code] of [
+      ['keys of two kinds', { jwks: { keys: [ec.bareJwk, rsa.bareJwk] } }, 'invalid_token_endpoint_auth_signing_alg'],
+      ['an RSA algorithm for an EC key', { token_endpoint_auth_signing_alg: 'RS256', jwks: { keys: [ec.bareJwk] } }, 'invalid_token_endpoint_auth_signing_alg'],
+      ['a key for encryption', { jwks: { keys: [{ ...rsa.bareJwk, use: 'enc' }] } }, 'invalid_jwks'],
+    ] as [string, Record<string, unknown>, string][]) {
+      const res = await register({ token_endpoint_auth_method: 'private_key_jwt', ...body })
+      await conform('POST', '/api/v1/clients', res.clone())
+      const answer = (await res.clone().json().catch(() => ({}))) as Refusal & { client?: { id: string } }
+      if (answer.client?.id) created.push(answer.client.id)
+      expect(res.status, what).toBe(400)
+      expect(answer.code, what).toBe(code)
+    }
   })
 
   it('says how every client authenticates', async () => {

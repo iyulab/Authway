@@ -72,6 +72,9 @@ type Client struct {
 	TokenEndpointAuthMethod string `json:"-" gorm:"column:token_endpoint_auth_method;not null;default:''"`
 	JWKS                    string `json:"-" gorm:"column:jwks;not null;default:''"`
 	JWKSURI                 string `json:"-" gorm:"column:jwks_uri;not null;default:''"`
+	// TokenEndpointAuthSigningAlg is the algorithm such a client's assertion
+	// is signed with (see AssertionAlg).
+	TokenEndpointAuthSigningAlg string `json:"-" gorm:"column:token_endpoint_auth_signing_alg;not null;default:''"`
 
 	// BackChannelLogoutURI is where the authorization server tells this
 	// client's backend that a user's session has ended (OpenID Connect
@@ -163,9 +166,10 @@ type PublicClient struct {
 
 	// How the client authenticates at the token endpoint, and — for one
 	// that does so with a key — its public keys or where they are fetched.
-	TokenEndpointAuthMethod string          `json:"token_endpoint_auth_method"`
-	JWKS                    json.RawMessage `json:"jwks,omitempty"`
-	JWKSURI                 string          `json:"jwks_uri,omitempty"`
+	TokenEndpointAuthMethod     string          `json:"token_endpoint_auth_method"`
+	TokenEndpointAuthSigningAlg string          `json:"token_endpoint_auth_signing_alg,omitempty"`
+	JWKS                        json.RawMessage `json:"jwks,omitempty"`
+	JWKSURI                     string          `json:"jwks_uri,omitempty"`
 
 	// Where the client's backend is told that a user's session has ended.
 	BackChannelLogoutURI string `json:"backchannel_logout_uri"`
@@ -246,9 +250,10 @@ func (c *Client) ToPublic() PublicClient {
 
 		Audience: nonNil(c.Audience),
 
-		TokenEndpointAuthMethod: c.AuthMethod(),
-		JWKS:                    c.registeredKeys(),
-		JWKSURI:                 c.JWKSURI,
+		TokenEndpointAuthMethod:     c.AuthMethod(),
+		TokenEndpointAuthSigningAlg: c.AssertionAlg(),
+		JWKS:                        c.registeredKeys(),
+		JWKSURI:                     c.JWKSURI,
 
 		BackChannelLogoutURI: c.BackChannelLogoutURI,
 
@@ -332,9 +337,13 @@ type CreateClientRequest struct {
 	// endpoint. Empty takes what the kind of client implies — a secret for
 	// a confidential client, none for a public one. private_key_jwt takes
 	// JWKS or JWKSURI and gives the client no secret.
-	TokenEndpointAuthMethod string          `json:"token_endpoint_auth_method"`
-	JWKS                    json.RawMessage `json:"jwks"`
-	JWKSURI                 string          `json:"jwks_uri"`
+	// TokenEndpointAuthSigningAlg is the algorithm its assertion is signed
+	// with; empty takes it from the keys (RS256 for keys fetched from
+	// JWKSURI).
+	TokenEndpointAuthMethod     string          `json:"token_endpoint_auth_method"`
+	TokenEndpointAuthSigningAlg string          `json:"token_endpoint_auth_signing_alg"`
+	JWKS                        json.RawMessage `json:"jwks"`
+	JWKSURI                     string          `json:"jwks_uri"`
 
 	// BackChannelLogoutURI: where the client's backend receives a logout
 	// token when a user's session ends. Validated in
@@ -459,10 +468,13 @@ type UpdateClientRequest struct {
 
 	// TokenEndpointAuthMethod cannot be changed: naming a different one is
 	// refused. JWKS / JWKSURI replace the keys of a client that authenticates
-	// with one (giving one clears the other).
-	TokenEndpointAuthMethod *string         `json:"token_endpoint_auth_method"`
-	JWKS                    json.RawMessage `json:"jwks"`
-	JWKSURI                 *string         `json:"jwks_uri"`
+	// with one (giving one clears the other); the signing algorithm is taken
+	// from them again unless TokenEndpointAuthSigningAlg names one, which
+	// may also be given alone.
+	TokenEndpointAuthMethod     *string         `json:"token_endpoint_auth_method"`
+	TokenEndpointAuthSigningAlg *string         `json:"token_endpoint_auth_signing_alg"`
+	JWKS                        json.RawMessage `json:"jwks"`
+	JWKSURI                     *string         `json:"jwks_uri"`
 
 	// BackChannelLogoutURI: "" means "clear", nil means "not provided".
 	BackChannelLogoutURI *string `json:"backchannel_logout_uri"`
