@@ -3287,8 +3287,9 @@ components:
         `scope` within the delegation, `authorization_details` — a JSON array
         of objects with a `type` (RFC 9396), kept and put in the token as
         given — and `requested_expiry`, 30 to 600 seconds, 300 by default). It
-        is answered `auth_req_id`, `approve_url` (the approval screen, which
-        the client brings to the user by its own means), `expires_in` and
+        is answered `auth_req_id`, `approve_url` (the login UI's approval
+        screen, `/approve` with `request` and `client_id`, which the client
+        brings to the user by its own means), `expires_in` and
         `interval`. The client polls the token endpoint with `grant_type`
         `urn:authway:params:oauth:grant-type:approval`, `auth_req_id` and its
         authentication: `authorization_pending` while the user has not

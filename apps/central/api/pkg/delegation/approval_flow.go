@@ -117,7 +117,9 @@ func (x *Exchanger) RequestApproval(ctx context.Context, form url.Values, author
 	}
 	return &ApprovalRequested{
 		AuthReqID:  secretID,
-		ApproveURL: x.approveURL + "?request=" + url.QueryEscape(r.ID.String()),
+		// The client names the application the user knows, and through it the
+		// tenant's account application the screen signs them in with.
+		ApproveURL: x.approveURL + "?" + url.Values{"request": {r.ID.String()}, "client_id": {clientID}}.Encode(),
 		ExpiresIn:  int(expiry.Seconds()),
 		Interval:   int(ApprovalPollInterval.Seconds()),
 		Request:    r,

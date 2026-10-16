@@ -99,9 +99,14 @@
   assertion once; `subject_token` the delegation handle; `binding_message`, a
   short code the user compares with the client's own screen; optional `scope`, `authorization_details` — RFC 9396 shape, kept
   as given — and `requested_expiry`, 30 to 600 seconds) answers `auth_req_id`,
-  `approve_url`, `expires_in` and `interval`. The user answers at
-  `/api/v1/users/approvals/{id}` (`approve`/`deny`) with a token of the
-  deployment's account application and a recent sign-in. The client polls the
+  `approve_url`, `expires_in` and `interval`. `approve_url` is the login UI's
+  approval screen (`/approve?request=…&client_id=…`), which the client brings
+  to the user by its own means: the user signs in to their account there,
+  compares the code, sees each `type` of `authorization_details` and the
+  scopes, and approves or denies — through
+  `/api/v1/users/approvals/{id}` (`approve`/`deny`), which takes a token of the
+  deployment's account application and a recent sign-in. See
+  [delegation.md](docs/api/delegation.md) §5. The client polls the
   token endpoint with `grant_type=urn:authway:params:oauth:grant-type:approval`
   (`authorization_pending`, `slow_down`, `access_denied`, `expired_token`) and
   receives one access token bound to the approval: `approval.id` and

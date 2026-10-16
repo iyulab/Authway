@@ -15,6 +15,7 @@ import MagicLinkPage from './pages/MagicLinkPage'
 import DevicePage from './pages/DevicePage'
 import DeviceDonePage from './pages/DeviceDonePage'
 import AccountPage, { AccountCallbackPage } from './pages/AccountPage'
+import ApprovePage from './pages/ApprovePage'
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
         <Route path="/device/done" element={<DeviceDonePage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/account/callback" element={<AccountCallbackPage />} />
+        <Route path="/approve" element={<ApprovePage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
     </div>

@@ -1,21 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { AuthwayClient } from '@authway/client'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
 import AccountConnections from './AccountConnections'
 import AccountDelegations from './AccountDelegations'
-import { getConfig } from '../config'
 import { useLoad } from '../utils/useLoad'
+import { httpsUrl, readStored, refusal, returnPath, signIn, useAccountSession } from './accountSession'
 
-/** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
-export interface AccountEntry {
-  client_id: string
-  redirect_uri: string
-  scope: string
-  app: { name: string; client_uri?: string }
-}
+export type { AccountEntry } from './accountSession'
 
 interface Status {
   enabled: boolean
@@ -30,53 +23,6 @@ interface Setup {
   account_name: string
 }
 
-/** Where the entry is kept between leaving for sign-in and coming back to /account/callback. */
-const ENTRY_KEY = 'authway.account.entry'
-
-const apiBase = () => getConfig().apiUrl || window.location.origin
-
-/** The application's address when it is an https URL — the only kind it registers, and the only kind followed. */
-const httpsUrl = (raw?: string): string | undefined => {
-  try {
-    const u = raw ? new URL(raw) : undefined
-    return u && u.protocol === 'https:' ? u.toString() : undefined
-  } catch {
-    return undefined
-  }
-}
-
-const signIn = (entry: AccountEntry) =>
-  new AuthwayClient({
-    domain: apiBase(),
-    clientId: entry.client_id,
-    redirectUri: entry.redirect_uri,
-    scope: entry.scope,
-    cacheLocation: 'sessionstorage',
-  })
-
-interface Stored {
-  appClientId: string
-  entry: AccountEntry
-}
-
-const readStored = (): Stored | null => {
-  try {
-    const raw = sessionStorage.getItem(ENTRY_KEY)
-    return raw ? (JSON.parse(raw) as Stored) : null
-  } catch {
-    return null
-  }
-}
-
-/** A refusal's message, or null when the answer is not one. */
-const refusal = async (res: Response): Promise<{ code?: string; detail?: string }> => {
-  try {
-    return (await res.json()) as { code?: string; detail?: string }
-  } catch {
-    return {}
-  }
-}
-
 // The code exchange of each comeback, run once: the code works once, so a
 // second run of the effect (React runs effects twice in development) waits for
 // the first instead of failing on a used-up code.
@@ -84,7 +30,8 @@ const exchanges = new Map<string, Promise<unknown>>()
 
 /**
  * The comeback from sign-in: finishes the authorization code exchange, then
- * returns to the account screen of the application the user came from.
+ * returns to the screen that sent the user — the account screen of the
+ * application they came from, or the approval screen.
  */
 export const AccountCallbackPage: React.FC = () => {
   const { t } = useTranslation(['auth'])
@@ -101,7 +48,7 @@ export const AccountCallbackPage: React.FC = () => {
     if (!exchanges.has(key)) exchanges.set(key, signIn(stored.entry).handleRedirectCallback())
     exchanges
       .get(key)!
-      .then(() => navigate(`/account?client_id=${encodeURIComponent(stored.appClientId)}`, { replace: true }))
+      .then(() => navigate(returnPath(stored), { replace: true }))
       .catch(() => setFailed(true))
   }, [navigate])
 
@@ -123,8 +70,10 @@ const AccountPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
   const appClientId = searchParams.get('client_id')
-  const [entry, setEntry] = useState<AccountEntry | null>(null)
-  const [email, setEmail] = useState<string | null>(null)
+  const { entry, email, client, call, fatal, setFatal } = useAccountSession(
+    appClientId,
+    `/account?client_id=${encodeURIComponent(appClientId ?? '')}`,
+  )
   const [status, setStatus] = useState<Status | null>(null)
   const [setup, setSetup] = useState<Setup | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
@@ -132,22 +81,7 @@ const AccountPage: React.FC = () => {
   const [code, setCode] = useState('')
   const [action, setAction] = useState<'disable' | 'regenerate' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [fatal, setFatal] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  const client = useMemo(() => (entry ? signIn(entry) : null), [entry])
-
-  /** Calls the account API with the user's token. */
-  const call = useCallback(
-    async (path: string, init: RequestInit = {}) => {
-      const token = await client!.getAccessToken()
-      return fetch(`${apiBase()}${path}`, {
-        ...init,
-        headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
-      })
-    },
-    [client],
-  )
 
   const loadStatus = useCallback(
     async (signal?: AbortSignal) => {
@@ -158,34 +92,6 @@ const AccountPage: React.FC = () => {
     },
     [call],
   )
-
-  // Find the account client for the application, then make sure the user is signed in to it.
-  useEffect(() => {
-    if (!appClientId) return
-    let cancelled = false
-    ;(async () => {
-      const res = await fetch(`${apiBase()}/api/v1/account-entry?client_id=${encodeURIComponent(appClientId)}`)
-      if (!res.ok) {
-        if (!cancelled) setFatal(res.status === 404 ? t('auth:account.unknownApp') : t('common:errorOccurred'))
-        return
-      }
-      const answer = (await res.json()) as AccountEntry
-      sessionStorage.setItem(ENTRY_KEY, JSON.stringify({ appClientId, entry: answer } satisfies Stored))
-      const sdk = signIn(answer)
-      if (!(await sdk.isAuthenticated()) && !(await sdk.checkSession().catch(() => false))) {
-        // A run that was cleaned up must not start a sign-in: two would each
-        // store their own state, and the one that comes back would not match.
-        if (!cancelled) await sdk.loginWithRedirect()
-        return
-      }
-      if (cancelled) return
-      setEntry(answer)
-      setEmail((await sdk.getUser())?.email ?? null)
-    })().catch(() => !cancelled && setFatal(t('common:errorOccurred')))
-    return () => {
-      cancelled = true
-    }
-  }, [appClientId, t])
 
   useLoad(
     useCallback(async (signal: AbortSignal) => {

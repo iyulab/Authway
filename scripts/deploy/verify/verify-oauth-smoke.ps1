@@ -29,6 +29,8 @@
 #       scope 로 만들고, 동의 → ID 토큰의 delegation_grant → discovery 의 token_endpoint 에서
 #       교환 → 액세스 토큰의 sub·act·tenant_id·수명·리프레시 없음 → 계정 삭제 뒤 같은 handle 은
 #       invalid_grant. 인가 서버의 토큰 훅(판정)과 클라이언트별 신뢰 등록까지 배포 환경에서 탄다.
+#       배포가 승인 요청을 제공하면(capabilities.approval_requests) 승인 요청 → 같은 세션으로 계정 앱
+#       로그인(PKCE) → 승인 → 폴링 토큰의 approval.id·act·authorization_details 까지.
 # ============================================================
 
 param(
@@ -482,6 +484,90 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
             exit 1
         }
         Write-Host "   ✅ 교환된 토큰으로 계정 경로 → 403" -ForegroundColor Green
+
+        # --- 8-4. 승인 요청 (배포가 제공할 때) ---
+        # client 가 승인을 요청 → 사용자가 계정 앱으로 로그인(같은 브라우저 세션, 화면 없이)
+        # 해 승인 → client 의 폴링이 승인에 묶인 토큰을 받는다(docs/api/delegation.md §5).
+        $caps = & curl.exe -s "$apiUrl/api/v1/capabilities" | ConvertFrom-Json
+        if ($caps.approval_requests -eq $true) {
+            Write-Host "7️⃣-4 승인 요청 → 사용자 승인 → 폴링" -ForegroundColor Yellow
+            $askResp = & curl.exe -s -X POST "$apiUrl/oauth2/approval-requests" `
+                --data-urlencode "subject_token=$handle" `
+                --data-urlencode 'subject_token_type=urn:authway:params:oauth:token-type:delegation-grant' `
+                --data-urlencode "binding_message=V-$suffix" `
+                --data-urlencode 'authorization_details=[{"type":"verify","ref":"smoke"}]' `
+                --data-urlencode "client_id=$clientId" --data-urlencode "client_secret=$clientSecret"
+            $ask = $askResp | ConvertFrom-Json
+            if (-not $ask.auth_req_id -or -not $ask.approve_url) {
+                Write-Host "❌ 승인 요청 실패: $askResp" -ForegroundColor Red
+                exit 1
+            }
+            $approvalId = if ($ask.approve_url -match '[?&]request=([^&]+)') { [uri]::UnescapeDataString($matches[1]) } else { $null }
+            $approveClient = if ($ask.approve_url -match '[?&]client_id=([^&]+)') { [uri]::UnescapeDataString($matches[1]) } else { $null }
+            if (-not $approvalId -or $approveClient -ne $clientId) {
+                Write-Host "❌ approve_url 에 client_id 가 없음: $($ask.approve_url)" -ForegroundColor Red
+                exit 1
+            }
+
+            # 계정 앱 로그인 — 승인 화면이 하는 일(PKCE, 이미 열린 세션).
+            $entry = & curl.exe -s "$apiUrl/api/v1/account-entry?client_id=$([uri]::EscapeDataString($clientId))" | ConvertFrom-Json
+            $verifier = (New-VerifySuffix) + (New-VerifySuffix) + (New-VerifySuffix) + (New-VerifySuffix)
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $challenge = [Convert]::ToBase64String($sha.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($verifier))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+            $accountUrl = "$issuer/oauth2/auth?client_id=$([uri]::EscapeDataString($entry.client_id))&response_type=code&scope=$([uri]::EscapeDataString($entry.scope))&redirect_uri=$([uri]::EscapeDataString($entry.redirect_uri))&state=a$(New-VerifySuffix)&code_challenge=$challenge&code_challenge_method=S256"
+            $accountCode = $null
+            foreach ($hop in 1..10) {
+                $ra = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($accountUrl)
+                if (-not $ra.Location) { break }
+                if ($ra.Location -match '[?&]code=([^&]+)') { $accountCode = [uri]::UnescapeDataString($matches[1]); break }
+                if ($ra.Location -match '[?&]error=') { break }
+                if ($ra.Location -match '[?&]flow=([^&]+)') {
+                    $kind = if ($ra.Location -match '/consent\?') { 'consent-flows' } else { 'login-flows' }
+                    $step = & curl.exe -s -c $cookieJar -b $cookieJar "$apiUrl/api/v1/$kind/$($matches[1])" | ConvertFrom-Json
+                    if ($step.next -ne 'redirect') { break }
+                    $accountUrl = $step.redirect_to
+                } else {
+                    $accountUrl = $ra.Location
+                }
+            }
+            if (-not $accountCode) {
+                Write-Host "❌ 계정 앱 로그인이 code 로 끝나지 않음 (마지막 주소: $($ra.Location))" -ForegroundColor Red
+                exit 1
+            }
+            $accountToken = (& curl.exe -s -X POST $tokenEndpoint -d 'grant_type=authorization_code' --data-urlencode "code=$accountCode" `
+                --data-urlencode "redirect_uri=$($entry.redirect_uri)" --data-urlencode "client_id=$($entry.client_id)" --data-urlencode "code_verifier=$verifier" | ConvertFrom-Json).access_token
+            $seen = & curl.exe -s "$apiUrl/api/v1/users/approvals/$approvalId" -H "Authorization: Bearer $accountToken" | ConvertFrom-Json
+            if ($seen.binding_message -ne "V-$suffix" -or $seen.status -ne 'pending') {
+                Write-Host "❌ 사용자가 보는 승인 요청이 다름: binding='$($seen.binding_message)' status='$($seen.status)'" -ForegroundColor Red
+                exit 1
+            }
+            $approved = & curl.exe -s -o NUL -w "%{http_code}" -X POST "$apiUrl/api/v1/users/approvals/$approvalId/approve" -H "Authorization: Bearer $accountToken"
+            if ($approved -ne '204') {
+                Write-Host "❌ 승인 실패(HTTP $approved)" -ForegroundColor Red
+                exit 1
+            }
+            Start-Sleep -Seconds ([int]$ask.interval + 1)
+            $pollResp = & curl.exe -s -X POST $tokenEndpoint `
+                --data-urlencode 'grant_type=urn:authway:params:oauth:grant-type:approval' `
+                --data-urlencode "auth_req_id=$($ask.auth_req_id)" `
+                --data-urlencode "client_id=$clientId" --data-urlencode "client_secret=$clientSecret"
+            $polled = $pollResp | ConvertFrom-Json
+            if (-not $polled.access_token) {
+                Write-Host "❌ 승인 뒤 폴링이 토큰을 내지 않음: $pollResp" -ForegroundColor Red
+                exit 1
+            }
+            $pParts = $polled.access_token.Split('.')
+            $pb64 = $pParts[1].Replace('-', '+').Replace('_', '/')
+            $pb64 += '=' * ((4 - $pb64.Length % 4) % 4)
+            $p = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($pb64)) | ConvertFrom-Json
+            if ($p.approval.id -ne $approvalId -or $p.act.sub -ne $clientId -or $p.sub -ne $claims.sub -or @($p.authorization_details)[0].type -ne 'verify') {
+                Write-Host "❌ 승인 토큰의 클레임이 다름 (approval.id='$($p.approval.id)' act.sub='$($p.act.sub)') — 토큰 훅·top-level approval/authorization_details 설정 확인" -ForegroundColor Red
+                exit 1
+            }
+            Write-Host "   ✅ 승인 → 토큰(approval.id, act.sub, authorization_details)" -ForegroundColor Green
+        } else {
+            Write-Host "   (승인 요청은 이 배포가 제공하지 않음 — capabilities.approval_requests)" -ForegroundColor Gray
+        }
     }
 
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---

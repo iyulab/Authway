@@ -81,7 +81,7 @@ describe('AccountPage', () => {
     await waitFor(() => expect(sdk.logins).toBe(1))
     expect(sdk.configs.at(-1)).toMatchObject({ clientId: 'authway_account', redirectUri: entry.redirect_uri, cacheLocation: 'sessionstorage' })
     // Kept for the comeback to /account/callback (the test environment's storage is a mock).
-    expect(window.sessionStorage.setItem).toHaveBeenCalledWith('authway.account.entry', JSON.stringify({ appClientId: 'notes', entry }))
+    expect(window.sessionStorage.setItem).toHaveBeenCalledWith('authway.account.entry', JSON.stringify({ appClientId: 'notes', entry, returnTo: '/account?client_id=notes' }))
   })
 
   it('turns the second factor on: QR code and key, a code, then the recovery codes', async () => {

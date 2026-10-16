@@ -92,6 +92,8 @@ describe('approval requests', { timeout: 90_000 }, () => {
     expect(asked.body.expires_in).toBe(300)
     const authReqId = asked.body.auth_req_id as string
     const id = requestIdOf(asked.body.approve_url as string)
+    // The screen finds the tenant's account application from the client.
+    expect(new URL(asked.body.approve_url as string).searchParams.get('client_id')).toBe(agent.clientId)
 
     const pending = await poll(authReqId)
     expect(pending.status).toBe(400)

@@ -109,6 +109,58 @@ identifier. Then:
 A token without `act` is the user's own. Introspection
 (`POST /api/v1/oauth2/introspect`) answers `act` too.
 
+## 5. Asking the user to approve one action
+
+Some actions should not run on the delegation alone: the user is to say yes
+to this one. The client asks; the user answers on Authway's approval screen;
+the client polls and receives a token bound to that approval.
+`capabilities.approval_requests` is `true` where this is offered. It is not
+OpenID CIBA: no ID token is issued (`capabilities.ciba` stays `false`).
+
+**Ask.** `POST /oauth2/approval-requests` on the API (form), with the client's
+authentication as at the token endpoint — `client_secret_post`, or
+`private_key_jwt` with an assertion addressed to the token endpoint (each
+assertion once):
+
+| Parameter | |
+|---|---|
+| `subject_token` | the delegation handle (`delegation_grant`) |
+| `subject_token_type` | `urn:authway:params:oauth:token-type:delegation-grant` |
+| `binding_message` | a short code, up to 200 characters, the user compares with what your application shows — not a description of the action |
+| `authorization_details` | optional: a JSON array of objects with a `type` (RFC 9396). Kept and put in the token as given; the approval screen shows only each `type`. Use an opaque reference to the action, so a resource server can check from the token alone that the approval is for that action |
+| `scope` | optional: within the delegation |
+| `requested_expiry` | optional: 30 to 600 seconds, 300 by default |
+
+The answer is `auth_req_id` (the polling secret — keep it), `approve_url`,
+`expires_in` and `interval`. **Bring `approve_url` to the user yourself** — a
+notification, a message, a link on your own screen, with the same code.
+Authway does not contact the user.
+
+**The user answers.** `approve_url` opens the approval screen. The user signs
+in to their account there (no screen when their session is still there),
+compares the code, sees the kinds of action (`type`) and the permissions, and
+approves or denies. Answering needs a sign-in within the last ten minutes; a
+token your application holds for the user cannot answer.
+
+**Poll.** The token endpoint, with
+`grant_type=urn:authway:params:oauth:grant-type:approval`, `auth_req_id` and
+the client's authentication, no more often than `interval`:
+
+| Answer | |
+|---|---|
+| `authorization_pending` | not answered yet |
+| `slow_down` | asked within `interval` |
+| `access_denied` | the user denied |
+| `expired_token` | not answered in time — take it as a denial |
+| `invalid_grant` | the token was already issued, or the request is not this client's |
+| 200 | one access token: `sub` the user, `act.sub` your client, `approval.id`, `authorization_details` as you sent them; at most five minutes, no refresh token |
+
+The token is issued once. A resource server checks `approval.id` or
+`authorization_details` against the action it is asked to perform.
+
+The audit log records `approval.requested`, `approval.approved`,
+`approval.denied` and `approval.exchanged`.
+
 ## Revoking
 
 - The user: `GET /api/v1/users/delegations`, `DELETE /api/v1/users/delegations/{id}`
