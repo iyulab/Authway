@@ -690,7 +690,9 @@ IDX20803: Unable to obtain configuration from:
 'http://localhost:8080/.well-known/openid-configuration'
 ```
 
-**Cause**: Using the Authway API URL as Authority
+**Cause**: Using the Authway API URL as Authority. (Where the API serves the
+provider's metadata, the library instead reports that the document's issuer
+does not match the Authority — the same mistake.)
 
 **Solution**: Use Hydra OAuth endpoint instead
 

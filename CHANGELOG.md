@@ -61,6 +61,18 @@
 
 ### Added
 
+- **The provider's metadata as the deployment offers it**, at the API's
+  `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`:
+  the authorization server's document with `introspection_endpoint`, the
+  token exchange and approval grants (and `approval_request_endpoint`) where
+  offered, and `token_endpoint_auth_signing_alg_values_supported` added, and
+  what no client can be registered for taken out (`implicit`, response types
+  other than `code`, `client_secret_basic`, front-channel logout, request
+  URIs). It reaches clients at the issuer's address where the deployment
+  routes those paths to the API ([DEPLOYMENT.md](docs/DEPLOYMENT.md),
+  「Discovery document」); until then they read the authorization server's
+  document, as before.
+
 - **A user can let a client act for them while they are away (delegation).**
   A confidential client registered with the
   `urn:ietf:params:oauth:grant-type:token-exchange` grant may ask for the

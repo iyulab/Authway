@@ -109,6 +109,12 @@ var assertionAlgs = map[string]struct{ kty, crv string }{
 	"ES256": {"EC", "P-256"}, "ES384": {"EC", "P-384"}, "ES512": {"EC", "P-521"},
 }
 
+// AssertionAlgs are the algorithms a client may sign its assertion with, as
+// discovery advertises them (token_endpoint_auth_signing_alg_values_supported).
+func AssertionAlgs() []string {
+	return []string{"RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512"}
+}
+
 // keyAlgs are the algorithms a key can sign with, its own (alg) first when it
 // names one.
 func keyAlgs(kty, crv, own string) []string {

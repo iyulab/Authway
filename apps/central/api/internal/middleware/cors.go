@@ -34,6 +34,8 @@ const corsAllowMethods = "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS"
 // deployment and carry nothing about a user.
 var publicDocuments = []string{
 	"/.well-known/authway-config",
+	"/.well-known/openid-configuration",
+	"/.well-known/oauth-authorization-server",
 	"/api/v1/capabilities",
 }
 

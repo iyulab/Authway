@@ -261,6 +261,27 @@ To manage DNS for this zone going forward, use the Cloudflare dashboard
 (dns.cloudflare.com → `authway.in`) or the Cloudflare API — not the GoDaddy
 DNS panel, which is no longer authoritative.
 
+#### Discovery document
+
+The authorization server's own discovery document cannot describe the
+deployment fully: its response type, grant and logout lists are fixed in its
+code (it advertises `implicit`, front-channel logout and request URIs, which
+no client can be registered for), and it has no place for the introspection
+endpoint or the grants Authway answers at the token endpoint (token exchange,
+approval polling). The API serves the document as the deployment offers it at
+`/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`
+— the authorization server's document with those corrections, `issuer`
+unchanged.
+
+A client reads discovery at the issuer's address, so the document reaches
+clients only where the deployment routes those two paths of the issuer's host
+to the API (a reverse proxy in front of both, or an edge rule on the issuer's
+domain). Without that route, clients see the authorization server's document;
+everything they can register still works, and the introspection endpoint is
+`{API}/api/v1/oauth2/introspect`. Read at the API's own address, the document
+fails a client's issuer check (OpenID Connect Discovery 1.0 §4.3) — the API is
+not the issuer.
+
 ---
 
 ## Docker Deployment

@@ -404,6 +404,11 @@ func main() {
 	if exchanger.OffersApprovals() {
 		app.Post("/oauth2/approval-requests", tokenEndpoint.ApprovalRequests)
 	}
+	// The provider's metadata as Authway offers it — reached at the issuer's
+	// address where the deployment routes it here (docs/DEPLOYMENT.md).
+	discovery := handler.NewDiscovery(cfg.Hydra.EngineURL(), cfg.App.BaseURL, exchanger != nil, exchanger.OffersApprovals(), zapLogger)
+	app.Get("/.well-known/openid-configuration", discovery.Serve)
+	app.Get("/.well-known/oauth-authorization-server", discovery.Serve)
 	// The authorization server calls this before it issues a token. Served
 	// only when the deployment set the key the authorization server presents.
 	if len(cfg.Hydra.TokenHookKeys) > 0 {

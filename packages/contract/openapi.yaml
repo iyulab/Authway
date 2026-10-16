@@ -74,6 +74,62 @@ paths:
                   auth_ui: { type: string, description: The login UI's public address; emailed links point at it. }
                   version: { type: string }
 
+  /.well-known/openid-configuration:
+    get:
+      operationId: getProviderMetadata
+      summary: The provider's metadata as this deployment offers it
+      description: |
+        The authorization server's discovery document (OpenID Connect
+        Discovery 1.0) with what Authway answers added and what no client can
+        be registered for taken out: `introspection_endpoint`; the token
+        exchange and approval grants where offered, with
+        `approval_request_endpoint`; `token_endpoint_auth_signing_alg_values_supported`;
+        `response_types_supported` `code` only; no `implicit` grant, no
+        `client_secret_basic`, `frontchannel_logout_supported` and
+        `request_uri_parameter_supported` false. `issuer` is the
+        authorization server's: a client finds this document at the issuer's
+        address where the deployment routes that address to the API; read at
+        the API's own address it fails a client's issuer check. Readable from
+        any origin.
+      security: []
+      responses:
+        '200':
+          description: The provider's metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issuer, authorization_endpoint, token_endpoint, jwks_uri, response_types_supported]
+                properties:
+                  issuer: { type: string }
+                  authorization_endpoint: { type: string }
+                  token_endpoint: { type: string }
+                  jwks_uri: { type: string }
+                  introspection_endpoint: { type: string }
+                  approval_request_endpoint: { type: string, description: Where a client acting for a user asks them to approve one action — present where approval requests are offered. }
+                  response_types_supported: { type: array, items: { type: string } }
+                  grant_types_supported: { type: array, items: { type: string } }
+                  token_endpoint_auth_methods_supported: { type: array, items: { type: string } }
+                  token_endpoint_auth_signing_alg_values_supported: { type: array, items: { type: string } }
+                additionalProperties: true
+        '503':
+          description: The authorization server's document could not be read.
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: getAuthorizationServerMetadata
+      summary: The same document at the RFC 8414 address
+      security: []
+      responses:
+        '200':
+          description: The provider's metadata, as /.well-known/openid-configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          description: The authorization server's document could not be read.
+
   /api/v1/account-entry:
     get:
       tags: [account]
