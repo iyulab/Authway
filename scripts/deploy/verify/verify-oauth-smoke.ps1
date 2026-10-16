@@ -475,6 +475,13 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
             exit 1
         }
         Write-Host "   ✅ 교환 — sub=사용자, act.sub=client, tenant_id, 수명 $($x.exp - $x.iat)s, 리프레시 없음" -ForegroundColor Green
+        # 그 토큰은 client 의 것이지 사용자의 것이 아니다: 사용자 계정 경로는 거절한다.
+        $own = & curl.exe -s -o NUL -w "%{http_code}" "$apiUrl/api/v1/users/delegations" -H "Authorization: Bearer $($ex.access_token)"
+        if ($own -ne '403') {
+            Write-Host "❌ 교환된 토큰이 사용자 계정 경로에서 받아들여짐(HTTP $own) — 403 delegated_token 이어야 한다" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ 교환된 토큰으로 계정 경로 → 403" -ForegroundColor Green
     }
 
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
