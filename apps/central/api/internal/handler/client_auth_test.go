@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/delegation"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -93,7 +94,7 @@ func TestEngineClientAuth(t *testing.T) {
 
 	t.Run("an assertion is taken once", func(t *testing.T) {
 		a := unsignedAssertion(t, jwt.MapClaims{"iss": "agent", "sub": "agent", "jti": "one", "exp": time.Now().Add(time.Minute).Unix()})
-		form := url.Values{"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"}, "client_assertion": {a}}
+		form := url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {a}}
 		if id, _, ok := auth.VerifyClient(ctx, "", form); !ok || id != "agent" {
 			t.Fatalf("first use: %q %v", id, ok)
 		}
@@ -104,14 +105,23 @@ func TestEngineClientAuth(t *testing.T) {
 
 	t.Run("an assertion without an id, or living too long, is not taken", func(t *testing.T) {
 		for name, claims := range map[string]jwt.MapClaims{
-			"no jti":   {"iss": "agent", "exp": time.Now().Add(time.Minute).Unix()},
-			"no exp":   {"iss": "agent", "jti": "two"},
-			"too long": {"iss": "agent", "jti": "three", "exp": time.Now().Add(2 * time.Hour).Unix()},
+			"no jti":   {"iss": "agent", "sub": "agent", "exp": time.Now().Add(time.Minute).Unix()},
+			"no exp":   {"iss": "agent", "sub": "agent", "jti": "two"},
+			"too long": {"iss": "agent", "sub": "agent", "jti": "three", "exp": time.Now().Add(2 * time.Hour).Unix()},
 		} {
-			form := url.Values{"client_assertion": {unsignedAssertion(t, claims)}}
+			form := url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {unsignedAssertion(t, claims)}}
 			if _, _, ok := auth.VerifyClient(ctx, "", form); ok {
 				t.Errorf("%s: accepted", name)
 			}
+		}
+	})
+
+	t.Run("a request that authenticates as one client and names another is refused", func(t *testing.T) {
+		// The server checks the assertion (its own client); the header names the victim.
+		a := unsignedAssertion(t, jwt.MapClaims{"iss": "public", "sub": "public", "jti": "five", "exp": time.Now().Add(time.Minute).Unix()})
+		form := url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {a}}
+		if _, _, ok := auth.VerifyClient(ctx, "Basic YWdlbnQ6d3Jvbmc=", form); ok {
+			t.Fatal("accepted as the client the header names")
 		}
 	})
 
@@ -119,11 +129,11 @@ func TestEngineClientAuth(t *testing.T) {
 		refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }))
 		defer refusing.Close()
 		strict := NewEngineClientAuth(refusing.URL, clientRowsByID{"agent": {ID: agentRow}}, redis.NewClient(&redis.Options{Addr: mr.Addr()}), zap.NewNop())
-		a := unsignedAssertion(t, jwt.MapClaims{"iss": "agent", "jti": "four", "exp": time.Now().Add(time.Minute).Unix()})
-		if _, _, ok := strict.VerifyClient(ctx, "", url.Values{"client_assertion": {a}}); ok {
+		a := unsignedAssertion(t, jwt.MapClaims{"iss": "agent", "sub": "agent", "jti": "four", "exp": time.Now().Add(time.Minute).Unix()})
+		if _, _, ok := strict.VerifyClient(ctx, "", url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {a}}); ok {
 			t.Fatal("accepted")
 		}
-		if _, _, ok := auth.VerifyClient(ctx, "", url.Values{"client_assertion": {a}}); !ok {
+		if _, _, ok := auth.VerifyClient(ctx, "", url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {a}}); !ok {
 			t.Fatal("a refused assertion used up its id")
 		}
 	})

@@ -179,11 +179,40 @@ func TestClientFromRequest(t *testing.T) {
 		t.Errorf("form: %q", got)
 	}
 	a, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": "key-client", "sub": "key-client"}).SignedString([]byte("k"))
-	if got := ClientFromRequest("", url.Values{"client_assertion": {a}}); got != "key-client" {
+	keyed := url.Values{"client_assertion_type": {ClientAssertionType}, "client_assertion": {a}}
+	if got := ClientFromRequest("", keyed); got != "key-client" {
 		t.Errorf("assertion: %q", got)
 	}
 	if got := ClientFromRequest("", url.Values{}); got != "" {
 		t.Errorf("none: %q", got)
+	}
+}
+
+// A request that authenticates in two ways, or names two clients, names
+// none: the server would check one, and the other is what would be believed.
+func TestClientFromRequest_NamesNoneWhenTheWaysDisagree(t *testing.T) {
+	other, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": "attacker", "sub": "attacker"}).SignedString([]byte("k"))
+	victim := "Basic " + base64.StdEncoding.EncodeToString([]byte("victim:wrong"))
+	split, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": "one", "sub": "two"}).SignedString([]byte("k"))
+	for name, c := range map[string]struct {
+		authorization string
+		form          url.Values
+	}{
+		"basic and an assertion":       {victim, url.Values{"client_assertion_type": {ClientAssertionType}, "client_assertion": {other}}},
+		"basic and a form secret":      {victim, url.Values{"client_secret": {"s"}}},
+		"basic and another client_id":  {victim, url.Values{"client_id": {"attacker"}}},
+		"an assertion for another id":  {"", url.Values{"client_id": {"victim"}, "client_assertion_type": {ClientAssertionType}, "client_assertion": {other}}},
+		"an assertion and a secret":    {"", url.Values{"client_secret": {"s"}, "client_assertion_type": {ClientAssertionType}, "client_assertion": {other}}},
+		"an assertion of another type": {"", url.Values{"client_assertion_type": {"urn:other"}, "client_assertion": {other}}},
+		"issuer and subject differ":    {"", url.Values{"client_assertion_type": {ClientAssertionType}, "client_assertion": {split}}},
+		"a bearer header":              {"Bearer x", url.Values{"client_id": {"victim"}}},
+	} {
+		if got := ClientFromRequest(c.authorization, c.form); got != "" {
+			t.Errorf("%s: named %q", name, got)
+		}
+	}
+	if got := ClientFromRequest(victim, url.Values{"client_id": {"victim"}}); got != "victim" {
+		t.Errorf("basic with the same client_id: %q", got)
 	}
 }
 

@@ -433,30 +433,57 @@ func (x *Exchanger) Judge(ctx context.Context, assertion, clientID string) HookA
 	return HookAnswer{Claims: out}
 }
 
+// ClientAssertionType is the client_assertion_type of a client assertion
+// (RFC 7523 section 2.2).
+const ClientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+
 // ClientFromRequest is the client a token request says it authenticates as:
-// HTTP Basic, the client_id parameter, or the issuer of a client assertion.
-// It is a claim, not a proof — the authorization server checks it.
+// HTTP Basic, a client assertion's subject, or the client_id parameter. It is
+// a claim, not a proof — the authorization server checks it — so it must
+// name the client the server will check: a request that authenticates in
+// more than one way, or names two clients, names none.
 func ClientFromRequest(authorization string, form url.Values) string {
-	if strings.HasPrefix(strings.ToLower(authorization), "basic ") {
-		if raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(authorization[6:])); err == nil {
-			if id, _, ok := strings.Cut(string(raw), ":"); ok {
-				if unescaped, err := url.QueryUnescape(id); err == nil {
-					return unescaped
-				}
-				return id
-			}
+	formID := form.Get("client_id")
+	secret := form.Get("client_secret") != ""
+	assertion := form.Get("client_assertion") != "" || form.Get("client_assertion_type") != ""
+	consistent := func(id string) string {
+		if id == "" || (formID != "" && formID != id) {
+			return ""
 		}
-	}
-	if id := form.Get("client_id"); id != "" {
 		return id
 	}
-	if a := form.Get("client_assertion"); a != "" {
-		claims := jwt.MapClaims{}
-		if _, _, err := jwt.NewParser().ParseUnverified(a, claims); err == nil {
-			if iss, _ := claims["iss"].(string); iss != "" {
-				return iss
-			}
+
+	if authorization != "" {
+		if !strings.HasPrefix(strings.ToLower(authorization), "basic ") || secret || assertion {
+			return ""
 		}
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(authorization[6:]))
+		if err != nil {
+			return ""
+		}
+		id, _, ok := strings.Cut(string(raw), ":")
+		if !ok {
+			return ""
+		}
+		if unescaped, err := url.QueryUnescape(id); err == nil {
+			id = unescaped
+		}
+		return consistent(id)
 	}
-	return ""
+	if assertion {
+		if secret || form.Get("client_assertion_type") != ClientAssertionType {
+			return ""
+		}
+		claims := jwt.MapClaims{}
+		if _, _, err := jwt.NewParser().ParseUnverified(form.Get("client_assertion"), claims); err != nil {
+			return ""
+		}
+		iss, _ := claims["iss"].(string)
+		sub, _ := claims["sub"].(string)
+		if iss != sub {
+			return ""
+		}
+		return consistent(sub)
+	}
+	return formID
 }
