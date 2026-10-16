@@ -24,6 +24,11 @@
 #     — 약관 단계까지(-Tenant 를 주지 않으면 이것이 기본): 임시 테넌트를 만들어(실제 사용자가 있는 테넌트에 문서를 올리지
 #       않으려고) 문서 둘을 올리고, 로그인이 `next: terms` 로 멈추는지 → 동의 →
 #       동의 기록 → 나머지 전 구간. 끝나면 테넌트까지 지운다. -Tenant 는 무시된다.
+#   verify/verify-oauth-smoke.ps1 -Target staging -WithDelegation
+#     — 위임까지(docs/api/delegation.md): 검증용 client 를 기밀·token exchange·delegation
+#       scope 로 만들고, 동의 → ID 토큰의 delegation_grant → discovery 의 token_endpoint 에서
+#       교환 → 액세스 토큰의 sub·act·tenant_id·수명·리프레시 없음 → 계정 삭제 뒤 같은 handle 은
+#       invalid_grant. 인가 서버의 토큰 훅(판정)과 클라이언트별 신뢰 등록까지 배포 환경에서 탄다.
 # ============================================================
 
 param(
@@ -37,7 +42,10 @@ param(
     [switch]$WithTerms,
 
     # audit_logs smoke(_shared/smoke-audit.ps1)를 이어서 실행하지 않으려면.
-    [switch]$SkipAuditSmoke
+    [switch]$SkipAuditSmoke,
+
+    # 위임 교환(RFC 8693)까지 검증.
+    [switch]$WithDelegation
 )
 
 $ErrorActionPreference = "Stop"
@@ -157,6 +165,9 @@ $verifyEmail = "verify-oauth-smoke-$suffix@authway.invalid"
 $cookieJar = [System.IO.Path]::GetTempFileName()
 $clientId = $null
 $clientDbId = $null
+$clientSecret = $null
+# 요청·동의하는 scope: 위임까지 보면 delegation 을 더한다.
+$scopes = if ($WithDelegation) { @("openid", "delegation") } else { @("openid") }
 $userCreated = $false
 $failed = $false
 
@@ -198,10 +209,17 @@ try {
         redirect_uris   = @("http://localhost:9999/verify-callback")
         allowed_origins = @("http://localhost:9999")
         grant_types     = @("authorization_code")
-        scopes          = @("openid")
+        scopes          = $scopes
         # JWT 액세스 토큰 — 아래에서 클레임 형태(계약의 TokenClaims)를 읽는다.
         access_token_strategy = "jwt"
-    } | ConvertTo-Json -Compress
+    }
+    if ($WithDelegation) {
+        # 위임을 교환하는 client 는 기밀이다(자기 자격증명으로 교환한다).
+        $createClientBody.public = $false
+        $createClientBody.Remove('allowed_origins')
+        $createClientBody.grant_types = @("authorization_code", "urn:ietf:params:oauth:grant-type:token-exchange")
+    }
+    $createClientBody = $createClientBody | ConvertTo-Json -Compress
 
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $createClientBody -NoNewline -Encoding UTF8
@@ -217,6 +235,7 @@ try {
     }
     $clientId = $createParsed.client.client_id
     $clientDbId = $createParsed.client.id
+    $clientSecret = $createParsed.credentials.client_secret
     Write-Host "   ✅ client_id=$clientId" -ForegroundColor Green
 
     # --- 2. 검증용 user 직접 생성 (admin API에 create 엔드포인트가 없음 —
@@ -240,7 +259,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     # ?flow=<id> 로 보낸다(docs/api/login-flows.md). 화면이 하는 일을 그대로 따라간다.
     Write-Host "3️⃣  OAuth authorize → 로그인 flow" -ForegroundColor Yellow
     $state = New-VerifySuffix
-    $authUrl = "$issuer/oauth2/auth?client_id=$clientId&response_type=code&scope=openid&redirect_uri=http%3A%2F%2Flocalhost%3A9999%2Fverify-callback&state=verify$state"
+    $authUrl = "$issuer/oauth2/auth?client_id=$clientId&response_type=code&scope=$($scopes -join '%20')&redirect_uri=http%3A%2F%2Flocalhost%3A9999%2Fverify-callback&state=verify$state"
     $r1 = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($authUrl)
     if (-not $r1.Location -or $r1.Location -notmatch 'login_challenge=') {
         Write-Host "❌ login_challenge를 얻지 못함 — status=$($r1.Status) location=$($r1.Location)" -ForegroundColor Red
@@ -311,7 +330,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     # --- 6. consent accept ---
     Write-Host "6️⃣  consent accept" -ForegroundColor Yellow
     # remember: 아래 8-2 의 prompt=none 이 code 로 답하려면 기억된 동의가 있어야 한다.
-    $consentBody = @{ grant_scope = @("openid"); remember = $true } | ConvertTo-Json -Compress
+    $consentBody = @{ grant_scope = $scopes; remember = $true } | ConvertTo-Json -Compress
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $consentBody -NoNewline -Encoding UTF8
     $consentResp = & curl.exe -s -c $cookieJar -b $cookieJar -X POST "$apiUrl/api/v1/consent-flows/$([uri]::EscapeDataString($consentFlow))/accept" `
@@ -342,9 +361,11 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         exit 1
     }
     Write-Host "   token_endpoint: $tokenEndpoint" -ForegroundColor Gray
-    $tokenResp = & curl.exe -s -X POST $tokenEndpoint `
-        -d "grant_type=authorization_code" -d "code=$code" `
-        -d "redirect_uri=http://localhost:9999/verify-callback" -d "client_id=$clientId"
+    $codeArgs = @('-s', '-X', 'POST', $tokenEndpoint,
+        '-d', 'grant_type=authorization_code', '-d', "code=$code",
+        '-d', 'redirect_uri=http://localhost:9999/verify-callback', '-d', "client_id=$clientId")
+    if ($clientSecret) { $codeArgs += @('--data-urlencode', "client_secret=$clientSecret") }
+    $tokenResp = & curl.exe @codeArgs
     $tokenJson = $tokenResp | ConvertFrom-Json
     if (-not $tokenJson.access_token) {
         Write-Host "❌ 토큰 교환 실패: $tokenResp" -ForegroundColor Red
@@ -419,6 +440,42 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     }
     Write-Host "   ✅ 화면 없이 code — 로그인이 세션을 열었고, 로그인 UI 를 거치지 않고 재사용됨" -ForegroundColor Green
 
+    # --- 8-3. (-WithDelegation) 위임 교환 ---
+    $exchangeArgs = $null
+    if ($WithDelegation) {
+        Write-Host "7️⃣-3 위임 교환 (RFC 8693)" -ForegroundColor Yellow
+        $idParts = "$($tokenJson.id_token)".Split('.')
+        $ib64 = $idParts[1].Replace('-', '+').Replace('_', '/')
+        $ib64 += '=' * ((4 - $ib64.Length % 4) % 4)
+        $idClaims = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ib64)) | ConvertFrom-Json
+        $handle = $idClaims.delegation_grant
+        if (-not $handle) {
+            Write-Host "❌ ID 토큰에 delegation_grant 가 없음 — delegation 동의가 위임을 만들지 않음" -ForegroundColor Red
+            exit 1
+        }
+        $exchangeArgs = @('-s', '-X', 'POST', $tokenEndpoint,
+            '--data-urlencode', 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange',
+            '--data-urlencode', "subject_token=$handle",
+            '--data-urlencode', 'subject_token_type=urn:authway:params:oauth:token-type:delegation-grant',
+            '--data-urlencode', "client_id=$clientId",
+            '--data-urlencode', "client_secret=$clientSecret")
+        $exResp = & curl.exe @exchangeArgs
+        $ex = $exResp | ConvertFrom-Json
+        if (-not $ex.access_token -or $ex.issued_token_type -ne 'urn:ietf:params:oauth:token-type:access_token' -or $ex.refresh_token) {
+            Write-Host "❌ 교환 실패 또는 모양이 다름: $exResp" -ForegroundColor Red
+            exit 1
+        }
+        $xParts = $ex.access_token.Split('.')
+        $xb64 = $xParts[1].Replace('-', '+').Replace('_', '/')
+        $xb64 += '=' * ((4 - $xb64.Length % 4) % 4)
+        $x = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($xb64)) | ConvertFrom-Json
+        if ($x.sub -ne $claims.sub -or $x.act.sub -ne $clientId -or $x.tenant_id -ne $Tenant -or ($x.exp - $x.iat) -gt 300) {
+            Write-Host "❌ 교환된 토큰의 클레임이 다름 (sub='$($x.sub)' act.sub='$($x.act.sub)' tenant_id='$($x.tenant_id)' 수명=$($x.exp - $x.iat)) — 토큰 훅 판정·top-level act 설정 확인" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ 교환 — sub=사용자, act.sub=client, tenant_id, 수명 $($x.exp - $x.iat)s, 리프레시 없음" -ForegroundColor Green
+    }
+
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
     # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
     # 나온다 — 그 사슬 전체의 검증이다. 삭제는 인가 서버의 세션·토큰도 끝내므로
@@ -435,6 +492,15 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         exit 1
     }
     Write-Host "   ✅ 계정 삭제 200, 그 토큰은 이후 401" -ForegroundColor Green
+
+    if ($exchangeArgs) {
+        $afterResp = & curl.exe @exchangeArgs
+        if (($afterResp | ConvertFrom-Json).error -ne 'invalid_grant') {
+            Write-Host "❌ 삭제된 계정의 위임이 아직 교환됨: $afterResp" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ 삭제된 계정의 위임은 invalid_grant" -ForegroundColor Green
+    }
 
 } catch {
     Write-Host "❌ 예외 발생: $_" -ForegroundColor Red
