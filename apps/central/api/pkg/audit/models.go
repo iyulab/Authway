@@ -39,6 +39,7 @@ const (
 	ActionConsentRevoked        AuditAction = "consent.revoked"
 	ActionDelegationGranted     AuditAction = "delegation.granted"
 	ActionDelegationRevoked     AuditAction = "delegation.revoked"
+	ActionDelegationExchanged   AuditAction = "delegation.exchanged"
 	ActionWebhookCreated        AuditAction = "webhook.created"
 	ActionWebhookUpdated        AuditAction = "webhook.updated"
 	ActionWebhookDeleted        AuditAction = "webhook.deleted"
@@ -94,6 +95,7 @@ var Actions = []struct {
 	{ActionConsentRevoked, "Consent revoked"},
 	{ActionDelegationGranted, "User let a client act for them while they are away"},
 	{ActionDelegationRevoked, "Delegation to a client revoked"},
+	{ActionDelegationExchanged, "Client exchanged a delegation for a user's token"},
 	{ActionWebhookCreated, "Webhook created"},
 	{ActionWebhookUpdated, "Webhook updated"},
 	{ActionWebhookDeleted, "Webhook deleted"},

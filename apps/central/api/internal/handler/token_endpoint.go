@@ -3,11 +3,18 @@ package handler
 import (
 	"bytes"
 	"crypto/subtle"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
+
+	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/delegation"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
@@ -30,6 +37,15 @@ type TokenEndpoint struct {
 	engineToken string
 	http        *http.Client
 	logger      *zap.Logger
+	exchanger   *delegation.Exchanger
+	audit       audit.Service
+}
+
+// ExchangesDelegations has the endpoint answer token exchange (RFC 8693) of a
+// delegation with x. Without it, token exchange is unsupported_grant_type.
+func (h *TokenEndpoint) ExchangesDelegations(x *delegation.Exchanger, auditService audit.Service) {
+	h.exchanger = x
+	h.audit = auditService
 }
 
 // NewTokenEndpoint forwards to the token endpoint of the authorization server
@@ -78,9 +94,71 @@ func (h *TokenEndpoint) Token(c *fiber.Ctx) error {
 	// Anything that is not a token exchange is the authorization server's to
 	// judge, a malformed request included.
 	if grantType(c) == grantTypeTokenExchange {
-		return tokenError(c, fiber.StatusBadRequest, "unsupported_grant_type", "Token exchange is not offered by this deployment yet.")
+		if h.exchanger == nil {
+			return tokenError(c, fiber.StatusBadRequest, "unsupported_grant_type", "Token exchange is not offered by this deployment.")
+		}
+		return h.exchange(c)
 	}
-	return h.forward(c)
+	return h.forward(c, c.Body())
+}
+
+// exchange answers a token exchange of a delegation: the authorization server
+// issues the token by its assertion grant, to the client it authenticates,
+// and the answer is put in the shape of RFC 8693 section 2.2.
+func (h *TokenEndpoint) exchange(c *fiber.Ctx) error {
+	form, _ := url.ParseQuery(string(c.Body()))
+	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	prepared, refused := h.exchanger.Prepare(c.UserContext(), form, clientID)
+	if refused != nil {
+		h.logExchange(c, nil, clientID, refused.Code)
+		return tokenError(c, refused.Status, refused.Code, refused.Description)
+	}
+	status, headers, body, err := h.send(c, []byte(prepared.Form.Encode()))
+	if err != nil {
+		return tokenError(c, fiber.StatusServiceUnavailable, "temporarily_unavailable", "The authorization server did not answer.")
+	}
+	if status != fiber.StatusOK {
+		var engineErr struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(body, &engineErr)
+		// A trust that was replaced or removed behind the API's back is
+		// checked again on the next exchange.
+		if engineErr.Error == "invalid_grant" || engineErr.Error == "invalid_scope" {
+			h.exchanger.Forget(clientID)
+		}
+		h.logExchange(c, prepared.Delegation, clientID, engineErr.Error)
+		return h.relay(c, status, headers, body)
+	}
+	var issued map[string]any
+	if err := json.Unmarshal(body, &issued); err != nil {
+		return tokenError(c, fiber.StatusBadGateway, "server_error", "The authorization server's answer could not be read.")
+	}
+	issued["issued_token_type"] = delegation.AccessTokenType
+	delete(issued, "refresh_token")
+	h.logExchange(c, prepared.Delegation, clientID, "")
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	c.Set(fiber.HeaderPragma, "no-cache")
+	return c.Status(fiber.StatusOK).JSON(issued)
+}
+
+// logExchange records an exchange: delegation.exchanged, failed when refused
+// is the refusal's code.
+func (h *TokenEndpoint) logExchange(c *fiber.Ctx, d *delegation.Standing, clientID, refused string) {
+	if h.audit == nil || d == nil {
+		return
+	}
+	entry := audit.EntryFromFiber(c, d.TenantID, audit.ActionDelegationExchanged, "delegation", d.ID.String())
+	entry.ActorType = "client"
+	entry.ActorID = nil
+	entry.ActorEmail = ""
+	entry.Details["client_id"] = clientID
+	entry.Details["user_id"] = d.UserID.String()
+	if refused != "" {
+		entry.Success = false
+		entry.ErrorMsg = refused
+	}
+	h.audit.LogAsync(entry)
 }
 
 // grantType reads grant_type from a form body (RFC 6749 section 3.2), or ""
@@ -96,11 +174,22 @@ func grantType(c *fiber.Ctx) string {
 	return form.Get("grant_type")
 }
 
-func (h *TokenEndpoint) forward(c *fiber.Ctx) error {
-	req, err := http.NewRequestWithContext(c.UserContext(), http.MethodPost, h.engineToken, bytes.NewReader(c.Body()))
+// forward passes body, with the request's headers the authorization server
+// reads, to its token endpoint and answers what it answers.
+func (h *TokenEndpoint) forward(c *fiber.Ctx, body []byte) error {
+	status, headers, answer, err := h.send(c, body)
+	if err != nil {
+		return tokenError(c, fiber.StatusServiceUnavailable, "temporarily_unavailable", "The authorization server did not answer.")
+	}
+	return h.relay(c, status, headers, answer)
+}
+
+// send posts body to the authorization server's token endpoint.
+func (h *TokenEndpoint) send(c *fiber.Ctx, body []byte) (int, http.Header, []byte, error) {
+	req, err := http.NewRequestWithContext(c.UserContext(), http.MethodPost, h.engineToken, bytes.NewReader(body))
 	if err != nil {
 		h.logger.Error("Building the token request for the authorization server failed", zap.Error(err))
-		return tokenError(c, fiber.StatusInternalServerError, "server_error", "The token request could not be passed on.")
+		return 0, nil, nil, err
 	}
 	for _, name := range forwardedRequestHeaders {
 		if v := c.Get(name); v != "" {
@@ -112,21 +201,25 @@ func (h *TokenEndpoint) forward(c *fiber.Ctx) error {
 	res, err := h.http.Do(req)
 	if err != nil {
 		h.logger.Error("The authorization server's token endpoint did not answer", zap.Error(err))
-		return tokenError(c, fiber.StatusServiceUnavailable, "temporarily_unavailable", "The authorization server did not answer.")
+		return 0, nil, nil, err
 	}
 	defer res.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	answer, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
 		h.logger.Error("Reading the authorization server's token answer failed", zap.Error(err))
-		return tokenError(c, fiber.StatusBadGateway, "server_error", "The authorization server's answer could not be read.")
+		return 0, nil, nil, err
 	}
+	return res.StatusCode, res.Header, answer, nil
+}
+
+// relay answers what the authorization server answered.
+func (h *TokenEndpoint) relay(c *fiber.Ctx, status int, headers http.Header, body []byte) error {
 	for _, name := range returnedResponseHeaders {
-		if v := res.Header.Get(name); v != "" {
+		if v := headers.Get(name); v != "" {
 			c.Set(name, v)
 		}
 	}
-	return c.Status(res.StatusCode).Send(body)
+	return c.Status(status).Send(body)
 }
 
 // tokenError answers in the error shape of RFC 6749 section 5.2, which every
@@ -137,22 +230,42 @@ func tokenError(c *fiber.Ctx, status int, code, description string) error {
 	return c.Status(status).JSON(fiber.Map{"error": code, "error_description": description})
 }
 
+// ClientExchangeScopes reads from the client registrations what a client may
+// be granted by an exchange (delegation.ClientScopes).
+func ClientExchangeScopes(clients client.Service) delegation.ClientScopes {
+	return clientExchangeScopes{clients}
+}
+
+type clientExchangeScopes struct{ clients client.Service }
+
+func (s clientExchangeScopes) ExchangeScopes(clientID string) ([]string, []string, bool, error) {
+	cl, err := s.clients.GetByClientID(clientID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return []string(cl.Scopes), []string(cl.Audience), cl.MayActForUsers(), nil
+}
+
 // TokenHookHeader carries the key the authorization server presents when it
 // calls the token hook (its OAUTH2_TOKEN_HOOK_AUTH_CONFIG_NAME).
 const TokenHookHeader = "X-Authway-Hook-Key"
 
 // TokenHook is called by the authorization server before it issues any token
-// (its OAUTH2_TOKEN_HOOK_URL). It can add claims to the token or refuse to
-// issue it. It changes nothing yet: every token keeps the shape it has
-// without the hook.
+// (its OAUTH2_TOKEN_HOOK_URL). For the assertion grant — the token of a
+// delegation exchange — it decides whether the token may be issued and names
+// the client as the actor; every other token it leaves as it is.
 type TokenHook struct {
-	keys [][]byte
+	keys     [][]byte
+	exchange *delegation.Exchanger
+	logger   *zap.Logger
 }
 
 // NewTokenHook accepts calls that present one of keys in TokenHookHeader.
-// More than one key is accepted while the key is being changed.
-func NewTokenHook(keys []string) *TokenHook {
-	h := &TokenHook{}
+// More than one key is accepted while the key is being changed. exchange may
+// be nil: then an assertion grant is refused, since only Authway's own
+// assertions are meant to reach the authorization server.
+func NewTokenHook(keys []string, exchange *delegation.Exchanger, logger *zap.Logger) *TokenHook {
+	h := &TokenHook{exchange: exchange, logger: logger}
 	for _, k := range keys {
 		if k != "" {
 			h.keys = append(h.keys, []byte(k))
@@ -161,13 +274,52 @@ func NewTokenHook(keys []string) *TokenHook {
 	return h
 }
 
-// Hook serves POST /internal/token-hook. An answer of 204 tells the
-// authorization server to issue the token unchanged.
+// tokenHookRequest is the part of the authorization server's hook call read
+// here.
+type tokenHookRequest struct {
+	Request struct {
+		ClientID   string                     `json:"client_id"`
+		GrantTypes []string                   `json:"grant_types"`
+		Payload    map[string]json.RawMessage `json:"payload"`
+	} `json:"request"`
+}
+
+// Hook serves POST /internal/token-hook. 204 tells the authorization server
+// to issue the token unchanged; 200 adds claims to it; 403 refuses it.
 func (h *TokenHook) Hook(c *fiber.Ctx) error {
 	if !h.accepts([]byte(c.Get(TokenHookHeader))) {
 		return c.SendStatus(fiber.StatusUnauthorized)
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+	var call tokenHookRequest
+	if err := json.Unmarshal(c.Body(), &call); err != nil {
+		return c.SendStatus(fiber.StatusBadRequest)
+	}
+	if !slices.Contains(call.Request.GrantTypes, hydra.JWTBearerGrant) {
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	if h.exchange == nil {
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	answer := h.exchange.Judge(c.UserContext(), payloadValue(call.Request.Payload["assertion"]), call.Request.ClientID)
+	if answer.Refuse != "" {
+		h.logger.Warn("Token hook refused an assertion grant", zap.String("client_id", call.Request.ClientID), zap.String("reason", answer.Refuse))
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	return c.JSON(fiber.Map{"session": fiber.Map{"access_token": answer.Claims}})
+}
+
+// payloadValue reads a request parameter the authorization server passes on
+// as a string or as a list of strings.
+func payloadValue(raw json.RawMessage) string {
+	var one string
+	if json.Unmarshal(raw, &one) == nil {
+		return one
+	}
+	var many []string
+	if json.Unmarshal(raw, &many) == nil && len(many) > 0 {
+		return many[0]
+	}
+	return ""
 }
 
 func (h *TokenHook) accepts(presented []byte) bool {

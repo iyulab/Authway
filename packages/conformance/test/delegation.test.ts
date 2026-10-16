@@ -183,3 +183,108 @@ describe('a consent', () => {
     }
   })
 })
+
+// A client exchanges the delegation at the token endpoint discovery names
+// (RFC 8693), authenticating as itself, for a short-lived access token whose
+// subject is the user and whose actor is the client.
+describe('exchanging a delegation', () => {
+  let offered = false
+  let agent: TestClient
+  let user: TestUser
+  let handle = ''
+  let sub = ''
+  const AUDIENCE = 'https://orders.conformance.example'
+
+  const exchange = async (client: TestClient, fields: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> => {
+    const { token_endpoint } = await provider.discovery()
+    const res = await fetch(token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: TOKEN_EXCHANGE_GRANT,
+        subject_token: handle,
+        subject_token_type: 'urn:authway:params:oauth:token-type:delegation-grant',
+        client_id: client.clientId,
+        client_secret: client.secret ?? '',
+        ...fields,
+      }),
+    })
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+  }
+
+  beforeAll(async () => {
+    const res = await fetch(`${api}/api/v1/capabilities`)
+    offered = ((await res.json()) as { token_exchange?: boolean }).token_exchange === true
+    if (!offered) return
+    agent = await provider.createDelegatingClient({ jwtAccessTokens: true, audience: [AUDIENCE] })
+    user = await provider.inviteAndAccept()
+    const outcome = await provider.login(agent, user, { scopes: ['openid', 'profile', 'delegation'] })
+    if (outcome.kind !== 'code') throw new Error(`granting the delegation failed: ${JSON.stringify(outcome)}`)
+    handle = claimsOf(outcome.tokens.id_token ?? '').delegation_grant as string
+    sub = outcome.sub
+  })
+
+  afterAll(async () => {
+    if (agent) await provider.deleteClient(agent)
+  })
+
+  it('issues an access token for the user, with the client as the actor, and no refresh token', async (ctx) => {
+    if (!offered) ctx.skip()
+    const { status, body } = await exchange(agent, { audience: AUDIENCE })
+    expect(status, JSON.stringify(body)).toBe(200)
+    expect(body.issued_token_type).toBe('urn:ietf:params:oauth:token-type:access_token')
+    expect(String(body.token_type).toLowerCase()).toBe('bearer')
+    expect(body.refresh_token).toBeUndefined()
+    expect(body.expires_in as number).toBeLessThanOrEqual(300)
+
+    const claims = claimsOf(body.access_token as string)
+    expect(claims.sub).toBe(sub)
+    expect(claims.client_id).toBe(agent.clientId)
+    expect(claims.act).toEqual({ sub: agent.clientId })
+    expect(claims.tenant_id).toBe(await provider.tenantId())
+    expect(claims.aud as string[]).toContain(AUDIENCE)
+    expect((claims.exp as number) - (claims.iat as number)).toBeLessThanOrEqual(300)
+    expect(String(claims.scope).split(' ').sort()).toEqual(['openid', 'profile'])
+  })
+
+  it('issues the scopes asked for, within what the user delegated', async (ctx) => {
+    if (!offered) ctx.skip()
+    const narrowed = await exchange(agent, { scope: 'profile' })
+    expect(narrowed.status, JSON.stringify(narrowed.body)).toBe(200)
+    expect(narrowed.body.scope).toBe('profile')
+    const wider = await exchange(agent, { scope: 'profile email' })
+    expect(wider.status).toBe(400)
+    expect(wider.body.error).toBe('invalid_scope')
+    const elsewhere = await exchange(agent, { audience: 'https://not-registered.example' })
+    expect(elsewhere.status).toBe(400)
+    expect(elsewhere.body.error).toBe('invalid_target')
+  })
+
+  it('is refused to anyone but the client the user delegated to', async (ctx) => {
+    if (!offered) ctx.skip()
+    const other = await provider.createDelegatingClient()
+    try {
+      const stolen = await exchange(other, {})
+      expect(stolen.status).toBe(400)
+      expect(stolen.body.error).toBe('invalid_grant')
+    } finally {
+      await provider.deleteClient(other)
+    }
+    const wrongSecret = await exchange({ ...agent, secret: 'not-the-secret' }, {})
+    expect(wrongSecret.status).toBe(401)
+    expect(wrongSecret.body.error).toBe('invalid_client')
+    const notADelegation = await exchange(agent, { subject_token_type: 'urn:ietf:params:oauth:token-type:access_token' })
+    expect(notADelegation.status).toBe(400)
+    expect(notADelegation.body.error).toBe('invalid_request')
+  })
+
+  it('is refused once the delegation is revoked', async (ctx) => {
+    if (!offered) ctx.skip()
+    const [granted] = await adminDelegations({ client_id: agent.clientId, user_id: sub })
+    const res = await provider.admin(`/api/v1/delegations/${granted.id}`, { method: 'DELETE' })
+    expect(res.status).toBe(204)
+    const after = await exchange(agent, {})
+    expect(after.status).toBe(400)
+    expect(after.body.error).toBe('invalid_grant')
+  })
+})

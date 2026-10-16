@@ -12,6 +12,14 @@ import (
 // with its own values.
 type CapabilitiesHandler struct {
 	social *SocialHandler
+	// exchanges is whether a client can exchange a delegation (RFC 8693).
+	exchanges bool
+}
+
+// ExchangesDelegations reports token_exchange as offered.
+func (h *CapabilitiesHandler) ExchangesDelegations() *CapabilitiesHandler {
+	h.exchanges = true
+	return h
 }
 
 func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
@@ -43,8 +51,10 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //   - terms_acceptance: a tenant names documents its users accept at
 //     sign-in; a login flow owes the terms step until they have accepted the
 //     current versions (/api/v1/tenants/{id}/terms)
-//   - token_exchange, ciba: delegated tokens (RFC 8693) and decoupled
-//     approval (OpenID CIBA) — not offered
+//   - token_exchange: a client a user granted a delegation exchanges it at
+//     the token endpoint for an access token whose subject is the user and
+//     whose actor (act) is the client (RFC 8693)
+//   - ciba: decoupled approval (OpenID CIBA) — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"multi_tenant":         true,
@@ -58,7 +68,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"token_introspection":  true,
 		"device_authorization": true,
 		"terms_acceptance":     true,
-		"token_exchange":       false,
+		"token_exchange":       h.exchanges,
 		"ciba":                 false,
 	})
 }

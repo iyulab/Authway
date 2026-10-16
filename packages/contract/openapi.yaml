@@ -3540,7 +3540,24 @@ components:
             terms step (TermsRequired) until the user has accepted the current
             versions.
           type: boolean
-        token_exchange: { type: boolean }
+        token_exchange:
+          description: |
+            A client exchanges a delegation (see Delegation) at the token
+            endpoint discovery names, by RFC 8693: `grant_type`
+            `urn:ietf:params:oauth:grant-type:token-exchange`, `subject_token`
+            the handle, `subject_token_type`
+            `urn:authway:params:oauth:token-type:delegation-grant`, the
+            client's own authentication, and optionally `scope` (within the
+            delegation; `invalid_scope` otherwise) and `audience` (among the
+            client's registered audiences; `invalid_target` otherwise). The
+            answer is an access token (`issued_token_type`
+            `urn:ietf:params:oauth:token-type:access_token`) lasting at most 5
+            minutes, with no refresh token: `sub` is the user, `client_id` and
+            `act.sub` the client (RFC 8693 section 4.1), `tenant_id` the
+            user's tenant; introspection answers `act` too. A handle another
+            client presents, one revoked, or one of a suspended user, a turned
+            off tenant or client is `invalid_grant`.
+          type: boolean
         ciba: { type: boolean }
 
     Introspection:

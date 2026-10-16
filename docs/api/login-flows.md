@@ -311,7 +311,7 @@ authorization request.
   "token_introspection": true,
   "device_authorization": true,
   "terms_acceptance": true,
-  "token_exchange": false,
+  "token_exchange": true,
   "ciba": false
 }
 ```

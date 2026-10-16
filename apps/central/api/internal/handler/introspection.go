@@ -33,8 +33,10 @@ func NewIntrospectionHandler(clients client.Service, hydraClient *hydra.Client, 
 }
 
 // contractClaims are the claims of the token contract; they are answered at
-// the top level, as they are in a JWT access token.
-var contractClaims = []string{"tenant_id", "email", "name", "auth_time"}
+// the top level, as they are in a JWT access token. act names the client that
+// acts for the user in a token exchanged for a delegation (RFC 8693 section
+// 4.1).
+var contractClaims = []string{"tenant_id", "email", "name", "auth_time", "act"}
 
 // Introspect serves POST /api/v1/oauth2/introspect.
 //

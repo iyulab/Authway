@@ -155,7 +155,7 @@ func TestTokenEndpoint_AnEngineThatDoesNotAnswerIsTemporarilyUnavailable(t *test
 
 func TestTokenHook_ChangesNothingForTheAuthorizationServerAndNothingForAnyoneElse(t *testing.T) {
 	app := fiber.New()
-	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key", "previous-key"}).Hook)
+	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key", "previous-key"}, nil, zap.NewNop()).Hook)
 	call := func(key string) int {
 		req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"session":{},"request":{"grant_types":["authorization_code"]}}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -177,5 +177,34 @@ func TestTokenHook_ChangesNothingForTheAuthorizationServerAndNothingForAnyoneEls
 		if got := call(key); got != http.StatusUnauthorized {
 			t.Errorf("with key %q: %d, want 401", key, got)
 		}
+	}
+}
+
+// Only Authway's own assertions are meant to reach the authorization server's
+// assertion grant; a deployment that cannot judge them refuses the token.
+func TestTokenHook_RefusesAnAssertionGrantItCannotJudge(t *testing.T) {
+	app := fiber.New()
+	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key"}, nil, zap.NewNop()).Hook)
+	req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"request":{"client_id":"c","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"],"payload":{"assertion":["x"]}}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHookHeader, "hook-key")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestPayloadValueReadsAStringOrAList(t *testing.T) {
+	if got := payloadValue([]byte(`"a"`)); got != "a" {
+		t.Errorf("string: %q", got)
+	}
+	if got := payloadValue([]byte(`["b","c"]`)); got != "b" {
+		t.Errorf("list: %q", got)
+	}
+	if got := payloadValue(nil); got != "" {
+		t.Errorf("absent: %q", got)
 	}
 }

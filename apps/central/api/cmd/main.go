@@ -373,11 +373,22 @@ func main() {
 	// The token endpoint discovery advertises: it passes every grant the
 	// authorization server knows on to it unchanged, and answers the ones
 	// Authway assembles itself.
-	app.Post("/oauth2/token", handler.NewTokenEndpoint(cfg.Hydra.EngineURL(), zapLogger).Token)
+	tokenEndpoint := handler.NewTokenEndpoint(cfg.Hydra.EngineURL(), zapLogger)
+	// A client exchanges a delegation there (RFC 8693): the authorization
+	// server issues the token by its assertion grant, on an assertion signed
+	// with a key kept in the database. Without the key, no exchange.
+	var exchanger *delegation.Exchanger
+	if signer, err := delegation.LoadSigner(db, totpCipher); err != nil {
+		zapLogger.Error("Token exchange is off: the delegation signing key could not be loaded", zap.Error(err))
+	} else {
+		exchanger = delegation.NewExchanger(delegationService, signer, hydraClient, handler.ClientExchangeScopes(clientService), cfg.App.BaseURL)
+		tokenEndpoint.ExchangesDelegations(exchanger, newFeatureServices.AuditService)
+	}
+	app.Post("/oauth2/token", tokenEndpoint.Token)
 	// The authorization server calls this before it issues a token. Served
 	// only when the deployment set the key the authorization server presents.
 	if len(cfg.Hydra.TokenHookKeys) > 0 {
-		app.Post("/internal/token-hook", handler.NewTokenHook(cfg.Hydra.TokenHookKeys).Hook)
+		app.Post("/internal/token-hook", handler.NewTokenHook(cfg.Hydra.TokenHookKeys, exchanger, zapLogger).Hook)
 	}
 
 	// API routes
@@ -388,7 +399,11 @@ func main() {
 	emailHandler.RegisterRoutes(v1)
 
 	// What this deployment offers, so screens show only what works.
-	v1.Get("/capabilities", handler.NewCapabilitiesHandler(socialHandler).Get)
+	capabilities := handler.NewCapabilitiesHandler(socialHandler)
+	if exchanger != nil {
+		capabilities.ExchangesDelegations()
+	}
+	v1.Get("/capabilities", capabilities.Get)
 	v1.Get("/account-entry", handler.NewAccountEntryHandler(clientService, cfg.App.FrontendURL, zapLogger).Get)
 
 	// A resource server asks whether a token is still good (RFC 7662). The

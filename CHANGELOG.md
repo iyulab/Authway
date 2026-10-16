@@ -76,9 +76,18 @@
   granted another;
   audit actions `delegation.granted` and `delegation.revoked`. A public client
   with the grant is `400 public_client_with_token_exchange`, the scope without
-  it `400 delegation_without_token_exchange`. Exchanging a delegation for an
-  access token comes next (`capabilities.token_exchange` stays `false` until
-  then). Database migration 044.
+  it `400 delegation_without_token_exchange`. Database migrations 044 and 045.
+- **A client exchanges a delegation for the user's access token (RFC 8693)**
+  at the token endpoint: `subject_token` the handle, `subject_token_type`
+  `urn:authway:params:oauth:token-type:delegation-grant`, the client's own
+  authentication, optional `scope` and `audience` within what was delegated
+  and registered. The token lasts at most five minutes and has no refresh
+  token; its `sub` is the user, `act.sub` the client, `tenant_id` the user's
+  tenant, and introspection answers `act` too. A revoked delegation, another
+  client's, or one of a suspended user or a turned-off tenant or client is
+  `invalid_grant`. `capabilities.token_exchange` is `true`; audit action
+  `delegation.exchanged`. Deployments add `act` to the authorization server's
+  top-level claims (shared settings).
 - **Verification, password reset and sign-in link mail name the
   organization** (tenant) the account is in, in the subject and the message.
   One address can have accounts in several organizations, and the mail did

@@ -85,6 +85,11 @@ type Service interface {
 	Find(ctx context.Context, id uuid.UUID) (*View, error)
 	// Revoke ends a delegation in force.
 	Revoke(ctx context.Context, id uuid.UUID) error
+	// Resolve returns the delegation in force a handle names, with what an
+	// exchange of it depends on.
+	Resolve(ctx context.Context, handle string) (*Standing, error)
+	// Standing returns a delegation in force by id, as Resolve does.
+	Standing(ctx context.Context, id uuid.UUID) (*Standing, error)
 }
 
 type service struct {

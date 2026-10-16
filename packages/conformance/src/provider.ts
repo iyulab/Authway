@@ -210,11 +210,13 @@ export class Provider {
    * the token exchange grant and the delegation scope, beside a sign-in of its
    * own (authorization code).
    */
-  async createDelegatingClient(options: { skipConsent?: boolean } = {}): Promise<TestClient> {
+  async createDelegatingClient(options: { skipConsent?: boolean; jwtAccessTokens?: boolean; audience?: string[] } = {}): Promise<TestClient> {
     const res = await this.admin('/api/v1/clients', {
       method: 'POST',
       body: JSON.stringify({
         ...(options.skipConsent ? { skip_consent: true } : {}),
+        ...(options.jwtAccessTokens ? { access_token_strategy: 'jwt' } : {}),
+        ...(options.audience ? { audience: options.audience } : {}),
         tenant_id: await this.tenantId(),
         name: `conformance-agent-${randomToken(4)}`,
         public: false,
