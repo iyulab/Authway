@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/delegation"
 
@@ -69,7 +70,7 @@ func (d *Discovery) Serve(c *fiber.Ctx) error {
 	doc, err := d.document(c.UserContext())
 	if err != nil {
 		d.logger.Error("Reading the authorization server's discovery document failed", zap.Error(err))
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "temporarily_unavailable"})
+		return apierror.Refuse(c, fiber.StatusServiceUnavailable, "temporarily_unavailable", "The authorization server's discovery document could not be read.")
 	}
 	c.Set(fiber.HeaderCacheControl, "public, max-age=60")
 	return c.JSON(doc)
