@@ -511,7 +511,8 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
 
             # 계정 앱 로그인 — 승인 화면이 하는 일(PKCE, 이미 열린 세션).
             $entry = & curl.exe -s "$apiUrl/api/v1/account-entry?client_id=$([uri]::EscapeDataString($clientId))" | ConvertFrom-Json
-            $verifier = (New-VerifySuffix) + (New-VerifySuffix) + (New-VerifySuffix) + (New-VerifySuffix)
+            # PKCE: 43 자 이상(RFC 7636 §4.1).
+            $verifier = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
             $sha = [System.Security.Cryptography.SHA256]::Create()
             $challenge = [Convert]::ToBase64String($sha.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($verifier))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
             $accountUrl = "$issuer/oauth2/auth?client_id=$([uri]::EscapeDataString($entry.client_id))&response_type=code&scope=$([uri]::EscapeDataString($entry.scope))&redirect_uri=$([uri]::EscapeDataString($entry.redirect_uri))&state=a$(New-VerifySuffix)&code_challenge=$challenge&code_challenge_method=S256"
@@ -534,8 +535,13 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
                 Write-Host "❌ 계정 앱 로그인이 code 로 끝나지 않음 (마지막 주소: $($ra.Location))" -ForegroundColor Red
                 exit 1
             }
-            $accountToken = (& curl.exe -s -X POST $tokenEndpoint -d 'grant_type=authorization_code' --data-urlencode "code=$accountCode" `
-                --data-urlencode "redirect_uri=$($entry.redirect_uri)" --data-urlencode "client_id=$($entry.client_id)" --data-urlencode "code_verifier=$verifier" | ConvertFrom-Json).access_token
+            $accountResp = & curl.exe -s -X POST $tokenEndpoint -d 'grant_type=authorization_code' --data-urlencode "code=$accountCode" `
+                --data-urlencode "redirect_uri=$($entry.redirect_uri)" --data-urlencode "client_id=$($entry.client_id)" --data-urlencode "code_verifier=$verifier"
+            $accountToken = ($accountResp | ConvertFrom-Json).access_token
+            if (-not $accountToken) {
+                Write-Host "❌ 계정 앱 code 교환 실패: $accountResp" -ForegroundColor Red
+                exit 1
+            }
             $seen = & curl.exe -s "$apiUrl/api/v1/users/approvals/$approvalId" -H "Authorization: Bearer $accountToken" | ConvertFrom-Json
             if ($seen.binding_message -ne "V-$suffix" -or $seen.status -ne 'pending') {
                 Write-Host "❌ 사용자가 보는 승인 요청이 다름: binding='$($seen.binding_message)' status='$($seen.status)'" -ForegroundColor Red
