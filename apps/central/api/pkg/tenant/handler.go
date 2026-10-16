@@ -157,6 +157,12 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 	if err := h.validate.Struct(req); err != nil {
 		return apierror.Invalid(c, err)
 	}
+	if req.Logo != nil && *req.Logo != "" && h.validate.Var(*req.Logo, "url") != nil {
+		return apierror.Write(c, apierror.RejectField("logo", "logo must be an absolute URL, or empty to clear it"))
+	}
+	if req.PrimaryColor != nil && *req.PrimaryColor != "" && h.validate.Var(*req.PrimaryColor, "hexcolor") != nil {
+		return apierror.Write(c, apierror.RejectField("primary_color", "primary_color must be a hex color such as #4F46E5, or empty to clear it"))
+	}
 
 	// Before-state snapshot for audit diff. Miss surfaces as the same 404
 	// UpdateTenant would raise, so the service owns the canonical error path.

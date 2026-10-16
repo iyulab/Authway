@@ -170,11 +170,14 @@ type CreateTenantRequest struct {
 type UpdateTenantRequest struct {
 	Name string `json:"name" validate:"omitempty,min=2,max=255"`
 	// Description changes only when named; an empty string clears it.
-	Description  *string         `json:"description" validate:"omitempty,max=1000"`
-	Settings     *TenantSettings `json:"settings"`
-	Logo         string          `json:"logo" validate:"omitempty,url"`
-	PrimaryColor string          `json:"primary_color" validate:"omitempty,hexcolor"`
-	Active       *bool           `json:"active"` // Pointer to allow explicit false
+	Description *string         `json:"description" validate:"omitempty,max=1000"`
+	Settings    *TenantSettings `json:"settings"`
+	// Logo and PrimaryColor change only when named; an empty string clears.
+	// A value is checked in the handler (a struct tag would refuse the empty
+	// string a pointer carries).
+	Logo         *string `json:"logo"`
+	PrimaryColor *string `json:"primary_color"`
+	Active       *bool   `json:"active"` // Pointer to allow explicit false
 }
 
 // DefaultTenantID is the UUID of the default tenant

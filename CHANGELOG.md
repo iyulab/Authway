@@ -110,6 +110,10 @@
 
 ### Fixed
 
+- **A tenant's `logo` and `primary_color` can be cleared.** Changing a
+  tenant with an empty string left them as they were; it now clears them, as
+  it does a description. A value given is still checked (an absolute URL, a
+  hex colour).
 - **A webhook whose host name resolves to a local or private address is
   refused when it is registered or changed** (`400`, `field: url`), as one
   named by such an address was. It was accepted and every delivery to it

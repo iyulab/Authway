@@ -157,11 +157,11 @@ func (s *Service) UpdateTenant(id uuid.UUID, req UpdateTenantRequest) (*Tenant, 
 	if req.Settings != nil {
 		tenant.Settings = *req.Settings
 	}
-	if req.Logo != "" {
-		tenant.Logo = req.Logo
+	if req.Logo != nil {
+		tenant.Logo = *req.Logo
 	}
-	if req.PrimaryColor != "" {
-		tenant.PrimaryColor = req.PrimaryColor
+	if req.PrimaryColor != nil {
+		tenant.PrimaryColor = *req.PrimaryColor
 	}
 	if req.Active != nil {
 		tenant.Active = *req.Active

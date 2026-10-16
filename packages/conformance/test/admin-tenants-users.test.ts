@@ -69,6 +69,19 @@ describe('admin API: managing tenants', () => {
     await conform('PUT', '/api/v1/tenants/{id}', notAColor)
     expect(notAColor.status).toBe(400)
     expect(await notAColor.json()).toMatchObject({ code: 'invalid_request', field: 'primary_color' })
+
+    const notAnAddress = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'PUT', body: JSON.stringify({ logo: 'logo.svg' }) })
+    await conform('PUT', '/api/v1/tenants/{id}', notAnAddress)
+    expect(notAnAddress.status).toBe(400)
+    expect(await notAnAddress.json()).toMatchObject({ code: 'invalid_request', field: 'logo' })
+
+    // An empty string clears either; one not named is left as it is.
+    const cleared = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'PUT', body: JSON.stringify({ logo: '' }) })
+    await conform('PUT', '/api/v1/tenants/{id}', cleared)
+    expect(cleared.status).toBe(200)
+    expect(await cleared.json()).toMatchObject({ logo: '', primary_color: '#0A7F5A' })
+    const bothCleared = await provider.admin(`/api/v1/tenants/${tenant!.id}`, { method: 'PUT', body: JSON.stringify({ primary_color: '' }) })
+    expect(await bothCleared.json()).toMatchObject({ logo: '', primary_color: '' })
   })
 
   it('names a setting it refuses by its place in the body', async () => {
