@@ -628,6 +628,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 	}
 
 	// Consent flow configuration
+	skippedConsent := client.SkipConsent
 	if req.SkipConsent != nil {
 		client.SkipConsent = *req.SkipConsent
 	}
@@ -727,6 +728,19 @@ func (s *service) Update(id uuid.UUID, req *UpdateClientRequest) (*Client, SyncS
 		if err := s.endTokens(&client); err != nil {
 			syncStatus = SyncStatus{State: SyncStateFailed, Error: err.Error()}
 			s.logger.Warn("Failed to end the tokens of a client turned off",
+				zap.Error(err), zap.String("client_id", client.ClientID))
+		}
+	}
+
+	// A client that skipped the question had every answer remembered for it
+	// (so that a sign-in without a screen works); once the client is to ask,
+	// those answers are withdrawn, or users would go unasked until they
+	// expire. The client's refresh tokens go with them: its users sign in
+	// again and are asked.
+	if skippedConsent && !client.SkipConsent && client.Active && syncStatus.State == SyncStateOK {
+		if err := s.revokeConsents(&client); err != nil {
+			syncStatus = SyncStatus{State: SyncStateFailed, Error: err.Error()}
+			s.logger.Warn("Failed to withdraw the answers remembered while the client skipped consent",
 				zap.Error(err), zap.String("client_id", client.ClientID))
 		}
 	}
@@ -1028,6 +1042,12 @@ func (s *service) endTokens(client *Client) error {
 	if err := s.hydraClient.DeleteClientTokens(client.ClientID); err != nil {
 		return err
 	}
+	return s.revokeConsents(client)
+}
+
+// revokeConsents withdraws what the tenant's users granted the client — the
+// remembered answers, and with them the client's refresh tokens for them.
+func (s *service) revokeConsents(client *Client) error {
 	var subjects []uuid.UUID
 	if err := s.db.Table("users").Where("tenant_id = ?", client.TenantID).Pluck("id", &subjects).Error; err != nil {
 		return fmt.Errorf("failed to list the tenant's users: %w", err)

@@ -198,6 +198,11 @@
 
 ### Fixed
 
+- **Turning a client's `skip_consent` off asks its users again.** While the
+  client skipped the question every answer was remembered for 30 days, and
+  those answers kept users unasked after the setting was turned off. Now they
+  are withdrawn, with the client's refresh tokens: its users sign in again
+  and are asked.
 - **A client that holds an EC key can authenticate with it.** A
   `private_key_jwt` client registered with an EC (or any non-RS256) key was
   accepted, and every assertion it signed was refused: the authorization

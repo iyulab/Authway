@@ -209,7 +209,10 @@ its next authorization request.
   ask: the user's earlier answer is remembered, or the client is registered
   with `skip_consent` (the tenant's own application). Being signed in already
   is not a reason — a user who arrives at another client on an existing
-  session is asked like anyone else.
+  session is asked like anyone else. While a client skips the question, the
+  answer is remembered (so a request without a prompt is answered); turning
+  `skip_consent` off withdraws those answers and the client's refresh tokens,
+  and its users are asked at their next sign-in.
 - `POST /api/v1/consent-flows/{flow}/accept` with
   `{"grant_scope": [...], "remember": true}` → `next: redirect`. `remember`
   is the user's "do not ask me again for this application"; the answer is

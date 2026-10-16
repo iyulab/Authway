@@ -1768,7 +1768,10 @@ paths:
                   description: |
                     The client is the tenant's own application: its users are
                     not asked for consent. A user who arrives at any other
-                    client is asked, signed in already or not.
+                    client is asked, signed in already or not. Turned off, the
+                    answers remembered for the client while it skipped are
+                    withdrawn, with its refresh tokens: its users sign in
+                    again and are asked.
                   type: boolean
                 skip_logout_consent: { type: boolean }
                 access_token_strategy:

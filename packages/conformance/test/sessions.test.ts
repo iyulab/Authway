@@ -77,6 +77,21 @@ describe('the session a sign-in opens', () => {
     expect(silent.kind, JSON.stringify(silent)).toBe('code')
   })
 
+  it('asks again once an application stops skipping consent: the answers remembered for it are withdrawn', async () => {
+    const own = await provider.createPublicClient({ skipConsent: true })
+    try {
+      const first = await signIn(own)
+      expect((await provider.silentAuthorize(first.browser, own)).kind).toBe('code')
+
+      const turned = await provider.admin(`/api/v1/clients/${own.id}`, { method: 'PUT', body: JSON.stringify({ skip_consent: false }) })
+      expect(turned.status, await turned.clone().text()).toBe(200)
+
+      expect(await provider.silentAuthorize(first.browser, own)).toEqual({ kind: 'error', error: 'consent_required' })
+    } finally {
+      await provider.deleteClient(own)
+    }
+  })
+
   it('still asks for consent when the user arrives at another application on an existing session', async () => {
     const first = await signIn(ownApp)
     // Signed in already, so no password — but this application has not been
