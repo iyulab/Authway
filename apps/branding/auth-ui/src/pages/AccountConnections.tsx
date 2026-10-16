@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLoad } from '../utils/useLoad'
 
 interface Props {
   /** Calls the account API with the user's token. */
@@ -22,15 +23,17 @@ const AccountConnections: React.FC<Props> = ({ call, signInAgain }) => {
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    const res = await call('/api/v1/users/connections')
-    if (!res.ok) throw new Error('connections')
-    setProviders(((await res.json()) as { connections: { provider: string }[] }).connections.map((c) => c.provider))
-  }, [call])
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const res = await call('/api/v1/users/connections', { signal })
+      if (!res.ok) throw new Error('connections')
+      const answer = ((await res.json()) as { connections: { provider: string }[] }).connections.map((c) => c.provider)
+      if (!signal?.aborted) setProviders(answer)
+    },
+    [call],
+  )
 
-  useEffect(() => {
-    load().catch(() => setProviders([]))
-  }, [load])
+  useLoad(load, () => setProviders([]))
 
   const remove = async (provider: string) => {
     setBusy(true)

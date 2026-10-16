@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { flowUrl, followRedirect, submitFlowStep, type FlowStep } from '../utils/loginFlow'
 import ClientLogo from '../components/ClientLogo'
+import { useLoad } from '../utils/useLoad'
 
 interface ConsentPageInfo {
   next: 'form'
@@ -29,16 +30,17 @@ const ConsentPage: React.FC = () => {
   const flow = searchParams.get('flow')
 
   // Fetch what the consent flow asks
-  useEffect(() => {
-    if (!flow) {
-      setError(t('consent:errors.missingChallenge'))
-      setIsLoading(false)
-      return
-    }
-
-    fetch(flowUrl('consent-flows', flow))
-      .then(res => res.json())
-      .then(data => {
+  useLoad(
+    useCallback(
+      async (signal: AbortSignal) => {
+        if (!flow) {
+          setError(t('consent:errors.missingChallenge'))
+          setIsLoading(false)
+          return
+        }
+        const res = await fetch(flowUrl('consent-flows', flow), { signal })
+        const data = await res.json()
+        if (signal.aborted) return
         if (data.next === 'redirect' && data.redirect_to) {
           // Nothing to ask (the client skips consent, or single sign-on).
           // Keep the loading state while the browser leaves.
@@ -52,13 +54,14 @@ const ConsentPage: React.FC = () => {
           setSelectedScopes(data.requested_scope || [])
           setIsLoading(false)
         }
-      })
-      .catch(err => {
-        console.error('Consent flow fetch error:', err)
-        setError(t('consent:errors.fetchFailed'))
-        setIsLoading(false)
-      })
-  }, [flow, t])
+      },
+      [flow, t],
+    ),
+    () => {
+      setError(t('consent:errors.fetchFailed'))
+      setIsLoading(false)
+    },
+  )
 
   const handleAnswer = (data: FlowStep) => {
     if (data.next === 'redirect' && data.redirect_to) {

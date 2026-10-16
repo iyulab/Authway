@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLoad } from '../utils/useLoad'
 
 interface Props {
   /** Calls the account API with the user's token. */
@@ -26,15 +27,17 @@ const AccountDelegations: React.FC<Props> = ({ call }) => {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    const res = await call('/api/v1/users/delegations')
-    if (!res.ok) throw new Error('delegations')
-    setDelegations(((await res.json()) as { delegations: Delegation[] }).delegations)
-  }, [call])
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const res = await call('/api/v1/users/delegations', { signal })
+      if (!res.ok) throw new Error('delegations')
+      const answer = ((await res.json()) as { delegations: Delegation[] }).delegations
+      if (!signal?.aborted) setDelegations(answer)
+    },
+    [call],
+  )
 
-  useEffect(() => {
-    load().catch(() => setDelegations([]))
-  }, [load])
+  useLoad(load, () => setDelegations([]))
 
   const revoke = async (id: string) => {
     setBusy(true)

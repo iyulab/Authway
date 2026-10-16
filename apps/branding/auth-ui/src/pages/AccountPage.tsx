@@ -7,6 +7,7 @@ import AccountPassword from './AccountPassword'
 import AccountConnections from './AccountConnections'
 import AccountDelegations from './AccountDelegations'
 import { getConfig } from '../config'
+import { useLoad } from '../utils/useLoad'
 
 /** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
 export interface AccountEntry {
@@ -148,11 +149,15 @@ const AccountPage: React.FC = () => {
     [client],
   )
 
-  const loadStatus = useCallback(async () => {
-    const res = await call('/api/v1/users/mfa/status')
-    if (!res.ok) throw new Error('status')
-    setStatus((await res.json()) as Status)
-  }, [call])
+  const loadStatus = useCallback(
+    async (signal?: AbortSignal) => {
+      const res = await call('/api/v1/users/mfa/status', { signal })
+      if (!res.ok) throw new Error('status')
+      const answer = (await res.json()) as Status
+      if (!signal?.aborted) setStatus(answer)
+    },
+    [call],
+  )
 
   // Find the account client for the application, then make sure the user is signed in to it.
   useEffect(() => {
@@ -182,9 +187,12 @@ const AccountPage: React.FC = () => {
     }
   }, [appClientId, t])
 
-  useEffect(() => {
-    if (client) loadStatus().catch(() => setFatal(t('common:errorOccurred')))
-  }, [client, loadStatus, t])
+  useLoad(
+    useCallback(async (signal: AbortSignal) => {
+      if (client) await loadStatus(signal)
+    }, [client, loadStatus]),
+    () => setFatal(t('common:errorOccurred')),
+  )
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true)

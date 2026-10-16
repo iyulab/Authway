@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, loginFlowUrl, submitLoginStep, type FlowStep, type TermsDocument } from '../utils/loginFlow'
+import { useLoad } from '../utils/useLoad'
 
 const versionKey = (d: TermsDocument) => `${d.kind}\u0000${d.version}`
 
@@ -38,19 +39,23 @@ const TermsPage: React.FC = () => {
   const [revised, setRevised] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    if (!flow || !challenge) return
-    fetch(`${loginFlowUrl(flow, '/terms')}?${new URLSearchParams({ terms_challenge: challenge })}`)
-      .then((res) => res.json() as Promise<FlowStep>)
-      .then((step) => {
+  useLoad(
+    useCallback(
+      async (signal: AbortSignal) => {
+        if (!flow || !challenge) return
+        const res = await fetch(`${loginFlowUrl(flow, '/terms')}?${new URLSearchParams({ terms_challenge: challenge })}`, { signal })
+        const step = (await res.json()) as FlowStep
+        if (signal.aborted) return
         if (step.next === 'terms' && step.terms) {
           setTerms(step.terms)
         } else {
           setError(t('auth:terms.expired'))
         }
-      })
-      .catch(() => setError(t('auth:terms.expired')))
-  }, [flow, challenge, t])
+      },
+      [flow, challenge, t],
+    ),
+    () => setError(t('auth:terms.expired')),
+  )
 
   const name = (d: TermsDocument) => d.title || t(`auth:terms.kinds.${d.kind}`, { defaultValue: d.kind })
 

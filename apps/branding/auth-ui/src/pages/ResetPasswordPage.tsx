@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getConfig } from '../config'
+import { useLoad } from '../utils/useLoad';
 
 /** What every tenant asks of a password; a tenant may ask for more. */
 const LEAST_PASSWORD_LENGTH = 8
@@ -25,21 +26,20 @@ export default function ResetPasswordPage() {
   const [passwordLength, setPasswordLength] = useState(LEAST_PASSWORD_LENGTH);
 
   // Validate token on mount
-  useEffect(() => {
-    const validateToken = async () => {
-      if (!token) {
-        setIsValidating(false);
-        setError(t('password:reset.errors.invalidLink'));
-        return;
-      }
-
-      try {
+  useLoad(
+    useCallback(
+      async (signal: AbortSignal) => {
+        if (!token) {
+          setIsValidating(false);
+          setError(t('password:reset.errors.invalidLink'));
+          return;
+        }
         const response = await fetch(
-          `${getConfig().apiUrl}/api/v1/email/verify-reset-token?token=${token}`
+          `${getConfig().apiUrl}/api/v1/email/verify-reset-token?token=${encodeURIComponent(token)}`,
+          { signal }
         );
-
         const data = await response.json();
-
+        if (signal.aborted) return;
         if (response.ok && data.valid) {
           setIsTokenValid(true);
           setPasswordLength(Number(data.password_min_length) || LEAST_PASSWORD_LENGTH);
@@ -48,15 +48,15 @@ export default function ResetPasswordPage() {
         } else {
           setError(data.detail || t('password:reset.errors.tokenExpired'));
         }
-      } catch {
-        setError(t('password:reset.errors.serverError'));
-      } finally {
         setIsValidating(false);
-      }
-    };
-
-    validateToken();
-  }, [token, t]);
+      },
+      [token, t]
+    ),
+    () => {
+      setError(t('password:reset.errors.serverError'));
+      setIsValidating(false);
+    }
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

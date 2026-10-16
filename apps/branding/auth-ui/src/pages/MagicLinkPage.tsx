@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import CodeInput from '../components/CodeInput'
 import { getConfig } from '../config'
 import { followRedirect, nextScreen, submitLoginStep, type FlowStep } from '../utils/loginFlow'
+import { useLoad } from '../utils/useLoad'
 
 interface LinkInfo {
   valid: boolean
@@ -79,22 +80,28 @@ const MagicLinkPage: React.FC = () => {
   const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null)
   const [code, setCode] = useState('')
 
-  const post = async (path: string, body: unknown) => {
+  const post = async (path: string, body: unknown, signal?: AbortSignal) => {
     const res = await fetch(`${getConfig().apiUrl}/api/v1${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     })
     return res.json()
   }
 
   // Landing: say whose link this is before anything is used up.
-  useEffect(() => {
-    if (!token) return
-    post('/magic-links/inspect', { token })
-      .then((data: LinkInfo) => setLinkInfo(data))
-      .catch(() => setLinkInfo({ valid: false }))
-  }, [token])
+  useLoad(
+    useCallback(
+      async (signal: AbortSignal) => {
+        if (!token) return
+        const data = (await post('/magic-links/inspect', { token }, signal)) as LinkInfo
+        if (!signal.aborted) setLinkInfo(data)
+      },
+      [token],
+    ),
+    () => setLinkInfo({ valid: false }),
+  )
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()

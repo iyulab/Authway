@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLoad } from '../utils/useLoad'
 
 interface Props {
   /** Calls the account API with the user's token. */
@@ -24,11 +25,18 @@ const AccountPassword: React.FC<Props> = ({ call, signInAgain }) => {
   const [done, setDone] = useState<'others' | 'all' | 'none' | null>(null)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    call('/api/v1/profile/me')
-      .then(async (res) => (res.ok ? setHasPassword(Boolean((await res.json()).has_password)) : setHasPassword(true)))
-      .catch(() => setHasPassword(true))
-  }, [call])
+  // An answer that cannot be read leaves the change form, the common case.
+  useLoad(
+    useCallback(
+      async (signal: AbortSignal) => {
+        const res = await call('/api/v1/profile/me', { signal })
+        const has = res.ok ? Boolean(((await res.json()) as { has_password?: boolean }).has_password) : true
+        if (!signal.aborted) setHasPassword(has)
+      },
+      [call],
+    ),
+    () => setHasPassword(true),
+  )
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
