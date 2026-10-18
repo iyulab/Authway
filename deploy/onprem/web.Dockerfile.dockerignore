@@ -1,0 +1,10 @@
+# Context for web.Dockerfile (BuildKit reads this instead of the root
+# .dockerignore, which is shaped for the API image): the two Vite apps and the
+# Caddyfile, nothing else.
+*
+!apps/branding/auth-ui/
+!apps/central/admin/
+!deploy/onprem/Caddyfile
+**/node_modules/
+**/dist/
+**/coverage/

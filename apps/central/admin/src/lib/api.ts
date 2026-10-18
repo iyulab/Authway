@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
-import { getConfig } from '../config'
+import { consolePath, getConfig } from '../config'
 
 const API_BASE_URL = getConfig().apiUrl
 
@@ -47,8 +47,8 @@ api.interceptors.response.use(
       useAuthStore.getState().logout()
       // Already on the login page? Then this 401 is a failed sign-in attempt,
       // and reloading would throw away the error the user needs to see.
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      if (window.location.pathname !== consolePath('login')) {
+        window.location.href = consolePath('login')
       }
     }
     return Promise.reject(error)

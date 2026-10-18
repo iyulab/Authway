@@ -44,3 +44,12 @@ export function getConfig(): RuntimeConfig {
     ),
   }
 }
+
+/**
+ * The address of one of the console's own pages. The console is built for the
+ * site root, or for a path under it (`ADMIN_BASE_PATH`, e.g. `/console/`) when
+ * it shares an origin with the login UI and the API.
+ */
+export function consolePath(page: string): string {
+  return import.meta.env.BASE_URL + page.replace(/^\/+/, '')
+}

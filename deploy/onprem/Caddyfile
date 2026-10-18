@@ -1,0 +1,55 @@
+# One origin for the whole installation: the authorization server, the API,
+# the login UI and the console share the address users and applications see
+# (AUTHWAY_DOMAIN). The authorization server's admin port and the API's
+# internal routes are not reachable from here.
+#
+# AUTHWAY_TLS picks how the certificate is obtained:
+#   internal             — Caddy's own certificate authority (closed networks;
+#                          clients must trust its root, see README.md)
+#   you@example.com      — a public certificate from Let's Encrypt
+#   /certs/site.crt /certs/site.key — a certificate you mount
+
+{
+	admin off
+}
+
+{$AUTHWAY_DOMAIN} {
+	tls {$AUTHWAY_TLS:internal}
+	encode zstd gzip
+
+	# Never from outside: the authorization server calls the API's token hook
+	# directly on the internal network.
+	# (A handle block, not a bare respond: Caddy runs handle before respond, so
+	# the login UI's catch-all would answer first.)
+	handle /internal/* {
+		respond 404
+	}
+
+	# The API: its token endpoint fronts the authorization server's, and it
+	# serves the discovery documents for the issuer this address names.
+	@api path /api/* /flows/* /auth/* /admin/* /health /oauth2/token /oauth2/approval-requests /.well-known/openid-configuration /.well-known/oauth-authorization-server /.well-known/authway-config
+	handle @api {
+		reverse_proxy {$AUTHWAY_API_UPSTREAM:api:8080}
+	}
+
+	# The authorization server's public endpoints.
+	@engine path /oauth2/* /.well-known/jwks.json /userinfo
+	handle @engine {
+		reverse_proxy {$AUTHWAY_ENGINE_UPSTREAM:hydra:4444}
+	}
+
+	# The console, built for /console/.
+	redir /console /console/
+	handle_path /console/* {
+		root * /srv/console
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Everything else is the login UI (sign-in, consent, account, …).
+	handle {
+		root * /srv/ui
+		try_files {path} /index.html
+		file_server
+	}
+}

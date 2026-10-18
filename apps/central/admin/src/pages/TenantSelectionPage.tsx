@@ -11,6 +11,7 @@ import { tenantsApi, Tenant, TenantSettings } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { Button, Modal, Input, Checkbox } from '@/components/ui'
+import { consolePath } from '../config'
 
 const TenantSelectionPage: React.FC = () => {
   const queryClient = useQueryClient()
@@ -74,7 +75,7 @@ const TenantSelectionPage: React.FC = () => {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/login'
+    window.location.href = consolePath('login')
   }
 
   // Auto-generate slug from name
