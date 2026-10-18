@@ -31,6 +31,11 @@
 #       invalid_grant. 인가 서버의 토큰 훅(판정)과 클라이언트별 신뢰 등록까지 배포 환경에서 탄다.
 #       배포가 승인 요청을 제공하면(capabilities.approval_requests) 승인 요청 → 같은 세션으로 계정 앱
 #       로그인(PKCE) → 승인 → 폴링 토큰의 approval.id·act·authorization_details 까지.
+#   verify/verify-oauth-smoke.ps1 -Target staging -Tenant <UUID> -Native [-Audience <API 식별자>]
+#     — 데스크톱·CLI 앱의 모양(docs/api/client-management.md, RFC 8252): 공개 client 를 루프백
+#       `http://127.0.0.1/callback` · authorization_code+refresh_token · offline_access · audience 로 만들고,
+#       인가 요청은 운영체제가 고른 포트 + PKCE S256 → 액세스 토큰의 aud · 최상위 client_id → 리프레시가
+#       새 리프레시 토큰을 주고 옛 것의 두 번째 사용은 거절(회전). 클레임 요약을 출력한다(리소스 서버에 건넬 모양).
 # ============================================================
 
 param(
@@ -47,10 +52,21 @@ param(
     [switch]$SkipAuditSmoke,
 
     # 위임 교환(RFC 8693)까지 검증.
-    [switch]$WithDelegation
+    [switch]$WithDelegation,
+
+    # 데스크톱·CLI 앱 모양(공개 · 루프백 · PKCE · 리프레시 회전 · audience)으로 검증.
+    [switch]$Native,
+
+    # -Native 의 client 가 등록할 audience(리소스 서버 식별자).
+    [string]$Audience = "https://api.verify.invalid"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Native -and $WithDelegation) {
+    Write-Host "❌ -Native 와 -WithDelegation 은 함께 쓰지 않는다(위임 client 는 기밀이다)" -ForegroundColor Red
+    exit 1
+}
 
 $VerifyDir = $PSScriptRoot
 if (-not $VerifyDir) { $VerifyDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -169,7 +185,16 @@ $clientId = $null
 $clientDbId = $null
 $clientSecret = $null
 # 요청·동의하는 scope: 위임까지 보면 delegation 을 더한다.
-$scopes = if ($WithDelegation) { @("openid", "delegation") } else { @("openid") }
+# @(...) 로 감싼다: if 식은 원소 하나짜리 배열을 문자열로 풀어 scopes 가 JSON 문자열로 나간다.
+$scopes = @(if ($WithDelegation) { "openid", "delegation" } elseif ($Native) { "openid", "profile", "email", "offline_access" } else { "openid" })
+# 앱이 돌아올 주소. 데스크톱 앱은 포트 없는 루프백을 등록하고, 요청 때 운영체제가 고른 포트를 쓴다(RFC 8252 §7.3).
+$redirectUri = "http://localhost:9999/verify-callback"
+$codeVerifier = $null
+if ($Native) {
+    $redirectUri = "http://127.0.0.1:$(Get-Random -Minimum 49152 -Maximum 65535)/callback"
+    # RFC 7636 §4.1: 43~128 자.
+    $codeVerifier = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+}
 $userCreated = $false
 $failed = $false
 
@@ -214,6 +239,12 @@ try {
         scopes          = $scopes
         # JWT 액세스 토큰 — 아래에서 클레임 형태(계약의 TokenClaims)를 읽는다.
         access_token_strategy = "jwt"
+    }
+    if ($Native) {
+        $createClientBody.redirect_uris = @("http://127.0.0.1/callback")
+        $createClientBody.Remove('allowed_origins')
+        $createClientBody.grant_types = @("authorization_code", "refresh_token")
+        $createClientBody.audience = @($Audience)
     }
     if ($WithDelegation) {
         # 위임을 교환하는 client 는 기밀이다(자기 자격증명으로 교환한다).
@@ -261,7 +292,12 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     # ?flow=<id> 로 보낸다(docs/api/login-flows.md). 화면이 하는 일을 그대로 따라간다.
     Write-Host "3️⃣  OAuth authorize → 로그인 flow" -ForegroundColor Yellow
     $state = New-VerifySuffix
-    $authUrl = "$issuer/oauth2/auth?client_id=$clientId&response_type=code&scope=$($scopes -join '%20')&redirect_uri=http%3A%2F%2Flocalhost%3A9999%2Fverify-callback&state=verify$state"
+    $authUrl = "$issuer/oauth2/auth?client_id=$clientId&response_type=code&scope=$($scopes -join '%20')&redirect_uri=$([uri]::EscapeDataString($redirectUri))&state=verify$state"
+    if ($codeVerifier) {
+        $sha = [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::ASCII.GetBytes($codeVerifier))
+        $challenge = [Convert]::ToBase64String($sha).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        $authUrl += "&code_challenge=$challenge&code_challenge_method=S256"
+    }
     $r1 = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($authUrl)
     if (-not $r1.Location -or $r1.Location -notmatch 'login_challenge=') {
         Write-Host "❌ login_challenge를 얻지 못함 — status=$($r1.Status) location=$($r1.Location)" -ForegroundColor Red
@@ -365,7 +401,8 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     Write-Host "   token_endpoint: $tokenEndpoint" -ForegroundColor Gray
     $codeArgs = @('-s', '-X', 'POST', $tokenEndpoint,
         '-d', 'grant_type=authorization_code', '-d', "code=$code",
-        '-d', 'redirect_uri=http://localhost:9999/verify-callback', '-d', "client_id=$clientId")
+        '--data-urlencode', "redirect_uri=$redirectUri", '-d', "client_id=$clientId")
+    if ($codeVerifier) { $codeArgs += @('-d', "code_verifier=$codeVerifier") }
     if ($clientSecret) { $codeArgs += @('--data-urlencode', "client_secret=$clientSecret") }
     $tokenResp = & curl.exe @codeArgs
     $tokenJson = $tokenResp | ConvertFrom-Json
@@ -404,6 +441,46 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     }
     Write-Host "   ✅ 서명 키 kid=$tokenKid — JWKS 에 공개됨 (공개된 kid $($publishedKids.Count) 개)" -ForegroundColor Green
 
+    # --- 8-1b. (-Native) 리소스 서버가 보는 것 · 리프레시 회전 ---
+    if ($Native) {
+        Write-Host "7️⃣-1b 데스크톱 앱 모양 — aud · client_id · 리프레시 회전" -ForegroundColor Yellow
+        $tokenAlg = ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($hb64)) | ConvertFrom-Json).alg
+        if (@($claims.aud) -notcontains $Audience) {
+            Write-Host "❌ 액세스 토큰 aud 에 $Audience 가 없음 (aud='$(@($claims.aud) -join ',')') — 등록한 audience 가 실리지 않음" -ForegroundColor Red
+            exit 1
+        }
+        if ($claims.client_id -ne $clientId) {
+            Write-Host "❌ 액세스 토큰 최상위 client_id 가 '$($claims.client_id)' — '$clientId' 여야 함" -ForegroundColor Red
+            exit 1
+        }
+        if (-not $tokenJson.refresh_token) {
+            Write-Host "❌ offline_access 를 동의했는데 리프레시 토큰이 없음" -ForegroundColor Red
+            exit 1
+        }
+        $refreshOnce = { param($rt) & curl.exe -s -X POST $tokenEndpoint -d 'grant_type=refresh_token' --data-urlencode "refresh_token=$rt" -d "client_id=$clientId" | ConvertFrom-Json }
+        $renewed = & $refreshOnce $tokenJson.refresh_token
+        if (-not $renewed.access_token -or -not $renewed.refresh_token -or $renewed.refresh_token -eq $tokenJson.refresh_token) {
+            Write-Host "❌ 리프레시가 새 액세스·리프레시 토큰을 주지 않음: $($renewed | ConvertTo-Json -Compress)" -ForegroundColor Red
+            exit 1
+        }
+        $reused = & $refreshOnce $tokenJson.refresh_token
+        if ($reused.error -ne 'invalid_grant') {
+            Write-Host "❌ 이미 쓴 리프레시 토큰의 두 번째 사용이 거절되지 않음: $($reused | ConvertTo-Json -Compress)" -ForegroundColor Red
+            exit 1
+        }
+        # 재사용을 탈취로 보고 그 계열을 끝낸다 — 방금 받은 새 액세스 토큰도 더는 받아들여지지 않아야 한다.
+        $renewedNow = & curl.exe -s -o NUL -w "%{http_code}" "$apiUrl/api/v1/profile/me" -H "Authorization: Bearer $($renewed.access_token)"
+        if ($renewedNow -ne '401') {
+            Write-Host "❌ 재사용 감지 뒤에도 그 계열의 새 액세스 토큰이 받아들여짐(HTTP $renewedNow)" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ✅ aud ∋ $Audience · client_id 최상위 · 리프레시는 새 토큰, 옛 토큰 재사용은 invalid_grant 이고 그 계열이 끝남" -ForegroundColor Green
+        Write-Host "   리소스 서버가 받는 액세스 토큰:" -ForegroundColor Gray
+        Write-Host "     iss=$($claims.iss)  alg=$tokenAlg  kid=$tokenKid" -ForegroundColor Gray
+        Write-Host "     sub=<사용자 id, UUID>  aud=$(@($claims.aud) -join ',')  client_id=$($claims.client_id)" -ForegroundColor Gray
+        Write-Host "     수명(exp-iat)=$($claims.exp - $claims.iat)초  scope='$($claims.scope)'  최상위: $(($claims.PSObject.Properties.Name | Sort-Object) -join ',')" -ForegroundColor Gray
+    }
+
     # --- 8-2. 로그인이 세션을 열었는가 ---
     # 「로그인 상태 유지」 없이 로그인했어도 세션이 있어야 한다: 같은 브라우저(쿠키)의
     # prompt=none 인가 요청이 화면 없이 code 로 끝난다. 세션이 없으면 login_required,
@@ -418,7 +495,7 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         $rs = Invoke-CurlCapture -CookieJar $cookieJar -CurlArgs @($silentUrl)
         if (-not $rs.Location) { $silentOutcome = "리다이렉트 없음(status=$($rs.Status))"; break }
         if ($rs.Location -match '[?&]error=([^&]+)') { $silentOutcome = "error=$($matches[1])"; break }
-        if ($rs.Location -match '[?&]code=') { $silentOutcome = 'code'; break }
+        if ($rs.Location -match '[?&]code=([^&]+)') { $silentOutcome = 'code'; $silentCode = [uri]::UnescapeDataString($matches[1]); break }
         if ($rs.Location -match '[?&]flow=([^&]+)') {
             # 화면이 하는 일: flow 가 무엇을 보여 달라는지 API 에 묻는다. 답은 redirect 여야 한다.
             $silentFlow = $matches[1]
@@ -441,6 +518,15 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         exit 1
     }
     Write-Host "   ✅ 화면 없이 code — 로그인이 세션을 열었고, 로그인 UI 를 거치지 않고 재사용됨" -ForegroundColor Green
+    if ($Native) {
+        # 위의 재사용 감지가 첫 토큰 계열을 끝냈다. 아래 단계는 세션에서 새로 받은 토큰으로 한다.
+        $tokenJson = & curl.exe -s -X POST $tokenEndpoint -d 'grant_type=authorization_code' -d "code=$silentCode" `
+            --data-urlencode "redirect_uri=$redirectUri" -d "client_id=$clientId" -d "code_verifier=$codeVerifier" | ConvertFrom-Json
+        if (-not $tokenJson.access_token) {
+            Write-Host "❌ 세션 재사용의 code 를 토큰으로 바꾸지 못함: $($tokenJson | ConvertTo-Json -Compress)" -ForegroundColor Red
+            exit 1
+        }
+    }
 
     # --- 8-3. (-WithDelegation) 위임 교환 ---
     $exchangeArgs = $null
