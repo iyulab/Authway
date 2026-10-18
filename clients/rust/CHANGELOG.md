@@ -1,9 +1,9 @@
 # Changelog
 
-All notable changes to `authway-native` are recorded here. The crate follows its own version line, apart from the
-Authway service.
+All notable changes to `authway-native` are recorded here. It is released together with `Authway.Native` (the same client for
+another language), under the same version, apart from the Authway service.
 
-## Unreleased
+## 0.1.0 — 2026-10-18
 
 ### Added
 

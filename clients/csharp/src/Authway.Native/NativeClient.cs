@@ -308,6 +308,10 @@ public sealed class NativeClient : IDisposable
         {
             throw new NativeSignInException(NativeSignInFailure.Http, $"could not reach the authorization server: {e.Message}", e);
         }
+        catch (TaskCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new NativeSignInException(NativeSignInFailure.Http, "the authorization server did not answer in time", e);
+        }
         DiscoveryDocument? d;
         try
         {
@@ -391,6 +395,10 @@ public sealed class NativeClient : IDisposable
         catch (HttpRequestException e)
         {
             throw new NativeSignInException(NativeSignInFailure.Http, $"could not reach the authorization server: {e.Message}", e);
+        }
+        catch (TaskCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new NativeSignInException(NativeSignInFailure.Http, "the authorization server did not answer in time", e);
         }
     }
 

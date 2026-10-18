@@ -43,9 +43,11 @@ jobs:
             echo "::error::Authway.Native $tag is already on nuget.org."; exit 1
           fi
 
+  # crates.io cannot take a version back (only yank it), so it goes last: if the nuget.org push fails, nothing is
+  # published — delete the tag, fix what failed, tag again.
   crate:
     name: publish authway-native
-    needs: check
+    needs: nuget
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:

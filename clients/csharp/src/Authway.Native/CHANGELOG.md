@@ -1,9 +1,9 @@
 # Changelog
 
-All notable changes to `Authway.Native` are recorded here. The package follows its own version line, apart from the
-Authway service and `Authway.Client`.
+All notable changes to `Authway.Native` are recorded here. It is released together with `authway-native` (the same client for
+another language), under the same version, apart from the Authway service.
 
-## Unreleased
+## 0.1.0 — 2026-10-18
 
 ### Added
 

@@ -82,7 +82,7 @@ fn serve(stream: TcpStream, addr: SocketAddr, seen: &Mutex<Seen>, token: &TokenA
 
     let issuer = format!("http://{addr}");
     let (status, answer) = match path.as_str() {
-        "/.well-known/openid-configuration" => (
+        p if p.ends_with("/.well-known/openid-configuration") => (
             200,
             json!({
                 "issuer": issuer,
@@ -297,8 +297,8 @@ fn a_declined_sign_in_stores_nothing() {
 #[test]
 fn a_discovery_document_for_another_issuer_is_refused() {
     let server = StandIn::start(Box::new(|_| (500, json!({}))));
-    // Ask for the issuer under a different host name than the document names.
-    let issuer = server.issuer().replace("127.0.0.1", "localhost");
+    // Ask for an issuer the document does not name.
+    let issuer = format!("{}/other", server.issuer());
     let client = NativeClient::new(Config::new(issuer, "desktop-app"), MemoryStore::default());
     assert!(matches!(client.begin_sign_in(), Err(Error::Discovery(_))));
 }
