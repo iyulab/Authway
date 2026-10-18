@@ -255,6 +255,83 @@ jobs:
           cat "$RUNNER_TEMP/api.log" || true
           docker logs hydra-ci || true
 
+  # The on-premises bundle (deploy/onprem) as an installation runs it: both
+  # images built from this commit, setup.sh, one `docker compose up`, then
+  # sign-in scenarios against the one origin through its own certificate
+  # authority. Nothing else in CI starts the images, the front's routing or the
+  # production-mode configuration checks.
+  onprem:
+    name: On-premises bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
+
+      - name: Build the images and the bundle
+        run: |
+          set -euo pipefail
+          docker build -t authway-api:latest --build-arg APP_VERSION=ci-${{ github.sha }} .
+          docker build -t authway-web:latest -f deploy/onprem/web.Dockerfile .
+          sh deploy/onprem/pack.sh "$RUNNER_TEMP/bundle" --no-images
+
+      - name: Install
+        working-directory: ${{ runner.temp }}/bundle
+        run: |
+          set -euo pipefail
+          sh setup.sh
+          # auth.localtest.me resolves to 127.0.0.1; the API refuses a loopback
+          # name for its public address in production mode.
+          sed -i -e 's|^AUTHWAY_DOMAIN=.*|AUTHWAY_DOMAIN=auth.localtest.me:8443|' \
+                 -e 's|^#AUTHWAY_HTTPS_PORT=443|AUTHWAY_HTTPS_PORT=8443|' \
+                 -e 's|^AUTHWAY_EMAIL_SMTP_HOST=.*|AUTHWAY_EMAIL_SMTP_HOST=mailhog|' \
+                 -e 's|^AUTHWAY_EMAIL_SMTP_PORT=.*|AUTHWAY_EMAIL_SMTP_PORT=1025|' \
+                 -e 's|^AUTHWAY_EMAIL_SMTP_SECURITY=.*|AUTHWAY_EMAIL_SMTP_SECURITY=none|' \
+                 -e 's|^AUTHWAY_EMAIL_FROM_EMAIL=.*|AUTHWAY_EMAIL_FROM_EMAIL=noreply@example.com|' .env
+          # A mail catcher in place of the organization's SMTP server.
+          printf 'services:\n  mailhog:\n    image: mailhog/mailhog:latest\n    ports: ["8025:8025"]\n' > mail.yml
+          docker compose -f docker-compose.yml -f mail.yml up -d --wait --wait-timeout 300
+          docker compose cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/root.crt"
+          key=$(grep '^AUTHWAY_ADMIN_API_KEY=' .env | cut -d= -f2)
+          echo "::add-mask::$key"
+          echo "ADMIN_KEY=$key" >> "$GITHUB_ENV"
+
+      - name: Run sign-in scenarios against the installation
+        env:
+          NODE_EXTRA_CA_CERTS: ${{ runner.temp }}/root.crt
+          # The name resolves to both 127.0.0.1 and ::1; the ports are published
+          # on IPv4 for certain.
+          NODE_OPTIONS: --dns-result-order=ipv4first
+          CONFORMANCE_ISSUER: https://auth.localtest.me:8443
+          CONFORMANCE_API: https://auth.localtest.me:8443
+          CONFORMANCE_ADMIN_KEY: ${{ env.ADMIN_KEY }}
+          CONFORMANCE_MAIL_API: http://localhost:8025
+        run: >-
+          pnpm --filter @authway/conformance exec vitest run
+          test/discovery.test.ts test/login.test.ts test/sessions.test.ts
+          test/refresh-tokens.test.ts test/token-claims.test.ts
+          test/magic-link.test.ts test/introspection.test.ts
+          test/resource-server.test.ts test/device-authorization.test.ts
+          test/admin-tenants-users.test.ts test/login-ui-routes.test.ts
+
+      - name: Show the installation's logs
+        if: failure()
+        working-directory: ${{ runner.temp }}/bundle
+        run: docker compose -f docker-compose.yml -f mail.yml logs --no-color --tail 200 || true
+
   # The two Vite apps live outside the pnpm workspace (each has its own
   # package-lock.json), so they were invisible to CI — their test suites only ever
   # ran on a developer machine. Build + test them here; no artifacts are uploaded
