@@ -6,6 +6,9 @@
 #   docker build -f deploy/onprem/web.Dockerfile -t authway-web .
 
 FROM node:24-alpine AS login-ui
+# The API is on the page's own origin: an empty URL, whatever a .env file
+# would say (src/config.ts).
+ENV VITE_API_URL=
 WORKDIR /src
 COPY apps/branding/auth-ui/package.json apps/branding/auth-ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -13,6 +16,7 @@ COPY apps/branding/auth-ui/ ./
 RUN npm run build
 
 FROM node:24-alpine AS console
+ENV VITE_API_URL=
 WORKDIR /src
 COPY apps/central/admin/package.json apps/central/admin/package-lock.json ./
 RUN npm ci --no-audit --no-fund

@@ -543,13 +543,13 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Fail-closed: emailed links must point at the auth UI, never at this API.
-	// Checked in every environment because the failure is silent — a wrong value
-	// compiles, boots, sends mail, and only the recipient ever sees the 404.
+	// Fail-closed: emailed links must point at the auth UI. Checked in every
+	// environment because the failure is silent — a wrong value compiles,
+	// boots, sends mail, and only the recipient ever sees the 404. The UI's
+	// address may be the API's own: an installation that serves both from one
+	// origin (deploy/onprem) has the two equal, and that is right.
 	if c.App.FrontendURL == "" {
 		errors = append(errors, "app.frontend_url (AUTHWAY_APP_FRONTEND_URL) is required — the auth UI's public URL, used for invitation/magic-link/verify-email/reset-password links")
-	} else if c.App.FrontendURL == c.App.BaseURL {
-		errors = append(errors, "app.frontend_url must not equal app.base_url — base_url is this API's own address, and emailed links pointing at it return 404")
 	} else if IsProduction(c.App.Environment) && isLoopbackURL(c.App.FrontendURL) {
 		// The required-check above cannot catch this on its own: viper's
 		// AutomaticEnv ignores an empty environment variable (allowEmptyEnv is

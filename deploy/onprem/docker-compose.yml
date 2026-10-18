@@ -1,0 +1,162 @@
+# An Authway installation on one host, from images alone — the same images the
+# hosted service runs. Everything is configured in .env (see .env.example and
+# setup.sh); this file is not meant to be edited per installation.
+#
+#   web    — Caddy: the one address users and applications see (TLS), the login
+#            UI and the console, and the routes to the two services below
+#   api    — the Authway API (sign-in flows, administration, token endpoint)
+#   hydra  — the OAuth 2.0 / OpenID Connect authorization server
+#   postgres, redis — storage; Hydra and the API share one database, as in
+#            every other deployment
+#
+# Only web publishes ports. The authorization server's admin port (4445) and
+# the API's internal token hook stay on the internal network.
+
+name: authway
+
+x-issuer: &issuer https://${AUTHWAY_DOMAIN:?set AUTHWAY_DOMAIN in .env}
+
+services:
+  web:
+    image: ${AUTHWAY_WEB_IMAGE:-authway-web:latest}
+    restart: unless-stopped
+    ports:
+      - "${AUTHWAY_HTTP_PORT:-80}:80"
+      # The same number inside: an address with a port (AUTHWAY_DOMAIN=host:8443)
+      # has Caddy listen on that port.
+      - "${AUTHWAY_HTTPS_PORT:-443}:${AUTHWAY_HTTPS_PORT:-443}"
+    environment:
+      AUTHWAY_DOMAIN: ${AUTHWAY_DOMAIN}
+      AUTHWAY_TLS: ${AUTHWAY_TLS:-internal}
+    volumes:
+      # Certificates, and with AUTHWAY_TLS=internal the root of Caddy's own
+      # certificate authority (pki/authorities/local/root.crt).
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./certs:/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      hydra:
+        condition: service_started
+
+  api:
+    image: ${AUTHWAY_API_IMAGE:-authway-api:latest}
+    restart: unless-stopped
+    environment:
+      AUTHWAY_APP_ENVIRONMENT: production
+      AUTHWAY_APP_BASE_URL: *issuer
+      AUTHWAY_APP_FRONTEND_URL: *issuer
+      AUTHWAY_CORS_ALLOWED_ORIGINS: *issuer
+      AUTHWAY_LOG_LEVEL: ${AUTHWAY_LOG_LEVEL:-info}
+      AUTHWAY_DATABASE_HOST: postgres
+      AUTHWAY_DATABASE_PORT: "5432"
+      AUTHWAY_DATABASE_NAME: authway
+      AUTHWAY_DATABASE_USER: authway
+      AUTHWAY_DATABASE_PASSWORD: ${AUTHWAY_DATABASE_PASSWORD:?run setup.sh}
+      AUTHWAY_DATABASE_SSL_MODE: disable
+      AUTHWAY_REDIS_HOST: redis
+      AUTHWAY_REDIS_PORT: "6379"
+      AUTHWAY_HYDRA_PUBLIC_URL: *issuer
+      AUTHWAY_HYDRA_PUBLIC_BACKEND_URL: http://hydra:4444
+      AUTHWAY_HYDRA_ADMIN_URL: http://hydra:4445
+      AUTHWAY_HYDRA_TOKEN_HOOK_KEY: ${AUTHWAY_HYDRA_TOKEN_HOOK_KEY:?run setup.sh}
+      AUTHWAY_ADMIN_API_KEY: ${AUTHWAY_ADMIN_API_KEY:?run setup.sh}
+      AUTHWAY_ADMIN_PASSWORD: ${AUTHWAY_ADMIN_PASSWORD:?run setup.sh}
+      AUTHWAY_TOTP_ENCRYPTION_KEY: ${AUTHWAY_TOTP_ENCRYPTION_KEY:?run setup.sh}
+      AUTHWAY_JWT_ACCESS_TOKEN_SECRET: ${AUTHWAY_JWT_ACCESS_TOKEN_SECRET:?run setup.sh}
+      AUTHWAY_JWT_REFRESH_TOKEN_SECRET: ${AUTHWAY_JWT_REFRESH_TOKEN_SECRET:?run setup.sh}
+      AUTHWAY_EMAIL_SMTP_HOST: ${AUTHWAY_EMAIL_SMTP_HOST:-}
+      AUTHWAY_EMAIL_SMTP_PORT: ${AUTHWAY_EMAIL_SMTP_PORT:-587}
+      AUTHWAY_EMAIL_SMTP_USER: ${AUTHWAY_EMAIL_SMTP_USER:-}
+      AUTHWAY_EMAIL_SMTP_PASSWORD: ${AUTHWAY_EMAIL_SMTP_PASSWORD:-}
+      AUTHWAY_EMAIL_SMTP_SECURITY: ${AUTHWAY_EMAIL_SMTP_SECURITY:-}
+      AUTHWAY_EMAIL_FROM_EMAIL: ${AUTHWAY_EMAIL_FROM_EMAIL:-}
+      AUTHWAY_EMAIL_FROM_NAME: ${AUTHWAY_EMAIL_FROM_NAME:-Authway}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      hydra-migrate:
+        condition: service_completed_successfully
+
+  hydra-migrate:
+    image: ${AUTHWAY_HYDRA_IMAGE:-oryd/hydra:v26.2.0}
+    command: migrate sql up -e --yes
+    environment:
+      DSN: postgres://authway:${AUTHWAY_DATABASE_PASSWORD}@postgres:5432/authway?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  hydra:
+    image: ${AUTHWAY_HYDRA_IMAGE:-oryd/hydra:v26.2.0}
+    command: serve all
+    restart: unless-stopped
+    # The settings every deployment shares (token shape, what discovery
+    # advertises, lifetimes); packed next to this file from configs/.
+    env_file:
+      - ./hydra.shared.env
+    environment:
+      DSN: postgres://authway:${AUTHWAY_DATABASE_PASSWORD}@postgres:5432/authway?sslmode=disable
+      SECRETS_SYSTEM: ${AUTHWAY_HYDRA_SECRETS_SYSTEM:?run setup.sh}
+      URLS_SELF_ISSUER: *issuer
+      URLS_LOGIN: https://${AUTHWAY_DOMAIN}/flows/login
+      URLS_CONSENT: https://${AUTHWAY_DOMAIN}/flows/consent
+      URLS_LOGOUT: https://${AUTHWAY_DOMAIN}/flows/logout
+      URLS_DEVICE_VERIFICATION: https://${AUTHWAY_DOMAIN}/flows/device
+      URLS_DEVICE_SUCCESS: https://${AUTHWAY_DOMAIN}/device/done
+      URLS_ERROR: https://${AUTHWAY_DOMAIN}/error
+      WEBFINGER_OIDC_DISCOVERY_TOKEN_URL: https://${AUTHWAY_DOMAIN}/oauth2/token
+      OAUTH2_TOKEN_HOOK_URL: http://api:8080/internal/token-hook
+      OAUTH2_TOKEN_HOOK_AUTH_TYPE: api_key
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_NAME: X-Authway-Hook-Key
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_IN: header
+      OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE: ${AUTHWAY_HYDRA_TOKEN_HOOK_KEY}
+      # The hook is on the internal network; it is the only private address
+      # the authorization server may call.
+      CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS: http://api:8080/internal/token-hook
+      SERVE_COOKIES_SAME_SITE_MODE: Lax
+      SERVE_PUBLIC_CORS_ENABLED: "true"
+      SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "*"
+      LOG_LEVEL: ${AUTHWAY_LOG_LEVEL:-info}
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+
+  postgres:
+    image: ${AUTHWAY_POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authway
+      POSTGRES_USER: authway
+      POSTGRES_PASSWORD: ${AUTHWAY_DATABASE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authway -d authway"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: ${AUTHWAY_REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

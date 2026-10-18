@@ -8,3 +8,6 @@
 **/node_modules/
 **/dist/
 **/coverage/
+# A developer's or a deploy script's build settings (VITE_API_URL pointing at
+# some other deployment) must not reach this build.
+**/.env*

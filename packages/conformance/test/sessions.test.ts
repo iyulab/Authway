@@ -112,7 +112,11 @@ describe('the session a sign-in opens', () => {
   it('is reused without the login UI being opened: nothing is asked, so no screen is loaded', async () => {
     const { auth_ui: loginUi } = (await (await fetch(`${provider.config.api}/.well-known/authway-config`)).json()) as { auth_ui: string }
     const first = await signIn(ownApp)
-    const screensOpened = (from: number) => first.browser.sentTo.slice(from).filter((u) => u.origin === new URL(loginUi).origin)
+    // A screen of the login UI is opened with a flow id. The UI may share its
+    // origin with the API and the authorization server, so the origin alone
+    // does not tell a screen from a redirect.
+    const screensOpened = (from: number) =>
+      first.browser.sentTo.slice(from).filter((u) => u.origin === new URL(loginUi).origin && u.searchParams.has('flow'))
 
     // A request without a prompt, and an ordinary one: both end at the
     // application without a page of the login UI in between.

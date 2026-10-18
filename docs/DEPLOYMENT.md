@@ -286,69 +286,13 @@ not the issuer.
 
 ## Docker Deployment
 
-### Docker Compose
-
-**`docker-compose.yml`**:
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: authway
-      POSTGRES_USER: authway
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  hydra:
-    image: oryd/hydra:v26.2.0
-    command: serve all --dev
-    environment:
-      DSN: postgres://authway:${DB_PASSWORD}@postgres:5432/hydra?sslmode=disable
-      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
-      URLS_SELF_ISSUER: https://oauth.example.com
-      URLS_LOGIN: https://api.example.com/flows/login
-      URLS_CONSENT: https://api.example.com/flows/consent
-      URLS_LOGOUT: https://api.example.com/flows/logout
-    ports:
-      - "4444:4444"
-      - "4445:4445"
-    depends_on:
-      - postgres
-
-  central-api:
-    build: ./apps/central/api
-    environment:
-      DATABASE_URL: postgres://authway:${DB_PASSWORD}@postgres:5432/authway?sslmode=disable
-      HYDRA_ADMIN_URL: http://hydra:4445
-      HYDRA_PUBLIC_URL: https://oauth.example.com
-    ports:
-      - "8080:8080"
-    depends_on:
-      - postgres
-      - hydra
-
-volumes:
-  postgres_data:
-```
-
-**`.env`**:
-```bash
-DB_PASSWORD=secure-db-password
-HYDRA_SYSTEM_SECRET=at-least-32-random-characters
-AUTH_BACKEND_SECRET=another-secure-secret
-```
-
-**Deploy**:
-```bash
-docker-compose up -d
-```
-
----
+An installation on one host — a company network without internet access
+included — runs from images with Docker Compose: **[deploy/onprem/](../deploy/onprem/README.md)**.
+One origin serves everything (Caddy in front: the login UI at `/`, the
+console at `/console/`, the API and the authorization server on their paths),
+`setup.sh` generates every secret into one `.env`, and `pack.sh` builds a
+bundle with the images saved to one `images.tar` for hosts that cannot reach
+a registry.
 
 ## CORS Configuration
 

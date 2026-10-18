@@ -32,18 +32,16 @@ func TestValidateAcceptsDistinctFrontendURL(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsFrontendURLEqualToBaseURL(t *testing.T) {
-	// This is the actual production wiring that shipped: the deploy script set
-	// AUTHWAY_APP_BASE_URL=$API_URL and nothing set a frontend URL at all.
+func TestValidateAcceptsOneOriginForTheAPIAndTheUI(t *testing.T) {
+	// An installation that serves the API and the login UI from one origin
+	// (deploy/onprem) gives both the same address; links built from it reach
+	// the UI. What shipped broken was a frontend URL nobody set, caught below.
 	c := validConfig()
-	c.App.FrontendURL = c.App.BaseURL
-
-	err := c.Validate()
-	if err == nil {
-		t.Fatal("frontend_url equal to base_url must be rejected — emailed links would 404")
-	}
-	if !strings.Contains(err.Error(), "frontend_url") {
-		t.Errorf("error should name the offending key, got: %v", err)
+	c.App.Environment = "production"
+	c.App.BaseURL = "https://auth.example.com"
+	c.App.FrontendURL = "https://auth.example.com"
+	if err := c.Validate(); err != nil && strings.Contains(err.Error(), "frontend_url") {
+		t.Fatalf("one origin for the API and the UI must be accepted, got: %v", err)
 	}
 }
 

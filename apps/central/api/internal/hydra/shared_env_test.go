@@ -46,6 +46,8 @@ func TestSharedHydraSettingsAreWrittenOnce(t *testing.T) {
 		"docker-compose.yml":                                "./configs/hydra.shared.env",
 		".github/workflows/ci.yml":                          "--env-file configs/hydra.shared.env",
 		"scripts/deploy/_shared/lib/publish-hydra.core.ps1": "Get-HydraSharedEnv",
+		// deploy/onprem/pack.sh copies the shared file next to it.
+		"deploy/onprem/docker-compose.yml": "./hydra.shared.env",
 	}
 	// The one kind of exception: a protection that local development and CI
 	// have to switch off because what it protects against is how they work.

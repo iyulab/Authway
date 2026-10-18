@@ -1,3 +1,7 @@
 # Read by `docker run --env-file`, which takes a trailing carriage return as
 # part of the value. Keep these files LF on every platform.
 *.env text eol=lf
+
+# The on-premises bundle runs on Linux hosts: a shell script or an env file
+# with carriage returns fails there, whatever machine packed it.
+deploy/onprem/** text eol=lf
