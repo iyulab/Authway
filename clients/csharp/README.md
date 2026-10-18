@@ -11,6 +11,8 @@ A .NET client for Authway's administration API — what a service's backend call
 
 Signing users in is not here. That is OpenID Connect: point your framework's handler (in ASP.NET Core,
 `AddOpenIdConnect`) at Authway's issuer, and validate access tokens with the standard JWT bearer handler.
+A desktop or command-line app that signs its user in through the system browser uses
+[`Authway.Native`](src/Authway.Native/README.md), in this directory too.
 
 ```
 dotnet add package Authway.Client

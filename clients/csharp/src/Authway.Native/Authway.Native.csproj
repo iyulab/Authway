@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>Authway.Native</PackageId>
+    <Description>Sign a desktop or command-line app's user in with the system browser (OAuth 2.0 for Native Apps: loopback redirect + PKCE), keep the tokens in a store the app chooses, and refresh them before they expire. Standard OpenID Connect discovery — written for Authway, works with any OpenID provider.</Description>
+    <PackageTags>authway;oidc;oauth;pkce;desktop;native;rfc8252</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/iyulab/Authway/tree/main/clients/csharp/src/Authway.Native</PackageProjectUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Authway.Native.Tests" />
+  </ItemGroup>
+
+</Project>
