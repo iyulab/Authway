@@ -479,6 +479,13 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         Write-Host "     iss=$($claims.iss)  alg=$tokenAlg  kid=$tokenKid" -ForegroundColor Gray
         Write-Host "     sub=<사용자 id, UUID>  aud=$(@($claims.aud) -join ',')  client_id=$($claims.client_id)" -ForegroundColor Gray
         Write-Host "     수명(exp-iat)=$($claims.exp - $claims.iat)초  scope='$($claims.scope)'  최상위: $(($claims.PSObject.Properties.Name | Sort-Object) -join ',')" -ForegroundColor Gray
+        if ($claims.ext) {
+            $extReport = @($claims.ext.PSObject.Properties | ForEach-Object {
+                $same = ($claims.PSObject.Properties.Name -contains $_.Name) -and (($claims.($_.Name) | ConvertTo-Json -Compress) -eq ($_.Value | ConvertTo-Json -Compress))
+                "$($_.Name)$(if ($same) { '=최상위' } else { '≠최상위' })"
+            })
+            Write-Host "     ext: $($extReport -join ', ')" -ForegroundColor Gray
+        }
     }
 
     # --- 8-2. 로그인이 세션을 열었는가 ---
