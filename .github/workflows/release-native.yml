@@ -1,0 +1,79 @@
+name: Release native sign-in clients
+
+# authway-native (clients/rust, crates.io) and Authway.Native (clients/csharp/src/Authway.Native, nuget.org) — the
+# two native sign-in clients have the same shape and are released together, driven only by a `native-v<version>` tag:
+# a push to main never publishes, and the `v*` and `client-v*` tags do not match. Their tests ran in CI on the tagged
+# commit; this checks that the tag, both manifests and both changelogs agree and that neither registry has the version
+# yet, then publishes. Text under clients/ is checked for internal references by the repository's pre-commit hook.
+
+on:
+  push:
+    tags: ['native-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-native
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: tag, manifests, changelogs and registries agree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # A mismatch fails here, not as a package nobody meant to publish — and a version already published is a mistake
+      # to say aloud, not one a skip flag should swallow.
+      - run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#native-v}"
+          crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' clients/rust/Cargo.toml | head -n1 | tr -d '\r')
+          nuget=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' clients/csharp/src/Authway.Native/Authway.Native.csproj | head -n1 | tr -d '\r')
+          [ "$tag" = "$crate" ] || { echo "::error::The tag says $tag, clients/rust/Cargo.toml says $crate."; exit 1; }
+          [ "$tag" = "$nuget" ] || { echo "::error::The tag says $tag, Authway.Native.csproj says $nuget."; exit 1; }
+          for log in clients/rust/CHANGELOG.md clients/csharp/src/Authway.Native/CHANGELOG.md; do
+            grep -q "^## $tag — [0-9]" "$log" || { echo "::error::$log has no dated $tag."; exit 1; }
+          done
+          if curl -fsS -A "authway-release (https://github.com/iyulab/Authway)" https://crates.io/api/v1/crates/authway-native 2>/dev/null | grep -q "\"num\":\"$tag\""; then
+            echo "::error::authway-native $tag is already on crates.io."; exit 1
+          fi
+          if curl -fsS https://api.nuget.org/v3-flatcontainer/authway.native/index.json 2>/dev/null | grep -q "\"$tag\""; then
+            echo "::error::Authway.Native $tag is already on nuget.org."; exit 1
+          fi
+
+  crate:
+    name: publish authway-native
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/rust
+    steps:
+      - uses: actions/checkout@v7
+      - name: Publish to crates.io
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  nuget:
+    name: publish Authway.Native
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/csharp
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Pack
+        run: dotnet pack src/Authway.Native/Authway.Native.csproj --configuration Release --output nupkg
+      - name: Push to nuget.org
+        run: dotnet nuget push nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY"
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

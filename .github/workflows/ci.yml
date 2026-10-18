@@ -318,7 +318,7 @@ jobs:
         run: dotnet build samples/asp-api --nologo
 
   clients:
-    name: .NET client build / test
+    name: .NET clients build / test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -332,8 +332,38 @@ jobs:
           dotnet-version: '10.0.x'
 
       # The live tests need a deployment (AUTHWAY_CLIENT_TEST_*) and skip here; they run against a local one.
-      - name: Build and test Authway.Client
+      # The end-to-end sign-in of Authway.Native runs from the conformance suite (CONFORMANCE_NATIVE_CLIENTS).
+      - name: Build and test Authway.Client and Authway.Native
         run: dotnet test --solution Authway.Client.slnx --configuration Release
+
+  rust-client:
+    name: Rust client fmt / clippy / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/rust
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('clients/rust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # The end-to-end sign-in runs from the conformance suite (CONFORMANCE_NATIVE_CLIENTS).
+      - name: Test
+        run: cargo test --locked
 
   packages:
     name: TS packages build / typecheck / tarball verify
