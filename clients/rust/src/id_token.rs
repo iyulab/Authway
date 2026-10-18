@@ -27,8 +27,8 @@ pub(crate) fn claims(
     let bytes = URL_SAFE_NO_PAD
         .decode(payload.trim_end_matches('='))
         .map_err(|e| Error::IdToken(format!("its payload is not base64url: {e}")))?;
-    let claims: Map<String, Value> =
-        serde_json::from_slice(&bytes).map_err(|e| Error::IdToken(format!("its payload is not JSON: {e}")))?;
+    let claims: Map<String, Value> = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::IdToken(format!("its payload is not JSON: {e}")))?;
 
     if claims.get("iss").and_then(Value::as_str) != Some(issuer) {
         return Err(Error::IdToken("it was issued by another issuer".into()));
@@ -51,7 +51,11 @@ pub(crate) fn claims(
             return Err(Error::IdToken("its nonce is not this sign-in's".into()));
         }
     }
-    if claims.get("sub").and_then(Value::as_str).is_none_or(str::is_empty) {
+    if claims
+        .get("sub")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
         return Err(Error::IdToken("it has no subject".into()));
     }
     Ok(claims)
@@ -94,7 +98,16 @@ mod tests {
     fn accepts_a_token_for_this_sign_in() {
         let c = check(&token(json!({}))).unwrap();
         assert_eq!(c["sub"], "user-1");
-        assert!(claims(&token(json!({"aud": "app"})), "https://auth.example", "app", Some("n-1"), NOW).is_ok());
+        assert!(
+            claims(
+                &token(json!({"aud": "app"})),
+                "https://auth.example",
+                "app",
+                Some("n-1"),
+                NOW
+            )
+            .is_ok()
+        );
     }
 
     #[test]

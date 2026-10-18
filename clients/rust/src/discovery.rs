@@ -14,9 +14,15 @@ pub(crate) struct Discovery {
 
 pub(crate) fn fetch(agent: &ureq::Agent, issuer: &str) -> Result<Discovery, Error> {
     let url = format!("{issuer}/.well-known/openid-configuration");
-    let mut response = agent.get(&url).call().map_err(|e| Error::Http(e.to_string()))?;
+    let mut response = agent
+        .get(&url)
+        .call()
+        .map_err(|e| Error::Http(e.to_string()))?;
     let status = response.status().as_u16();
-    let body = response.body_mut().read_to_string().map_err(|e| Error::Http(e.to_string()))?;
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| Error::Http(e.to_string()))?;
     if status != 200 {
         return Err(Error::Http(format!("{url} answered HTTP {status}")));
     }

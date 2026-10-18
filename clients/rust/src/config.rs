@@ -38,7 +38,9 @@ impl Config {
             issuer: issuer.into().trim_end_matches('/').to_string(),
             store_key: format!("authway.{client_id}"),
             client_id,
-            scopes: ["openid", "profile", "email", "offline_access"].map(String::from).to_vec(),
+            scopes: ["openid", "profile", "email", "offline_access"]
+                .map(String::from)
+                .to_vec(),
             audience: Vec::new(),
             redirect_path: "/callback".to_string(),
             success_page: DEFAULT_SUCCESS_PAGE.to_string(),
@@ -73,7 +75,11 @@ impl Config {
     /// The path of the registered loopback redirect URI. Default `/callback`.
     pub fn redirect_path(mut self, path: impl Into<String>) -> Self {
         let path = path.into();
-        self.redirect_path = if path.starts_with('/') { path } else { format!("/{path}") };
+        self.redirect_path = if path.starts_with('/') {
+            path
+        } else {
+            format!("/{path}")
+        };
         self
     }
 

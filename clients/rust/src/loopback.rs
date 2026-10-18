@@ -9,7 +9,10 @@ use crate::error::Error;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Callback {
     Code(String),
-    Denied { error: String, description: Option<String> },
+    Denied {
+        error: String,
+        description: Option<String>,
+    },
 }
 
 /// Reads one request line — `GET /callback?code=…&state=… HTTP/1.1` — and returns what it carries
@@ -77,10 +80,15 @@ pub(crate) fn wait(
             Ok((mut stream, _)) => {
                 // A connection that sends nothing must not hold up the wait.
                 stream.set_nonblocking(false).map_err(Error::Loopback)?;
-                stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(Error::Loopback)?;
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .map_err(Error::Loopback)?;
                 let mut line = String::new();
                 let read = BufReader::new(&stream).read_line(&mut line).is_ok();
-                match read.then(|| parse_request_line(&line, path, state)).flatten() {
+                match read
+                    .then(|| parse_request_line(&line, path, state))
+                    .flatten()
+                {
                     Some(Callback::Code(code)) => {
                         respond(&mut stream, "200 OK", success_page);
                         return Ok(code);
@@ -111,7 +119,11 @@ mod tests {
     #[test]
     fn reads_the_code_of_this_sign_in() {
         assert_eq!(
-            parse_request_line("GET /callback?code=c%2B1&state=s-1 HTTP/1.1", "/callback", "s-1"),
+            parse_request_line(
+                "GET /callback?code=c%2B1&state=s-1 HTTP/1.1",
+                "/callback",
+                "s-1"
+            ),
             Some(Callback::Code("c+1".into()))
         );
     }
@@ -124,7 +136,10 @@ mod tests {
                 "/callback",
                 "s-1"
             ),
-            Some(Callback::Denied { error: "access_denied".into(), description: Some("The user declined".into()) })
+            Some(Callback::Denied {
+                error: "access_denied".into(),
+                description: Some("The user declined".into())
+            })
         );
     }
 
@@ -158,12 +173,24 @@ mod tests {
         let browser = std::thread::spawn(move || {
             let stray = send(addr, "GET /favicon.ico HTTP/1.1\r\n\r\n");
             let forged = send(addr, "GET /callback?code=x&state=forged HTTP/1.1\r\n\r\n");
-            let real = send(addr, "GET /callback?code=the-code&state=s-1 HTTP/1.1\r\n\r\n");
+            let real = send(
+                addr,
+                "GET /callback?code=the-code&state=s-1 HTTP/1.1\r\n\r\n",
+            );
             (stray, forged, real)
         });
         let never = AtomicBool::new(false);
         let deadline = Instant::now() + Duration::from_secs(10);
-        let code = wait(listener, "/callback", "s-1", deadline, &never, "done", "failed").unwrap();
+        let code = wait(
+            listener,
+            "/callback",
+            "s-1",
+            deadline,
+            &never,
+            "done",
+            "failed",
+        )
+        .unwrap();
         assert_eq!(code, "the-code");
         let (stray, forged, real) = browser.join().unwrap();
         assert!(stray.starts_with("HTTP/1.1 404"));
@@ -175,10 +202,24 @@ mod tests {
     fn ends_on_a_refusal_with_the_failure_page() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        let browser = std::thread::spawn(move || send(addr, "GET /callback?error=access_denied&state=s-1 HTTP/1.1\r\n\r\n"));
+        let browser = std::thread::spawn(move || {
+            send(
+                addr,
+                "GET /callback?error=access_denied&state=s-1 HTTP/1.1\r\n\r\n",
+            )
+        });
         let never = AtomicBool::new(false);
         let deadline = Instant::now() + Duration::from_secs(10);
-        let err = wait(listener, "/callback", "s-1", deadline, &never, "done", "failed").unwrap_err();
+        let err = wait(
+            listener,
+            "/callback",
+            "s-1",
+            deadline,
+            &never,
+            "done",
+            "failed",
+        )
+        .unwrap_err();
         assert!(matches!(err, Error::Denied { ref error, .. } if error == "access_denied"));
         assert!(browser.join().unwrap().ends_with("failed"));
     }
@@ -188,15 +229,31 @@ mod tests {
         let never = AtomicBool::new(false);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let started = Instant::now();
-        let err = wait(listener, "/callback", "s", Instant::now() + Duration::from_millis(200), &never, "", "")
-            .unwrap_err();
+        let err = wait(
+            listener,
+            "/callback",
+            "s",
+            Instant::now() + Duration::from_millis(200),
+            &never,
+            "",
+            "",
+        )
+        .unwrap_err();
         assert!(matches!(err, Error::TimedOut));
         assert!(started.elapsed() < Duration::from_secs(3));
 
         let cancelled = AtomicBool::new(true);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let err = wait(listener, "/callback", "s", Instant::now() + Duration::from_secs(60), &cancelled, "", "")
-            .unwrap_err();
+        let err = wait(
+            listener,
+            "/callback",
+            "s",
+            Instant::now() + Duration::from_secs(60),
+            &cancelled,
+            "",
+            "",
+        )
+        .unwrap_err();
         assert!(matches!(err, Error::Cancelled));
     }
 }

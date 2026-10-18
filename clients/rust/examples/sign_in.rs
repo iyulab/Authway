@@ -26,7 +26,10 @@ fn main() {
     };
     let mut config = Config::new(issuer, client_id.clone());
     if let Some(i) = args.iter().position(|a| a == "--refresh-ahead") {
-        let seconds = args.get(i + 1).and_then(|s| s.parse().ok()).expect("--refresh-ahead takes seconds");
+        let seconds = args
+            .get(i + 1)
+            .and_then(|s| s.parse().ok())
+            .expect("--refresh-ahead takes seconds");
         config = config.refresh_ahead(Duration::from_secs(seconds));
     }
     if let Err(e) = run(config, &client_id) {
@@ -39,9 +42,15 @@ fn run(config: Config, client_id: &str) -> Result<(), authway_native::Error> {
     let store = Arc::new(MemoryStore::default());
     let client = NativeClient::new(config, store.clone());
     let stored_refresh_token = || -> String {
-        let raw = store.get(&format!("authway.{client_id}")).unwrap().unwrap_or_default();
+        let raw = store
+            .get(&format!("authway.{client_id}"))
+            .unwrap()
+            .unwrap_or_default();
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
-        value["refresh_token"].as_str().unwrap_or_default().to_string()
+        value["refresh_token"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
     };
 
     let pending = client.begin_sign_in()?;

@@ -45,7 +45,12 @@ pub struct MemoryStore {
 
 impl TokenStore for MemoryStore {
     fn get(&self, key: &str) -> Result<Option<String>, StoreError> {
-        Ok(self.values.lock().unwrap_or_else(|e| e.into_inner()).get(key).cloned())
+        Ok(self
+            .values
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .cloned())
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), StoreError> {
@@ -57,7 +62,10 @@ impl TokenStore for MemoryStore {
     }
 
     fn delete(&self, key: &str) -> Result<(), StoreError> {
-        self.values.lock().unwrap_or_else(|e| e.into_inner()).remove(key);
+        self.values
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key);
         Ok(())
     }
 }

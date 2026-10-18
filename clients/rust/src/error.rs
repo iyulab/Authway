@@ -40,13 +40,19 @@ impl fmt::Display for Error {
             Error::Http(m) => write!(f, "could not reach the authorization server: {m}"),
             Error::Discovery(m) => write!(f, "unusable discovery document: {m}"),
             Error::Loopback(e) => write!(f, "could not listen for the sign-in redirect: {e}"),
-            Error::TimedOut => f.write_str("sign-in timed out: no redirect arrived from the browser"),
+            Error::TimedOut => {
+                f.write_str("sign-in timed out: no redirect arrived from the browser")
+            }
             Error::Cancelled => f.write_str("sign-in was cancelled"),
             Error::Denied { error, description } => match description {
                 Some(d) => write!(f, "sign-in was refused ({error}): {d}"),
                 None => write!(f, "sign-in was refused ({error})"),
             },
-            Error::Token { status, error, description } => {
+            Error::Token {
+                status,
+                error,
+                description,
+            } => {
                 write!(f, "the token endpoint refused the request (HTTP {status}")?;
                 if let Some(e) = error {
                     write!(f, ", {e}")?;

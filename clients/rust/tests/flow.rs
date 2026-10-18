@@ -46,7 +46,14 @@ impl StandIn {
     }
 
     fn forms(&self, path: &str) -> Vec<HashMap<String, String>> {
-        self.seen.lock().unwrap().forms.iter().filter(|(p, _)| p == path).map(|(_, f)| f.clone()).collect()
+        self.seen
+            .lock()
+            .unwrap()
+            .forms
+            .iter()
+            .filter(|(p, _)| p == path)
+            .map(|(_, f)| f.clone())
+            .collect()
     }
 }
 
@@ -85,11 +92,17 @@ fn serve(stream: TcpStream, addr: SocketAddr, seen: &Mutex<Seen>, token: &TokenA
             }),
         ),
         "/oauth2/token" => {
-            seen.lock().unwrap().forms.push((path.clone(), form.clone()));
+            seen.lock()
+                .unwrap()
+                .forms
+                .push((path.clone(), form.clone()));
             token(&form)
         }
         "/oauth2/revoke" => {
-            seen.lock().unwrap().forms.push((path.clone(), form.clone()));
+            seen.lock()
+                .unwrap()
+                .forms
+                .push((path.clone(), form.clone()));
             (200, json!({}))
         }
         _ => (404, json!({})),
@@ -105,7 +118,10 @@ fn serve(stream: TcpStream, addr: SocketAddr, seen: &Mutex<Seen>, token: &TokenA
 }
 
 fn id_token(issuer: &str, nonce: Option<&str>) -> String {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let mut claims = json!({"iss": issuer, "aud": ["desktop-app"], "sub": "user-1", "email": "user@example.com", "exp": now + 3600});
     if let Some(n) = nonce {
         claims["nonce"] = json!(n);
@@ -119,16 +135,28 @@ fn browser_returns(authorize_url: &str, params: &str) -> String {
     let url = url::Url::parse(authorize_url).unwrap();
     let q: HashMap<String, String> = url.query_pairs().into_owned().collect();
     let redirect = url::Url::parse(&q["redirect_uri"]).unwrap();
-    let mut s = TcpStream::connect((redirect.host_str().unwrap(), redirect.port().unwrap())).unwrap();
+    let mut s =
+        TcpStream::connect((redirect.host_str().unwrap(), redirect.port().unwrap())).unwrap();
     let state = &q["state"];
-    write!(s, "GET {}?{params}&state={state} HTTP/1.1\r\nHost: x\r\n\r\n", redirect.path()).unwrap();
+    write!(
+        s,
+        "GET {}?{params}&state={state} HTTP/1.1\r\nHost: x\r\n\r\n",
+        redirect.path()
+    )
+    .unwrap();
     let mut out = String::new();
     let _ = s.read_to_string(&mut out);
     out
 }
 
 fn nonce_of(authorize_url: &str) -> String {
-    url::Url::parse(authorize_url).unwrap().query_pairs().find(|(k, _)| k == "nonce").unwrap().1.into_owned()
+    url::Url::parse(authorize_url)
+        .unwrap()
+        .query_pairs()
+        .find(|(k, _)| k == "nonce")
+        .unwrap()
+        .1
+        .into_owned()
 }
 
 #[test]
@@ -163,11 +191,18 @@ fn signs_in_refreshes_and_signs_out() {
     let pending = client.begin_sign_in().unwrap();
     let url = pending.url().to_string();
     assert!(url.starts_with(&format!("{}/oauth2/auth?", server.issuer())));
-    let q: HashMap<String, String> = url::Url::parse(&url).unwrap().query_pairs().into_owned().collect();
+    let q: HashMap<String, String> = url::Url::parse(&url)
+        .unwrap()
+        .query_pairs()
+        .into_owned()
+        .collect();
     assert_eq!(q["client_id"], "desktop-app");
     assert_eq!(q["code_challenge_method"], "S256");
     assert_eq!(q["scope"], "openid profile email offline_access");
-    assert!(q["redirect_uri"].starts_with("http://127.0.0.1:") && q["redirect_uri"].ends_with("/callback"));
+    assert!(
+        q["redirect_uri"].starts_with("http://127.0.0.1:")
+            && q["redirect_uri"].ends_with("/callback")
+    );
     *nonce.lock().unwrap() = Some(nonce_of(&url));
 
     let browser = std::thread::spawn(move || browser_returns(&url, "code=the-code"));
@@ -183,7 +218,8 @@ fn signs_in_refreshes_and_signs_out() {
 
     // 30 seconds left is inside the 60-second margin: refreshed, and the new refresh token kept.
     assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
-    let stored: Value = serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
+    let stored: Value =
+        serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
     assert_eq!(stored["refresh_token"], "refresh-2");
     // Fresh now: no second refresh.
     assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
@@ -191,7 +227,11 @@ fn signs_in_refreshes_and_signs_out() {
 
     let out = client.sign_out().unwrap();
     assert!(out.was_signed_in && out.revoked);
-    let revoked: Vec<String> = server.forms("/oauth2/revoke").iter().map(|f| f["token"].clone()).collect();
+    let revoked: Vec<String> = server
+        .forms("/oauth2/revoke")
+        .iter()
+        .map(|f| f["token"].clone())
+        .collect();
     assert_eq!(revoked, ["refresh-2", "access-2"]);
     assert!(client.session().unwrap().is_none());
     assert_eq!(client.access_token().unwrap(), None);
@@ -199,7 +239,12 @@ fn signs_in_refreshes_and_signs_out() {
 
 #[test]
 fn a_refused_refresh_ends_the_session() {
-    let server = StandIn::start(Box::new(|_| (400, json!({"error": "invalid_grant", "error_description": "revoked"}))));
+    let server = StandIn::start(Box::new(|_| {
+        (
+            400,
+            json!({"error": "invalid_grant", "error_description": "revoked"}),
+        )
+    }));
     let store = Arc::new(MemoryStore::default());
     store
         .set(
@@ -215,10 +260,15 @@ fn a_refused_refresh_ends_the_session() {
 
 #[test]
 fn another_token_endpoint_failure_keeps_the_session() {
-    let server = StandIn::start(Box::new(|_| (503, json!({"code": "unavailable", "detail": "try later"}))));
+    let server = StandIn::start(Box::new(|_| {
+        (503, json!({"code": "unavailable", "detail": "try later"}))
+    }));
     let store = Arc::new(MemoryStore::default());
     store
-        .set("authway.desktop-app", &json!({"access_token": "old", "expires_at": 0, "refresh_token": "r"}).to_string())
+        .set(
+            "authway.desktop-app",
+            &json!({"access_token": "old", "expires_at": 0, "refresh_token": "r"}).to_string(),
+        )
         .unwrap();
     let client = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store.clone());
     let err = client.access_token().unwrap_err();

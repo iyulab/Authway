@@ -34,6 +34,9 @@ mod tests {
         let b = random_token();
         assert_ne!(a, b);
         assert_eq!(a.len(), 43);
-        assert!(a.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            a.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
     }
 }

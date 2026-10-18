@@ -50,7 +50,12 @@ struct Stored {
 impl Stored {
     fn session(&self) -> Session {
         Session {
-            subject: self.claims.get("sub").and_then(Value::as_str).unwrap_or_default().to_string(),
+            subject: self
+                .claims
+                .get("sub")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             claims: self.claims.clone(),
             access_token_expires_at: UNIX_EPOCH + Duration::from_secs(self.expires_at),
         }
@@ -72,7 +77,10 @@ struct TokenResponse {
 const ASSUMED_LIFETIME_SECONDS: u64 = 300;
 
 fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 struct Inner {
@@ -158,7 +166,9 @@ impl NativeClient {
     /// revoked); sign in again.
     pub fn access_token(&self) -> Result<Option<String>, Error> {
         let _one_at_a_time = self.inner.session.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(stored) = self.load()? else { return Ok(None) };
+        let Some(stored) = self.load()? else {
+            return Ok(None);
+        };
         let ahead = self.inner.config.refresh_ahead.as_secs();
         if stored.expires_at > now() + ahead {
             return Ok(Some(stored.access_token));
@@ -186,7 +196,10 @@ impl NativeClient {
     pub fn sign_out(&self) -> Result<SignedOut, Error> {
         let _one_at_a_time = self.inner.session.lock().unwrap_or_else(|e| e.into_inner());
         let Some(stored) = self.load()? else {
-            return Ok(SignedOut { was_signed_in: false, revoked: false });
+            return Ok(SignedOut {
+                was_signed_in: false,
+                revoked: false,
+            });
         };
         let endpoint = self.discovery().ok().and_then(|d| d.revocation_endpoint);
         let revoked = match endpoint {
@@ -201,11 +214,18 @@ impl NativeClient {
             None => false,
         };
         self.remove()?;
-        Ok(SignedOut { was_signed_in: true, revoked })
+        Ok(SignedOut {
+            was_signed_in: true,
+            revoked,
+        })
     }
 
     fn discovery(&self) -> Result<Discovery, Error> {
-        let mut cached = self.inner.discovery.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cached = self
+            .inner
+            .discovery
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(d) = cached.as_ref() {
             return Ok(d.clone());
         }
@@ -215,7 +235,11 @@ impl NativeClient {
     }
 
     fn load(&self) -> Result<Option<Stored>, Error> {
-        let raw = self.inner.store.get(&self.inner.config.store_key).map_err(Error::Store)?;
+        let raw = self
+            .inner
+            .store
+            .get(&self.inner.config.store_key)
+            .map_err(Error::Store)?;
         // A value this version cannot read is treated as no session rather than an error the app
         // cannot get past: signing in again replaces it.
         Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
@@ -223,11 +247,17 @@ impl NativeClient {
 
     fn save(&self, stored: &Stored) -> Result<(), Error> {
         let value = serde_json::to_string(stored).expect("a session always serializes");
-        self.inner.store.set(&self.inner.config.store_key, &value).map_err(Error::Store)
+        self.inner
+            .store
+            .set(&self.inner.config.store_key, &value)
+            .map_err(Error::Store)
     }
 
     fn remove(&self) -> Result<(), Error> {
-        self.inner.store.delete(&self.inner.config.store_key).map_err(Error::Store)
+        self.inner
+            .store
+            .delete(&self.inner.config.store_key)
+            .map_err(Error::Store)
     }
 
     fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<(u16, String), Error> {
@@ -238,7 +268,10 @@ impl NativeClient {
             .send_form(form.iter().copied())
             .map_err(|e| Error::Http(e.to_string()))?;
         let status = response.status().as_u16();
-        let body = response.body_mut().read_to_string().map_err(|e| Error::Http(e.to_string()))?;
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| Error::Http(e.to_string()))?;
         Ok((status, body))
     }
 
@@ -246,14 +279,23 @@ impl NativeClient {
         let discovery = self.discovery()?;
         let (status, body) = self.post_form(&discovery.token_endpoint, form)?;
         if status == 200 {
-            return serde_json::from_str(&body).map_err(|e| Error::Http(format!("unreadable token response: {e}")));
+            return serde_json::from_str(&body)
+                .map_err(|e| Error::Http(format!("unreadable token response: {e}")));
         }
         // RFC 6749 §5.2 `error` / `error_description`, or RFC 9457 `code` / `detail`.
         let refusal: Map<String, Value> = serde_json::from_str(&body).unwrap_or_default();
         let field = |a: &str, b: &str| {
-            refusal.get(a).or_else(|| refusal.get(b)).and_then(Value::as_str).map(String::from)
+            refusal
+                .get(a)
+                .or_else(|| refusal.get(b))
+                .and_then(Value::as_str)
+                .map(String::from)
         };
-        Err(Error::Token { status, error: field("error", "code"), description: field("error_description", "detail") })
+        Err(Error::Token {
+            status,
+            error: field("error", "code"),
+            description: field("error_description", "detail"),
+        })
     }
 
     /// Redeems a refresh token and stores what comes back. `None` when the server no longer
@@ -266,21 +308,27 @@ impl NativeClient {
             ("client_id", &config.client_id),
         ]) {
             Ok(r) => r,
-            Err(Error::Token { error: Some(ref e), .. }) if e == "invalid_grant" => {
+            Err(Error::Token {
+                error: Some(ref e), ..
+            }) if e == "invalid_grant" => {
                 self.remove()?;
                 return Ok(None);
             }
             Err(e) => return Err(e),
         };
         let claims = match &response.id_token {
-            Some(t) => id_token::claims(t, &self.discovery()?.issuer, &config.client_id, None, now())?,
+            Some(t) => {
+                id_token::claims(t, &self.discovery()?.issuer, &config.client_id, None, now())?
+            }
             None => stored.claims.clone(),
         };
         let renewed = Stored {
             access_token: response.access_token,
             expires_at: now() + response.expires_in.unwrap_or(ASSUMED_LIFETIME_SECONDS),
             // The server issues a new refresh token with each use; the old one is spent.
-            refresh_token: response.refresh_token.or_else(|| stored.refresh_token.clone()),
+            refresh_token: response
+                .refresh_token
+                .or_else(|| stored.refresh_token.clone()),
             claims,
         };
         self.save(&renewed)?;
@@ -290,7 +338,14 @@ impl NativeClient {
     fn revoke(&self, endpoint: &str, token: &str, hint: &str) -> bool {
         let client_id = self.inner.config.client_id.as_str();
         matches!(
-            self.post_form(endpoint, &[("token", token), ("token_type_hint", hint), ("client_id", client_id)]),
+            self.post_form(
+                endpoint,
+                &[
+                    ("token", token),
+                    ("token_type_hint", hint),
+                    ("client_id", client_id)
+                ]
+            ),
             Ok((200, _))
         )
     }
@@ -351,18 +406,27 @@ impl PendingSignIn {
             ("client_id", &config.client_id),
             ("code_verifier", &self.verifier),
         ])?;
-        let id_token = response
-            .id_token
-            .as_deref()
-            .ok_or_else(|| Error::IdToken("the answer has none — request the openid scope".into()))?;
-        let claims = id_token::claims(id_token, &client.discovery()?.issuer, &config.client_id, Some(&self.nonce), now())?;
+        let id_token = response.id_token.as_deref().ok_or_else(|| {
+            Error::IdToken("the answer has none — request the openid scope".into())
+        })?;
+        let claims = id_token::claims(
+            id_token,
+            &client.discovery()?.issuer,
+            &config.client_id,
+            Some(&self.nonce),
+            now(),
+        )?;
         let stored = Stored {
             access_token: response.access_token,
             expires_at: now() + response.expires_in.unwrap_or(ASSUMED_LIFETIME_SECONDS),
             refresh_token: response.refresh_token,
             claims,
         };
-        let _one_at_a_time = client.inner.session.lock().unwrap_or_else(|e| e.into_inner());
+        let _one_at_a_time = client
+            .inner
+            .session
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         client.save(&stored)?;
         Ok(stored.session())
     }
