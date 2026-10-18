@@ -68,6 +68,10 @@ theft: it ends the session. Two processes refreshing from one stored session —
 process — therefore sign the user out. **In one app, let one process sign in, refresh and sign out**; other processes
 ask it for the current access token.
 
+Inside that process no lock of your own is needed: `NativeClient` is `Clone + Send + Sync`, its clones share the
+session, and calls from several threads take turns — when the access token is due, the first caller refreshes and the
+others get the renewed token.
+
 ## Errors
 
 `Error::Denied` — the user declined or the server refused the request; `Error::TimedOut` / `Error::Cancelled` — no

@@ -259,6 +259,47 @@ fn a_refused_refresh_ends_the_session() {
 }
 
 #[test]
+fn concurrent_calls_share_one_refresh() {
+    // The server rotates: the refresh token works once, and a second use is refused as theft.
+    let used = Arc::new(Mutex::new(0));
+    let counted = used.clone();
+    let server = StandIn::start(Box::new(move |form| {
+        let mut used = counted.lock().unwrap();
+        if form["refresh_token"] == "spent" && *used == 0 {
+            *used += 1;
+            (
+                200,
+                json!({"access_token": "access-2", "expires_in": 3600, "refresh_token": "refresh-2", "token_type": "bearer"}),
+            )
+        } else {
+            *used += 1;
+            (
+                400,
+                json!({"error": "invalid_grant", "error_description": "reused"}),
+            )
+        }
+    }));
+    let store = Arc::new(MemoryStore::default());
+    store
+        .set(
+            "authway.desktop-app",
+            &json!({"access_token": "old", "expires_at": 0, "refresh_token": "spent", "claims": {"sub": "user-1"}}).to_string(),
+        )
+        .unwrap();
+    let client = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store);
+    let callers: Vec<_> = (0..8)
+        .map(|_| {
+            let client = client.clone();
+            std::thread::spawn(move || client.access_token().unwrap())
+        })
+        .collect();
+    for caller in callers {
+        assert_eq!(caller.join().unwrap().as_deref(), Some("access-2"));
+    }
+    assert_eq!(*used.lock().unwrap(), 1);
+}
+
+#[test]
 fn another_token_endpoint_failure_keeps_the_session() {
     let server = StandIn::start(Box::new(|_| {
         (503, json!({"code": "unavailable", "detail": "try later"}))

@@ -45,7 +45,10 @@ public sealed class FlowTests
 
         private (HttpStatusCode, object) Record(string path, Dictionary<string, string> form, (HttpStatusCode, object) answer)
         {
-            Forms.Add((path, form));
+            lock (Forms)
+            {
+                Forms.Add((path, form));
+            }
             return answer;
         }
 
@@ -151,6 +154,26 @@ public sealed class FlowTests
         (await client.GetSessionAsync(ct))!.Subject.Should().Be("user-1");
         (await client.GetAccessTokenAsync(ct)).Should().BeNull();
         (await store.GetAsync("authway.desktop-app", ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Concurrent_calls_share_one_refresh()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = await Expired(ct);
+        var used = 0;
+        // The server rotates: the refresh token works once, and a second use is refused as theft.
+        using var http = new HttpClient(new StandIn(form =>
+        {
+            Thread.Sleep(50);
+            return form["refresh_token"] == "spent" && Interlocked.Increment(ref used) == 1
+                ? (HttpStatusCode.OK, new { access_token = "access-2", expires_in = 3600, refresh_token = "refresh-2", token_type = "bearer" })
+                : (HttpStatusCode.BadRequest, new { error = "invalid_grant", error_description = "reused" });
+        }));
+        using var client = new NativeClient(new NativeClientOptions(Issuer, "desktop-app"), store, http);
+        var tokens = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() => client.GetAccessTokenAsync(ct), ct)));
+        tokens.Should().AllBe("access-2");
+        used.Should().Be(1);
     }
 
     [Fact]

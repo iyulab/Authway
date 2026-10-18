@@ -68,6 +68,9 @@ theft: it ends the session. Two processes refreshing from one stored session —
 process — therefore sign the user out. **In one app, let one process sign in, refresh and sign out**; other processes
 ask it for the current access token.
 
+Inside that process no lock of your own is needed: `NativeClient` is thread-safe, and concurrent calls take turns —
+when the access token is due, the first caller refreshes and the others get the renewed token. Share one instance.
+
 ## Failures
 
 Every failure is a `NativeSignInException`; branch on `Failure`: `Denied` (the user declined or the server refused —

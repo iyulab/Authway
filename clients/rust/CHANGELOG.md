@@ -3,6 +3,14 @@
 All notable changes to `authway-native` are recorded here. It is released together with `Authway.Native` (the same client for
 another language), under the same version, apart from the Authway service.
 
+## Unreleased
+
+### Documentation
+
+- Both READMEs say that calls from several threads of one process need no lock of the app's own: they take turns, and
+  when the access token is due the first caller refreshes while the others get the renewed token. A test in each client
+  holds this.
+
 ## 0.1.0 — 2026-10-18
 
 ### Added
