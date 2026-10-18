@@ -33,7 +33,7 @@ func NewFlowEntryHandler(frontendURL string, settle FlowSettler) *FlowEntryHandl
 	return &FlowEntryHandler{frontendURL: strings.TrimRight(frontendURL, "/"), settle: settle}
 }
 
-// Login serves GET /login?login_challenge=… (Hydra's URLS_LOGIN).
+// Login serves GET /flows/login?login_challenge=… (Hydra's URLS_LOGIN).
 func (h *FlowEntryHandler) Login(c *fiber.Ctx) error {
 	var settle func(*fiber.Ctx, string) (string, bool)
 	if h.settle != nil {
@@ -42,7 +42,7 @@ func (h *FlowEntryHandler) Login(c *fiber.Ctx) error {
 	return h.enter(c, "login_challenge", "/login", settle)
 }
 
-// Consent serves GET /consent?consent_challenge=… (Hydra's URLS_CONSENT).
+// Consent serves GET /flows/consent?consent_challenge=… (Hydra's URLS_CONSENT).
 func (h *FlowEntryHandler) Consent(c *fiber.Ctx) error {
 	var settle func(*fiber.Ctx, string) (string, bool)
 	if h.settle != nil {
@@ -51,7 +51,7 @@ func (h *FlowEntryHandler) Consent(c *fiber.Ctx) error {
 	return h.enter(c, "consent_challenge", "/consent", settle)
 }
 
-// Device serves GET /device?device_challenge=…[&user_code=…] (Hydra's
+// Device serves GET /flows/device?device_challenge=…[&user_code=…] (Hydra's
 // URLS_DEVICE_VERIFICATION): a user signing in a device (RFC 8628) is handed
 // to the login UI's code page. A user code the device's complete
 // verification URI carried goes along — it is the code the user is about to
@@ -69,7 +69,7 @@ func (h *FlowEntryHandler) Device(c *fiber.Ctx) error {
 	return c.Redirect(h.frontendURL+"/device?"+q.Encode(), fiber.StatusFound)
 }
 
-// Logout serves GET /logout?logout_challenge=… (Hydra's URLS_LOGOUT).
+// Logout serves GET /flows/logout?logout_challenge=… (Hydra's URLS_LOGOUT).
 func (h *FlowEntryHandler) Logout(c *fiber.Ctx) error {
 	return h.enter(c, "logout_challenge", "/logout", nil)
 }

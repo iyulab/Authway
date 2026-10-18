@@ -25,10 +25,10 @@ function Get-HydraFlowUrls {
     $ui = $EnvVars['AUTH_UI_URL'].TrimEnd('/')
 
     return [ordered]@{
-        URLS_LOGIN   = "$api/login"
-        URLS_CONSENT = "$api/consent"
-        URLS_LOGOUT  = "$api/logout"
-        URLS_DEVICE_VERIFICATION = "$api/device"
+        URLS_LOGIN   = "$api/flows/login"
+        URLS_CONSENT = "$api/flows/consent"
+        URLS_LOGOUT  = "$api/flows/logout"
+        URLS_DEVICE_VERIFICATION = "$api/flows/device"
         URLS_DEVICE_SUCCESS      = "$ui/device/done"
         URLS_ERROR   = "$ui/error"
     }

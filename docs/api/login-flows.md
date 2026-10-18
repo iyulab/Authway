@@ -30,8 +30,8 @@ still asks first (`GET …-flows/{flow}`), because the answer may have become
 
 A screen treats the flow id as opaque: it only ever passes it back, URL-encoded
 in a path segment. Point the authorization server's login, consent and logout
-URLs at the API (`URLS_LOGIN=<API>/login`, `URLS_CONSENT=<API>/consent`,
-`URLS_LOGOUT=<API>/logout`, `URLS_DEVICE_VERIFICATION=<API>/device`); its error
+URLs at the API (`URLS_LOGIN=<API>/flows/login`, `URLS_CONSENT=<API>/flows/consent`,
+`URLS_LOGOUT=<API>/flows/logout`, `URLS_DEVICE_VERIFICATION=<API>/flows/device`); its error
 URL and the page that ends a device sign-in stay on the login UI
 (`<login UI>/error`, `URLS_DEVICE_SUCCESS=<login UI>/device/done`).
 

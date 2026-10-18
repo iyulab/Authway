@@ -184,10 +184,10 @@ jobs:
             -e DSN=memory \
             -e SECRETS_SYSTEM="$(openssl rand -hex 16)" \
             -e URLS_SELF_ISSUER=http://localhost:4444 \
-            -e URLS_LOGIN=http://localhost:8080/login \
-            -e URLS_CONSENT=http://localhost:8080/consent \
-            -e URLS_LOGOUT=http://localhost:8080/logout \
-            -e URLS_DEVICE_VERIFICATION=http://localhost:8080/device \
+            -e URLS_LOGIN=http://localhost:8080/flows/login \
+            -e URLS_CONSENT=http://localhost:8080/flows/consent \
+            -e URLS_LOGOUT=http://localhost:8080/flows/logout \
+            -e URLS_DEVICE_VERIFICATION=http://localhost:8080/flows/device \
             -e URLS_DEVICE_SUCCESS=http://localhost:3001/device/done \
             -e WEBFINGER_OIDC_DISCOVERY_TOKEN_URL=http://localhost:8080/oauth2/token \
             -e OAUTH2_TOKEN_HOOK_URL=http://localhost:8080/internal/token-hook \

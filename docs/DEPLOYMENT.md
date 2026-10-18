@@ -110,9 +110,9 @@ az containerapp create \
     DSN=secretref:dsn \
     SECRETS_SYSTEM=secretref:secrets-system \
     URLS_SELF_ISSUER="https://oauth.authway.in" \
-    URLS_LOGIN="https://api.authway.in/login" \
-    URLS_CONSENT="https://api.authway.in/consent" \
-    URLS_LOGOUT="https://api.authway.in/logout"     WEBFINGER_OIDC_DISCOVERY_TOKEN_URL="https://api.authway.in/oauth2/token"     OAUTH2_TOKEN_HOOK_URL="https://<api app address>/internal/token-hook"     CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS="https://<api app address>/internal/token-hook"     OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE=secretref:token-hook-key
+    URLS_LOGIN="https://api.authway.in/flows/login" \
+    URLS_CONSENT="https://api.authway.in/flows/consent" \
+    URLS_LOGOUT="https://api.authway.in/flows/logout"     WEBFINGER_OIDC_DISCOVERY_TOKEN_URL="https://api.authway.in/oauth2/token"     OAUTH2_TOKEN_HOOK_URL="https://<api app address>/internal/token-hook"     CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS="https://<api app address>/internal/token-hook"     OAUTH2_TOKEN_HOOK_AUTH_CONFIG_VALUE=secretref:token-hook-key
 ```
 
 (plus `--secrets token-hook-key="<openssl rand -hex 32>"`, and the settings
@@ -311,9 +311,9 @@ services:
       DSN: postgres://authway:${DB_PASSWORD}@postgres:5432/hydra?sslmode=disable
       SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
       URLS_SELF_ISSUER: https://oauth.example.com
-      URLS_LOGIN: https://api.example.com/login
-      URLS_CONSENT: https://api.example.com/consent
-      URLS_LOGOUT: https://api.example.com/logout
+      URLS_LOGIN: https://api.example.com/flows/login
+      URLS_CONSENT: https://api.example.com/flows/consent
+      URLS_LOGOUT: https://api.example.com/flows/logout
     ports:
       - "4444:4444"
       - "4445:4445"
@@ -412,9 +412,9 @@ AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
 DSN=postgres://user:password@host:5432/hydra?sslmode=require
 SECRETS_SYSTEM=<at-least-32-random-characters>
 URLS_SELF_ISSUER=https://oauth.authway.in
-URLS_LOGIN=https://api.authway.in/login      # the API hands the login UI an opaque flow id
-URLS_CONSENT=https://api.authway.in/consent
-URLS_LOGOUT=https://api.authway.in/logout
+URLS_LOGIN=https://api.authway.in/flows/login      # the API hands the login UI an opaque flow id
+URLS_CONSENT=https://api.authway.in/flows/consent
+URLS_LOGOUT=https://api.authway.in/flows/logout
 WEBFINGER_OIDC_DISCOVERY_TOKEN_URL=https://api.authway.in/oauth2/token   # the API's token endpoint
 OAUTH2_TOKEN_HOOK_URL=https://<api app address>/internal/token-hook
 CLIENTS_HTTP_PRIVATE_IP_EXCEPTION_URLS=https://<api app address>/internal/token-hook

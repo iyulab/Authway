@@ -359,9 +359,18 @@ func main() {
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)
 
 	// The authorization server sends the browser here to start a login; it is
-	// handed on to the login UI with an opaque flow id.
+	// handed on to the login UI with an opaque flow id. The paths sit under
+	// /flows so the API and the login UI can share one origin: the UI's own
+	// screens are /login, /consent, /logout and /device.
 	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL, authHandler)
 	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
+	app.Get("/flows/login", flowEntryHandler.Login)
+	app.Get("/flows/consent", flowEntryHandler.Consent)
+	app.Get("/flows/logout", flowEntryHandler.Logout)
+	app.Get("/flows/device", flowEntryHandler.Device)
+	// TODO(transition): remove these four once staging's and production's
+	// authorization servers point at /flows/* (publish-hydra after an API that
+	// serves both is deployed) — until then their sign-ins arrive here.
 	app.Get("/login", flowEntryHandler.Login)
 	app.Get("/consent", flowEntryHandler.Consent)
 	app.Get("/logout", flowEntryHandler.Logout)

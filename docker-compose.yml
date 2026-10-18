@@ -107,10 +107,10 @@ services:
       # UI (:3001) an opaque flow id; the error screen is on the UI directly.
       # Deployments derive the same from API_URL/AUTH_UI_URL
       # (scripts/deploy/_shared/hydra-flow-urls.ps1).
-      URLS_LOGIN: http://localhost:8080/login
-      URLS_CONSENT: http://localhost:8080/consent
-      URLS_LOGOUT: http://localhost:8080/logout
-      URLS_DEVICE_VERIFICATION: http://localhost:8080/device
+      URLS_LOGIN: http://localhost:8080/flows/login
+      URLS_CONSENT: http://localhost:8080/flows/consent
+      URLS_LOGOUT: http://localhost:8080/flows/logout
+      URLS_DEVICE_VERIFICATION: http://localhost:8080/flows/device
       URLS_DEVICE_SUCCESS: http://localhost:3001/device/done
       URLS_ERROR: http://localhost:3001/error
       # Discovery names the API's token endpoint, which passes every grant
