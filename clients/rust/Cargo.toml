@@ -1,0 +1,21 @@
+[package]
+name = "authway-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Sign a desktop or command-line app's user in with the system browser (OAuth 2.0 for Native Apps: loopback redirect + PKCE), keep the tokens in a store the app chooses, and refresh them before they expire."
+license = "MIT"
+repository = "https://github.com/iyulab/Authway"
+homepage = "https://github.com/iyulab/Authway/tree/main/clients/rust"
+readme = "README.md"
+keywords = ["oauth", "oidc", "pkce", "desktop", "authway"]
+categories = ["authentication"]
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ureq = { version = "3", features = ["json"] }
+url = "2"
