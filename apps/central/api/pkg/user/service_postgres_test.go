@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -120,6 +121,39 @@ func TestGetByEmailAndTenant_ScopesCorrectly(t *testing.T) {
 	}
 	if gotB.ID != uB.ID {
 		t.Fatalf("GetByEmailAndTenant(tenant B) resolved the wrong user: got %v, want %v", gotB.ID, uB.ID)
+	}
+}
+
+// FindByEmail answers someone looking a user up: the address in any case,
+// and only the tenant asked about.
+func TestFindByEmail_IgnoresCaseAndStaysInTheTenant(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tnA := freshTenant(t, db, ts)
+	tnB := freshTenant(t, db, ts)
+	email := fmt.Sprintf("Found-%s@Example.com", uuid.New().String()[:8])
+
+	uA, err := svc.Create(tnA.ID, &CreateUserRequest{Email: email, Name: "Tenant A user"})
+	if err != nil {
+		t.Fatalf("Create (tenant A): %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, uA.ID) })
+	uB, err := svc.Create(tnB.ID, &CreateUserRequest{Email: email, Name: "Tenant B user"})
+	if err != nil {
+		t.Fatalf("Create (tenant B): %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, uB.ID) })
+
+	found, err := svc.FindByEmail(tnA.ID, strings.ToLower(email))
+	if err != nil {
+		t.Fatalf("FindByEmail: %v", err)
+	}
+	if len(found) != 1 || found[0].ID != uA.ID {
+		t.Fatalf("FindByEmail(tenant A, lower case) = %v, want only %v", found, uA.ID)
+	}
+	none, err := svc.FindByEmail(tnA.ID, "nobody-"+email)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("FindByEmail(unknown) = %v, %v; want none", none, err)
 	}
 }
 

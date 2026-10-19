@@ -14,11 +14,10 @@ import (
 	"authway/apps/central/api/internal/hydra"
 )
 
-// allowedScopes is the initial admin-API scope allowlist a service_client
-// may be granted. Extend this (and the CreateServiceClientRequest.Scopes
-// validator tag) when a second admin scope (e.g. admin.invitations:write)
-// is actually needed by a consumer; do not pre-add scopes nothing requests
-// yet.
+// allowedScopes are the admin-API scopes a service_client may be granted,
+// each reaching only its own tenant. Extend this (and the
+// CreateServiceClientRequest.Scopes validator tag, and the contract's enum)
+// when a consumer needs another; do not pre-add scopes nothing requests yet.
 var allowedScopes = map[string]bool{
 	"admin.clients:write": true,
 	// Read and write the claims stored for the tenant's users
@@ -28,6 +27,15 @@ var allowedScopes = map[string]bool{
 	// and read what they accepted (/api/v1/tenants/{id}/terms,
 	// /api/v1/users/{id}/terms-acceptances).
 	"admin.terms:write": true,
+	// List, read and find by email the tenant's users (GET /api/v1/users,
+	// GET /api/v1/users/{id}, POST /api/v1/users/search) — what a product's
+	// own support console needs to answer its users.
+	"admin.users:read": true,
+	// Change a user of the tenant: suspend and reactivate, name and picture
+	// (PUT /api/v1/users/{id}). Deleting an account stays with the admin API.
+	"admin.users:write": true,
+	// Read the tenant's audit log (GET /api/v1/audit/* — not the purge).
+	"admin.audit:read": true,
 }
 
 // The grant_types a scoped-service-authenticated client-creation request may
@@ -40,7 +48,7 @@ var allowedScopes = map[string]bool{
 
 type CreateServiceClientRequest struct {
 	Name   string   `json:"name" validate:"required"`
-	Scopes []string `json:"scopes" validate:"required,min=1,dive,oneof=admin.clients:write admin.claims:write admin.terms:write"`
+	Scopes []string `json:"scopes" validate:"required,min=1,dive,oneof=admin.clients:write admin.claims:write admin.terms:write admin.users:read admin.users:write admin.audit:read"`
 }
 
 type ClientCredentials struct {

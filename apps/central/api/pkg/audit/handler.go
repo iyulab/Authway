@@ -278,15 +278,16 @@ func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
 	})
 }
 
-// RegisterRoutes registers audit log routes
-// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
-func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
-	audit := app.Group("/audit", adminMiddleware)
-	audit.Get("/logs", h.QueryAuditLogs)
-	audit.Get("/logs/:id", h.GetAuditLog)
-	audit.Get("/users/:userId/activity", h.GetUserActivity)
-	audit.Get("/security", h.GetSecurityEvents)
-	audit.Get("/summary", h.GetAuditSummary)
-	audit.Get("/actions", h.GetAvailableActions)
-	audit.Delete("/logs/purge", tenantscope.RequireOwnerOf(""), h.PurgeOldLogs)
+// RegisterRoutes registers the audit log routes. Reading takes readAuth —
+// the admin API, or a tenant's service credential granted admin.audit:read;
+// purging takes adminAuth and the tenant's owner.
+func (h *Handler) RegisterRoutes(app fiber.Router, adminAuth, readAuth fiber.Handler) {
+	audit := app.Group("/audit")
+	audit.Get("/logs", readAuth, h.QueryAuditLogs)
+	audit.Get("/logs/:id", readAuth, h.GetAuditLog)
+	audit.Get("/users/:userId/activity", readAuth, h.GetUserActivity)
+	audit.Get("/security", readAuth, h.GetSecurityEvents)
+	audit.Get("/summary", readAuth, h.GetAuditSummary)
+	audit.Get("/actions", readAuth, h.GetAvailableActions)
+	audit.Delete("/logs/purge", adminAuth, tenantscope.RequireOwnerOf(""), h.PurgeOldLogs)
 }

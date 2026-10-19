@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -121,6 +122,15 @@ func (f *fakeUserService) GetByEmailAndTenant(tenantID uuid.UUID, email string) 
 		}
 	}
 	return nil, fmt.Errorf("user not found")
+}
+func (f *fakeUserService) FindByEmail(tenantID uuid.UUID, email string) ([]*user.User, error) {
+	var found []*user.User
+	for _, u := range f.users {
+		if strings.EqualFold(u.Email, email) && u.TenantID == tenantID {
+			found = append(found, u)
+		}
+	}
+	return found, nil
 }
 func (f *fakeUserService) GetByTenant(uuid.UUID, int, int) ([]*user.User, int64, error) {
 	return nil, 0, fmt.Errorf("not implemented")

@@ -113,6 +113,39 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	})
 }
 
+// SearchUsersRequest finds a tenant's users by what someone answering them
+// knows. The address travels in the body, not the URL, so it stays out of
+// access logs.
+type SearchUsersRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// Search lists the users of the request's tenant with the given address,
+// compared without regard to case.
+func (h *UserHandler) Search(c *fiber.Ctx) error {
+	tenantID, err := tenantscope.FromRequest(c)
+	if err != nil {
+		return err
+	}
+	var req SearchUsersRequest
+	if err := c.BodyParser(&req); err != nil {
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request", "Invalid request body", fiber.Map{"field": "email"})
+	}
+	if err := h.validator.Struct(&req); err != nil {
+		return apierror.Invalid(c, err)
+	}
+	found, err := h.services.UserService.FindByEmail(tenantID, req.Email)
+	if err != nil {
+		h.logger.Error("Failed to search users", zap.Error(err), zap.String("tenant_id", tenantID.String()))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to search users")
+	}
+	users := make([]user.PublicUser, len(found))
+	for i, u := range found {
+		users[i] = u.ToPublic()
+	}
+	return c.JSON(fiber.Map{"users": users})
+}
+
 // admit refuses, as not found, a user of another tenant than the request
 // names. A missing user is left to the caller's own answer.
 func (h *UserHandler) admit(c *fiber.Ctx, id uuid.UUID) error {

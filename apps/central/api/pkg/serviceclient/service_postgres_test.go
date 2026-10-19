@@ -90,7 +90,7 @@ func TestCreate_RejectsUnknownScope(t *testing.T) {
 	svc := NewService(db, zap.NewNop(), hydra.NewClient(testHydraAdminURL()))
 
 	_, _, err := svc.Create(tenantID, &CreateServiceClientRequest{
-		Name: "bad-scope", Scopes: []string{"admin.users:write"},
+		Name: "bad-scope", Scopes: []string{"admin.everything"},
 	})
 	if err == nil {
 		t.Fatal("expected an error for an unallowlisted scope, got nil")

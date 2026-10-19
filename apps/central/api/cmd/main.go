@@ -551,12 +551,18 @@ func main() {
 	v1.Get("/users/mfa/status", jwtAuth, mfaHandler.GetMFAStatus)
 	v1.Post("/users/mfa/recovery/regenerate", jwtAuth, loginRateLimit, mfaHandler.RegenerateRecoveryCodes)
 
-	// User management routes (Admin only)
+	// User management routes. A tenant's service credential may read its
+	// users (admin.users:read) and change them (admin.users:write) — what a
+	// product's own support console needs; deleting an account stays with the
+	// admin API.
+	usersReadAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.users:read")
+	usersWriteAuth := adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.users:write")
 	v1.Get("/delegations", adminAuth, delegationHandler.List)
 	v1.Delete("/delegations/:id", adminAuth, delegationHandler.Revoke)
-	v1.Get("/users", adminAuth, userHandler.List)
-	v1.Get("/users/:id", adminAuth, userHandler.Get)
-	v1.Put("/users/:id", adminAuth, userHandler.Update)
+	v1.Get("/users", usersReadAuth, userHandler.List)
+	v1.Post("/users/search", usersReadAuth, userHandler.Search)
+	v1.Get("/users/:id", usersReadAuth, userHandler.Get)
+	v1.Put("/users/:id", usersWriteAuth, userHandler.Update)
 	v1.Delete("/users/:id", adminAuth, userHandler.Delete)
 
 	// Tenant Management API routes (Admin only)
@@ -588,7 +594,8 @@ func main() {
 	// into ClientHandler; route registration waits for jwtAuth/adminAuth.
 	// ======================================
 	// adminAuth (declared above) already accepts session tokens and the API key.
-	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminAuth)
+	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminAuth,
+		adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.audit:read"))
 	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)
 
 	// Cleanup expired admin sessions periodically

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/serviceclient"
+	"authway/apps/central/api/pkg/tenantscope"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -298,6 +300,56 @@ func newFakeHydraIntrospectServer(t *testing.T, clientID string) *httptest.Serve
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// A service credential acts in its own tenant: naming none means it, naming
+// it is fine, and naming another is answered as for a tenant that does not
+// exist — not with its own tenant's data under the other tenant's name.
+func TestGetClientAuth_ServiceClientActsInItsOwnTenant(t *testing.T) {
+	const clientID = "authway_svc_own-tenant"
+	own := uuid.New()
+	svc := &fakeServiceClientService{byHydraClientID: map[string]*serviceclient.ServiceClient{
+		clientID: {ID: uuid.New(), TenantID: own, HydraClientID: clientID, GrantedScopes: []string{"admin.users:read"}},
+	}}
+	hydraSrv := newFakeHydraIntrospectServer(t, clientID)
+	h := newTestHandler("api-key-xyz", nil)
+	app := fiber.New()
+	app.Get("/protected", h.GetClientAuth(hydra.NewClient(hydraSrv.URL), svc, "admin.users:read"), func(c *fiber.Ctx) error {
+		id, err := tenantscope.FromRequest(c)
+		if err != nil {
+			return err
+		}
+		return c.SendString(id.String())
+	})
+
+	for _, tc := range []struct {
+		name   string
+		header string
+		want   int
+	}{
+		{"names none", "", fiber.StatusOK},
+		{"names its own", own.String(), fiber.StatusOK},
+		{"names another", uuid.NewString(), fiber.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/protected", nil)
+			req.Header.Set("Authorization", "Bearer anything")
+			if tc.header != "" {
+				req.Header.Set(tenantscope.Header, tc.header)
+			}
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("app.Test: %v", err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != tc.want {
+				t.Fatalf("status = %d (%s), want %d", resp.StatusCode, body, tc.want)
+			}
+			if tc.want == fiber.StatusOK && string(body) != own.String() {
+				t.Fatalf("acted in tenant %s, want its own %s", body, own)
+			}
+		})
+	}
 }
 
 // TestGetClientAuth_ServiceClient covers the four success/rejection

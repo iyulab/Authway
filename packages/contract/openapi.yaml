@@ -1258,9 +1258,13 @@ paths:
         tokens with the standard client_credentials grant and calls the
         administration API inside this tenant only, within its scopes —
         `admin.clients:write` (register clients, a reduced set of fields),
-        `admin.claims:write` (read and write users' claims) and
-        `admin.terms:write` (the tenant's terms documents). The secret is in
-        this answer only.
+        `admin.claims:write` (read and write users' claims),
+        `admin.terms:write` (the tenant's terms documents),
+        `admin.users:read` (list, read and find users by email),
+        `admin.users:write` (suspend, reactivate and rename users — not delete
+        them) and `admin.audit:read` (the tenant's audit log, not its purge).
+        A call that names another tenant is answered as for one that does not
+        exist (404 not_found). The secret is in this answer only.
       security: [{ adminKey: [] }]
       requestBody:
         required: true
@@ -1274,7 +1278,7 @@ paths:
                 scopes:
                   type: array
                   minItems: 1
-                  items: { type: string, enum: [admin.clients:write, admin.claims:write, admin.terms:write] }
+                  items: { type: string, enum: [admin.clients:write, admin.claims:write, admin.terms:write, admin.users:read, admin.users:write, admin.audit:read] }
       responses:
         '201':
           description: Issued
@@ -2533,6 +2537,8 @@ paths:
         well formed is refused (code invalid_request), never ignored. An entry
         is written just after the change it records, not as part of it: a read
         made straight after a change may not show it yet.
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
@@ -2574,6 +2580,9 @@ paths:
     get:
       tags: [admin]
       operationId: getAuditLog
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -2626,6 +2635,9 @@ paths:
     get:
       tags: [admin]
       operationId: getUserAuditActivity
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
@@ -2652,6 +2664,9 @@ paths:
     get:
       tags: [admin]
       operationId: getSecurityAuditEvents
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
@@ -2678,6 +2693,9 @@ paths:
     get:
       tags: [admin]
       operationId: getAuditSummary
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
       responses:
@@ -2707,6 +2725,9 @@ paths:
     get:
       tags: [admin]
       operationId: listAuditActions
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.audit:read); it reads that tenant's log only.
       security: [{ adminKey: [] }]
       responses:
         '200':
@@ -2741,6 +2762,9 @@ paths:
     get:
       tags: [admin]
       operationId: listUsers
+      description: |
+        A provider may also accept a credential scoped to the tenant (scope
+        admin.users:read); it lists that tenant's users only.
       security: [{ adminKey: [] }]
       parameters:
         - name: tenant_id
@@ -2770,12 +2794,58 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/search:
+    post:
+      tags: [admin]
+      operationId: searchUsers
+      description: |
+        The users of the tenant the call names with this email address,
+        compared without regard to case — usually one or none. The address is
+        in the body so that it stays out of URLs and their logs. A provider
+        may also accept a credential scoped to the tenant (scope
+        admin.users:read).
+      security: [{ adminKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: The users with that address
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+        '400':
+          description: No address, or not one (code invalid_request), or no tenant named (code tenant_required)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /api/v1/users/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
     get:
       tags: [admin]
       operationId: getUser
+      description: |
+        A provider may also accept a credential scoped to the user's tenant
+        (scope admin.users:read); such a caller does not find users of other
+        tenants (404).
       security: [{ adminKey: [] }]
       responses:
         '200':
@@ -2794,6 +2864,10 @@ paths:
     put:
       tags: [admin]
       operationId: updateUser
+      description: |
+        A provider may also accept a credential scoped to the user's tenant
+        (scope admin.users:write); such a caller does not find users of other
+        tenants (404).
       security: [{ adminKey: [] }]
       requestBody:
         required: true

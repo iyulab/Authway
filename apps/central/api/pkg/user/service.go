@@ -25,6 +25,11 @@ type Service interface {
 	// GetByEmailAndTenant.
 	GetSoleAccountByEmail(email string) (*User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error)
+	// FindByEmail lists the tenant's accounts with this address, compared
+	// without regard to case — what someone answering a user looks up by.
+	// Usually one or none; addresses differing only in case are separate
+	// accounts, and all of them are returned.
+	FindByEmail(tenantID uuid.UUID, email string) ([]*User, error)
 	// GetByProviderSubject finds the account in a tenant that signs in with a
 	// provider's account (subject is the provider's own identifier for it).
 	// ErrUserNotFound when no account in the tenant is linked to it.
@@ -326,6 +331,15 @@ func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, 
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	return &user, nil
+}
+
+func (s *service) FindByEmail(tenantID uuid.UUID, email string) ([]*User, error) {
+	var users []*User
+	if err := s.db.Where("tenant_id = ? AND lower(email) = lower(?)", tenantID, email).
+		Order("created_at").Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("failed to find users: %w", err)
+	}
+	return users, nil
 }
 
 func (s *service) GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*User, error) {

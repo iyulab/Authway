@@ -368,6 +368,18 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 			return apierror.Refuse(c, fiber.StatusForbidden, "insufficient_scope", "Insufficient scope")
 		}
 
+		// The credential acts in its own tenant. A request that names another
+		// gets the answer for a tenant that does not exist, rather than its
+		// own tenant's data under another tenant's name.
+		h.setTenantIDLocal(c)
+		named, ok, err := tenantscope.Named(c)
+		if err != nil {
+			return err
+		}
+		if ok && named != sc.TenantID {
+			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "tenant not found")
+		}
+
 		c.Locals("admin_authenticated", false)
 		c.Locals("is_admin_console", false)
 		c.Locals("auth_method", "service_client")

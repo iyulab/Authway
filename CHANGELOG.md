@@ -21,6 +21,14 @@
   /api/v1/console/me` lists them. The system tenant cannot be turned off or
   deleted (`409 system_tenant`). See [Console accounts](docs/api/console-accounts.md).
   Migration 048 adds the column and the table.
+- **A tenant's service credential can answer its users** — three scopes for
+  a product's own support console, each reaching the credential's tenant only:
+  `admin.users:read` (list and read users, and find them by email address —
+  `POST /api/v1/users/search`, the address in the body, compared without
+  regard to case), `admin.users:write` (suspend, reactivate, rename — not
+  delete) and `admin.audit:read` (the audit log, not its purge). Until now
+  these calls took the deployment's admin key. See
+  [Service clients](docs/api/service-clients.md).
 
 ### Changed
 

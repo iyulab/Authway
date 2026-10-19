@@ -11,14 +11,20 @@ which scopes it was granted. Hydra is the credential store (`client_id` /
 `client_secret`); Authway only tracks the tenant + scope mapping and whether
 the credential has been revoked.
 
-A service client can be granted three scopes, each authorizing one set of
-endpoints, always for the credential's own tenant:
+A service client can be granted these scopes, each authorizing one set of
+endpoints, always for the credential's own tenant. A call that names another
+tenant (`X-Tenant-ID`, the `tenant_id` query) is answered as for one that does
+not exist (`404 not_found`); a call that names none acts in the credential's
+tenant.
 
 | Scope | What it allows |
 |---|---|
 | `admin.clients:write` | Creating OAuth clients in its tenant via `POST /api/v1/clients`, with a reduced set of fields (section 3). |
 | `admin.claims:write` | Reading and writing the claims stored for its tenant's users via `GET` and `PATCH /api/v1/users/{id}/claims` — see [claims.md](claims.md). A user of another tenant answers `404`. |
 | `admin.terms:write` | Publishing and retiring the documents its tenant's users accept at sign-in, and reading what a user accepted: `GET /api/v1/tenants/{id}/terms`, `PUT`/`DELETE /api/v1/tenants/{id}/terms/{kind}`, `GET /api/v1/users/{id}/terms-acceptances`. Another tenant, or a user of one, answers `404`. |
+| `admin.users:read` | Listing its tenant's users (`GET /api/v1/users`), reading one (`GET /api/v1/users/{id}`) and finding them by email address, compared without regard to case: `POST /api/v1/users/search` with `{"email": "…"}` — in the body, so the address stays out of URLs and their logs. What a product's own support console needs to answer its users. |
+| `admin.users:write` | Changing its tenant's users with `PUT /api/v1/users/{id}`: suspending (`{"active": false}` — the account's sessions end and signing in is refused) and reactivating them, their name and picture. Deleting an account stays with the admin API. |
+| `admin.audit:read` | Reading its tenant's audit log: `GET /api/v1/audit/logs` (and `/{id}`), `/audit/users/{userId}/activity`, `/audit/security`, `/audit/summary`, `/audit/actions`. Purging it stays with the admin API. |
 
 The scopes that count are the ones granted when the service client was
 provisioned (section 1). A valid credential calling an endpoint whose scope
