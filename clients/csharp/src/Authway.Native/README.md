@@ -59,7 +59,10 @@ path, the pages the browser shows when it comes back, and how early to refresh.
 
 `ITokenStore` is three methods — get, set, delete of one value under one key — the shape OS keychain libraries share,
 so an adapter is a few lines (Windows Credential Manager, DPAPI-protected file, …). `MemoryTokenStore` is included for
-tests and one-off command-line runs. The stored value holds the refresh token: keep it where only the user can read it.
+tests and one-off command-line runs. The stored value is the refresh token and the signed-in user's claims; the access
+token stays in memory, so the first `GetAccessTokenAsync()` after the app starts refreshes it. That keeps the value
+well inside one Windows Credential Manager entry (2,560 bytes) and keeps bearer tokens off the disk. Keep the value
+where only the user can read it.
 
 ### One process owns the session
 
@@ -69,7 +72,8 @@ process — therefore sign the user out. **In one app, let one process sign in, 
 ask it for the current access token.
 
 Inside that process no lock of your own is needed: `NativeClient` is thread-safe, and concurrent calls take turns —
-when the access token is due, the first caller refreshes and the others get the renewed token. Share one instance.
+when the access token is due, the first caller refreshes and the others get the renewed token. Share one instance: the
+access token lives in it, so a second instance in the same process refreshes again.
 
 ## Failures
 

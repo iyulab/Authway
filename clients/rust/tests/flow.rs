@@ -216,11 +216,20 @@ fn signs_in_refreshes_and_signs_out() {
     assert_eq!(exchange["redirect_uri"], q["redirect_uri"]);
     assert_eq!(exchange["code_verifier"].len(), 43);
 
+    // The access token stays in the process: the stored value is the refresh token and the claims.
+    let signed_in: Value =
+        serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
+    let mut keys: Vec<&String> = signed_in.as_object().unwrap().keys().collect();
+    keys.sort();
+    assert_eq!(keys, ["claims", "refresh_token"]);
+    assert_eq!(signed_in["refresh_token"], "refresh-1");
+
     // 30 seconds left is inside the 60-second margin: refreshed, and the new refresh token kept.
     assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
     let stored: Value =
         serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
     assert_eq!(stored["refresh_token"], "refresh-2");
+    assert!(stored.get("access_token").is_none());
     // Fresh now: no second refresh.
     assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
     assert_eq!(server.forms("/oauth2/token").len(), 2);
@@ -235,6 +244,101 @@ fn signs_in_refreshes_and_signs_out() {
     assert_eq!(revoked, ["refresh-2", "access-2"]);
     assert!(client.session().unwrap().is_none());
     assert_eq!(client.access_token().unwrap(), None);
+}
+
+#[test]
+fn a_restarted_app_refreshes_once_from_the_stored_refresh_token() {
+    let server = StandIn::start(Box::new(|form| {
+        if form["refresh_token"] == "r-1" {
+            (
+                200,
+                json!({"access_token": "access-2", "expires_in": 3600, "refresh_token": "r-2", "token_type": "bearer"}),
+            )
+        } else {
+            (400, json!({"error": "invalid_grant"}))
+        }
+    }));
+    let store = Arc::new(MemoryStore::default());
+    store
+        .set(
+            "authway.desktop-app",
+            &json!({"refresh_token": "r-1", "claims": {"sub": "user-1"}}).to_string(),
+        )
+        .unwrap();
+    let client = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store.clone());
+
+    let before = client.session().unwrap().unwrap();
+    assert_eq!(before.subject, "user-1");
+    assert_eq!(before.access_token_expires_at, std::time::UNIX_EPOCH);
+    assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
+    assert_eq!(client.access_token().unwrap().as_deref(), Some("access-2"));
+    assert_eq!(server.forms("/oauth2/token").len(), 1);
+    let after = client.session().unwrap().unwrap();
+    assert!(
+        after.access_token_expires_at > std::time::SystemTime::now() + Duration::from_secs(30 * 60)
+    );
+    let stored: Value =
+        serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
+    assert_eq!(
+        stored,
+        json!({"refresh_token": "r-2", "claims": {"sub": "user-1"}})
+    );
+}
+
+#[test]
+fn a_session_stored_by_0_1_keeps_its_access_token_until_the_first_refresh() {
+    let server = StandIn::start(Box::new(|_| (500, json!({}))));
+    let later = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 3600;
+    let store = Arc::new(MemoryStore::default());
+    store
+        .set(
+            "authway.desktop-app",
+            &json!({"access_token": "old", "expires_at": later, "refresh_token": "r", "claims": {"sub": "user-1"}}).to_string(),
+        )
+        .unwrap();
+    let client = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store);
+    assert_eq!(client.access_token().unwrap().as_deref(), Some("old"));
+    assert!(server.forms("/oauth2/token").is_empty());
+}
+
+#[test]
+fn without_a_refresh_token_the_access_token_is_what_is_stored() {
+    let nonce: Arc<Mutex<Option<String>>> = Arc::default();
+    let issuer_slot: Arc<Mutex<String>> = Arc::default();
+    let (n, i) = (nonce.clone(), issuer_slot.clone());
+    let server = StandIn::start(Box::new(move |_| {
+        let issuer = i.lock().unwrap().clone();
+        (
+            200,
+            json!({
+                "access_token": "access-1", "expires_in": 3600,
+                "id_token": id_token(&issuer, n.lock().unwrap().as_deref()), "token_type": "bearer",
+            }),
+        )
+    }));
+    *issuer_slot.lock().unwrap() = server.issuer();
+    let store = Arc::new(MemoryStore::default());
+    let client = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store.clone());
+    let pending = client.begin_sign_in().unwrap();
+    let url = pending.url().to_string();
+    *nonce.lock().unwrap() = Some(nonce_of(&url));
+    let browser = std::thread::spawn(move || browser_returns(&url, "code=the-code"));
+    pending.wait(Duration::from_secs(10)).unwrap();
+    browser.join().unwrap();
+
+    let stored: Value =
+        serde_json::from_str(&store.get("authway.desktop-app").unwrap().unwrap()).unwrap();
+    assert_eq!(stored["access_token"], "access-1");
+    assert!(stored.get("refresh_token").is_none());
+    let restarted = NativeClient::new(Config::new(server.issuer(), "desktop-app"), store);
+    assert_eq!(
+        restarted.access_token().unwrap().as_deref(),
+        Some("access-1")
+    );
 }
 
 #[test]

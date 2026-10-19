@@ -5,6 +5,14 @@ another language), under the same version, apart from the Authway service.
 
 ## Unreleased
 
+### Changed
+
+- The stored session no longer holds the access token — only the refresh token and the ID token's claims; the access
+  token stays in the client, and the first call after a start refreshes it. A real sign-in's stored value carried a
+  JWT access token and passed one Windows Credential Manager entry (2,560 bytes), so a store adapter over it refused
+  the sign-in. A session without a refresh token still stores its access token, since nothing else could resume it.
+  Sessions stored by 0.1.0 are read as they are: no new sign-in is needed.
+
 ### Documentation
 
 - Both READMEs say that calls from several threads of one process need no lock of the app's own: they take turns, and

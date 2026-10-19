@@ -139,6 +139,12 @@ describe.skipIf(clients.length === 0)('native sign-in clients', () => {
         expect(claims.client_id).toBe(client.clientId)
         expect(claims.aud).toContain(AUDIENCE)
 
+        // The stored session leaves the access token in the process, so it fits one Windows
+        // Credential Manager entry (2,560 bytes) even with a JWT access token.
+        const [bytes, held] = (await example.next('STORED')).split(' ')
+        expect(held).toBe('access=false')
+        expect(Number(bytes)).toBeLessThanOrEqual(2560)
+
         expect(await example.next('SIGNED_OUT')).toBe('revoked=true')
         expect(await example.exited).toBe(0)
 

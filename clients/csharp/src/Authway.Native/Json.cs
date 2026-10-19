@@ -15,10 +15,15 @@ internal sealed record TokenResponse(
     string? RefreshToken,
     string? IdToken);
 
-/// <summary>What is kept in the <see cref="ITokenStore"/> between runs. <see cref="ExpiresAt"/> is Unix seconds.</summary>
+/// <summary>
+/// What is kept in the <see cref="ITokenStore"/> between runs: the refresh token and the ID token's claims. The access
+/// token stays in the process — it is renewed from the refresh token, and leaving it out keeps the value small enough for
+/// one OS credential entry. Only a session without a refresh token keeps its access token (and <see cref="ExpiresAt"/>,
+/// Unix seconds), since nothing else could resume it.
+/// </summary>
 internal sealed record StoredSession(
-    string AccessToken,
-    long ExpiresAt,
+    string? AccessToken,
+    long? ExpiresAt,
     string? RefreshToken,
     Dictionary<string, JsonElement> Claims);
 

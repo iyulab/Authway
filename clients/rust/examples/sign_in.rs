@@ -62,6 +62,17 @@ fn run(config: Config, client_id: &str) -> Result<(), authway_native::Error> {
     let token = client.access_token()?.unwrap_or_default();
     println!("ACCESS {token}");
     println!("REFRESH_AFTER {}", stored_refresh_token());
+    // What an OS credential store would hold: its size as UTF-16, and whether the access token is
+    // in it.
+    let stored = store
+        .get(&format!("authway.{client_id}"))
+        .unwrap()
+        .unwrap_or_default();
+    println!(
+        "STORED {} access={}",
+        stored.encode_utf16().count() * 2,
+        !token.is_empty() && stored.contains(&token)
+    );
 
     let out = client.sign_out()?;
     println!("SIGNED_OUT revoked={}", out.revoked);

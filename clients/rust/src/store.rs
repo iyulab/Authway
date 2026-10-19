@@ -26,7 +26,9 @@ pub type StoreError = Box<dyn std::error::Error + Send + Sync>;
 /// }
 /// ```
 ///
-/// The value holds the refresh token. Keep it where only the user can read it.
+/// The value holds the refresh token and the ID token's claims — not the access token, which
+/// stays in the process — so it fits one Windows Credential Manager entry. Keep it where only the
+/// user can read it.
 pub trait TokenStore: Send + Sync {
     /// The value stored under `key`, or `None` when there is none.
     fn get(&self, key: &str) -> Result<Option<String>, StoreError>;

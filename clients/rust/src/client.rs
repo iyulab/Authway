@@ -21,6 +21,8 @@ pub struct Session {
     /// is signed in; an API trusts only the access token.
     pub claims: Map<String, Value>,
     /// When the current access token expires. [`NativeClient::access_token`] refreshes it before.
+    /// The Unix epoch when this process holds none yet — the access token is not stored, so the
+    /// first call after a start refreshes.
     pub access_token_expires_at: SystemTime,
 }
 
@@ -35,31 +37,28 @@ pub struct SignedOut {
     pub revoked: bool,
 }
 
-/// What is kept in the [`TokenStore`] between runs.
+/// What is kept in the [`TokenStore`] between runs: the refresh token and the ID token's claims.
+/// The access token stays in the process — it is renewed from the refresh token, and leaving it out
+/// keeps the value small enough for one OS credential entry. Only a session without a refresh
+/// token keeps its access token, since nothing else could resume it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Stored {
-    access_token: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    access_token: Option<String>,
     /// Seconds since the Unix epoch.
-    expires_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expires_at: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     refresh_token: Option<String>,
     #[serde(default)]
     claims: Map<String, Value>,
 }
 
-impl Stored {
-    fn session(&self) -> Session {
-        Session {
-            subject: self
-                .claims
-                .get("sub")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-            claims: self.claims.clone(),
-            access_token_expires_at: UNIX_EPOCH + Duration::from_secs(self.expires_at),
-        }
-    }
+/// An access token in hand, and when it expires (seconds since the Unix epoch).
+#[derive(Debug, Clone)]
+struct Held {
+    token: String,
+    expires_at: u64,
 }
 
 #[derive(Deserialize)]
@@ -90,6 +89,8 @@ struct Inner {
     discovery: Mutex<Option<Discovery>>,
     /// Held while the stored session is read and replaced, so one refresh happens at a time.
     session: Mutex<()>,
+    /// The access token this process holds. Written only while `session` is held.
+    current: Mutex<Option<Held>>,
 }
 
 /// Signs the user in with the system browser and keeps their session.
@@ -116,6 +117,7 @@ impl NativeClient {
                 agent,
                 discovery: Mutex::new(None),
                 session: Mutex::new(()),
+                current: Mutex::new(None),
             }),
         }
     }
@@ -170,24 +172,23 @@ impl NativeClient {
             return Ok(None);
         };
         let ahead = self.inner.config.refresh_ahead.as_secs();
-        if stored.expires_at > now() + ahead {
-            return Ok(Some(stored.access_token));
+        if let Some(held) = self.held(&stored) {
+            if held.expires_at > now() + ahead {
+                return Ok(Some(held.token));
+            }
         }
         let Some(refresh_token) = stored.refresh_token.clone() else {
             self.remove()?;
             return Ok(None);
         };
-        match self.refresh(&stored, &refresh_token)? {
-            Some(renewed) => Ok(Some(renewed.access_token)),
-            None => Ok(None),
-        }
+        self.refresh(&stored, &refresh_token)
     }
 
     /// Who is signed in, without contacting the server. The access token may have expired; the
     /// next [`access_token`](Self::access_token) refreshes it.
     pub fn session(&self) -> Result<Option<Session>, Error> {
         let _one_at_a_time = self.inner.session.lock().unwrap_or_else(|e| e.into_inner());
-        Ok(self.load()?.map(|s| s.session()))
+        Ok(self.load()?.map(|s| self.session_of(&s)))
     }
 
     /// Ends the session: revokes its tokens at the authorization server and removes it from the
@@ -208,7 +209,9 @@ impl NativeClient {
                     .refresh_token
                     .as_deref()
                     .is_none_or(|t| self.revoke(&endpoint, t, "refresh_token"));
-                let access = self.revoke(&endpoint, &stored.access_token, "access_token");
+                let access = self
+                    .held(&stored)
+                    .is_none_or(|h| self.revoke(&endpoint, &h.token, "access_token"));
                 refresh && access
             }
             None => false,
@@ -234,6 +237,35 @@ impl NativeClient {
         Ok(d)
     }
 
+    fn current(&self) -> std::sync::MutexGuard<'_, Option<Held>> {
+        self.inner.current.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The access token in hand: the one this process holds, or — for a session without a refresh
+    /// token, or one stored by an earlier version — the stored one.
+    fn held(&self, stored: &Stored) -> Option<Held> {
+        self.current().clone().or_else(|| {
+            stored.access_token.clone().map(|token| Held {
+                token,
+                expires_at: stored.expires_at.unwrap_or(0),
+            })
+        })
+    }
+
+    fn session_of(&self, stored: &Stored) -> Session {
+        Session {
+            subject: stored
+                .claims
+                .get("sub")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            claims: stored.claims.clone(),
+            access_token_expires_at: UNIX_EPOCH
+                + Duration::from_secs(self.held(stored).map_or(0, |h| h.expires_at)),
+        }
+    }
+
     fn load(&self) -> Result<Option<Stored>, Error> {
         let raw = self
             .inner
@@ -242,18 +274,53 @@ impl NativeClient {
             .map_err(Error::Store)?;
         // A value this version cannot read is treated as no session rather than an error the app
         // cannot get past: signing in again replaces it.
-        Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
+        let stored: Option<Stored> = raw.and_then(|r| serde_json::from_str(&r).ok());
+        if stored.is_none() {
+            // The session is gone from the store, so the access token this process held belongs
+            // to no session.
+            *self.current() = None;
+        }
+        Ok(stored)
     }
 
-    fn save(&self, stored: &Stored) -> Result<(), Error> {
-        let value = serde_json::to_string(stored).expect("a session always serializes");
+    /// Keeps a token response: the access token in the process, the refresh token and claims in
+    /// the store. Without a refresh token the access token is stored too — nothing else could
+    /// resume the session.
+    fn save(
+        &self,
+        response: TokenResponse,
+        refresh_token: Option<String>,
+        claims: Map<String, Value>,
+    ) -> Result<(Stored, Held), Error> {
+        let held = Held {
+            token: response.access_token,
+            expires_at: now() + response.expires_in.unwrap_or(ASSUMED_LIFETIME_SECONDS),
+        };
+        let stored = match refresh_token {
+            Some(refresh_token) => Stored {
+                access_token: None,
+                expires_at: None,
+                refresh_token: Some(refresh_token),
+                claims,
+            },
+            None => Stored {
+                access_token: Some(held.token.clone()),
+                expires_at: Some(held.expires_at),
+                refresh_token: None,
+                claims,
+            },
+        };
+        let value = serde_json::to_string(&stored).expect("a session always serializes");
         self.inner
             .store
             .set(&self.inner.config.store_key, &value)
-            .map_err(Error::Store)
+            .map_err(Error::Store)?;
+        *self.current() = Some(held.clone());
+        Ok((stored, held))
     }
 
     fn remove(&self) -> Result<(), Error> {
+        *self.current() = None;
         self.inner
             .store
             .delete(&self.inner.config.store_key)
@@ -298,9 +365,9 @@ impl NativeClient {
         })
     }
 
-    /// Redeems a refresh token and stores what comes back. `None` when the server no longer
-    /// accepts it: the session is removed.
-    fn refresh(&self, stored: &Stored, refresh_token: &str) -> Result<Option<Stored>, Error> {
+    /// Redeems a refresh token, stores what comes back and returns the new access token. `None`
+    /// when the server no longer accepts it: the session is removed.
+    fn refresh(&self, stored: &Stored, refresh_token: &str) -> Result<Option<String>, Error> {
         let config = &self.inner.config;
         let response = match self.token_request(&[
             ("grant_type", "refresh_token"),
@@ -322,17 +389,13 @@ impl NativeClient {
             }
             None => stored.claims.clone(),
         };
-        let renewed = Stored {
-            access_token: response.access_token,
-            expires_at: now() + response.expires_in.unwrap_or(ASSUMED_LIFETIME_SECONDS),
-            // The server issues a new refresh token with each use; the old one is spent.
-            refresh_token: response
-                .refresh_token
-                .or_else(|| stored.refresh_token.clone()),
-            claims,
-        };
-        self.save(&renewed)?;
-        Ok(Some(renewed))
+        // The server issues a new refresh token with each use; the old one is spent.
+        let refresh_token = response
+            .refresh_token
+            .clone()
+            .or_else(|| stored.refresh_token.clone());
+        let (_, held) = self.save(response, refresh_token, claims)?;
+        Ok(Some(held.token))
     }
 
     fn revoke(&self, endpoint: &str, token: &str, hint: &str) -> bool {
@@ -416,18 +479,13 @@ impl PendingSignIn {
             Some(&self.nonce),
             now(),
         )?;
-        let stored = Stored {
-            access_token: response.access_token,
-            expires_at: now() + response.expires_in.unwrap_or(ASSUMED_LIFETIME_SECONDS),
-            refresh_token: response.refresh_token,
-            claims,
-        };
         let _one_at_a_time = client
             .inner
             .session
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        client.save(&stored)?;
-        Ok(stored.session())
+        let refresh_token = response.refresh_token.clone();
+        let (stored, _) = client.save(response, refresh_token, claims)?;
+        Ok(client.session_of(&stored))
     }
 }

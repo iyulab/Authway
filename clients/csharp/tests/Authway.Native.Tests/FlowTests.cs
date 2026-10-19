@@ -124,9 +124,16 @@ public sealed class FlowTests
         exchange["redirect_uri"].Should().Be(query["redirect_uri"]);
         exchange["code_verifier"].Should().HaveLength(43);
 
+        // The access token stays in the process: the stored value is the refresh token and the claims.
+        var signedIn = JsonNode.Parse((await store.GetAsync("authway.desktop-app", ct))!)!.AsObject();
+        signedIn.Select(p => p.Key).Should().BeEquivalentTo("refresh_token", "claims");
+        signedIn["refresh_token"]!.GetValue<string>().Should().Be("refresh-1");
+
         // 30 seconds left is inside the 60-second margin: refreshed, and the new refresh token kept.
         (await client.GetAccessTokenAsync(ct)).Should().Be("access-2");
-        JsonNode.Parse((await store.GetAsync("authway.desktop-app", ct))!)!["refresh_token"]!.GetValue<string>().Should().Be("refresh-2");
+        var refreshed = JsonNode.Parse((await store.GetAsync("authway.desktop-app", ct))!)!.AsObject();
+        refreshed["refresh_token"]!.GetValue<string>().Should().Be("refresh-2");
+        refreshed.ContainsKey("access_token").Should().BeFalse();
         (await client.GetAccessTokenAsync(ct)).Should().Be("access-2");
         server.FormsTo("/oauth2/token").Should().HaveCount(2);
 
@@ -142,6 +149,67 @@ public sealed class FlowTests
         var store = new MemoryTokenStore();
         await store.SetAsync("authway.desktop-app", """{"access_token":"old","expires_at":0,"refresh_token":"spent","claims":{"sub":"user-1"}}""", ct);
         return store;
+    }
+
+    [Fact]
+    public async Task A_restarted_app_refreshes_once_from_the_stored_refresh_token()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = new MemoryTokenStore();
+        await store.SetAsync("authway.desktop-app", """{"refresh_token":"r-1","claims":{"sub":"user-1"}}""", ct);
+        var server = new StandIn(form => form["refresh_token"] == "r-1"
+            ? (HttpStatusCode.OK, new { access_token = "access-2", expires_in = 3600, refresh_token = "r-2", token_type = "bearer" })
+            : (HttpStatusCode.BadRequest, new { error = "invalid_grant" }));
+        using var http = new HttpClient(server);
+        using var client = new NativeClient(new NativeClientOptions(Issuer, "desktop-app"), store, http);
+
+        var before = (await client.GetSessionAsync(ct))!;
+        before.Subject.Should().Be("user-1");
+        before.AccessTokenExpiresAt.Should().Be(DateTimeOffset.UnixEpoch);
+        (await client.GetAccessTokenAsync(ct)).Should().Be("access-2");
+        (await client.GetAccessTokenAsync(ct)).Should().Be("access-2");
+        server.FormsTo("/oauth2/token").Should().HaveCount(1);
+        (await client.GetSessionAsync(ct))!.AccessTokenExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(30));
+        (await store.GetAsync("authway.desktop-app", ct)).Should().Be("""{"refresh_token":"r-2","claims":{"sub":"user-1"}}""");
+    }
+
+    [Fact]
+    public async Task A_session_stored_by_0_1_keeps_its_access_token_until_the_first_refresh()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var store = new MemoryTokenStore();
+        var later = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        await store.SetAsync("authway.desktop-app", $$$"""{"access_token":"old","expires_at":{{{later}}},"refresh_token":"r","claims":{"sub":"user-1"}}""", ct);
+        var server = new StandIn(_ => (HttpStatusCode.InternalServerError, new { }));
+        using var http = new HttpClient(server);
+        using var client = new NativeClient(new NativeClientOptions(Issuer, "desktop-app"), store, http);
+        (await client.GetAccessTokenAsync(ct)).Should().Be("old");
+        server.FormsTo("/oauth2/token").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Without_a_refresh_token_the_access_token_is_what_is_stored()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        StandIn server = null!;
+        server = new StandIn(_ => (HttpStatusCode.OK, new
+        {
+            access_token = "access-1", expires_in = 3600, id_token = IdToken(server.Nonce), token_type = "bearer",
+        }));
+        var store = new MemoryTokenStore();
+        using var http = new HttpClient(server);
+        using var client = new NativeClient(new NativeClientOptions(Issuer, "desktop-app"), store, http);
+        using var pending = await client.BeginSignInAsync(ct);
+        server.Nonce = ParseQuery(pending.Url.Query)["nonce"];
+        var waiting = pending.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        using var page = await BrowserReturns(pending.Url, "code=the-code");
+        await waiting;
+
+        var stored = JsonNode.Parse((await store.GetAsync("authway.desktop-app", ct))!)!.AsObject();
+        stored["access_token"]!.GetValue<string>().Should().Be("access-1");
+        stored.ContainsKey("refresh_token").Should().BeFalse();
+        using var restarted = new NativeClient(new NativeClientOptions(Issuer, "desktop-app"), store, http);
+        (await restarted.GetAccessTokenAsync(ct)).Should().Be("access-1");
     }
 
     [Fact]

@@ -43,6 +43,9 @@ try
     var token = await client.GetAccessTokenAsync() ?? "";
     Console.WriteLine($"ACCESS {token}");
     Console.WriteLine($"REFRESH_AFTER {await StoredRefreshToken()}");
+    // What an OS credential store would hold: its size as UTF-16, and whether the access token is in it.
+    var stored = await store.GetAsync(options.StoreKey) ?? "";
+    Console.WriteLine($"STORED {stored.Length * 2} access={(token.Length > 0 && stored.Contains(token, StringComparison.Ordinal) ? "true" : "false")}");
 
     var signedOut = await client.SignOutAsync();
     Console.WriteLine($"SIGNED_OUT revoked={(signedOut.Revoked ? "true" : "false")}");

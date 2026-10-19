@@ -8,7 +8,8 @@ namespace Authway.Native;
 /// </summary>
 /// <remarks>
 /// The shape is the one OS keychain libraries share: one secret per key, read, written and removed whole, so an adapter
-/// is a few lines. The value holds the refresh token: keep it where only the user can read it.
+/// is a few lines. The value holds the refresh token and the ID token's claims — not the access token, which stays in
+/// the process — so it fits one Windows Credential Manager entry. Keep it where only the user can read it.
 /// </remarks>
 public interface ITokenStore
 {

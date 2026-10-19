@@ -12,7 +12,10 @@ namespace Authway.Native;
 /// The ID token's claims — <c>email</c>, <c>name</c> and the others the scopes asked for. For showing who is signed in;
 /// an API trusts only the access token.
 /// </param>
-/// <param name="AccessTokenExpiresAt">When the current access token expires; <see cref="NativeClient.GetAccessTokenAsync"/> refreshes it before.</param>
+/// <param name="AccessTokenExpiresAt">
+/// When the current access token expires; <see cref="NativeClient.GetAccessTokenAsync"/> refreshes it before. The Unix
+/// epoch when this process holds none yet — the access token is not stored, so the first call after a start refreshes.
+/// </param>
 public sealed record NativeSession(
     string Subject,
     IReadOnlyDictionary<string, JsonElement> Claims,
@@ -52,6 +55,9 @@ public sealed class NativeClient : IDisposable
     private readonly TimeProvider time;
     private readonly SemaphoreSlim session = new(1, 1);
     private DiscoveryDocument? discovery;
+
+    /// <summary>The access token this process holds, and when it expires (Unix seconds). Guarded by <see cref="session"/>.</summary>
+    private (string Token, long ExpiresAt)? current;
 
     /// <param name="http">
     /// The <see cref="HttpClient"/> to reach the authorization server with; one is created and disposed with the client
@@ -131,16 +137,16 @@ public sealed class NativeClient : IDisposable
             {
                 return null;
             }
-            if (stored.ExpiresAt > Now + (long)options.RefreshAhead.TotalSeconds)
+            if (AccessTokenOf(stored) is { } access && access.ExpiresAt > Now + (long)options.RefreshAhead.TotalSeconds)
             {
-                return stored.AccessToken;
+                return access.Token;
             }
             if (stored.RefreshToken is null)
             {
-                await store.DeleteAsync(options.StoreKey, cancellationToken).ConfigureAwait(false);
+                await RemoveAsync(cancellationToken).ConfigureAwait(false);
                 return null;
             }
-            return (await RefreshAsync(stored, cancellationToken).ConfigureAwait(false))?.AccessToken;
+            return await RefreshAsync(stored, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -194,10 +200,11 @@ public sealed class NativeClient : IDisposable
             {
                 var refresh = stored.RefreshToken is null ||
                     await RevokeAsync(endpoint, stored.RefreshToken, "refresh_token", cancellationToken).ConfigureAwait(false);
-                var access = await RevokeAsync(endpoint, stored.AccessToken, "access_token", cancellationToken).ConfigureAwait(false);
+                var access = AccessTokenOf(stored) is not { } held ||
+                    await RevokeAsync(endpoint, held.Token, "access_token", cancellationToken).ConfigureAwait(false);
                 revoked = refresh && access;
             }
-            await store.DeleteAsync(options.StoreKey, cancellationToken).ConfigureAwait(false);
+            await RemoveAsync(cancellationToken).ConfigureAwait(false);
             return new SignedOut(true, revoked);
         }
         finally
@@ -234,27 +241,35 @@ public sealed class NativeClient : IDisposable
         }
         var d = await DiscoverAsync(cancellationToken).ConfigureAwait(false);
         var claims = Protocol.IdTokenClaims(response.IdToken, d.Issuer, options.ClientId, nonce, Now);
-        var stored = new StoredSession(response.AccessToken, Now + (response.ExpiresIn ?? AssumedLifetimeSeconds), response.RefreshToken, claims);
 
         await session.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await SaveAsync(stored, cancellationToken).ConfigureAwait(false);
+            return ToSession(await SaveAsync(response, response.RefreshToken, claims, cancellationToken).ConfigureAwait(false));
         }
         finally
         {
             session.Release();
         }
-        return ToSession(stored);
     }
 
-    private static NativeSession ToSession(StoredSession stored) => new(
+    private NativeSession ToSession(StoredSession stored) => new(
         Protocol.StringClaim(stored.Claims, "sub") ?? "",
         stored.Claims,
-        DateTimeOffset.FromUnixTimeSeconds(stored.ExpiresAt));
+        DateTimeOffset.FromUnixTimeSeconds(AccessTokenOf(stored)?.ExpiresAt ?? 0));
 
-    /// <summary>Redeems the refresh token and stores what comes back; <see langword="null"/> when it is no longer accepted.</summary>
-    private async Task<StoredSession?> RefreshAsync(StoredSession stored, CancellationToken cancellationToken)
+    /// <summary>
+    /// The access token in hand: the one this process holds, or — for a session without a refresh token, or one stored by
+    /// an earlier version — the stored one.
+    /// </summary>
+    private (string Token, long ExpiresAt)? AccessTokenOf(StoredSession stored) =>
+        current ?? (stored.AccessToken is { } token ? (token, stored.ExpiresAt ?? 0) : null);
+
+    /// <summary>
+    /// Redeems the refresh token, stores what comes back and returns the new access token; <see langword="null"/> when it
+    /// is no longer accepted.
+    /// </summary>
+    private async Task<string?> RefreshAsync(StoredSession stored, CancellationToken cancellationToken)
     {
         TokenResponse response;
         try
@@ -268,7 +283,7 @@ public sealed class NativeClient : IDisposable
         }
         catch (NativeSignInException e) when (e.Failure == NativeSignInFailure.Token && e.Error == "invalid_grant")
         {
-            await store.DeleteAsync(options.StoreKey, cancellationToken).ConfigureAwait(false);
+            await RemoveAsync(cancellationToken).ConfigureAwait(false);
             return null;
         }
         var claims = stored.Claims;
@@ -278,13 +293,8 @@ public sealed class NativeClient : IDisposable
             claims = Protocol.IdTokenClaims(response.IdToken, d.Issuer, options.ClientId, null, Now);
         }
         // The server issues a new refresh token with each use; the old one is spent.
-        var renewed = new StoredSession(
-            response.AccessToken,
-            Now + (response.ExpiresIn ?? AssumedLifetimeSeconds),
-            response.RefreshToken ?? stored.RefreshToken,
-            claims);
-        await SaveAsync(renewed, cancellationToken).ConfigureAwait(false);
-        return renewed;
+        await SaveAsync(response, response.RefreshToken ?? stored.RefreshToken, claims, cancellationToken).ConfigureAwait(false);
+        return current!.Value.Token;
     }
 
     private async Task<DiscoveryDocument> DiscoverAsync(CancellationToken cancellationToken)
@@ -423,22 +433,47 @@ public sealed class NativeClient : IDisposable
     private async Task<StoredSession?> LoadAsync(CancellationToken cancellationToken)
     {
         var raw = await store.GetAsync(options.StoreKey, cancellationToken).ConfigureAwait(false);
-        if (raw is null)
+        StoredSession? stored = null;
+        if (raw is not null)
         {
-            return null;
+            try
+            {
+                // A value this version cannot read is no session rather than an error the app cannot get past: signing in
+                // again replaces it.
+                stored = JsonSerializer.Deserialize(raw, NativeJsonContext.Default.StoredSession);
+            }
+            catch (JsonException)
+            {
+            }
         }
-        try
+        if (stored is null)
         {
-            // A value this version cannot read is no session rather than an error the app cannot get past: signing in
-            // again replaces it.
-            return JsonSerializer.Deserialize(raw, NativeJsonContext.Default.StoredSession);
+            // The session is gone from the store, so the access token this process held belongs to no session.
+            current = null;
         }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return stored;
     }
 
-    private ValueTask SaveAsync(StoredSession stored, CancellationToken cancellationToken) =>
-        store.SetAsync(options.StoreKey, JsonSerializer.Serialize(stored, NativeJsonContext.Default.StoredSession), cancellationToken);
+    /// <summary>
+    /// Keeps a token response: the access token in the process, the refresh token and claims in the store. Without a
+    /// refresh token the access token is stored too — nothing else could resume the session.
+    /// </summary>
+    private async Task<StoredSession> SaveAsync(
+        TokenResponse response, string? refreshToken, Dictionary<string, JsonElement> claims, CancellationToken cancellationToken)
+    {
+        var expiresAt = Now + (response.ExpiresIn ?? AssumedLifetimeSeconds);
+        var stored = refreshToken is null
+            ? new StoredSession(response.AccessToken, expiresAt, null, claims)
+            : new StoredSession(null, null, refreshToken, claims);
+        await store.SetAsync(options.StoreKey, JsonSerializer.Serialize(stored, NativeJsonContext.Default.StoredSession), cancellationToken)
+            .ConfigureAwait(false);
+        current = (response.AccessToken, expiresAt);
+        return stored;
+    }
+
+    private async Task RemoveAsync(CancellationToken cancellationToken)
+    {
+        current = null;
+        await store.DeleteAsync(options.StoreKey, cancellationToken).ConfigureAwait(false);
+    }
 }
