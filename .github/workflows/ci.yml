@@ -119,7 +119,7 @@ jobs:
   conformance:
     name: Conformance scenarios
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -175,6 +175,28 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
+
+      # The native sign-in clients (clients/) are driven end to end by the
+      # suite: each example signs in through its loopback port, refreshes and
+      # signs out against the stack below.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('clients/rust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build the native sign-in examples
+        run: |
+          set -euo pipefail
+          (cd clients/rust && cargo build --example sign_in --locked)
+          dotnet build clients/csharp/examples/SignIn --nologo
 
       - name: Start Hydra
         run: |
@@ -247,6 +269,9 @@ jobs:
           CONFORMANCE_ADMIN_KEY: ${{ env.ADMIN_API_KEY }}
           CONFORMANCE_MAIL_API: http://localhost:8025
           CONFORMANCE_IDP_STANDIN: http://localhost:9912
+          CONFORMANCE_NATIVE_CLIENTS: >-
+            rust=${{ github.workspace }}/clients/rust/target/debug/examples/sign_in;
+            dotnet=dotnet ${{ github.workspace }}/clients/csharp/examples/SignIn/bin/Debug/net10.0/SignIn.dll
         run: pnpm --filter @authway/conformance test
 
       - name: Show service logs
@@ -409,7 +434,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       # The live tests need a deployment (AUTHWAY_CLIENT_TEST_*) and skip here; they run against a local one.
-      # The end-to-end sign-in of Authway.Native runs from the conformance suite (CONFORMANCE_NATIVE_CLIENTS).
+      # The end-to-end sign-in of Authway.Native runs in the conformance job (CONFORMANCE_NATIVE_CLIENTS).
       - name: Build and test Authway.Client and Authway.Native
         run: dotnet test --solution Authway.Client.slnx --configuration Release
 
@@ -438,7 +463,7 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets --locked -- -D warnings
 
-      # The end-to-end sign-in runs from the conformance suite (CONFORMANCE_NATIVE_CLIENTS).
+      # The end-to-end sign-in runs in the conformance job (CONFORMANCE_NATIVE_CLIENTS).
       - name: Test
         run: cargo test --locked
 
