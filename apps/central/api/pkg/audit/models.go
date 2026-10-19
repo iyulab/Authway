@@ -51,6 +51,9 @@ const (
 	ActionServiceClientRevoked  AuditAction = "service_client.revoked"
 	ActionAdminLoginSuccess     AuditAction = "admin.login_success"
 	ActionAdminLogout           AuditAction = "admin.logout"
+	ActionConsoleSystemTenant   AuditAction = "console.system_tenant_set"
+	ActionConsoleMemberPut      AuditAction = "console.membership_set"
+	ActionConsoleMemberRemoved  AuditAction = "console.membership_removed"
 )
 
 // AuditSeverity represents the severity level of the audit event
@@ -111,6 +114,9 @@ var Actions = []struct {
 	{ActionServiceClientRevoked, "Service client revoked"},
 	{ActionAdminLoginSuccess, "Admin console sign-in"},
 	{ActionAdminLogout, "Admin console sign-out"},
+	{ActionConsoleSystemTenant, "Tenant whose accounts sign in to the console chosen"},
+	{ActionConsoleMemberPut, "Console account given a role"},
+	{ActionConsoleMemberRemoved, "Console account's role removed"},
 }
 
 // Severities lists the severities an entry can carry.

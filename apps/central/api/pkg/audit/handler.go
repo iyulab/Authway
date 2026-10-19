@@ -288,5 +288,5 @@ func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler,
 	audit.Get("/security", h.GetSecurityEvents)
 	audit.Get("/summary", h.GetAuditSummary)
 	audit.Get("/actions", h.GetAvailableActions)
-	audit.Delete("/logs/purge", h.PurgeOldLogs)
+	audit.Delete("/logs/purge", tenantscope.RequireOwnerOf(""), h.PurgeOldLogs)
 }

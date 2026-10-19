@@ -10,8 +10,32 @@
   API's and the authorization server's paths; its discovery document names
   every endpoint, introspection included, on that origin. The console can be
   built for a path (`ADMIN_BASE_PATH`).
+- **Console accounts** — people who administer Authway can sign in with an
+  account of their own instead of the shared admin password. A console
+  account is a user of the *system tenant* (`PUT /api/v1/console/system-tenant`,
+  operators only; `is_system` on the tenant); its access token, issued to an
+  application registered with the audience `urn:authway:console`, is taken by
+  the administration API beside the admin key and the console session. Its
+  memberships (`/api/v1/console/memberships`) say what it administers:
+  `operator` every tenant, `owner` or `admin` one tenant. `GET
+  /api/v1/console/me` lists them. The system tenant cannot be turned off or
+  deleted (`409 system_tenant`). See [Console accounts](docs/api/console-accounts.md).
+  Migration 048 adds the column and the table.
 
 ### Changed
+
+- **What an administration call may touch is decided by the server.** A
+  caller that administers some tenants — a console account, or a tenant's
+  service credential — reaches only those: a tenant outside them is answered
+  as one that does not exist (`404 not_found`), whether it is named in
+  `X-Tenant-ID`, the `tenant_id` query, the path or a request body; creating
+  or deleting a tenant, turning one off or on and synchronising every client
+  with the authorization server are an operator's (`403 insufficient_scope`);
+  a tenant's settings, its service credentials, its audit-log purge and who
+  administers it are its owner's. `GET /api/v1/tenants` lists the tenants the
+  caller administers. Nothing changes
+  for the admin key or the console session, which administer every tenant.
+  Every administration operation in the contract now lists `403` and `404`.
 
 - **A new database starts without the two sample tenants** («Fruits Company»,
   «Sweets Company») migration 002 used to insert. Databases that have them

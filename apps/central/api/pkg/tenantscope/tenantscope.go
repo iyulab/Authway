@@ -20,8 +20,21 @@ const LocalKey = "tenant_id"
 // cross-origin requests, so the CORS policy has to allow it.
 const Header = "X-Tenant-ID"
 
-// Named returns the tenant the request names and whether it names one.
+// Named returns the tenant the request names and whether it names one. A
+// tenant outside the caller's scope is refused as 404 not_found.
 func Named(c *fiber.Ctx) (uuid.UUID, bool, error) {
+	id, ok, err := named(c)
+	if err != nil || !ok {
+		return id, ok, err
+	}
+	if s, set := ScopeOf(c); set && !s.Covers(id) {
+		return uuid.Nil, false, outside("tenant not found")
+	}
+	return id, true, nil
+}
+
+// named reads the tenant local without consulting the caller's scope.
+func named(c *fiber.Ctx) (uuid.UUID, bool, error) {
 	switch v := c.Locals(LocalKey).(type) {
 	case uuid.UUID:
 		if v != uuid.Nil {
@@ -57,10 +70,14 @@ func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
 // Admit lets a request act on a resource owned by owner. A request that names
 // a different tenant is refused as 404 not_found with notFound as the
 // message — the same answer as for an id that does not exist, so it learns
-// nothing about other tenants. A request that names no tenant is admitted:
-// the admin key and the admin console session administer every tenant.
+// nothing about other tenants. A resource of a tenant outside the caller's
+// scope gets the same answer. A request that names no tenant is otherwise
+// admitted: the admin key and an operator administer every tenant.
 func Admit(c *fiber.Ctx, owner uuid.UUID, notFound string) error {
-	id, ok, err := Named(c)
+	if s, set := ScopeOf(c); set && !s.Covers(owner) {
+		return outside(notFound)
+	}
+	id, ok, err := named(c)
 	if err != nil {
 		return err
 	}

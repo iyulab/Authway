@@ -146,6 +146,10 @@ func (s *Service) UpdateTenant(id uuid.UUID, req UpdateTenantRequest) (*Tenant, 
 	if tenant.IsDefaultTenant() && req.Active != nil && !*req.Active {
 		return nil, ErrCannotDeactivateDefault
 	}
+	// Turning the system tenant off would lock every console account out.
+	if tenant.IsSystem && req.Active != nil && !*req.Active {
+		return nil, ErrSystemTenantProtected
+	}
 
 	// Update fields
 	if req.Name != "" {
@@ -184,6 +188,9 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 	// Prevent deleting default tenant
 	if tenant.IsDefaultTenant() {
 		return ErrCannotDeleteDefault
+	}
+	if tenant.IsSystem {
+		return ErrSystemTenantProtected
 	}
 
 	// Check if tenant has active (non-deleted) users

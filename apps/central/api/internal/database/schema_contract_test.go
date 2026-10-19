@@ -14,6 +14,7 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/console"
 	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
@@ -258,6 +259,7 @@ func mappedModels() []any {
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
 		&terms.Document{}, &terms.Acceptance{},
 		&delegation.Grant{}, &delegation.SigningKey{}, &delegation.Approval{},
+		&console.Membership{},
 	}
 }
 

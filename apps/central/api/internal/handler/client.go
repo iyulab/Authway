@@ -55,8 +55,16 @@ func (h *ClientHandler) List(c *fiber.Ctx) error {
 	offsetStr := c.Query("offset", "0")
 	// The tenant a call names in X-Tenant-ID, as everywhere else in the admin
 	// API; tenant_id in the query is the older way of saying it. A call that
-	// names none lists every tenant's clients.
-	tenantIDStr := c.Query("tenant_id", c.Get("X-Tenant-ID"))
+	// names none lists every tenant's clients — when its caller administers every
+	// tenant; any other caller names one of its tenants.
+	tenantID, named, err := tenantscope.Named(c)
+	if err != nil {
+		return err
+	}
+	if scope, _ := tenantscope.ScopeOf(c); !named && !scope.IsAll() {
+		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required",
+			"name the tenant with the "+tenantscope.Header+" header or the tenant_id query parameter")
+	}
 
 	limit, err := strconv.Atoi(limitStr)
 	switch {
@@ -76,15 +84,11 @@ func (h *ClientHandler) List(c *fiber.Ctx) error {
 	var total int64
 
 	// If tenant_id is provided, filter by tenant
-	if tenantIDStr != "" {
-		tenantID, err := uuid.Parse(tenantIDStr)
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant_id format")
-		}
+	if named {
 
 		clients, total, err = h.services.ClientService.GetByTenant(tenantID, limit, offset)
 		if err != nil {
-			h.logger.Error("Failed to list clients by tenant", zap.Error(err), zap.String("tenant_id", tenantIDStr))
+			h.logger.Error("Failed to list clients by tenant", zap.Error(err), zap.String("tenant_id", tenantID.String()))
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve clients")
 		}
 	} else {
@@ -146,6 +150,12 @@ func (h *ClientHandler) Create(c *fiber.Ctx) error {
 	case !ok && req.TenantID == "":
 		return apierror.RefuseWith(c, fiber.StatusBadRequest, "tenant_required",
 			"name the tenant with tenant_id or the "+tenantscope.Header+" header", fiber.Map{"field": "tenant_id"})
+	}
+	// The tenant named in the body alone is held to the caller's scope too.
+	if tid, err := uuid.Parse(req.TenantID); err == nil {
+		if err := tenantscope.Admit(c, tid, "tenant not found"); err != nil {
+			return err
+		}
 	}
 
 	newClient, credentials, err := h.services.ClientService.Create(&req)

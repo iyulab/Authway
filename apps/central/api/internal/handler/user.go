@@ -56,8 +56,16 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	offsetStr := c.Query("offset", "0")
 	// The tenant a call names in X-Tenant-ID, as everywhere else in the admin
 	// API; tenant_id in the query is the older way of saying it. A call that
-	// names none lists every tenant's users.
-	tenantIDStr := c.Query("tenant_id", c.Get("X-Tenant-ID"))
+	// names none lists every tenant's users — when its caller administers every
+	// tenant; any other caller names one of its tenants.
+	tenantID, named, err := tenantscope.Named(c)
+	if err != nil {
+		return err
+	}
+	if scope, _ := tenantscope.ScopeOf(c); !named && !scope.IsAll() {
+		return apierror.Refuse(c, fiber.StatusBadRequest, "tenant_required",
+			"name the tenant with the "+tenantscope.Header+" header or the tenant_id query parameter")
+	}
 
 	limit, err := strconv.Atoi(limitStr)
 	switch {
@@ -77,14 +85,10 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 	var total int64
 
 	// If tenant_id is provided, filter by tenant
-	if tenantIDStr != "" {
-		tenantID, err := uuid.Parse(tenantIDStr)
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, "Invalid tenant ID")
-		}
+	if named {
 		users, total, err = h.services.UserService.GetByTenant(tenantID, limit, offset)
 		if err != nil {
-			h.logger.Error("Failed to list users by tenant", zap.Error(err), zap.String("tenant_id", tenantIDStr))
+			h.logger.Error("Failed to list users by tenant", zap.Error(err), zap.String("tenant_id", tenantID.String()))
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to retrieve users")
 		}
 	} else {

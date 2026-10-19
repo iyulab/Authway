@@ -28,6 +28,10 @@ type Handler struct {
 	version      string
 	apiKey       string // Empty = dev mode (skip auth for admin console)
 	auditService audit.Service
+	// introspector and accounts admit console accounts' access tokens;
+	// nil until UseConsoleAccounts.
+	introspector Introspector
+	accounts     ConsoleAccounts
 }
 
 // NewHandler builds the admin Handler. auditService may be nil — the handler
@@ -245,6 +249,14 @@ func (h *Handler) GetAdminConsoleAuth() fiber.Handler {
 			h.logger.Error("Failed to validate admin token", zap.Error(sessionErr))
 			return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to validate session")
 		}
+		if !ok && h.accounts != nil {
+			if handled, refusal := h.consoleAccount(c, h.introspect(h.introspector, token)); handled {
+				if refusal != nil {
+					return apierror.Write(c, refusal)
+				}
+				return c.Next()
+			}
+		}
 		if !ok {
 			h.logger.Warn("AdminConsoleAuth: Token invalid or expired", zap.String("path", c.Path()))
 			h.logAuthFailure(c, "invalid_or_expired_session", "token rejected by session validator (also covers api_key mismatch)")
@@ -271,6 +283,7 @@ func (h *Handler) checkAdminAuth(c *fiber.Ctx, token string) (ok bool, err error
 		c.Locals("actor_type", "api_key")
 		c.Locals("actor_key_hint", apiKeyHint(h.apiKey))
 		h.setTenantIDLocal(c)
+		tenantscope.SetScope(c, tenantscope.All())
 		return true, nil
 	}
 
@@ -284,6 +297,7 @@ func (h *Handler) checkAdminAuth(c *fiber.Ctx, token string) (ok bool, err error
 	c.Locals("auth_method", "session")
 	c.Locals("actor_type", "admin_session")
 	h.setTenantIDLocal(c)
+	tenantscope.SetScope(c, tenantscope.All())
 	c.Locals("admin_authenticated", true)
 	c.Locals("is_admin_console", true)
 	return true, nil
@@ -332,8 +346,16 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 		}
 
 		introspectResp, err := hydraClient.IntrospectToken(token)
+		if err == nil {
+			if handled, refusal := h.consoleAccount(c, introspectResp); handled {
+				if refusal != nil {
+					return apierror.Write(c, refusal)
+				}
+				return c.Next()
+			}
+		}
 		if err != nil || !introspectResp.Active || introspectResp.ClientID == "" || introspectResp.ClientID != introspectResp.Subject {
-			h.logAuthFailure(c, "invalid_credential", "token rejected by api key, admin session, and service-client introspection")
+			h.logAuthFailure(c, "invalid_credential", "token rejected by api key, admin session, console account, and service-client introspection")
 			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		}
 
@@ -351,6 +373,7 @@ func (h *Handler) GetClientAuth(hydraClient *hydra.Client, svc serviceclient.Ser
 		c.Locals("auth_method", "service_client")
 		c.Locals("actor_type", "service_client")
 		c.Locals("tenant_id", sc.TenantID.String())
+		tenantscope.SetScope(c, tenantscope.Only(map[uuid.UUID]tenantscope.Role{sc.TenantID: tenantscope.RoleService}))
 		return c.Next()
 	}
 }

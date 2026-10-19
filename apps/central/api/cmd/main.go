@@ -21,6 +21,7 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/console"
 	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/email"
@@ -30,6 +31,7 @@ import (
 	"authway/apps/central/api/pkg/outbound"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
+	"authway/apps/central/api/pkg/tenantscope"
 	"authway/apps/central/api/pkg/terms"
 	"authway/apps/central/api/pkg/user"
 	"github.com/go-playground/validator/v10"
@@ -518,7 +520,7 @@ func main() {
 	// Client Google OAuth configuration routes (admin-only)
 
 	// Client Hydra sync (admin operation for one-time migration)
-	v1.Post("/clients/sync-hydra", adminAuth, clientHandler.SyncToHydra)
+	v1.Post("/clients/sync-hydra", adminAuth, tenantscope.RequireAll(), clientHandler.SyncToHydra)
 
 	// Claims stored for a user go into the tokens issued to them, so only a
 	// trusted party writes them: the admin API, or a tenant's service
@@ -566,9 +568,16 @@ func main() {
 	// Service client provisioning — admin-only, since
 	// this mints new M2M credentials. The credentials it mints are what
 	// clientCreateAuth (above) accepts on POST /clients.
-	v1.Post("/tenants/:id/service-clients", adminAuth, serviceClientHandler.Create)
-	v1.Get("/tenants/:id/service-clients", adminAuth, serviceClientHandler.List)
-	v1.Delete("/tenants/:id/service-clients/:service_client_id", adminAuth, serviceClientHandler.Revoke)
+	v1.Post("/tenants/:id/service-clients", adminAuth, tenantscope.RequireOwnerOf("id"), serviceClientHandler.Create)
+	v1.Get("/tenants/:id/service-clients", adminAuth, tenantscope.RequireOwnerOf("id"), serviceClientHandler.List)
+	v1.Delete("/tenants/:id/service-clients/:service_client_id", adminAuth, tenantscope.RequireOwnerOf("id"), serviceClientHandler.Revoke)
+
+	// Console accounts: users of the system tenant whose memberships say what
+	// they administer. The admin middleware takes their access tokens beside
+	// the admin key and the console session.
+	consoleService := console.NewService(db)
+	adminHandler.UseConsoleAccounts(hydraClient, consoleService)
+	console.NewHandler(consoleService, newFeatureServices.AuditService, zapLogger).RegisterRoutes(v1, adminAuth)
 
 	// Admin Console routes
 	adminHandler.RegisterRoutes(app)

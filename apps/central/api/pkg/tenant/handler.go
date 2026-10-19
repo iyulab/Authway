@@ -6,6 +6,7 @@ import (
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/tenantscope"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -63,16 +64,17 @@ func (h *Handler) logAudit(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditA
 // RegisterRoutes registers tenant routes
 // All routes require Admin API Key authentication
 func (h *Handler) RegisterRoutes(app *fiber.App, adminMiddleware fiber.Handler) {
+	// Each route names its own middleware: a prefix-wide Use would also run
+	// in front of every /api/v1/tenants/:id/… route registered after these.
 	api := app.Group("/api/v1/tenants")
 
-	// Apply admin middleware to all routes
-	api.Use(adminMiddleware)
-
-	api.Post("/", h.CreateTenant)      // POST /api/v1/tenants
-	api.Get("/", h.ListTenants)        // GET /api/v1/tenants
-	api.Get("/:id", h.GetTenant)       // GET /api/v1/tenants/:id
-	api.Put("/:id", h.UpdateTenant)    // PUT /api/v1/tenants/:id
-	api.Delete("/:id", h.DeleteTenant) // DELETE /api/v1/tenants/:id
+	// Creating and deleting a tenant is the platform's; a tenant's owner
+	// changes its settings; whoever administers it reads it.
+	api.Post("/", adminMiddleware, tenantscope.RequireAll(), h.CreateTenant)
+	api.Get("/", adminMiddleware, h.ListTenants)
+	api.Get("/:id", adminMiddleware, tenantscope.AdmitParam("id"), h.GetTenant)
+	api.Put("/:id", adminMiddleware, tenantscope.RequireOwnerOf("id"), h.UpdateTenant)
+	api.Delete("/:id", adminMiddleware, tenantscope.RequireAll(), h.DeleteTenant)
 }
 
 // CreateTenant creates a new tenant
@@ -113,10 +115,13 @@ func (h *Handler) ListTenants(c *fiber.Ctx) error {
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", apierror.Message(err, "failed to list tenants"))
 	}
 
-	// Convert to public format
-	publicTenants := make([]PublicTenant, len(tenants))
-	for i, tenant := range tenants {
-		publicTenants[i] = tenant.ToPublic()
+	// A caller that administers some tenants sees those.
+	scope, _ := tenantscope.ScopeOf(c)
+	publicTenants := make([]PublicTenant, 0, len(tenants))
+	for _, tenant := range tenants {
+		if scope.Covers(tenant.ID) {
+			publicTenants = append(publicTenants, tenant.ToPublic())
+		}
 	}
 
 	return c.JSON(publicTenants)
@@ -168,6 +173,14 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 	// UpdateTenant would raise, so the service owns the canonical error path.
 	beforeTenant, _ := h.service.GetTenantByID(id)
 
+	// Turning a tenant off or on is the platform's, not its owner's. Sending
+	// the value it already has changes nothing and is let through.
+	if scope, _ := tenantscope.ScopeOf(c); req.Active != nil && !scope.IsAll() &&
+		(beforeTenant == nil || *req.Active != beforeTenant.Active) {
+		return apierror.RefuseWith(c, fiber.StatusForbidden, "insufficient_scope",
+			"Only an operator of this Authway can turn a tenant off or on.", fiber.Map{"field": "active"})
+	}
+
 	tenant, err := h.service.UpdateTenant(id, req)
 	if err != nil {
 		// Handle specific errors with appropriate status codes
@@ -176,6 +189,9 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 		}
 		if errors.Is(err, ErrCannotDeactivateDefault) {
 			return apierror.Refuse(c, fiber.StatusForbidden, "default_tenant_protected", "Cannot deactivate the default tenant")
+		}
+		if errors.Is(err, ErrSystemTenantProtected) {
+			return apierror.RefuseWith(c, fiber.StatusConflict, "system_tenant", "The tenant whose accounts sign in to the console cannot be turned off.", fiber.Map{"field": "active"})
 		}
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to update tenant")
 	}
@@ -234,6 +250,9 @@ func (h *Handler) DeleteTenant(c *fiber.Ctx) error {
 		}
 		if errors.Is(err, ErrCannotDeleteDefault) {
 			return apierror.Refuse(c, fiber.StatusForbidden, "default_tenant_protected", "Cannot delete the default tenant")
+		}
+		if errors.Is(err, ErrSystemTenantProtected) {
+			return apierror.Refuse(c, fiber.StatusConflict, "system_tenant", "The tenant whose accounts sign in to the console cannot be deleted.")
 		}
 		if errors.Is(err, ErrHasUsers) {
 			return apierror.Refuse(c, fiber.StatusConflict, "tenant_has_users", "Cannot delete tenant with existing users")

@@ -12,6 +12,7 @@ import (
 
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/console"
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/serviceclient"
@@ -58,6 +59,8 @@ func TestRequestBodies_AreTheContractsOwn(t *testing.T) {
 		{"POST /api/v1/webhooks", webhook.CreateWebhookRequest{}},
 		{"PATCH /api/v1/webhooks/{id}", webhook.UpdateWebhookRequest{}},
 		{"PUT /api/v1/users/{id}", user.UpdateUserRequest{}},
+		{"PUT /api/v1/console/system-tenant", console.PutSystemTenantRequest{}},
+		{"PUT /api/v1/console/memberships", console.PutMembershipRequest{}},
 		{"PATCH /api/v1/users/{id}/claims", claims.PatchClaimsRequest{}},
 		{"DELETE /api/v1/users/mfa", FactorProofRequest{}},
 		{"POST /api/v1/users/mfa/recovery/regenerate", FactorProofRequest{}},

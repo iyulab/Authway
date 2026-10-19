@@ -16,6 +16,10 @@ var (
 	// ErrCannotDeactivateDefault is returned when attempting to deactivate the default tenant
 	ErrCannotDeactivateDefault = errors.New("cannot deactivate default tenant")
 
+	// ErrSystemTenantProtected: the tenant whose accounts sign in to the
+	// console cannot be turned off or deleted.
+	ErrSystemTenantProtected = errors.New("the system tenant cannot be turned off or deleted")
+
 	// ErrHasUsers is returned when attempting to delete a tenant with existing users
 	ErrHasUsers = errors.New("cannot delete tenant with existing users")
 

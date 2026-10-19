@@ -23,9 +23,12 @@ type Tenant struct {
 	Logo         string         `json:"logo"`
 	PrimaryColor string         `json:"primary_color" gorm:"default:#4F46E5"`
 	Active       bool           `json:"active"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	// IsSystem marks the tenant whose accounts sign in to the administration
+	// console (at most one). It cannot be turned off or deleted.
+	IsSystem  bool           `json:"is_system" gorm:"not null;default:false"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 // TenantSettings contains tenant-specific configuration
@@ -136,6 +139,7 @@ type PublicTenant struct {
 	Logo         string         `json:"logo"`
 	PrimaryColor string         `json:"primary_color"`
 	Active       bool           `json:"active"`
+	IsSystem     bool           `json:"is_system"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
@@ -151,6 +155,7 @@ func (t *Tenant) ToPublic() PublicTenant {
 		Logo:         t.Logo,
 		PrimaryColor: t.PrimaryColor,
 		Active:       t.Active,
+		IsSystem:     t.IsSystem,
 		CreatedAt:    t.CreatedAt,
 		UpdatedAt:    t.UpdatedAt,
 	}

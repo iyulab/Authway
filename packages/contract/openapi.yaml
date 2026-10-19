@@ -1138,6 +1138,8 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
     get:
       tags: [admin]
       operationId: listTenants
@@ -1151,6 +1153,8 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Tenant' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants/{id}:
     parameters:
@@ -1168,6 +1172,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     put:
       tags: [admin]
       operationId: updateTenant
@@ -1290,6 +1295,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     get:
       tags: [admin]
       operationId: listServiceClients
@@ -1313,6 +1319,8 @@ paths:
                   offset: { type: integer }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants/{id}/service-clients/{service_client_id}:
     parameters:
@@ -1329,6 +1337,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants/{id}/terms:
     parameters:
@@ -1355,6 +1364,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/tenants/{id}/terms/{kind}:
     parameters:
@@ -1398,6 +1408,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: retireTenantTerms
@@ -1408,6 +1419,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/clients:
     get:
@@ -1439,6 +1451,8 @@ paths:
                   offset: { type: integer }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
     post:
       tags: [admin]
       operationId: createClient
@@ -1621,6 +1635,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/clients/{id}:
     parameters:
@@ -1642,6 +1657,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     put:
       tags: [admin]
       operationId: updateClient
@@ -1802,6 +1818,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
+        '403': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: deleteClient
@@ -1819,6 +1836,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/clients/sync-hydra:
     post:
@@ -1844,6 +1862,8 @@ paths:
                   failed: { type: integer }
         '401': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/v1/clients/{id}/regenerate-secret:
     post:
       tags: [admin]
@@ -1882,6 +1902,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/SyncFailed' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/invitations:
     get:
@@ -1914,6 +1935,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
     post:
       tags: [admin]
       operationId: createInvitation
@@ -1967,6 +1990,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/invitations/{id}:
     parameters:
@@ -1988,6 +2012,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: revokeInvitation
@@ -2003,6 +2028,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/invitations/{id}/resend:
     post:
@@ -2022,7 +2048,178 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
+  /api/v1/console/me:
+    get:
+      tags: [admin]
+      operationId: getConsoleMe
+      summary: Who the caller is and what it administers
+      description: |
+        For a console account, its memberships: what the console offers to
+        pick from. For the admin key or a console session, operator is true
+        and there are no memberships.
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actor_type, operator, memberships]
+                properties:
+                  actor_type: { type: string, enum: [api_key, admin_session, console_user] }
+                  operator: { type: boolean }
+                  user_id: { type: string, format: uuid }
+                  memberships:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConsoleMembership' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/console/system-tenant:
+    get:
+      tags: [admin]
+      operationId: getConsoleSystemTenant
+      summary: The tenant whose accounts sign in to the console
+      description: Operators only.
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The system tenant, or null when none has been chosen
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenant]
+                properties:
+                  tenant:
+                    oneOf:
+                      - { $ref: '#/components/schemas/Tenant' }
+                      - { type: 'null' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      operationId: putConsoleSystemTenant
+      summary: Choose the tenant whose accounts sign in to the console
+      description: |
+        Operators only. While accounts of the current system tenant hold
+        memberships it cannot be replaced (409 system_tenant_in_use).
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_id]
+              properties:
+                tenant_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The system tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenant]
+                properties:
+                  tenant: { $ref: '#/components/schemas/Tenant' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/console/memberships:
+    get:
+      tags: [admin]
+      operationId: listConsoleMemberships
+      summary: Memberships of the tenants the caller administers
+      description: An operator sees every membership, operators' included.
+      security: [{ adminKey: [] }]
+      parameters:
+        - { name: tenant_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [memberships]
+                properties:
+                  memberships:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConsoleMembership' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [admin]
+      operationId: putConsoleMembership
+      summary: Give a console account a role
+      description: |
+        One role per account and tenant; putting another replaces it. An
+        operator gives any role, an owner roles in its tenant. user_id must be
+        an account of the system tenant (400, field user_id); without a
+        system tenant the answer is 409 no_system_tenant.
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role]
+              properties:
+                user_id: { type: string, format: uuid }
+                tenant_id:
+                  description: The tenant; absent for the operator role.
+                  type: string
+                  format: uuid
+                role: { type: string, enum: [operator, owner, admin] }
+      responses:
+        '200':
+          description: The account's role in the tenant was replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [membership]
+                properties:
+                  membership: { $ref: '#/components/schemas/ConsoleMembership' }
+        '201':
+          description: The membership was created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [membership]
+                properties:
+                  membership: { $ref: '#/components/schemas/ConsoleMembership' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/console/memberships/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [admin]
+      operationId: removeConsoleMembership
+      summary: Remove a console account's role
+      security: [{ adminKey: [] }]
+      responses:
+        '204': { description: Removed }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/v1/delegations:
     get:
       tags: [admin]
@@ -2051,6 +2248,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/delegations/{id}:
     parameters:
@@ -2070,6 +2269,7 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '502': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks:
     get:
@@ -2095,6 +2295,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
     post:
       tags: [admin]
       operationId: createWebhook
@@ -2149,6 +2351,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks/events:
     get:
@@ -2173,6 +2377,8 @@ paths:
                         type: { $ref: '#/components/schemas/WebhookEvent' }
                         description: { type: string }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks/{id}:
     parameters:
@@ -2194,6 +2400,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     patch:
       tags: [admin]
       operationId: updateWebhook
@@ -2229,6 +2436,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: deleteWebhook
@@ -2238,6 +2446,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks/{id}/test:
     post:
@@ -2263,6 +2472,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks/{id}/rotate-secret:
     post:
@@ -2285,6 +2495,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/webhooks/{id}/deliveries:
     get:
@@ -2309,6 +2520,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/logs:
     get:
@@ -2353,6 +2565,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/logs/{id}:
     get:
@@ -2374,6 +2588,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/logs/purge:
     delete:
@@ -2402,6 +2617,8 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/users/{userId}/activity:
     get:
@@ -2426,6 +2643,8 @@ paths:
                     items: { $ref: '#/components/schemas/AuditLog' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/security:
     get:
@@ -2450,6 +2669,8 @@ paths:
                   hours: { type: integer }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/summary:
     get:
@@ -2477,6 +2698,8 @@ paths:
                       failed_operations: { type: integer, minimum: 0, description: Entries in the last 24 hours recorded as failures. }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/audit/actions:
     get:
@@ -2509,6 +2732,8 @@ paths:
                         severity: { $ref: '#/components/schemas/AuditSeverity' }
                         description: { type: string }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/users:
     get:
@@ -2540,6 +2765,8 @@ paths:
                   offset: { type: integer }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/v1/users/{id}:
     parameters:
@@ -2561,6 +2788,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     put:
       tags: [admin]
       operationId: updateUser
@@ -2605,6 +2833,7 @@ paths:
         # The account is suspended but its sessions could not be ended (code
         # authorization_server_unavailable); the same request again ends them.
         '502': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     delete:
       tags: [admin]
       operationId: deleteUser
@@ -2618,6 +2847,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/users/{id}/claims:
     parameters:
@@ -2639,6 +2869,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
     patch:
       tags: [admin]
       operationId: patchUserClaims
@@ -2675,6 +2906,7 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
   /api/v1/users/{id}/terms-acceptances:
     parameters:
@@ -2703,6 +2935,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 
 webhooks:
   event:
@@ -2748,7 +2981,18 @@ components:
     adminKey:
       type: http
       scheme: bearer
-      description: The deployment's admin API key, or an admin console session token.
+      description: |
+        The deployment's admin API key, an admin console session token, or a
+        console account's access token. A console account is a user of the
+        system tenant (see /api/v1/console/system-tenant); its token carries
+        the audience `urn:authway:console`, and its memberships decide what it
+        administers: an operator every tenant, an owner or admin one tenant.
+        A tenant outside what the caller administers is answered as one that
+        does not exist (404 not_found); an operation only an operator may do,
+        or only an owner, is refused with 403 insufficient_scope; and a caller
+        that administers several tenants names the one a call is about
+        (otherwise 400 tenant_required). A console account with no membership
+        is refused with 403 no_console_access.
     clientSecret:
       type: http
       scheme: basic
@@ -3501,8 +3745,37 @@ components:
         logo: { type: string }
         primary_color: { type: string }
         active: { type: boolean }
+        is_system:
+          description: |
+            The tenant whose accounts sign in to the administration console.
+            It cannot be turned off or deleted (409 system_tenant). Chosen with
+            PUT /api/v1/console/system-tenant.
+          type: boolean
         created_at: { type: string }
         updated_at: { type: string }
+
+    ConsoleMembership:
+      type: object
+      required: [id, user_id, tenant_id, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id:
+          description: The console account, a user of the system tenant.
+          type: string
+          format: uuid
+        tenant_id:
+          description: The tenant it administers; null for the operator role.
+          type: [string, 'null']
+          format: uuid
+        role:
+          type: string
+          enum: [operator, owner, admin]
+          description: |
+            operator: every tenant, as the admin key. owner: the tenant, its
+            settings, its service credentials and who administers it. admin:
+            the tenant's applications, users, invitations, webhooks, documents,
+            claims and audit records.
+        created_at: { type: string }
 
     TenantSettings:
       type: object

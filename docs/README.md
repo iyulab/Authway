@@ -27,6 +27,7 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 - **[Backend Integration](./BACKEND_INTEGRATION.md)** - Protect your APIs with JWT validation
 - **[.NET client](../clients/csharp/README.md)** - `Authway.Client`: the administration API, typed refusals and webhook verification from a .NET backend
 - **[Client Management API](./api/client-management.md)** - OAuth client config, Hydra sync semantics, application-type matrix (ASP.NET / SPA / M2M)
+- **[Console accounts](./api/console-accounts.md)** - Administering with an account of the system tenant: memberships (operator · owner · admin), which tenant a call is about
 - **[Delegation](./api/delegation.md)** - A client acting for a user who is away: the `delegation` scope, exchanging the handle (RFC 8693), `act` at the resource server, revoking
 - **[Service Clients](./api/service-clients.md)** - Tenant-scoped machine credentials for provisioning clients and writing claims
 - **[Custom Claims](./api/claims.md)** - Claims your backend stores for a user, and where they appear
