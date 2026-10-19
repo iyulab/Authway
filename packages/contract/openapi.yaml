@@ -2165,8 +2165,10 @@ paths:
       description: |
         One role per account and tenant; putting another replaces it. An
         operator gives any role, an owner roles in its tenant. user_id must be
-        an account of the system tenant (400, field user_id); without a
-        system tenant the answer is 409 no_system_tenant.
+        an account of the system tenant (400, field user_id); the system
+        tenant itself takes no owner or admin, only operators administer it
+        (400, field tenant_id); without a system tenant the answer is 409
+        no_system_tenant.
       security: [{ adminKey: [] }]
       requestBody:
         required: true

@@ -171,6 +171,8 @@ func (h *Handler) PutMembership(c *fiber.Ctx) error {
 		return apierror.Write(c, apierror.RejectField("user_id", "user_id is not an account of the system tenant"))
 	case errors.Is(err, ErrUnknownTenant):
 		return apierror.Write(c, apierror.RejectField("tenant_id", "no tenant has this id"))
+	case errors.Is(err, ErrSystemTenantMembership):
+		return apierror.Write(c, apierror.RejectField("tenant_id", "the system tenant is administered by operators only; give the operator role instead"))
 	case err != nil:
 		h.logger.Error("Failed to set a console membership", zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to set the membership")

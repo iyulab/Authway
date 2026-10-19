@@ -162,11 +162,64 @@ describe('console accounts: a system tenant user administers what its membership
     expect(giveOperator.status).toBe(403)
   })
 
+  it('holds the routes a service credential may also call to the same scope', async () => {
+    await put({ user_id: sub, tenant_id: administered, role: 'admin' })
+    const member = await provider.inviteAndAccept()
+    const users = (await (await provider.admin('/api/v1/users?limit=100')).json()) as { users: { id: string; email: string }[] }
+    const memberId = users.users.find((u) => u.email === member.email)?.id
+    if (!memberId) throw new Error('the invited user is not listed')
+    const issued = await provider.admin(`/api/v1/tenants/${administered}/service-clients`, {
+      method: 'POST',
+      body: JSON.stringify({ name: `conformance-console-${randomToken(4)}`, scopes: ['admin.claims:write'] }),
+    })
+    expect(issued.status, await issued.clone().text()).toBe(201)
+    const { service_client: svc, credentials } = (await issued.json()) as {
+      service_client: { id: string }
+      credentials: { client_id: string; client_secret: string }
+    }
+    try {
+      const claims = JSON.stringify({ claims: { conformance_console: 'yes' } })
+
+      // A console account: its tenant's user, not the system tenant's.
+      const own = await asAccount(token, `/api/v1/users/${memberId}/claims`, { method: 'PATCH', body: claims })
+      await conform('PATCH', '/api/v1/users/{id}/claims', own.clone())
+      expect(own.status, await own.clone().text()).toBe(200)
+      const outside = await asAccount(token, `/api/v1/users/${sub}/claims`, { method: 'PATCH', body: claims })
+      await conform('PATCH', '/api/v1/users/{id}/claims', outside.clone())
+      expect(outside.status).toBe(404)
+
+      // A service credential of the tenant, naming another tenant.
+      const { token_endpoint } = await provider.discovery()
+      const granted = await fetch(token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'client_credentials', client_id: credentials.client_id, client_secret: credentials.client_secret }),
+      })
+      expect(granted.status).toBe(200)
+      const serviceToken = ((await granted.json()) as { access_token: string }).access_token
+      const elsewhere = await asAccount(serviceToken, `/api/v1/users/${sub}/claims`, { method: 'PATCH', body: claims, tenant: systemTenant })
+      await conform('PATCH', '/api/v1/users/{id}/claims', elsewhere.clone())
+      expect(elsewhere.status).toBe(404)
+      const mine = await asAccount(serviceToken, `/api/v1/users/${memberId}/claims`, { method: 'PATCH', body: claims })
+      expect(mine.status).toBe(200)
+    } finally {
+      await provider.admin(`/api/v1/tenants/${administered}/service-clients/${svc.id}`, { method: 'DELETE' })
+      await provider.deleteUser(memberId)
+    }
+  })
+
+  it('tells the admin key it is an operator with no memberships', async () => {
+    const me = await asOperatorKey('/api/v1/console/me')
+    await conform('GET', '/api/v1/console/me', me.clone())
+    expect(me.status).toBe(200)
+    expect(await me.json()).toMatchObject({ actor_type: 'api_key', operator: true, memberships: [] })
+  })
+
   it('lets an owner change its tenant but not turn it off', async () => {
     await put({ user_id: sub, tenant_id: administered, role: 'owner' })
     const current = (await (await asAccount(token, `/api/v1/tenants/${administered}`)).json()) as { name: string; active: boolean }
 
-    const same = await asAccount(token, `/api/v1/tenants/${administered}`, { method: 'PUT', body: JSON.stringify({ name: current.name, active: current.active }) })
+    const same = await asAccount(token, `/api/v1/tenants/${administered}`, { method: 'PUT', body: JSON.stringify({ name: current.name }) })
     await conform('PUT', '/api/v1/tenants/{id}', same.clone())
     expect(same.status, await same.clone().text()).toBe(200)
 
@@ -200,5 +253,11 @@ describe('console accounts: a system tenant user administers what its membership
     expect(await code(replace)).toBe('system_tenant_in_use')
     const unknown = await asOperatorKey('/api/v1/console/memberships', { method: 'PUT', body: JSON.stringify({ user_id: randomUUID(), tenant_id: administered, role: 'admin' }) })
     expect(unknown.status).toBe(400)
+    // The system tenant's users are the console accounts: only operators
+    // administer them, or an owner of it could take an operator's account.
+    const ownSystem = await asOperatorKey('/api/v1/console/memberships', { method: 'PUT', body: JSON.stringify({ user_id: sub, tenant_id: systemTenant, role: 'owner' }) })
+    await conform('PUT', '/api/v1/console/memberships', ownSystem.clone())
+    expect(ownSystem.status).toBe(400)
+    expect(((await ownSystem.json()) as { field?: string }).field).toBe('tenant_id')
   })
 })

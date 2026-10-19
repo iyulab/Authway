@@ -58,6 +58,11 @@ var (
 	ErrSystemTenantInUse = errors.New("console: the system tenant has members")
 	// ErrNotFound: no such membership.
 	ErrNotFound = errors.New("console: membership not found")
+	// ErrSystemTenantMembership: the system tenant is administered by
+	// operators only. Its users are the console accounts; whoever could
+	// change them — an address, a password, a suspension — could take an
+	// operator's account.
+	ErrSystemTenantMembership = errors.New("console: the system tenant is administered by operators only")
 )
 
 // Service reads and changes console memberships.
@@ -200,6 +205,9 @@ func (s *Service) Put(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID
 		}
 		if accounts == 0 {
 			return ErrNotConsoleAccount
+		}
+		if tenantID != nil && *tenantID == system.ID {
+			return ErrSystemTenantMembership
 		}
 		if tenantID != nil {
 			var tenants int64

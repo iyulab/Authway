@@ -41,10 +41,18 @@ type world struct {
 
 func fixture(t *testing.T, db *gorm.DB) world {
 	t.Helper()
-	var already int64
-	db.Model(&tenant.Tenant{}).Where("is_system").Count(&already)
-	if already > 0 {
-		t.Skip("this database already has a system tenant; the tests would change it")
+	// A database the conformance suite ran against keeps its system tenant.
+	// The test takes it over when no account of it holds a membership, and
+	// gives it back afterwards.
+	var previous []uuid.UUID
+	db.Model(&tenant.Tenant{}).Where("is_system").Pluck("id", &previous)
+	if len(previous) > 0 {
+		var members int64
+		db.Model(&Membership{}).Count(&members)
+		if members > 0 {
+			t.Skip("this database's system tenant has members; the tests would change who administers it")
+		}
+		db.Exec(`UPDATE tenants SET is_system = false WHERE is_system`)
 	}
 	suffix := uuid.New().String()[:8]
 	tenants := tenant.NewService(db)
@@ -70,6 +78,9 @@ func fixture(t *testing.T, db *gorm.DB) world {
 	t.Cleanup(func() {
 		db.Exec(`DELETE FROM console_memberships WHERE user_id IN (?, ?)`, w.account, w.outsider)
 		db.Exec(`UPDATE tenants SET is_system = false WHERE id IN (?, ?)`, w.system, w.other)
+		for _, id := range previous {
+			db.Exec(`UPDATE tenants SET is_system = true WHERE id = ?`, id)
+		}
 		db.Exec(`DELETE FROM users WHERE id IN (?, ?)`, w.account, w.outsider)
 		db.Exec(`DELETE FROM tenants WHERE id IN (?, ?)`, w.system, w.other)
 	})
@@ -110,11 +121,13 @@ func TestMemberships(t *testing.T) {
 		role   string
 		want   error
 	}{
-		"account of another tenant": {w.outsider, &w.other, "admin", ErrNotConsoleAccount},
-		"operator of one tenant":    {w.account, &w.other, RoleOperator, ErrInvalidRole},
-		"owner of no tenant":        {w.account, nil, "owner", ErrInvalidRole},
-		"unknown role":              {w.account, &w.other, "viewer", ErrInvalidRole},
-		"unknown tenant":            {w.account, ptr(uuid.New()), "admin", ErrUnknownTenant},
+		"account of another tenant":  {w.outsider, &w.other, "admin", ErrNotConsoleAccount},
+		"operator of one tenant":     {w.account, &w.other, RoleOperator, ErrInvalidRole},
+		"owner of no tenant":         {w.account, nil, "owner", ErrInvalidRole},
+		"unknown role":               {w.account, &w.other, "viewer", ErrInvalidRole},
+		"unknown tenant":             {w.account, ptr(uuid.New()), "admin", ErrUnknownTenant},
+		"owner of the system tenant": {w.account, &w.system, "owner", ErrSystemTenantMembership},
+		"admin of the system tenant": {w.account, &w.system, "admin", ErrSystemTenantMembership},
 	} {
 		if _, _, err := s.Put(ctx, tc.user, tc.tenant, tc.role); !errors.Is(err, tc.want) {
 			t.Errorf("%s: Put = %v, want %v", name, err, tc.want)

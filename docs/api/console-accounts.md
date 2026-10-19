@@ -45,7 +45,10 @@ with `403 no_console_access`.
 | `owner` | one | everything in the tenant, its settings (`PUT /api/v1/tenants/{id}` — except turning it off or on), its service credentials, its audit-log purge, and who administers it |
 | `admin` | one | the tenant's applications, users, invitations, webhooks, delegations, documents, claims and audit records |
 
-One role per account and tenant; giving another replaces it.
+One role per account and tenant; giving another replaces it. The system
+tenant itself takes no `owner` or `admin`: its users are the console
+accounts, and whoever could change them could take an operator's account —
+only operators administer it.
 
 ```
 PUT /api/v1/console/memberships
