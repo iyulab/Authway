@@ -4,6 +4,7 @@ import { useAuthStore, selectIsAuthenticated } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import Layout from '@/components/Layout'
 import LoginPage from '@/pages/LoginPage'
+import CallbackPage from '@/pages/CallbackPage'
 import TenantSelectionPage from '@/pages/TenantSelectionPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ClientsPage from '@/pages/ClientsPage'
@@ -26,6 +27,8 @@ function App() {
         <Toaster position="top-right" />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Where Authway's sign-in of a console account comes back to. */}
+          <Route path="/callback" element={<CallbackPage />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </>

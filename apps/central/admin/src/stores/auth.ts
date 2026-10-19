@@ -1,10 +1,18 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+/**
+ * How the console signed in: with the admin password (a console session), or
+ * as a console account through Authway's own sign-in (its access token).
+ * Signing out of an account also ends its session at Authway.
+ */
+export type SignInMethod = 'password' | 'account'
+
 interface AuthState {
   token: string | null
   expiresAt: string | null
-  login: (token: string, expiresAt: string) => void
+  method: SignInMethod | null
+  login: (token: string, expiresAt: string, method?: SignInMethod) => void
   logout: () => void
 }
 
@@ -25,17 +33,19 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       token: null,
       expiresAt: null,
-      login: (token, expiresAt) => set({ token, expiresAt }),
-      logout: () => set({ token: null, expiresAt: null }),
+      method: null,
+      login: (token, expiresAt, method = 'password') => set({ token, expiresAt, method }),
+      logout: () => set({ token: null, expiresAt: null, method: null }),
     }),
     {
       name: 'authway-admin-auth',
-      // Only the two facts.
+      // Only these facts.
       partialize: (state) => ({
         token: state.token,
         expiresAt: state.expiresAt,
+        method: state.method,
       }),
-      // Read back exactly those two and nothing else. The default merge is a
+      // Read back exactly those and nothing else. The default merge is a
       // shallow spread, so a stale `isAuthenticated: true` written by an older
       // build would be reinstated into the live store on every load — the very
       // value that caused the loop. Naming the fields drops it for good.
@@ -45,6 +55,7 @@ export const useAuthStore = create<AuthState>()(
           ...current,
           token: saved.token ?? null,
           expiresAt: saved.expiresAt ?? null,
+          method: saved.method ?? (saved.token ? 'password' : null),
         }
       },
     }

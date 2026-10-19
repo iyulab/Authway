@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../stores/auth'
 import { authApi, LoginRequest } from '../lib/api'
+import { fetchConsoleEntry, signInWithAccount, type ConsoleEntry } from '../lib/consoleSignIn'
 
 // Validation schema
 const loginSchema = z.object({
@@ -18,6 +19,31 @@ const LoginPage: React.FC = () => {
   const login = useAuthStore((state) => state.login)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  // The console's own sign-in, when the deployment offers it.
+  const [entry, setEntry] = useState<ConsoleEntry | null>(null)
+  const [leaving, setLeaving] = useState(false)
+
+  useEffect(() => {
+    let current = true
+    fetchConsoleEntry().then((found) => {
+      if (current) setEntry(found)
+    })
+    return () => {
+      current = false
+    }
+  }, [])
+
+  const onAccount = async () => {
+    if (!entry) return
+    setLeaving(true)
+    setError(null)
+    try {
+      await signInWithAccount(entry)
+    } catch (err: any) {
+      setLeaving(false)
+      setError(err?.message || '로그인 화면을 열지 못했습니다.')
+    }
+  }
 
   const {
     register,
@@ -71,9 +97,30 @@ const LoginPage: React.FC = () => {
             Authway 관리자 로그인
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            관리자 비밀번호로 로그인하세요
+            {entry ? '콘솔 계정이나 관리자 비밀번호로 로그인하세요' : '관리자 비밀번호로 로그인하세요'}
           </p>
         </div>
+
+        {entry && (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={onAccount}
+              disabled={leaving}
+              className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {leaving ? '로그인 화면으로 이동 중...' : '콘솔 계정으로 로그인'}
+            </button>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-gray-50 px-2 text-gray-500">또는 관리자 비밀번호</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           {error && (
@@ -89,6 +136,7 @@ const LoginPage: React.FC = () => {
               </label>
               <input
                 {...register('password')}
+                id="password"
                 type="password"
                 autoComplete="current-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
@@ -117,17 +165,6 @@ const LoginPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              일반 사용자이신가요?{' '}
-              <a
-                href="http://localhost:3001/login"
-                className="text-indigo-600 hover:text-indigo-500"
-              >
-                사용자 로그인 페이지
-              </a>
-            </p>
-          </div>
         </form>
       </div>
     </div>

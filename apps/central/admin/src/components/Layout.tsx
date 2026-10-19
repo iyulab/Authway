@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
-import { authApi } from '@/lib/api'
+import { signOut } from '@/lib/signOut'
 import {
   HomeIcon,
   CogIcon,
@@ -36,7 +35,6 @@ const GITHUB_URL = 'https://github.com/iyulab/Authway'
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const logout = useAuthStore((state) => state.logout)
   const { selectedTenant, clearSelectedTenant } = useTenantStore()
 
   // Sidebar collapse state with localStorage persistence
@@ -54,14 +52,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   const handleLogout = async () => {
-    try {
-      await authApi.logout()
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      logout()
-      navigate('/login')
-    }
+    if (!(await signOut())) navigate('/login')
   }
 
   return (

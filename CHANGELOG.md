@@ -31,7 +31,13 @@
   answers `404 console_sign_in_unavailable`. Migration 049 lets a tenant hold
   one Authway client of each kind (`clients.system_kind`). The account screen's
   client now follows a moved login UI address too — it kept the address it was
-  first registered with.
+  first registered with. **The console offers it**: «콘솔 계정으로 로그인» on its
+  sign-in page sends the browser to Authway's sign-in and back to
+  `/callback`; the tenant picker then lists the tenants the account
+  administers, and signing out ends the account's session at Authway too. The
+  admin password stays as the other way in, and is the only one where the
+  deployment offers no console sign-in. The sign-in page no longer links to a
+  login page on `localhost:3001`.
 - **A tenant's service credential can answer its users** — three scopes for
   a product's own support console, each reaching the credential's tenant only:
   `admin.users:read` (list and read users, and find them by email address —
