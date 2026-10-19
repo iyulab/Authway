@@ -230,6 +230,9 @@ func (f *fakeClientService) SyncAllClientsToHydra() (int, int, error) { return 0
 func (f *fakeClientService) EnsureAccountClient(uuid.UUID, string) (*client.Client, error) {
 	return nil, errors.New("not used")
 }
+func (f *fakeClientService) EnsureConsoleClient(uuid.UUID, string) (*client.Client, error) {
+	return nil, errors.New("not used")
+}
 func (f *fakeClientService) DeleteSystemClients(uuid.UUID) error { return nil }
 
 // fakeClaimsService is a claims.Service nothing in the login path calls.

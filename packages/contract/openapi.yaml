@@ -2054,6 +2054,45 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Error' }
 
+  /api/v1/console/entry:
+    get:
+      tags: [admin]
+      operationId: getConsoleEntry
+      summary: The client the console signs console accounts in with
+      description: |
+        The console's client in the system tenant — a public client (PKCE)
+        whose sign-in returns to the console, without a consent screen, whose
+        access tokens carry the audience the administration API takes from a
+        console account. A provider registers it the first time the console
+        asks. Public: everything in the answer is what a browser sees anyway.
+        404 console_sign_in_unavailable while the provider names no console
+        address or has no system tenant; the console then signs in with the
+        admin password only.
+      security: []
+      responses:
+        '200':
+          description: How to sign a console account in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, redirect_uri, scope, audience]
+                properties:
+                  client_id: { type: string }
+                  redirect_uri: { type: string, format: uri }
+                  scope: { type: string, description: Space-separated, as the authorization request takes it. }
+                  audience: { type: string, description: The audience to ask the authorization request for. }
+        '404':
+          description: No console sign-in in this deployment (code console_sign_in_unavailable)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+        '502':
+          description: The client could not be registered right now (code console_sign_in_unavailable)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/v1/console/me:
     get:
       tags: [admin]

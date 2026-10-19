@@ -33,6 +33,12 @@ export interface ConformanceConfig {
   idpStandIn?: string
   /** The sign-in provider the stand-in is put in the place of. */
   idpStandInAs: string
+  /**
+   * The console address the provider is configured with, when it signs
+   * console accounts in to its console (e.g. `http://localhost:3000`). Unset,
+   * the provider is expected to offer no console sign-in.
+   */
+  consoleUrl?: string
 }
 
 const REQUIRED = {
@@ -61,5 +67,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConformanceCon
     callbackHost: env.CONFORMANCE_CALLBACK_HOST || 'localhost',
     idpStandIn: env.CONFORMANCE_IDP_STANDIN ? trim(env.CONFORMANCE_IDP_STANDIN) : undefined,
     idpStandInAs: env.CONFORMANCE_IDP_STANDIN_AS || 'google',
+    consoleUrl: env.CONFORMANCE_CONSOLE_URL ? trim(env.CONFORMANCE_CONSOLE_URL) : undefined,
   }
 }

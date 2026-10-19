@@ -583,6 +583,9 @@ func main() {
 	// the admin key and the console session.
 	consoleService := console.NewService(db)
 	adminHandler.UseConsoleAccounts(hydraClient, consoleService)
+	// Public: which client the console signs console accounts in with.
+	// Registered before the authenticated /console routes.
+	v1.Get("/console/entry", handler.NewConsoleEntryHandler(clientService, consoleService, cfg.App.ConsoleURL, zapLogger).Get)
 	console.NewHandler(consoleService, newFeatureServices.AuditService, zapLogger).RegisterRoutes(v1, adminAuth)
 
 	// Admin Console routes

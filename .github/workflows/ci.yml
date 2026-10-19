@@ -250,6 +250,9 @@ jobs:
           AUTHWAY_GOOGLE_AUTH_URL: http://localhost:9912/authorize
           AUTHWAY_GOOGLE_TOKEN_URL: http://localhost:9912/token
           AUTHWAY_GOOGLE_USERINFO_URL: http://localhost:9912/userinfo
+          # Console accounts sign in through the console's own client; nothing
+          # listens there — the suite takes the code from the redirect.
+          AUTHWAY_APP_CONSOLE_URL: http://localhost:3000
         run: |
           set -euo pipefail
           go build -o "$RUNNER_TEMP/authway-api" ./apps/central/api/cmd
@@ -269,6 +272,7 @@ jobs:
           CONFORMANCE_ADMIN_KEY: ${{ env.ADMIN_API_KEY }}
           CONFORMANCE_MAIL_API: http://localhost:8025
           CONFORMANCE_IDP_STANDIN: http://localhost:9912
+          CONFORMANCE_CONSOLE_URL: http://localhost:3000
           CONFORMANCE_NATIVE_CLIENTS: >-
             rust=${{ github.workspace }}/clients/rust/target/debug/examples/sign_in;
             dotnet=dotnet ${{ github.workspace }}/clients/csharp/examples/SignIn/bin/Debug/net10.0/SignIn.dll

@@ -70,6 +70,12 @@ type AppConfig struct {
 	// password. These used to be built from BaseURL, which pointed at the API,
 	// so every emailed link 404'd in every environment.
 	FrontendURL string `mapstructure:"frontend_url"`
+	// ConsoleURL is the console's public address (the admin SPA, e.g.
+	// https://admin.example.com or https://auth.example.com/console). Console
+	// accounts sign in to it through the console's client in the system
+	// tenant, whose redirect is <ConsoleURL>/callback. Empty: the console
+	// signs in only with the admin password.
+	ConsoleURL string `mapstructure:"console_url"`
 }
 
 type DatabaseConfig struct {
@@ -560,6 +566,14 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("CRITICAL: app.frontend_url must be a publicly reachable URL outside development, got %q — emailed links would point at the container itself", c.App.FrontendURL))
 	}
 
+	if c.App.ConsoleURL != "" {
+		if u, err := url.Parse(c.App.ConsoleURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errors = append(errors, fmt.Sprintf("app.console_url (AUTHWAY_APP_CONSOLE_URL) must be the console's absolute http(s) address, got %q", c.App.ConsoleURL))
+		} else if IsProduction(c.App.Environment) && isLoopbackURL(c.App.ConsoleURL) {
+			errors = append(errors, fmt.Sprintf("app.console_url must be a publicly reachable URL outside development, got %q — console sign-ins would return to the container itself", c.App.ConsoleURL))
+		}
+	}
+
 	if c.Google.EndpointsOverridden() && IsProduction(c.App.Environment) {
 		errors = append(errors, "google.auth_url, google.token_url and google.userinfo_url (AUTHWAY_GOOGLE_*_URL) point sign-in at a stand-in provider and are only accepted in development")
 	}
@@ -623,6 +637,9 @@ func setDefaults() {
 	viper.SetDefault("app.base_url", "http://localhost:8080")
 	// The auth UI's vite dev server, not the API port — see AppConfig.FrontendURL.
 	viper.SetDefault("app.frontend_url", "http://localhost:3001")
+	// No console sign-in until the console's address is configured — a key
+	// without a default is not read from the environment.
+	viper.SetDefault("app.console_url", "")
 
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")

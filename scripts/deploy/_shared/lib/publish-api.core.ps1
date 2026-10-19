@@ -172,6 +172,7 @@ try {
             "AUTHWAY_APP_PORT=8080" `
             "AUTHWAY_APP_BASE_URL=$($envVars['API_URL'])" `
             "AUTHWAY_APP_FRONTEND_URL=$($envVars['AUTH_UI_URL'])" `
+            "AUTHWAY_APP_CONSOLE_URL=$($envVars['ADMIN_URL'])" `
             "AUTHWAY_ADMIN_PASSWORD=secretref:admin-password" `
             "AUTHWAY_DATABASE_HOST=$($envVars['AUTHWAY_DATABASE_HOST'])" `
             "AUTHWAY_DATABASE_PORT=$($envVars['AUTHWAY_DATABASE_PORT'])" `

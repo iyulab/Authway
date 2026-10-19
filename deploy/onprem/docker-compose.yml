@@ -47,6 +47,7 @@ services:
       AUTHWAY_APP_ENVIRONMENT: production
       AUTHWAY_APP_BASE_URL: *issuer
       AUTHWAY_APP_FRONTEND_URL: *issuer
+      AUTHWAY_APP_CONSOLE_URL: https://${AUTHWAY_DOMAIN}/console
       AUTHWAY_CORS_ALLOWED_ORIGINS: *issuer
       AUTHWAY_LOG_LEVEL: ${AUTHWAY_LOG_LEVEL:-info}
       AUTHWAY_DATABASE_HOST: postgres

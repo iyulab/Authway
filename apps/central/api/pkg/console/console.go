@@ -14,6 +14,7 @@ import (
 	"errors"
 	"time"
 
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tenantscope"
 
@@ -26,7 +27,7 @@ import (
 // from a console account. The console's client is registered with it in the
 // system tenant; a token without it — a token any other application of that
 // tenant holds — administers nothing.
-const Audience = "urn:authway:console"
+const Audience = client.ConsoleAudience
 
 // RoleOperator administers every tenant.
 const RoleOperator = "operator"

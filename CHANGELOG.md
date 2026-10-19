@@ -21,6 +21,17 @@
   /api/v1/console/me` lists them. The system tenant cannot be turned off or
   deleted (`409 system_tenant`). See [Console accounts](docs/api/console-accounts.md).
   Migration 048 adds the column and the table.
+- **The console's own sign-in client** — with the console's address
+  configured (`AUTHWAY_APP_CONSOLE_URL`) and a system tenant chosen,
+  `GET /api/v1/console/entry` answers with the client console accounts sign in
+  with: a public client of the system tenant that Authway registers the first
+  time it is asked (sign-in returns to `<console>/callback`, no consent screen,
+  access tokens for `urn:authway:console`, no refresh token) and that cannot be
+  changed or deleted through the administration API. Without the address it
+  answers `404 console_sign_in_unavailable`. Migration 049 lets a tenant hold
+  one Authway client of each kind (`clients.system_kind`). The account screen's
+  client now follows a moved login UI address too — it kept the address it was
+  first registered with.
 - **A tenant's service credential can answer its users** — three scopes for
   a product's own support console, each reaching the credential's tenant only:
   `admin.users:read` (list and read users, and find them by email address —

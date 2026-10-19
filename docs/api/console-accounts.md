@@ -92,8 +92,18 @@ With the admin key:
    be replaced only while no account of it holds a membership
    (`409 system_tenant_in_use`), and it cannot be turned off or deleted
    (`409 system_tenant`).
-2. Register the console's application in it with the audience
-   `urn:authway:console`.
+2. Give the deployment the console's address, `AUTHWAY_APP_CONSOLE_URL`
+   (for example `https://admin.example.com`, or `https://auth.example.com/console`
+   where the console is served under a path). The console's application is
+   then Authway's own: the first time the console asks
+   (`GET /api/v1/console/entry`), Authway registers a public client in the
+   system tenant — sign-in returns to `<console>/callback`, no consent screen,
+   access tokens for the audience `urn:authway:console`, no refresh token —
+   and keeps its addresses at the configured one. Like the account screen's
+   client it cannot be changed or deleted through the administration API
+   (`409 system_client`). Without the address, `GET /api/v1/console/entry`
+   answers `404 console_sign_in_unavailable` and the console signs in with the
+   admin password only.
 3. Invite the people who administer (`POST /api/v1/invitations` with the
    system tenant in `X-Tenant-ID`), and once they have accounts give each a
    membership.

@@ -97,13 +97,18 @@ AUTHWAY_APP_ENVIRONMENT=development         # development|staging|production
 AUTHWAY_APP_PORT=8080                       # HTTP port
 AUTHWAY_APP_BASE_URL=http://localhost:8080      # This API's own public URL (discovery `api_server`)
 AUTHWAY_APP_FRONTEND_URL=http://localhost:3001  # The auth UI's public URL
+AUTHWAY_APP_CONSOLE_URL=http://localhost:3000   # The console's public URL (optional)
 ```
 
-`BASE_URL` and `FRONTEND_URL` are different hosts and must not be set to the
-same value — startup fails if they are. Everything a person clicks is built from
-`FRONTEND_URL`: invitation accept, magic link, email verification, password
-reset. Pointing those at the API returns 404, and nothing else in the system
-notices — only the recipient of the mail does.
+Everything a person clicks is built from `FRONTEND_URL`: invitation accept,
+magic link, email verification, password reset. Pointing those at the API
+returns 404, and nothing else in the system notices — only the recipient of
+the mail does. `BASE_URL` and `FRONTEND_URL` are the same only where one origin
+serves both the API and the login UI (the on-premises bundle).
+
+`CONSOLE_URL` is where the console is served; console accounts sign in to it
+(see [Console accounts](docs/api/console-accounts.md)). Left empty, the console
+signs in with the admin password only.
 
 ### Database Configuration
 

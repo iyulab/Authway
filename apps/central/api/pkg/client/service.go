@@ -41,6 +41,9 @@ type Service interface {
 	// EnsureAccountClient returns the tenant's account screen client,
 	// registering it the first time (see system.go).
 	EnsureAccountClient(tenantID uuid.UUID, loginUI string) (*Client, error)
+	// EnsureConsoleClient returns the client console accounts sign in with,
+	// in the system tenant, registering it the first time (see system.go).
+	EnsureConsoleClient(systemTenantID uuid.UUID, consoleURL string) (*Client, error)
 	// DeleteSystemClients removes the clients Authway registered for a
 	// tenant, when the tenant is deleted.
 	DeleteSystemClients(tenantID uuid.UUID) error
@@ -272,6 +275,7 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 		Public:       req.Public,
 		Active:       true,
 		System:       req.System,
+		SystemKind:   req.SystemKind,
 	}
 
 	// The client's own provider apps: what is given is stored, as a change

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
 import { randomToken } from '../src/pkce.js'
-import { Provider, REDIRECT_URI, type TestClient } from '../src/provider.js'
+import { Provider, REDIRECT_URI, type TestClient, type TestUser } from '../src/provider.js'
 
 const CONSOLE_AUDIENCE = 'urn:authway:console'
 
@@ -38,6 +38,7 @@ describe('console accounts: a system tenant user administers what its membership
   let token: string
   let otherAppToken: string
   let sub: string
+  let user: TestUser
   const memberships: string[] = []
 
   const registerClient = async (audience?: string[]): Promise<TestClient> => {
@@ -84,7 +85,7 @@ describe('console accounts: a system tenant user administers what its membership
     expect(chosen.status, await chosen.clone().text()).toBe(200)
 
     system = new Provider({ ...config, tenantId: systemTenant })
-    const user = await system.inviteAndAccept()
+    user = await system.inviteAndAccept()
     consoleClient = await registerClient([CONSOLE_AUDIENCE])
     otherApp = await registerClient()
 
@@ -160,6 +161,41 @@ describe('console accounts: a system tenant user administers what its membership
     expect(rename.status).toBe(403)
     const giveOperator = await asAccount(token, '/api/v1/console/memberships', { method: 'PUT', body: JSON.stringify({ user_id: sub, role: 'operator' }) })
     expect(giveOperator.status).toBe(403)
+  })
+
+  it('signs console accounts in with the console’s own client', async () => {
+    const entry = await fetch(`${config.api}/api/v1/console/entry`)
+    await conform('GET', '/api/v1/console/entry', entry.clone())
+    if (!config.consoleUrl) {
+      expect(entry.status).toBe(404)
+      expect(await code(entry)).toBe('console_sign_in_unavailable')
+      return
+    }
+    expect(entry.status, await entry.clone().text()).toBe(200)
+    const given = (await entry.json()) as { client_id: string; redirect_uri: string; scope: string; audience: string }
+    expect(given).toMatchObject({ redirect_uri: `${config.consoleUrl}/callback`, audience: CONSOLE_AUDIENCE })
+    const again = (await (await fetch(`${config.api}/api/v1/console/entry`)).json()) as { client_id: string }
+    expect(again.client_id).toBe(given.client_id)
+
+    await put({ user_id: sub, tenant_id: administered, role: 'admin' })
+    const signedIn = await system.login({ id: '', clientId: given.client_id, redirectUri: given.redirect_uri }, user, { scopes: given.scope.split(' ') })
+    if (signedIn.kind !== 'code') throw new Error(`console sign-in stopped at ${signedIn.kind}`)
+    // No consent screen, and no refresh token: the console signs in again silently.
+    expect(signedIn.consent).not.toBe('asked')
+    expect(signedIn.tokens.refresh_token).toBeUndefined()
+    const me = await asAccount(signedIn.tokens.access_token, '/api/v1/console/me')
+    await conform('GET', '/api/v1/console/me', me.clone())
+    expect(me.status, await me.clone().text()).toBe(200)
+    expect(await me.json()).toMatchObject({ actor_type: 'console_user', user_id: sub })
+
+    // It is Authway's own: the administration API does not change or delete it.
+    const listed = (await (await system.admin('/api/v1/clients?limit=100')).json()) as { clients: { id: string; client_id: string; system: boolean }[] }
+    const own = listed.clients.find((c) => c.client_id === given.client_id)
+    expect(own?.system).toBe(true)
+    const removed = await system.admin(`/api/v1/clients/${own!.id}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/clients/{id}', removed.clone())
+    expect(removed.status).toBe(409)
+    expect(await code(removed)).toBe('system_client')
   })
 
   it('holds the routes a service credential may also call to the same scope', async () => {

@@ -36,9 +36,13 @@ type Client struct {
 	Public          bool           `json:"public" gorm:"default:false"`
 	Active          bool           `json:"active"`
 	// System marks an application Authway itself owns — the account screen's
-	// client, one per tenant (see EnsureAccountClient). The administration API
-	// refuses to change or delete it.
+	// client, and in the system tenant the console's: one of each kind per
+	// tenant (see EnsureAccountClient, EnsureConsoleClient). The
+	// administration API refuses to change or delete it.
 	System bool `json:"-" gorm:"column:is_system;not null;default:false"`
+	// SystemKind says which of them a system client is (SystemKindAccount,
+	// SystemKindConsole); empty for every other client.
+	SystemKind string `json:"-" gorm:"column:system_kind;default:null"`
 
 	// Client-specific Google OAuth (optional - if enabled, uses client settings; otherwise uses Authway common OAuth)
 	GoogleOAuthEnabled bool    `json:"google_oauth_enabled" gorm:"column:google_oauth_enabled;default:false"`
@@ -281,9 +285,10 @@ func (c *Client) ToPublic() PublicClient {
 
 // CreateClientRequest represents the request to create a new OAuth client
 type CreateClientRequest struct {
-	// System is set only by Authway itself (EnsureAccountClient); a request
-	// body cannot carry it.
-	System bool `json:"-"`
+	// System and SystemKind are set only by Authway itself (the Ensure…Client
+	// functions); a request body cannot carry them.
+	System     bool   `json:"-"`
+	SystemKind string `json:"-"`
 
 	// TenantID names the tenant in the body; the X-Tenant-ID header may name
 	// it instead, and when both do they must agree (the handler settles it).

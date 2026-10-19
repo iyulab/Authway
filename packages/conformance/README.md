@@ -49,6 +49,7 @@ pnpm --filter @authway/conformance test
 | `CONFORMANCE_TENANT_ID` | Optional. Tenant to provision into; defaults to the `default` tenant |
 | `CONFORMANCE_IDP_STANDIN` | Where the suite serves a stand-in identity provider, e.g. `http://localhost:9912`. Required when the provider offers sign-in through other identity providers (`capabilities.providers` is not empty) — see below |
 | `CONFORMANCE_IDP_STANDIN_AS` | Optional. The sign-in provider the stand-in is put in the place of. Defaults to `google` |
+| `CONFORMANCE_CONSOLE_URL` | Optional. The console address the provider is configured with (e.g. `http://localhost:3000`), when it signs console accounts in to its console. Unset, the suite expects no console sign-in (`GET /api/v1/console/entry` answers `404`) |
 | `CONFORMANCE_CALLBACK_HOST` | Optional. The name under which the provider reaches the machine running the suite, for the scenarios in which the provider calls the suite (back-channel logout). Defaults to `localhost`; with the authorization server in a container on Docker Desktop, `host.docker.internal` |
 
 The provider must be able to call the machine running the suite: the
