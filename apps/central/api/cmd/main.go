@@ -368,13 +368,6 @@ func main() {
 	app.Get("/flows/consent", flowEntryHandler.Consent)
 	app.Get("/flows/logout", flowEntryHandler.Logout)
 	app.Get("/flows/device", flowEntryHandler.Device)
-	// TODO(transition): remove these four once staging's and production's
-	// authorization servers point at /flows/* (publish-hydra after an API that
-	// serves both is deployed) — until then their sign-ins arrive here.
-	app.Get("/login", flowEntryHandler.Login)
-	app.Get("/consent", flowEntryHandler.Consent)
-	app.Get("/logout", flowEntryHandler.Logout)
-	app.Get("/device", flowEntryHandler.Device)
 
 	// Onboarding is invitation-only — public self-registration removed (D-a/B).
 	// Users are created by accepting an invitation (POST

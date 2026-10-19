@@ -24,10 +24,11 @@
   `/consent`, `/logout` and `/device`, which are the login UI's own screens.
   The API and the login UI can now be served from one origin. **Migration:**
   point the authorization server's `URLS_LOGIN`, `URLS_CONSENT`, `URLS_LOGOUT`
-  and `URLS_DEVICE_VERIFICATION` at `<API>/flows/…` after deploying this API
-  (the deploy scripts derive them). The old paths answer until then and will
-  be removed in a later release. Nothing to change for applications; a device
-  shows the verification address discovery gives it.
+  and `URLS_DEVICE_VERIFICATION` at `<API>/flows/…` together with this
+  upgrade (the deploy scripts derive them) — the API no longer answers the
+  old paths, so an authorization server left on them sends sign-ins to a
+  404. Nothing to change for applications; a device shows the verification
+  address discovery gives it.
 
 - **A sign-in through another provider continues with a redirect** (`303 See
   Other`) instead of a page whose script navigated onward. Nothing to change
