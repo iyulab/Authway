@@ -163,6 +163,21 @@ describe('console accounts: a system tenant user administers what its membership
     expect(giveOperator.status).toBe(403)
   })
 
+  it('names the console account that invites, in its tenant only', async () => {
+    await put({ user_id: sub, tenant_id: administered, role: 'admin' })
+    const email = `conformance-invited-${randomToken(6).toLowerCase()}@example.test`
+    const res = await asAccount(token, '/api/v1/invitations', { method: 'POST', body: JSON.stringify({ email }) })
+    await conform('POST', '/api/v1/invitations', res.clone())
+    expect(res.status, await res.clone().text()).toBe(201)
+    const { invitation } = (await res.json()) as { invitation: { id: string; inviter_id: string | null; inviter_name: string } }
+    expect(invitation.inviter_id).toBe(sub)
+    expect(invitation.inviter_name).not.toBe('system')
+    await asAccount(token, `/api/v1/invitations/${invitation.id}`, { method: 'DELETE' })
+
+    const elsewhere = await asAccount(token, '/api/v1/invitations', { method: 'POST', tenant: systemTenant, body: JSON.stringify({ email }) })
+    expect(elsewhere.status).toBe(404)
+  })
+
   it('signs console accounts in with the console’s own client', async () => {
     const entry = await fetch(`${config.api}/api/v1/console/entry`)
     await conform('GET', '/api/v1/console/entry', entry.clone())

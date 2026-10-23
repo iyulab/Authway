@@ -22,11 +22,13 @@ import (
 // database or the returned struct. The outbound link is the only place the
 // plaintext still appears.
 type stubEmailSender struct {
-	lastLinkURL string
+	lastLinkURL     string
+	lastInviterName string
 }
 
 func (s *stubEmailSender) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
 	s.lastLinkURL = inviteURL
+	s.lastInviterName = inviterName
 	return nil
 }
 
@@ -133,7 +135,7 @@ func TestCreate_SystemActor_BootstrapsEmptyTenant(t *testing.T) {
 	}
 
 	email := fmt.Sprintf("first-%s@example.com", uuid.New().String()[:8])
-	inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: email})
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("system-actor invitation must succeed on an empty tenant, got: %v", err)
 	}
@@ -181,7 +183,7 @@ func TestAccept_SystemActorInvitation_CreatesFirstUser(t *testing.T) {
 	tn := freshTenant(t, ts)
 
 	email := fmt.Sprintf("owner-%s@example.com", uuid.New().String()[:8])
-	inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: email})
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -242,7 +244,7 @@ func TestCreate_UserInviter_IsAttributed(t *testing.T) {
 	}
 	defer db.Exec(`DELETE FROM users WHERE id = ?`, inviter.ID)
 
-	inv, err := svc.Create(tn.ID, &inviter.ID, &CreateInvitationRequest{
+	inv, err := svc.Create(tn.ID, Inviter{UserID: &inviter.ID}, &CreateInvitationRequest{
 		Email: fmt.Sprintf("colleague-%s@example.com", uuid.New().String()[:8]),
 	})
 	if err != nil {
@@ -287,10 +289,53 @@ func TestCreate_UserInviter_RejectsCrossTenant(t *testing.T) {
 	}
 	defer db.Exec(`DELETE FROM users WHERE id = ?`, outsider.ID)
 
-	_, err = svc.Create(tenantA.ID, &outsider.ID, &CreateInvitationRequest{
+	_, err = svc.Create(tenantA.ID, Inviter{UserID: &outsider.ID}, &CreateInvitationRequest{
 		Email: fmt.Sprintf("victim-%s@example.com", uuid.New().String()[:8]),
 	})
 	if err == nil {
 		t.Fatal("an inviter from another tenant must be rejected")
+	}
+}
+
+// TestCreate_ConsoleInviter_IsAttributedAcrossTenants: a console account is a
+// user of the system tenant, and inviting into a tenant it administers names
+// it as the inviter — recorded, in the mail, and on read — rather than leaving
+// the invitation to the system actor.
+func TestCreate_ConsoleInviter_IsAttributedAcrossTenants(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts, us, sender := newTestServiceWithSender(t, db)
+	system := freshTenant(t, ts)
+	tn := freshTenant(t, ts)
+
+	account, err := us.Create(system.ID, &user.CreateUserRequest{
+		Email:    fmt.Sprintf("operator-%s@example.com", uuid.New().String()[:8]),
+		Password: "correct-horse-battery",
+		Name:     "Console Operator",
+	})
+	if err != nil {
+		t.Fatalf("seed console account: %v", err)
+	}
+	defer db.Exec(`DELETE FROM users WHERE id = ?`, account.ID)
+
+	inv, err := svc.Create(tn.ID, Inviter{UserID: &account.ID, Console: true}, &CreateInvitationRequest{
+		Email: fmt.Sprintf("member-%s@example.com", uuid.New().String()[:8]),
+	})
+	if err != nil {
+		t.Fatalf("a console account inviting into a tenant it administers must succeed: %v", err)
+	}
+	defer db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
+
+	if inv.InviterID == nil || *inv.InviterID != account.ID {
+		t.Errorf("inviter not recorded: %v", inv.InviterID)
+	}
+	if sender.lastInviterName != "Console Operator" {
+		t.Errorf("mail names %q, want the console account", sender.lastInviterName)
+	}
+	got, err := svc.GetByID(inv.ID)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got.InviterName != "Console Operator" {
+		t.Errorf("read-back InviterName = %q", got.InviterName)
 	}
 }

@@ -37,24 +37,21 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return err
 	}
 
-	// A signed-in user is attributed as the inviter. The Admin Console
-	// authenticates with the admin API key and has no user behind it, so it
-	// invites as the system actor — inviterID stays nil, which the schema now
-	// expresses as a NULL inviter_id. (It previously pointed at a hard-coded
-	// UUID that no users row ever had, which failed every admin-key invite.)
-	var inviterID *uuid.UUID
-	isAdminConsole := c.Locals("is_admin_console")
-	userIDStr := c.Locals("user_id")
-
-	if userIDStr != nil {
+	// Who invites: a console account is the inviter, recorded and named in
+	// the mail, though it is a user of the system tenant. The admin key and a
+	// console session have no user behind them and invite as the system actor
+	// — a NULL inviter_id. A signed-in user of the tenant is its inviter.
+	var by Inviter
+	isAdminConsole, _ := c.Locals("is_admin_console").(bool)
+	if account, ok := c.Locals("actor_id").(uuid.UUID); ok && c.Locals("actor_type") == "console_user" {
+		by = Inviter{UserID: &account, Console: true}
+	} else if userIDStr := c.Locals("user_id"); userIDStr != nil {
 		parsed, err := uuid.Parse(userIDStr.(string))
 		if err != nil {
 			return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid user ID")
 		}
-		inviterID = &parsed
-	} else if isAdminConsole != nil && isAdminConsole.(bool) {
-		// system actor — nil inviter
-	} else {
+		by = Inviter{UserID: &parsed}
+	} else if !isAdminConsole {
 		return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "unauthorized - user_id required")
 	}
 
@@ -67,7 +64,7 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return apierror.Invalid(c, err)
 	}
 
-	invitation, err := h.service.Create(tenantID, inviterID, &req)
+	invitation, err := h.service.Create(tenantID, by, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
 		switch {

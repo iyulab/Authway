@@ -72,7 +72,7 @@ func TestBackfillTokenHashes_IdempotentOnAlreadyHashedRows(t *testing.T) {
 	tn := freshTenant(t, ts)
 
 	email := fmt.Sprintf("normal-%s@example.com", uuid.New().String()[:8])
-	inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: email})
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

@@ -28,14 +28,14 @@ func TestCreate_RefusesAnAddressOutsideTheDomainsTheTenantAllows(t *testing.T) {
 	svc, ts, _ := newTestService(t, db)
 	tn := tenantWith(t, ts, tenant.TenantSettings{AllowedDomains: []string{"Example.com"}})
 
-	if _, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: "someone@elsewhere.example"}); !errors.Is(err, ErrAddressNotAllowed) {
+	if _, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: "someone@elsewhere.example"}); !errors.Is(err, ErrAddressNotAllowed) {
 		t.Fatalf("an outside address: got %v, want ErrAddressNotAllowed", err)
 	}
 	// A subdomain is a different domain.
-	if _, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: "someone@mail.example.com"}); !errors.Is(err, ErrAddressNotAllowed) {
+	if _, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: "someone@mail.example.com"}); !errors.Is(err, ErrAddressNotAllowed) {
 		t.Fatalf("a subdomain: got %v, want ErrAddressNotAllowed", err)
 	}
-	inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: fmt.Sprintf("in-%s@example.com", uuid.NewString()[:8])})
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: fmt.Sprintf("in-%s@example.com", uuid.NewString()[:8])})
 	if err != nil {
 		t.Fatalf("an address in the domain: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestAccept_ProvesTheAddressAndHoldsThePasswordToTheRule(t *testing.T) {
 	tn := tenantWith(t, tenantService, tenant.TenantSettings{PasswordMinLength: 12})
 
 	email := fmt.Sprintf("invited-%s@example.com", uuid.NewString()[:8])
-	inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: email})
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestMarkAcceptedAddressesVerified(t *testing.T) {
 
 	invite := func(email string) *user.User {
 		t.Helper()
-		inv, err := svc.Create(tn.ID, nil, &CreateInvitationRequest{Email: email})
+		inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email})
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}

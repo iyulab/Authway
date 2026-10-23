@@ -19,7 +19,10 @@
   memberships (`/api/v1/console/memberships`) say what it administers:
   `operator` every tenant, `owner` or `admin` one tenant. `GET
   /api/v1/console/me` lists them. The system tenant cannot be turned off or
-  deleted (`409 system_tenant`). See [Console accounts](docs/api/console-accounts.md).
+  deleted (`409 system_tenant`). An invitation a console account sends names
+  it as the inviter — recorded in `inviter_id` and in the mail — instead of
+  the system actor the admin key and the console session invite as. See
+  [Console accounts](docs/api/console-accounts.md).
   Migration 048 adds the column and the table.
 - **The console's own sign-in client** — with the console's address
   configured (`AUTHWAY_APP_CONSOLE_URL`) and a system tenant chosen,

@@ -167,7 +167,7 @@ func TestMagicLink_InvitedAddress_ProvisionsUser(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("invited-%s@example.com", uuid.New().String()[:8])
 
-	inv, err := f.invitation.Create(f.tenant.ID, nil, &invitation.CreateInvitationRequest{Email: email})
+	inv, err := f.invitation.Create(f.tenant.ID, invitation.Inviter{}, &invitation.CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("invite: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestVerifyMagicLink_RevokedInvitation_Denies(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("revoked-%s@example.com", uuid.New().String()[:8])
 
-	inv, err := f.invitation.Create(f.tenant.ID, nil, &invitation.CreateInvitationRequest{Email: email})
+	inv, err := f.invitation.Create(f.tenant.ID, invitation.Inviter{}, &invitation.CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("invite: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestInspectMagicLink_DoesNotConsume(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("inspect-%s@example.com", uuid.New().String()[:8])
 
-	inv, err := f.invitation.Create(f.tenant.ID, nil, &invitation.CreateInvitationRequest{Email: email})
+	inv, err := f.invitation.Create(f.tenant.ID, invitation.Inviter{}, &invitation.CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("invite: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("single-%s@example.com", uuid.New().String()[:8])
 
-	inv, err := f.invitation.Create(f.tenant.ID, nil, &invitation.CreateInvitationRequest{Email: email})
+	inv, err := f.invitation.Create(f.tenant.ID, invitation.Inviter{}, &invitation.CreateInvitationRequest{Email: email})
 	if err != nil {
 		t.Fatalf("invite: %v", err)
 	}

@@ -36,11 +36,21 @@ type EmailSender interface {
 	SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error
 }
 
+// Inviter is who sends an invitation. The zero value is the system actor (the
+// admin API key, a console session): there is no user behind it.
+type Inviter struct {
+	// UserID is the user who invites.
+	UserID *uuid.UUID
+	// Console says the user is a console account — a user of the system
+	// tenant, inviting into a tenant it administers; the admin middleware has
+	// checked its membership. Any other user invites into its own tenant only.
+	Console bool
+}
+
 // Service provides organization invitation functionality
 type Service interface {
-	// Create issues an invitation. inviterID is nil when the caller is the
-	// system actor (admin API key) rather than a signed-in user.
-	Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error)
+	// Create issues an invitation from inviter.
+	Create(tenantID uuid.UUID, inviter Inviter, req *CreateInvitationRequest) (*Invitation, error)
 	// HasValidInvitation reports whether (tenantID, email) has a pending,
 	// unexpired invitation.
 	HasValidInvitation(tenantID uuid.UUID, email string) (bool, error)
@@ -94,7 +104,8 @@ func generateToken() (string, error) {
 	return tokenhash.Generate()
 }
 
-func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateInvitationRequest) (*Invitation, error) {
+func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRequest) (*Invitation, error) {
+	inviterID := by.UserID
 	t, err := s.tenantService.GetTenantByID(tenantID)
 	if err != nil {
 		return nil, ErrTenantNotFound
@@ -107,7 +118,7 @@ func (s *service) Create(tenantID uuid.UUID, inviterID *uuid.UUID, req *CreateIn
 		if err != nil {
 			return nil, apierror.NewPublic("inviter not found")
 		}
-		if inviter.TenantID != tenantID {
+		if inviter.TenantID != tenantID && !by.Console {
 			return nil, apierror.NewPublic("inviter belongs to a different organization")
 		}
 		inviterName = displayName(inviter)

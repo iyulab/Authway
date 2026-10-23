@@ -3532,7 +3532,7 @@ components:
         email: { type: string }
         status: { type: string, enum: [pending, accepted, expired, revoked] }
         message: { type: string }
-        inviter_id: { type: ['null', string], description: null when issued with the admin key. }
+        inviter_id: { type: ['null', string], description: "null when issued with the admin key or a console session; a console account that invites is named." }
         inviter_name: { type: string }
         tenant_name: { type: string }
         accepted_at: { type: ['null', string] }
