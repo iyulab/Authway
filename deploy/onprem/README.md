@@ -32,6 +32,17 @@ vi .env                          # AUTHWAY_DOMAIN, AUTHWAY_TLS, mail
 docker compose up -d
 ```
 
+Where the host can reach GitHub's registry, it can pull a released version
+instead of loading `images.tar` — name it in `.env`:
+
+```sh
+AUTHWAY_API_IMAGE=ghcr.io/iyulab/authway-api:0.19.0
+AUTHWAY_WEB_IMAGE=ghcr.io/iyulab/authway-web:0.19.0
+```
+
+The images are published for each product version (`v<version>` tags,
+CHANGELOG's sections).
+
 The first start takes a minute: the API applies its database migrations.
 `docker compose ps` shows `api` as healthy when it is ready.
 

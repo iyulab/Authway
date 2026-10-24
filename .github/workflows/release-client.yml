@@ -1,7 +1,7 @@
 name: Release .NET client
 
 # Authway.Client (clients/csharp) to nuget.org, driven only by a `client-v<version>` tag — a push to main never
-# publishes, and the npm SDK's `v*` tags do not match. The tests ran in CI on the tagged commit; this checks that the
+# publishes, and the npm SDK's `js-v*` tags and the product's `v*` tags do not match. The tests ran in CI on the tagged commit; this checks that the
 # tag, the project and the changelog agree and that nuget.org does not have the version yet, then packs and pushes.
 # Text under clients/ is checked for internal references by the repository's pre-commit hook before it is committed.
 

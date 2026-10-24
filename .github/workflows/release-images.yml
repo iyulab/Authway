@@ -1,0 +1,76 @@
+name: Release images
+
+# Publishes the on-premises installation's two images to GHCR on a product tag
+# `v<version>` (CHANGELOG's `## [<version>]`): ghcr.io/iyulab/authway-api and
+# ghcr.io/iyulab/authway-web, each as `<version>` and `latest`. The bundle's
+# compose file runs them when AUTHWAY_API_IMAGE and AUTHWAY_WEB_IMAGE name them
+# (deploy/onprem/README.md); a host without registry access keeps using
+# pack.sh's images.tar.
+#
+# Human workflow, once the version's CHANGELOG section is cut on main:
+#   git tag v0.19.0 <commit> && git push origin v0.19.0
+#
+# The tests ran in CI on the tagged commit; this checks that the tag names a
+# CHANGELOG section and that the commit is on main, then builds and pushes.
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: build and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -q "^## \[${version}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for ${version}"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # The same builds the on-premises CI job and pack.sh run.
+      - name: Build
+        run: |
+          set -euo pipefail
+          v='${{ steps.version.outputs.version }}'
+          docker build -t "ghcr.io/iyulab/authway-api:${v}" -t ghcr.io/iyulab/authway-api:latest \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.version=${v}" \
+            --build-arg "APP_VERSION=v${v}" .
+          docker build -t "ghcr.io/iyulab/authway-web:${v}" -t ghcr.io/iyulab/authway-web:latest \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.version=${v}" \
+            -f deploy/onprem/web.Dockerfile .
+
+      - name: Push
+        run: |
+          set -euo pipefail
+          v='${{ steps.version.outputs.version }}'
+          for image in authway-api authway-web; do
+            docker push "ghcr.io/iyulab/${image}:${v}"
+            docker push "ghcr.io/iyulab/${image}:latest"
+          done

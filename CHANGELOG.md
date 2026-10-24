@@ -13,6 +13,12 @@
   tenant (an entry still open is reused), shows a band with the tenant, the
   reason and the time left, and ends it there; when the hour is up it goes
   back to the tenant list.
+- **Released images for the on-premises installation** — each product version
+  (`v<version>` tag) publishes `ghcr.io/iyulab/authway-api` and
+  `ghcr.io/iyulab/authway-web` as `<version>` and `latest`; a host that
+  reaches the registry names them in `.env` instead of loading `images.tar`.
+  The npm SDK's release tags are now `js-v<version>` (they were `v<version>`
+  up to `v0.5.0`).
 
 ### Changed
 

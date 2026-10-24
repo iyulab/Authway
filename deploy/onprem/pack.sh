@@ -22,7 +22,7 @@ cp "$here/docker-compose.yml" "$here/.env.example" "$here/setup.sh" "$here/READM
 cp "$root/configs/hydra.shared.env" "$out/hydra.shared.env"
 
 if [ "$images" = yes ]; then
-	version=$(git -C "$root" describe --tags --always --dirty 2>/dev/null || date +%Y%m%d)
+	version=$(git -C "$root" describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || date +%Y%m%d)
 	docker build -t authway-api:latest --build-arg APP_VERSION="$version" -f "$root/Dockerfile" "$root"
 	docker build -t authway-web:latest -f "$here/web.Dockerfile" "$root"
 	set -- authway-api:latest authway-web:latest
