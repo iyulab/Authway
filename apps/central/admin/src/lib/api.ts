@@ -180,11 +180,6 @@ export interface LoginResponse {
   expires_at: string
 }
 
-export interface AdminInfo {
-  authenticated: boolean
-  version: string
-}
-
 // Admin Auth API
 export const authApi = {
   login: (data: LoginRequest) =>
@@ -192,12 +187,19 @@ export const authApi = {
 
   logout: () =>
     api.post<{ message: string }>('/admin/logout'),
+}
 
-  validate: () =>
-    api.get<{ valid: boolean; info: AdminInfo }>('/admin/validate'),
+/** Who the caller is (GET /api/v1/console/me), whichever way it came in. */
+export interface ConsoleMe {
+  // console_user (a console account), admin_session (the admin password) or api_key
+  actor_type: string
+  operator: boolean
+  user_id?: string
+  memberships: { tenant_id: string | null; role: string }[]
+}
 
-  info: () =>
-    api.get<AdminInfo>('/admin/info'),
+export const consoleApi = {
+  me: () => api.get<ConsoleMe>('/api/v1/console/me'),
 }
 
 // Users API

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@/test/utils'
 import toast from 'react-hot-toast'
 import SettingsPage from './SettingsPage'
-import { authApi, capabilitiesApi, healthApi, tenantsApi } from '@/lib/api'
+import { capabilitiesApi, consoleApi, healthApi, tenantsApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 
 // The settings page shows only what it reads from the deployment, and says
@@ -14,7 +14,7 @@ const answer = <T,>(data: T) => ({ data }) as never
 beforeEach(() => {
   vi.restoreAllMocks()
   useTenantStore.setState({ selectedTenant: { id: 't1', name: 'Tenant', slug: 'tenant', active: true } as never })
-  vi.spyOn(authApi, 'validate').mockResolvedValue(answer({ valid: true, info: { authenticated: true, version: 'v20261015212924' } }))
+  vi.spyOn(consoleApi, 'me').mockResolvedValue(answer({ actor_type: 'console_user', operator: false, user_id: 'u1', memberships: [{ tenant_id: 't1', role: 'owner' }] }))
   vi.spyOn(healthApi, 'get').mockResolvedValue(answer({ status: 'ok', version: 'v20261015212924', migrations: ['000', '040', '041'] }))
   vi.spyOn(capabilitiesApi, 'get').mockResolvedValue(
     answer({ multi_tenant: true, providers: ['google'], magic_link: true, mfa: ['totp'], signup_modes: ['invite_only', 'open'], device_authorization: true, token_exchange: false, ciba: false }),
@@ -28,6 +28,9 @@ describe('settings', () => {
     expect(screen.getByText('migration 041')).toBeInTheDocument()
     expect(await screen.findByText('google')).toBeInTheDocument()
     expect(screen.getByText('invite_only, open')).toBeInTheDocument()
+    // Who is signed in comes from /console/me, which answers a console account too.
+    expect(screen.getByText('콘솔 계정')).toBeInTheDocument()
+    expect(screen.getByText('테넌트 1 개')).toBeInTheDocument()
     // Nothing the console cannot read.
     expect(screen.queryByText(/PKCE/)).not.toBeInTheDocument()
     expect(screen.queryByText('http://localhost:4445')).not.toBeInTheDocument()

@@ -11,7 +11,7 @@ import {
   TrashIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi, authApi, healthApi, capabilitiesApi } from '@/lib/api'
+import { tenantsApi, consoleApi, healthApi, capabilitiesApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input, ConfirmDialog } from '@/components/ui'
 import { getConfig } from '../config'
@@ -86,15 +86,20 @@ const SettingsPage: React.FC = () => {
     }
   }
 
-  // The admin console has no per-admin account model — Login() issues a
-  // session token from a single shared AUTHWAY_ADMIN_PASSWORD (pkg/admin
-  // Service.Authenticate), so there is no name/email/verified/active to
-  // fetch for "the current admin". /admin/validate is the one thing the
-  // backend can truthfully say about this session.
-  const { data: adminInfo } = useQuery({
-    queryKey: ['admin-session-info'],
-    queryFn: () => authApi.validate().then((res) => res.data.info),
+  // Who is signed in, whichever way: a console account, the shared admin
+  // password, or the admin key. /admin/validate answers the password's
+  // session only, and a console account's token there is refused.
+  const { data: me } = useQuery({
+    queryKey: ['console-me'],
+    queryFn: () => consoleApi.me().then((res) => res.data),
   })
+  const signedInAs = !me
+    ? '확인 중'
+    : me.actor_type === 'console_user'
+      ? '콘솔 계정'
+      : me.actor_type === 'admin_session'
+        ? '관리자 비밀번호'
+        : '관리 키'
 
   // Everything below is read from the deployment itself — the console's own
   // configuration, the API's /health, and what it says it offers. Nothing is
@@ -250,29 +255,21 @@ const SettingsPage: React.FC = () => {
             관리자 세션
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Admin Console은 관리자별 계정이 아니라 공유 관리자 비밀번호로 인증합니다 — 세션은
-            "누가"가 아니라 "인증됐는지"만 구분합니다.
+            콘솔 계정으로 들어오면 그 계정의 멤버십이 관리할 수 있는 테넌트를 정합니다. 공유 관리자
+            비밀번호는 모든 테넌트를 관리합니다.
           </p>
         </div>
         <div className="px-4 py-5 sm:px-6">
           <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
             <div>
-              <dt className="text-sm font-medium text-gray-500">인증 상태</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                <span
-                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    adminInfo?.authenticated
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {adminInfo?.authenticated ? '인증됨' : '확인 중'}
-                </span>
-              </dd>
+              <dt className="text-sm font-medium text-gray-500">로그인 방식</dt>
+              <dd className="mt-1 text-sm text-gray-900">{signedInAs}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">서버 버전</dt>
-              <dd className="mt-1 text-sm text-gray-900">{adminInfo?.version ?? '-'}</dd>
+              <dt className="text-sm font-medium text-gray-500">관리 범위</dt>
+              <dd className="mt-1 text-sm text-gray-900">
+                {!me ? '-' : me.operator ? '모든 테넌트(운영자)' : `테넌트 ${me.memberships.length} 개`}
+              </dd>
             </div>
           </dl>
         </div>
