@@ -12,13 +12,23 @@ name: Release images
 #
 # The tests ran in CI on the tagged commit; this checks that the tag names a
 # CHANGELOG section and that the commit is on main, then builds and pushes.
+#
+# A tag push runs this file as the tagged commit has it. A version tagged on a
+# commit from before this file existed (v0.19.0), or one to publish again, is
+# built by running it by hand with the version:
+#   gh workflow run release-images.yml -f version=0.19.0
 
 on:
   push:
     tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The product version to build — its tag v<version> must exist
+        required: true
 
 concurrency:
-  group: release-images-${{ github.ref }}
+  group: release-images-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -32,19 +42,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
           fetch-depth: 0
 
       - name: Check the tag
         id: version
+        env:
+          TAG: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           if ! grep -q "^## \[${version}\]" CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no section for ${version}"
             exit 1
           fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_REF_NAME is not on main"
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$TAG is not on main"
             exit 1
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
