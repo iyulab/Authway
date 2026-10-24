@@ -1,0 +1,14 @@
+# Deploy: npx wrangler@4 deploy (from this directory, signed in to the account
+# that holds the zone). See docs/DEPLOYMENT.md, "Discovery document".
+name = "authway-discovery"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "oauth.authway.in/.well-known/openid-configuration", zone_name = "authway.in" },
+  { pattern = "oauth.authway.in/.well-known/oauth-authorization-server", zone_name = "authway.in" },
+]
+
+[vars]
+API_ORIGIN = "https://api.authway.in"

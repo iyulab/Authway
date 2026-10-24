@@ -276,7 +276,22 @@ unchanged.
 A client reads discovery at the issuer's address, so the document reaches
 clients only where the deployment routes those two paths of the issuer's host
 to the API (a reverse proxy in front of both, or an edge rule on the issuer's
-domain). Without that route, clients see the authorization server's document;
+domain). The on-premises bundle does this in its reverse proxy. On Azure the
+issuer's domain sits behind Cloudflare, whose origin rules cannot change the
+host on the zone's plan, so a Worker serves the two paths:
+[`deploy/cloudflare/discovery/`](../deploy/cloudflare/discovery/). It is
+routed at those two exact paths only, passes the request's `Origin` on so the
+API answers CORS, and hands the request to the issuer's origin when the API
+does not return a document for this issuer. Deploy it with
+`npx wrangler@4 deploy` from that directory, signed in to the account that
+holds the zone (the Pages token in the deployment `.env` cannot edit
+Workers). Then set both routes to fail open on the free plan's daily request
+limit (Workers → Routes, or `request_limit_fail_open: true` on the zone's
+`workers/routes`) — over the limit, clients read the authorization server's
+document as they would without the Worker; check this after every deploy, as
+a deploy may recreate the routes. To undo, delete the two routes. The smoke
+test (`verify-oauth-smoke.ps1 -Target prod`) fails when the issuer's
+discovery has no `introspection_endpoint`. Without that route, clients see the authorization server's document;
 everything they can register still works, and the introspection endpoint is
 `{API}/api/v1/oauth2/introspect`. Read at the API's own address, the document
 fails a client's issuer check (OpenID Connect Discovery 1.0 §4.3) — the API is

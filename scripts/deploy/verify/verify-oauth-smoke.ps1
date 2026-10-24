@@ -392,12 +392,23 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     Write-Host "7️⃣  authorization code → access token 교환" -ForegroundColor Yellow
     # At the token endpoint discovery names, as a client finds it — the API's
     # front, which passes the grant on to the authorization server.
-    $tokenEndpoint = (& curl.exe -s "$issuer/.well-known/openid-configuration" | ConvertFrom-Json).token_endpoint
+    $discovery = & curl.exe -s "$issuer/.well-known/openid-configuration" | ConvertFrom-Json
+    $tokenEndpoint = $discovery.token_endpoint
     if (-not $tokenEndpoint) {
         Write-Host "❌ discovery 에 token_endpoint 가 없음" -ForegroundColor Red
         exit 1
     }
     Write-Host "   token_endpoint: $tokenEndpoint" -ForegroundColor Gray
+    # The issuer's discovery is the API's document only where the deployment
+    # routes those paths to the API (prod: the edge Worker in
+    # deploy/cloudflare/discovery). Staging has no edge in front of the issuer.
+    if (-not $discovery.introspection_endpoint) {
+        if ($Target -eq 'prod') {
+            Write-Host "❌ 발급자 discovery 에 introspection_endpoint 가 없음 — 엣지 Worker(deploy/cloudflare/discovery) 확인" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "   ⚠ 발급자 discovery 에 introspection_endpoint 없음(이 환경엔 발급자 앞 라우팅이 없음)" -ForegroundColor Yellow
+    }
     $codeArgs = @('-s', '-X', 'POST', $tokenEndpoint,
         '-d', 'grant_type=authorization_code', '-d', "code=$code",
         '--data-urlencode', "redirect_uri=$redirectUri", '-d', "client_id=$clientId")
