@@ -135,10 +135,11 @@ describe('password login through the authorization-code flow', () => {
     if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)
     subjects.add(outcome.sub)
     if (!outcome.tokens.id_token) throw new Error('no id_token to hint the logout with')
-    // Refused before the logout screen (no flow id), or ended anywhere but there.
+    // Refused before the logout screen — at an error page whose address each
+    // deployment sets — or ended anywhere but there.
     const landed = await provider.rpInitiatedLogout(outcome.browser, outcome.tokens.id_token, 'https://elsewhere.invalid/back').catch((e: Error) => e)
     if (landed instanceof Error) {
-      expect(landed.message).toMatch(/without a flow id.*error=invalid_request/)
+      expect(landed.message).toContain('error=invalid_request')
       return
     }
     expect(landed.origin).not.toBe('https://elsewhere.invalid')
