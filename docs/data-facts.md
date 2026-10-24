@@ -30,7 +30,8 @@ with the session, or when the user signs out everywhere.
 | Sign-in links and codes by email | 15 minutes, then removed within the hour. Each records the IP address and browser that asked for it |
 | Email verification links | 6 hours, then removed within the hour (only a hash of the link is stored) |
 | Password reset links | 1 hour, then removed within the hour (hash only) |
-| Invitations | Valid for 7 days. The invitation — the invited address, who invited, the message — is kept after it is accepted or expires |
+| Invitations | Valid for 7 days. Once accepted, revoked or expired, the invitation — the invited address, who invited, the message — is removed after 90 days |
+| Webhook delivery records | 30 days — each delivery's payload (ids only) and the receiver's answer |
 
 ## The audit log
 
@@ -41,9 +42,10 @@ IP address and browser, and the outcome. A failed sign-in records the address
 that was tried; an administrator's deletion of an account records the deleted
 account's address.
 
-Entries are kept until a tenant owner removes them: `DELETE
-/api/v1/audit/logs/purge?retention_days=N` removes those older than `N` days
-(at least 30). Nothing removes them on a schedule.
+Entries are kept for the tenant's `audit_retention_days` — 365 days unless
+the tenant sets another, at least 30 — and removed daily once older. A tenant
+owner can also remove older entries at once: `DELETE
+/api/v1/audit/logs/purge?retention_days=N`.
 
 ## What leaves Authway
 
@@ -53,7 +55,7 @@ Entries are kept until a tenant owner removes them: `DELETE
 - **Webhooks** to the addresses a tenant registers. A delivery carries ids —
   the event, the tenant, the resource and who acted — and no profile data
   ([webhooks](api/webhooks.md)). Authway keeps each delivery and the
-  receiver's answer.
+  receiver's answer for 30 days.
 - **Sign-in providers** are asked for the user's basic profile and email
   address (Google and Microsoft `openid email profile`, GitHub `user:email
   read:user`, Apple `name email`). Authway keeps the provider's account id, the
@@ -79,7 +81,7 @@ or by an administrator:
 - the [`user.deleted`](api/webhooks.md#events) webhook tells the tenant's
   services, which remove what they keep about the user.
 
-What stays: the tenant's audit-log entries about the account (until purged,
-as above), invitations sent to its address (the invitation's link to the
+What stays, for as long as above: the tenant's audit-log entries about the
+account, invitations sent to its address (the invitation's link to the
 account is cleared), webhook delivery records (ids only), and the service's
 logs.

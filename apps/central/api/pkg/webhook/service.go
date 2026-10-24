@@ -55,6 +55,9 @@ type Service interface {
 	// whether or not it is enabled, and returns the recorded delivery.
 	Test(id uuid.UUID) (*WebhookDelivery, error)
 	GetDeliveries(webhookID uuid.UUID, limit int) ([]WebhookDelivery, error)
+	// PurgeDeliveries removes the records of deliveries made before
+	// olderThan ago — with them the receivers' answers.
+	PurgeDeliveries(olderThan time.Duration) (int64, error)
 	// RotateSecret replaces the signing secret and returns the new one.
 	RotateSecret(id uuid.UUID) (string, error)
 }
@@ -474,6 +477,14 @@ func (s *service) post(delivery *WebhookDelivery, webhook Webhook, msgID string,
 	} else {
 		delivery.ErrorMessage = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
+}
+
+func (s *service) PurgeDeliveries(olderThan time.Duration) (int64, error) {
+	result := s.db.Where("delivered_at < ?", time.Now().Add(-olderThan)).Delete(&WebhookDelivery{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to purge webhook deliveries: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 func (s *service) GetDeliveries(webhookID uuid.UUID, limit int) ([]WebhookDelivery, error) {

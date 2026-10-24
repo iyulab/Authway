@@ -72,6 +72,10 @@ type Service interface {
 	Revoke(id uuid.UUID) error
 	Resend(id uuid.UUID) error
 	CleanupExpired() (int64, error)
+	// PurgeClosed removes the invitations that were accepted, revoked or
+	// expired more than closedFor ago — and with them the invited address
+	// and the inviter's message.
+	PurgeClosed(closedFor time.Duration) (int64, error)
 }
 
 type service struct {
@@ -419,6 +423,14 @@ func (s *service) Resend(id uuid.UUID) error {
 	}
 	s.logger.Info("Invitation resent", zap.String("invitation_id", inv.ID.String()))
 	return nil
+}
+
+func (s *service) PurgeClosed(closedFor time.Duration) (int64, error) {
+	result := s.db.Where("status IN ? AND updated_at < ?", []InvitationStatus{StatusAccepted, StatusRevoked, StatusExpired}, time.Now().Add(-closedFor)).Delete(&Invitation{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to purge closed invitations: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 func (s *service) CleanupExpired() (int64, error) {

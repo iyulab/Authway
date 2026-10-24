@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"authway/apps/central/api/internal/database"
 	"authway/apps/central/api/pkg/tenant"
@@ -337,5 +338,54 @@ func TestCreate_ConsoleInviter_IsAttributedAcrossTenants(t *testing.T) {
 	}
 	if got.InviterName != "Console Operator" {
 		t.Errorf("read-back InviterName = %q", got.InviterName)
+	}
+}
+
+// TestPurgeClosed_RemovesInvitationsLongClosedAndNothingPending: an
+// invitation accepted, revoked or expired long enough ago goes — with the
+// address and the message — while a pending one stays however old.
+func TestPurgeClosed_RemovesInvitationsLongClosedAndNothingPending(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts, _ := newTestService(t, db)
+	tn := freshTenant(t, ts)
+
+	invite := func(status InvitationStatus, closedDaysAgo int) uuid.UUID {
+		t.Helper()
+		inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: fmt.Sprintf("purge-%s@example.com", uuid.NewString()[:8])})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		t.Cleanup(func() { db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID) })
+		// The table's trigger stamps updated_at on every update; replica mode
+		// skips it so the closing can be dated in the past.
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec(`SET LOCAL session_replication_role = replica`).Error; err != nil {
+				return err
+			}
+			return tx.Exec(`UPDATE invitations SET status = ?, updated_at = NOW() - make_interval(days => ?) WHERE id = ?`, status, closedDaysAgo, inv.ID).Error
+		}); err != nil {
+			t.Fatalf("backdate: %v", err)
+		}
+		return inv.ID
+	}
+	gone := []uuid.UUID{invite(StatusAccepted, 100), invite(StatusRevoked, 100), invite(StatusExpired, 100)}
+	kept := []uuid.UUID{invite(StatusAccepted, 10), invite(StatusPending, 100)}
+
+	if _, err := svc.PurgeClosed(90 * 24 * time.Hour); err != nil {
+		t.Fatalf("PurgeClosed: %v", err)
+	}
+	count := func(id uuid.UUID) (n int64) {
+		db.Raw(`SELECT count(*) FROM invitations WHERE id = ?`, id).Scan(&n)
+		return n
+	}
+	for i, id := range gone {
+		if count(id) != 0 {
+			t.Errorf("closed invitation %d should be gone", i)
+		}
+	}
+	for i, id := range kept {
+		if count(id) != 1 {
+			t.Errorf("invitation %d should stay", i)
+		}
 	}
 }

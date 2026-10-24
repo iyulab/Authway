@@ -21,6 +21,11 @@ type Service interface {
 	GetUserActivity(tenantID, userID uuid.UUID, limit int) ([]AuditLog, error)
 	GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]AuditLog, error)
 	PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (int64, error)
+	// PurgeExpired removes, across every tenant, the entries older than the
+	// tenant keeps them (its settings' audit_retention_days, or
+	// defaultDays) — entries of a tenant that no longer exists, or of none,
+	// after defaultDays.
+	PurgeExpired(defaultDays int) (int64, error)
 	// Subscribe registers fn to be called with each entry once it has been
 	// recorded — the audit log is the one place every lifecycle event passes
 	// through, so whatever else must hear of them (webhooks) listens here.
@@ -202,6 +207,17 @@ func (s *service) GetRecentSecurityEvents(tenantID uuid.UUID, hours int) ([]Audi
 		return nil, fmt.Errorf("failed to get security events: %w", err)
 	}
 	return logs, nil
+}
+
+func (s *service) PurgeExpired(defaultDays int) (int64, error) {
+	result := s.db.Exec(`DELETE FROM audit_logs a
+		WHERE a.created_at < NOW() - make_interval(days => COALESCE(
+			(SELECT NULLIF((t.settings->>'audit_retention_days')::int, 0) FROM tenants t WHERE t.id = a.tenant_id),
+			?))`, defaultDays)
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to purge expired audit logs: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 func (s *service) PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (int64, error) {

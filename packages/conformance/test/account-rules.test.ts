@@ -81,6 +81,7 @@ describe('accounts: what an account is created with', () => {
       { password_min_length: 5 },
       { password_min_length: 100 },
       { session_timeout: -1 },
+      { audit_retention_days: 29 },
       { allowed_domains: ['not a domain'] },
       { allowed_domains: ['someone@example.test'] },
     ]) {

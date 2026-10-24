@@ -156,6 +156,8 @@ export interface TenantSettings {
   // pending invitation) or 'open' (any address auto-provisions). Absent,
   // empty, or any other value behaves as 'invite_only'.
   signup_mode?: 'invite_only' | 'open' | string
+  // Days the audit log keeps an entry; 0 or absent keeps it 365.
+  audit_retention_days?: number
 }
 
 export interface Tenant {

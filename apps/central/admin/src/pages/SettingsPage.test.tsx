@@ -106,7 +106,7 @@ describe('settings', () => {
       {
         name: 'Tenant',
         description: '',
-        settings: { password_min_length: 12, session_timeout: 60, allowed_domains: ['a.example', 'b.example'], signup_mode: 'open' },
+        settings: { password_min_length: 12, session_timeout: 60, audit_retention_days: 0, allowed_domains: ['a.example', 'b.example'], signup_mode: 'open' },
       },
     ])
   })

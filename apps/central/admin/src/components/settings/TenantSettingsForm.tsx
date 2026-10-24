@@ -6,16 +6,20 @@ import { useTenantStore } from '@/stores/tenant'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 
 // What the API accepts (pkg/tenant TenantSettings): a password length of
-// 8–72 when more than every tenant gets, a session of up to 30 days.
+// 8–72 when more than every tenant gets, a session of up to 30 days, an
+// audit log kept at least 30 days (a year when not said).
 const MIN_PASSWORD = 8
 const MAX_PASSWORD = 72
 const MAX_SESSION_MINUTES = 43200
+const MIN_AUDIT_DAYS = 30
+const MAX_AUDIT_DAYS = 36500
 
 interface Draft {
   name: string
   description: string
   passwordMinLength: string
   sessionTimeout: string
+  auditRetentionDays: string
   allowedDomains: string
   signupMode: string
 }
@@ -27,6 +31,7 @@ const memberOf: Record<keyof Draft, string> = {
   description: 'description',
   passwordMinLength: 'settings.password_min_length',
   sessionTimeout: 'settings.session_timeout',
+  auditRetentionDays: 'settings.audit_retention_days',
   allowedDomains: 'settings.allowed_domains',
   signupMode: 'settings.signup_mode',
 }
@@ -36,6 +41,7 @@ const draftOf = (t: Tenant): Draft => ({
   description: t.description ?? '',
   passwordMinLength: t.settings?.password_min_length ? String(t.settings.password_min_length) : '',
   sessionTimeout: t.settings?.session_timeout ? String(t.settings.session_timeout) : '',
+  auditRetentionDays: t.settings?.audit_retention_days ? String(t.settings.audit_retention_days) : '',
   allowedDomains: (t.settings?.allowed_domains ?? []).join('\n'),
   signupMode: t.settings?.signup_mode === 'open' ? 'open' : 'invite_only',
 })
@@ -52,6 +58,10 @@ export function draftErrors(d: Draft): Partial<Record<keyof Draft, string>> {
   if (st !== '' && !(/^\d+$/.test(st) && +st <= MAX_SESSION_MINUTES)) {
     errors.sessionTimeout = `0~${MAX_SESSION_MINUTES} 분(30 일), 또는 비워 두세요(기본)`
   }
+  const ar = d.auditRetentionDays.trim()
+  if (ar !== '' && !(/^\d+$/.test(ar) && +ar >= MIN_AUDIT_DAYS && +ar <= MAX_AUDIT_DAYS)) {
+    errors.auditRetentionDays = `${MIN_AUDIT_DAYS}~${MAX_AUDIT_DAYS} 일, 또는 비워 두세요(365)`
+  }
   return errors
 }
 
@@ -61,6 +71,7 @@ export function settingsOf(d: Draft, current?: TenantSettings): TenantSettings {
     ...current,
     password_min_length: d.passwordMinLength.trim() === '' ? 0 : Number(d.passwordMinLength),
     session_timeout: d.sessionTimeout.trim() === '' ? 0 : Number(d.sessionTimeout),
+    audit_retention_days: d.auditRetentionDays.trim() === '' ? 0 : Number(d.auditRetentionDays),
     allowed_domains: d.allowedDomains
       .split(/[\s,]+/)
       .map((s) => s.trim().toLowerCase())
@@ -154,6 +165,15 @@ const TenantSettingsForm: React.FC = () => {
           onChange={set('sessionTimeout')}
           error={errorAt('sessionTimeout')}
           helperText="사용자의 로그인 세션이 유지되는 시간. 최대 43200 분(30 일)."
+        />
+        <Input
+          label="감사 로그 보관(일)"
+          inputMode="numeric"
+          placeholder="365"
+          value={draft.auditRetentionDays}
+          onChange={set('auditRetentionDays')}
+          error={errorAt('auditRetentionDays')}
+          helperText="이보다 오래된 감사 기록은 매일 지워집니다. 최소 30 일."
         />
       </div>
       <Textarea

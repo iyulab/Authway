@@ -518,3 +518,39 @@ func TestFromAudit_AnAuditEntryReachesTheSubscribedReceiver(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+// TestPurgeDeliveries_RemovesOnlyRecordsOlderThanAsked: delivery records —
+// payloads and the receivers' answers — go once they are older than the
+// retention, and newer ones stay.
+func TestPurgeDeliveries_RemovesOnlyRecordsOlderThanAsked(t *testing.T) {
+	db := setupPostgres(t)
+	tenantID := fixtureTenant(t, db)
+	svc := NewService(db, zap.NewNop(), AllowPrivateTargets(true))
+	wh, err := svc.Create(tenantID, &CreateWebhookRequest{Name: "retention", URL: "https://hooks.example.com/r", Events: []string{"user.created"}})
+	if err != nil {
+		t.Fatalf("create webhook: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM webhooks WHERE id = ?`, wh.ID) })
+
+	delivery := func(ageDays int) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		if err := db.Exec(`INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, attempt, delivered_at, success)
+			VALUES (?, ?, 'user.created', '{}', 1, NOW() - make_interval(days => ?), true)`, id, wh.ID, ageDays).Error; err != nil {
+			t.Fatalf("seed delivery: %v", err)
+		}
+		t.Cleanup(func() { db.Exec(`DELETE FROM webhook_deliveries WHERE id = ?`, id) })
+		return id
+	}
+	old, recent := delivery(40), delivery(5)
+
+	if _, err := svc.PurgeDeliveries(30 * 24 * time.Hour); err != nil {
+		t.Fatalf("PurgeDeliveries: %v", err)
+	}
+	var oldCount, recentCount int64
+	db.Raw(`SELECT count(*) FROM webhook_deliveries WHERE id = ?`, old).Scan(&oldCount)
+	db.Raw(`SELECT count(*) FROM webhook_deliveries WHERE id = ?`, recent).Scan(&recentCount)
+	if oldCount != 0 || recentCount != 1 {
+		t.Fatalf("after purge: old %d (want 0), recent %d (want 1)", oldCount, recentCount)
+	}
+}

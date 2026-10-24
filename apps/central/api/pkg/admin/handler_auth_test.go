@@ -49,6 +49,8 @@ func (s *stubAuditService) PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (
 	return 0, nil
 }
 
+func (s *stubAuditService) PurgeExpired(defaultDays int) (int64, error) { return 0, nil }
+
 func (s *stubAuditService) snapshot() []*audit.AuditEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -87,8 +87,46 @@ func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth,
 	s.AuditHandler.RegisterRoutes(v1, adminAuth, auditReadAuth)
 }
 
+// How long records that name people are kept once they have served:
+// webhook delivery records (with the receivers' answers) and invitations
+// that were accepted, revoked or expired. The audit log's is the tenant's
+// setting (tenant.DefaultAuditRetentionDays when it has none).
+const (
+	deliveryRetention         = 30 * 24 * time.Hour
+	closedInvitationRetention = 90 * 24 * time.Hour
+)
+
+// purgeExpiredRecords removes what has outlived its retention.
+func (s *NewFeatureServices) purgeExpiredRecords(logger *zap.Logger) {
+	for _, job := range []struct {
+		what  string
+		purge func() (int64, error)
+	}{
+		{"audit entries", func() (int64, error) { return s.AuditService.PurgeExpired(tenant.DefaultAuditRetentionDays) }},
+		{"webhook deliveries", func() (int64, error) { return s.WebhookService.PurgeDeliveries(deliveryRetention) }},
+		{"closed invitations", func() (int64, error) { return s.InvitationService.PurgeClosed(closedInvitationRetention) }},
+	} {
+		if count, err := job.purge(); err != nil {
+			logger.Error("Failed to remove expired records", zap.String("records", job.what), zap.Error(err))
+		} else if count > 0 {
+			logger.Info("Removed expired records", zap.String("records", job.what), zap.Int64("count", count))
+		}
+	}
+}
+
 // StartBackgroundCleanupTasks starts background cleanup goroutines
 func (s *NewFeatureServices) StartBackgroundCleanupTasks(logger *zap.Logger) {
+	// Records past their retention go once at start — an instance that
+	// scales to zero may never see a day's tick — and daily after.
+	go func() {
+		s.purgeExpiredRecords(logger)
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			s.purgeExpiredRecords(logger)
+		}
+	}()
+
 	// Cleanup expired invitations periodically
 	go func() {
 		ticker := time.NewTicker(6 * time.Hour)

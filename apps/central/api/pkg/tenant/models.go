@@ -53,7 +53,19 @@ type TenantSettings struct {
 	// any unrecognized value all resolve to the safe invite-only behavior
 	// with no separate validation required.
 	SignupMode string `json:"signup_mode"`
+	// AuditRetentionDays is how many days the tenant's audit log keeps an
+	// entry before it is removed. Zero means DefaultAuditRetentionDays; less
+	// than MinAuditRetentionDays is refused.
+	AuditRetentionDays int `json:"audit_retention_days" validate:"omitempty,min=30,max=36500"`
 }
+
+const (
+	// DefaultAuditRetentionDays is how long an audit entry is kept when the
+	// tenant has not said: a year, so a sign-in can be traced well after it.
+	DefaultAuditRetentionDays = 365
+	// MinAuditRetentionDays is the least a tenant may keep its audit log.
+	MinAuditRetentionDays = 30
+)
 
 const (
 	// SignupModeInviteOnly is the default: a first-time sign-in may only
