@@ -19,7 +19,7 @@ func validConfig() *Config {
 	c.Database.Host = "localhost"
 	c.Database.User = "authway"
 	c.Database.Name = "authway"
-	c.Admin.Password = "not-empty"
+	c.Admin.Password = "a-strong-admin-password"
 	c.App.Environment = "development"
 	c.App.BaseURL = "http://localhost:8080"
 	c.App.FrontendURL = "http://localhost:3001"

@@ -42,6 +42,10 @@
   `error=invalid_request` instead of a code (RFC 9700). The SDKs always sent
   it; a hand-written sign-in must add `code_challenge` (S256) and send the
   `code_verifier` with the code.
+- **Outside development the shared admin password must be at least 16
+  characters and not an example value** — the API refused only `admin123`,
+  so `.env.example`'s value started a deployment. The on-premises setup
+  generates 32 characters.
 
 ### Fixed
 

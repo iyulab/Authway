@@ -515,8 +515,8 @@ func (c *Config) Validate() error {
 	// development — staging is a real deployed, internet-facing environment and
 	// gets the same guarantees as production, not the relaxed dev fallback.
 	if IsProduction(c.App.Environment) {
-		if c.Admin.Password == "" || c.Admin.Password == "admin123" {
-			errors = append(errors, "CRITICAL: admin.password must be set to a strong password outside development")
+		if weakAdminPassword(c.Admin.Password) {
+			errors = append(errors, fmt.Sprintf("CRITICAL: admin.password must be set to a strong password outside development — at least %d characters, not an example value", minAdminPasswordLength))
 		}
 		// Fail-closed: admin API key is required. Without it, every
 		// adminAuth-protected endpoint rejects all traffic (and previously — before
@@ -713,4 +713,19 @@ func setDefaults() {
 	// Application Insights defaults (completely optional)
 	viper.SetDefault("applicationinsights.enabled", false)
 	viper.SetDefault("applicationinsights.connection_string", "")
+}
+
+// minAdminPasswordLength is the least length of the shared admin password
+// outside development. The on-premises setup generates 32 characters.
+const minAdminPasswordLength = 16
+
+// weakAdminPassword reports a shared admin password a deployment must not run
+// with: none, too short, or a value the repository itself shows as an example
+// (the development default and .env.example's).
+func weakAdminPassword(p string) bool {
+	switch p {
+	case "admin123", "authway0":
+		return true
+	}
+	return len(p) < minAdminPasswordLength
 }

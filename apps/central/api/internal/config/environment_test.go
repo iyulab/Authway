@@ -114,6 +114,22 @@ func TestValidateRejectsStagingWeakAdminPassword(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsShortOrExampleAdminPasswords(t *testing.T) {
+	// The .env.example value, and one character short of the least length.
+	for _, p := range []string{"", "authway0", "fifteen-chars-x"} {
+		c := stagingConfig()
+		c.Admin.Password = p
+		if err := c.Validate(); err == nil {
+			t.Errorf("staging accepted the admin password %q", p)
+		}
+	}
+	c := stagingConfig()
+	c.Admin.Password = "sixteen-chars-ok"
+	if err := c.Validate(); err != nil {
+		t.Errorf("a 16-character admin password must be accepted: %v", err)
+	}
+}
+
 func TestValidateRejectsLoopbackFrontendURLInStaging(t *testing.T) {
 	c := stagingConfig()
 	c.App.FrontendURL = "http://localhost:3001"
