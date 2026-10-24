@@ -24,6 +24,11 @@
   entering the tenant first (for an operator, without opening support
   access): turning it off asks to confirm. A tenant's own administrators see
   no such control.
+- **The two screens as one build output** — `packages/ui` (`npm run build`)
+  builds the login UI for the site root and the console for `/console/`, both
+  on the page's own origin, into `login/` and `console/`: what an
+  installation serving everything on one address ships. The on-premises web
+  image now builds its screens with it.
 - **The screens' runtime configuration is part of the contract** —
   `packages/contract/runtime-config.schema.json` describes `config.js`
   (`window.__AUTHWAY_CONFIG__`: `apiUrl`, `issuerUrl`,

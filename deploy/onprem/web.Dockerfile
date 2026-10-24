@@ -5,28 +5,22 @@
 # Build from the repository root:
 #   docker build -f deploy/onprem/web.Dockerfile -t authway-web .
 
-FROM node:24-alpine AS login-ui
-# The API is on the page's own origin: an empty URL, whatever a .env file
-# would say (src/config.ts).
-ENV VITE_API_URL=
+# The two screens as packages/ui builds them (packages/ui/build.mjs): the
+# login UI for the site root, the console for /console/, both reaching the
+# API on the page's own origin.
+FROM node:24-alpine AS screens
 WORKDIR /src
-COPY apps/branding/auth-ui/package.json apps/branding/auth-ui/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY apps/branding/auth-ui/ ./
-RUN npm run build
-
-FROM node:24-alpine AS console
-ENV VITE_API_URL=
-WORKDIR /src
-COPY apps/central/admin/package.json apps/central/admin/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY apps/central/admin/ ./
-RUN ADMIN_BASE_PATH=/console/ npm run build
+# Each app's dependencies first, in their own layer.
+COPY apps/branding/auth-ui/package.json apps/branding/auth-ui/package-lock.json apps/branding/auth-ui/
+COPY apps/central/admin/package.json apps/central/admin/package-lock.json apps/central/admin/
+RUN cd apps/branding/auth-ui && npm ci --no-audit --no-fund
+RUN cd apps/central/admin && npm ci --no-audit --no-fund
+COPY apps/branding/auth-ui/ apps/branding/auth-ui/
+COPY apps/central/admin/ apps/central/admin/
+COPY packages/ui/ packages/ui/
+RUN node packages/ui/build.mjs --no-install
 
 FROM caddy:2.10-alpine
-COPY --from=login-ui /src/dist /srv/ui
-COPY --from=console /src/dist /srv/console
-# Hosting files for other platforms; nothing here reads them.
-RUN rm -f /srv/ui/_headers /srv/ui/_redirects /srv/ui/staticwebapp.config.json \
-          /srv/console/_headers /srv/console/_redirects /srv/console/staticwebapp.config.json
+COPY --from=screens /src/packages/ui/login /srv/ui
+COPY --from=screens /src/packages/ui/console /srv/console
 COPY deploy/onprem/Caddyfile /etc/caddy/Caddyfile

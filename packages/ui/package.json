@@ -1,0 +1,16 @@
+{
+  "name": "@authway/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authway's login UI and console, built for one origin: the login UI at the root, the console under /console/",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "files": [
+    "login",
+    "console",
+    "README.md"
+  ],
+  "license": "Apache-2.0"
+}
