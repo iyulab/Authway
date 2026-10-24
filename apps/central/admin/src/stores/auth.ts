@@ -12,8 +12,17 @@ interface AuthState {
   token: string | null
   expiresAt: string | null
   method: SignInMethod | null
+  /**
+   * The browser is leaving for Authway's sign-out. The console shows nothing
+   * else meanwhile: a sign-in started from a page still on screen would cancel
+   * that navigation, and Authway's session would outlive the sign-out. Never
+   * persisted — a page loaded afresh is not leaving.
+   */
+  signingOut: boolean
   login: (token: string, expiresAt: string, method?: SignInMethod) => void
   logout: () => void
+  /** Drops the token like logout, and holds the console on the signing-out screen. */
+  beginSignOut: () => void
 }
 
 /**
@@ -34,8 +43,10 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       expiresAt: null,
       method: null,
-      login: (token, expiresAt, method = 'password') => set({ token, expiresAt, method }),
-      logout: () => set({ token: null, expiresAt: null, method: null }),
+      signingOut: false,
+      login: (token, expiresAt, method = 'password') => set({ token, expiresAt, method, signingOut: false }),
+      logout: () => set({ token: null, expiresAt: null, method: null, signingOut: false }),
+      beginSignOut: () => set({ token: null, expiresAt: null, method: null, signingOut: true }),
     }),
     {
       name: 'authway-admin-auth',

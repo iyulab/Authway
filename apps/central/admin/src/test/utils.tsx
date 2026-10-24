@@ -3,19 +3,6 @@ import { render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router'
 
-// Mock Zustand store
-const mockAuthStore = {
-  user: null,
-  token: null,
-  isAuthenticated: false,
-  login: vi.fn(),
-  logout: vi.fn(),
-}
-
-vi.mock('../lib/store', () => ({
-  useAuthStore: () => mockAuthStore,
-}))
-
 // Create a custom render function that includes providers
 const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
   const queryClient = new QueryClient({

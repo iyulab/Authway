@@ -72,12 +72,14 @@ export async function completeSignIn(url = window.location.href): Promise<Signed
 
 /**
  * Ends the console account's session at Authway too, and comes back to the
- * console's sign-in page. Without the entry (it was cleared) only this
- * browser's tokens are dropped.
+ * console's sign-in page. Resolves true when the browser is leaving for
+ * Authway's sign-out; false without the entry (it was cleared), when only
+ * this browser's tokens are dropped.
  */
-export async function signOutOfAccount(): Promise<void> {
+export async function signOutOfAccount(): Promise<boolean> {
   const entry = readEntry()
-  if (!entry) return
+  if (!entry) return false
   sessionStorage.removeItem(ENTRY_KEY)
   await clientFor(entry).logout({ returnTo: new URL(consolePath(''), window.location.origin).toString() })
+  return true
 }

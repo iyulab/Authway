@@ -11,7 +11,7 @@ const later = () => new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
 beforeEach(() => {
   signOutOfAccount.mockReset()
-  useAuthStore.setState({ token: null, expiresAt: null, method: null })
+  useAuthStore.setState({ token: null, expiresAt: null, method: null, signingOut: false })
 })
 
 describe('signOut', () => {
@@ -21,11 +21,40 @@ describe('signOut', () => {
       apiLogout = true
       return HttpResponse.json({})
     }))
+    signOutOfAccount.mockResolvedValue(true)
     useAuthStore.getState().login('account-token', later(), 'account')
     expect(await signOut()).toBe(true)
     expect(signOutOfAccount).toHaveBeenCalledOnce()
     expect(apiLogout).toBe(false)
-    expect(useAuthStore.getState()).toMatchObject({ token: null, method: null })
+    // Leaving: the token is gone, and the console holds on the signing-out
+    // screen rather than a sign-in page whose click would cancel the leaving.
+    expect(useAuthStore.getState()).toMatchObject({ token: null, method: null, signingOut: true })
+  })
+
+  it('holds the signing-out screen before it starts to leave', async () => {
+    let signingOutWhenLeaving: boolean | undefined
+    signOutOfAccount.mockImplementation(async () => {
+      signingOutWhenLeaving = useAuthStore.getState().signingOut
+      return true
+    })
+    useAuthStore.getState().login('account-token', later(), 'account')
+    await signOut()
+    expect(signingOutWhenLeaving).toBe(true)
+  })
+
+  it('shows the sign-in page when there is nowhere to leave for', async () => {
+    signOutOfAccount.mockResolvedValue(false)
+    useAuthStore.getState().login('account-token', later(), 'account')
+    expect(await signOut()).toBe(false)
+    expect(useAuthStore.getState()).toMatchObject({ token: null, signingOut: false })
+  })
+
+  it('shows the sign-in page when leaving fails', async () => {
+    signOutOfAccount.mockRejectedValue(new Error('discovery unreachable'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    useAuthStore.getState().login('account-token', later(), 'account')
+    expect(await signOut()).toBe(false)
+    expect(useAuthStore.getState()).toMatchObject({ token: null, signingOut: false })
   })
 
   it('ends an admin session at the API', async () => {

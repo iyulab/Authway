@@ -38,6 +38,15 @@
   who sent the invitation, to ask for the application's address. It said only
   to sign in from the app.
 
+### Fixed
+
+- **Signing a console account out of the console ends its Authway session
+  every time**: the console showed its sign-in page while it was still
+  preparing to leave for Authway's sign-out, and signing in from it then
+  cancelled the sign-out — the next sign-in went through without asking for
+  the password. The console now shows only a signing-out screen until the
+  page leaves.
+
 ## [0.19.0] - 2026-10-24
 
 > Minor. Console accounts (people sign in to the console with an account of
