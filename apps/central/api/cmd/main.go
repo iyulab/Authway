@@ -601,13 +601,17 @@ func main() {
 		adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.audit:read"))
 	newFeatureServices.StartBackgroundCleanupTasks(zapLogger)
 
-	// Cleanup expired admin sessions periodically
+	// Cleanup expired admin sessions, and the verification and reset links
+	// that can no longer be used, periodically
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
 			if err := adminService.CleanupExpiredSessions(); err != nil {
 				zapLogger.Error("Failed to cleanup expired admin sessions", zap.Error(err))
+			}
+			if err := emailRepo.CleanupExpiredTokens(); err != nil {
+				zapLogger.Error("Failed to cleanup expired email links", zap.Error(err))
 			}
 		}
 	}()

@@ -36,7 +36,9 @@ On `200` the account is gone:
 - the user's sign-in sessions, consents and every token issued under them are
   ended at the authorization server — the access token used for this call
   stops working, as does any refresh token;
-- the account is deleted;
+- the account is removed, with what hangs on it — its custom claims,
+  accepted terms, delegations and unused email links (what the tenant's audit
+  log keeps about it is listed in [What Authway keeps about a user](../data-facts.md#when-an-account-is-deleted));
 - [`user.deleted`](webhooks.md#events) is sent, with the user as both
   `resource` and `actor`, so services that keep data about the user can remove
   it. The event carries the user's id (their `sub`) and nothing else.

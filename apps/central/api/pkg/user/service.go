@@ -205,8 +205,13 @@ func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
 	return &user, nil
 }
 
+// Delete removes the account and, through the schema's cascades, what hangs
+// on it (claims, terms acceptances, delegations, approvals, console
+// memberships, unused email links); invitations keep their row with the
+// account's id cleared. A deleted account is gone, not hidden: nothing of it
+// stays to be restored or to answer for the person who asked to leave.
 func (s *service) Delete(id uuid.UUID) error {
-	result := s.db.Delete(&User{}, id)
+	result := s.db.Unscoped().Delete(&User{}, id)
 	if result.Error != nil {
 		s.logger.Error("Failed to delete user", zap.Error(result.Error), zap.String("id", id.String()))
 		return fmt.Errorf("failed to delete user: %w", result.Error)

@@ -278,6 +278,17 @@
 
 ### Fixed
 
+- **Deleting an account removes it.** It only set a deletion mark: the row —
+  email address, password hash, the encrypted authenticator secret, provider
+  ids — stayed, and so did everything keyed by it (custom claims, accepted
+  terms, delegations, approvals, console memberships), since the schema's
+  cascades never ran. The account and those rows are now removed; invitations
+  keep their row with the account cleared. Accounts deleted before this
+  version keep their rows until a later release removes them.
+- **Expired verification and reset links are removed.** The cleanup existed
+  but nothing ran it, and it skipped links already replaced by newer ones. It
+  now runs hourly. [What Authway keeps about a user](docs/data-facts.md) lists
+  what is stored, for how long, and what deletion removes.
 - **Turning a client's `skip_consent` off asks its users again.** While the
   client skipped the question every answer was remembered for 30 days, and
   those answers kept users unasked after the setting was turned off. Now they

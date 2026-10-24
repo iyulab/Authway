@@ -140,15 +140,14 @@ func (r *Repository) DeletePasswordResetsByUserID(userID uuid.UUID) error {
 	return nil
 }
 
-// CleanupExpiredTokens removes expired tokens (can be run periodically)
+// CleanupExpiredTokens removes the verification and reset links that can no
+// longer be used — expired ones, those already set aside included — so the
+// table holds only links still on their way to someone.
 func (r *Repository) CleanupExpiredTokens() error {
-	// Delete expired email verifications
-	if err := r.db.Unscoped().Where("expires_at < NOW() AND deleted_at IS NULL").Delete(&EmailVerification{}).Error; err != nil {
+	if err := r.db.Unscoped().Where("expires_at < NOW()").Delete(&EmailVerification{}).Error; err != nil {
 		return fmt.Errorf("failed to cleanup expired verifications: %w", err)
 	}
-
-	// Delete expired password resets
-	if err := r.db.Unscoped().Where("expires_at < NOW() AND deleted_at IS NULL").Delete(&PasswordReset{}).Error; err != nil {
+	if err := r.db.Unscoped().Where("expires_at < NOW()").Delete(&PasswordReset{}).Error; err != nil {
 		return fmt.Errorf("failed to cleanup expired resets: %w", err)
 	}
 

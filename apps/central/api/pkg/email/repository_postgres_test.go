@@ -247,8 +247,17 @@ func TestCleanupExpiredTokens_RemovesOnlyExpiredRows(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM email_verifications WHERE user_id = ?`, userID) })
 
-	if err := db.Exec(`UPDATE email_verifications SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = ?`, expired.ID).Error; err != nil {
-		t.Fatalf("backdate expired row: %v", err)
+	setAside, err := repo.CreateVerification(userID)
+	if err != nil {
+		t.Fatalf("CreateVerification (set aside): %v", err)
+	}
+	if err := db.Exec(`UPDATE email_verifications SET expires_at = NOW() - INTERVAL '1 hour' WHERE id IN (?, ?)`, expired.ID, setAside.ID).Error; err != nil {
+		t.Fatalf("backdate expired rows: %v", err)
+	}
+	// A link replaced by a newer one is set aside (deleted_at), and once it
+	// expires it goes too.
+	if err := db.Exec(`UPDATE email_verifications SET deleted_at = NOW() WHERE id = ?`, setAside.ID).Error; err != nil {
+		t.Fatalf("set aside: %v", err)
 	}
 
 	if err := repo.CleanupExpiredTokens(); err != nil {
@@ -258,6 +267,11 @@ func TestCleanupExpiredTokens_RemovesOnlyExpiredRows(t *testing.T) {
 	var expiredCount, freshCount int64
 	db.Table("email_verifications").Where("id = ?", expired.ID).Count(&expiredCount)
 	db.Table("email_verifications").Where("id = ?", fresh.ID).Count(&freshCount)
+	var setAsideCount int64
+	db.Table("email_verifications").Where("id = ?", setAside.ID).Count(&setAsideCount)
+	if setAsideCount != 0 {
+		t.Fatalf("expected the expired, set-aside verification to be removed, still found %d", setAsideCount)
+	}
 	if expiredCount != 0 {
 		t.Fatalf("expected the expired verification to be removed, still found %d", expiredCount)
 	}

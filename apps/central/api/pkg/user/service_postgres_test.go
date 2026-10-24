@@ -285,10 +285,11 @@ func TestUpdate_EmptyFieldsLeaveExistingValuesUnchanged(t *testing.T) {
 	}
 }
 
-// TestDelete_SoftDeletesAndSecondCallReportsNotFound guards Delete's
-// RowsAffected-based not-found signal — without it, a second Delete on an
-// already-deleted (or never-existing) ID would silently report success.
-func TestDelete_SoftDeletesAndSecondCallReportsNotFound(t *testing.T) {
+// TestDelete_RemovesTheAccountAndWhatHangsOnIt: deleting an account removes
+// its row — not a deleted_at mark over an email, a password hash and the
+// provider ids — and the rows keyed by it go with it. A second Delete reports
+// not-found rather than succeeding silently.
+func TestDelete_RemovesTheAccountAndWhatHangsOnIt(t *testing.T) {
 	db := setupPostgres(t)
 	svc, ts := newTestService(t, db)
 	tn := freshTenant(t, db, ts)
@@ -299,16 +300,27 @@ func TestDelete_SoftDeletesAndSecondCallReportsNotFound(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+	if err := db.Exec(`INSERT INTO user_claims (user_id, tenant_id, claim_key, claim_value) VALUES (?, ?, 'plan', '"pro"')`, u.ID, tn.ID).Error; err != nil {
+		t.Fatalf("seed claim: %v", err)
+	}
 
 	if err := svc.Delete(u.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := svc.GetByID(u.ID); err == nil {
-		t.Fatal("expected GetByID to fail for a soft-deleted user")
+	var rows, claims int64
+	db.Raw(`SELECT count(*) FROM users WHERE id = ?`, u.ID).Scan(&rows)
+	db.Raw(`SELECT count(*) FROM user_claims WHERE user_id = ?`, u.ID).Scan(&claims)
+	if rows != 0 || claims != 0 {
+		t.Fatalf("after Delete: %d user rows, %d claims — the account must be gone, not marked", rows, claims)
 	}
 	if err := svc.Delete(u.ID); err == nil {
-		t.Fatal("expected a second Delete on an already-deleted user to report not-found, not succeed silently")
+		t.Fatal("expected a second Delete on a deleted user to report not-found, not succeed silently")
 	}
+	again, err := svc.Create(tn.ID, &CreateUserRequest{Email: email, Name: "Back Again"})
+	if err != nil {
+		t.Fatalf("the address is free again after Delete: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, again.ID) })
 }
 
 // TestGetByTenant_ScopesAndPaginates guards that listing is both correctly
