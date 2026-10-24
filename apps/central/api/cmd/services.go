@@ -39,7 +39,7 @@ func InitNewFeatureServices(
 	webhookAllowPrivateTargets bool,
 	atRest crypto.Cipher,
 ) *NewFeatureServices {
-	auditHandler := audit.NewHandler(auditService, logger)
+	auditHandler := audit.NewHandler(auditService, logger, tenant.DefaultAuditRetentionDays)
 
 	// Webhook Service. Every event a webhook can subscribe to is something
 	// the audit log records, so webhooks listen to what is recorded there.

@@ -2725,11 +2725,14 @@ paths:
     delete:
       tags: [admin]
       operationId: purgeAuditLogs
-      description: Deletes the tenant's entries older than retention_days.
+      description: |
+        Deletes the tenant's entries older than retention_days. Without it,
+        those past the tenant's own retention (settings.audit_retention_days,
+        365 days when it has not set one) — what the daily clean-up removes.
       security: [{ adminKey: [] }]
       parameters:
         - $ref: '#/components/parameters/TenantHeader'
-        - { name: retention_days, in: query, required: false, schema: { type: integer, minimum: 30, maximum: 36500, default: 90 } }
+        - { name: retention_days, in: query, required: false, schema: { type: integer, minimum: 30, maximum: 36500 } }
       responses:
         '200':
           description: Purged

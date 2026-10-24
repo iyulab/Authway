@@ -26,6 +26,9 @@ type Service interface {
 	// defaultDays) — entries of a tenant that no longer exists, or of none,
 	// after defaultDays.
 	PurgeExpired(defaultDays int) (int64, error)
+	// RetentionDays is how long the tenant keeps its entries: its
+	// audit_retention_days, or defaultDays when it has not said.
+	RetentionDays(tenantID uuid.UUID, defaultDays int) (int, error)
 	// Subscribe registers fn to be called with each entry once it has been
 	// recorded — the audit log is the one place every lifecycle event passes
 	// through, so whatever else must hear of them (webhooks) listens here.
@@ -218,6 +221,19 @@ func (s *service) PurgeExpired(defaultDays int) (int64, error) {
 		return 0, fmt.Errorf("failed to purge expired audit logs: %w", result.Error)
 	}
 	return result.RowsAffected, nil
+}
+
+func (s *service) RetentionDays(tenantID uuid.UUID, defaultDays int) (int, error) {
+	var days int
+	err := s.db.Raw(`SELECT COALESCE(NULLIF((settings->>'audit_retention_days')::int, 0), ?) FROM tenants WHERE id = ?`,
+		defaultDays, tenantID).Scan(&days).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to read the audit retention: %w", err)
+	}
+	if days == 0 {
+		days = defaultDays
+	}
+	return days, nil
 }
 
 func (s *service) PurgeOldLogs(tenantID uuid.UUID, retentionDays int) (int64, error) {

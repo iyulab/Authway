@@ -18,13 +18,17 @@ import (
 type Handler struct {
 	service Service
 	logger  *zap.Logger
+	// defaultRetentionDays is how long a tenant that has not set
+	// audit_retention_days keeps its entries.
+	defaultRetentionDays int
 }
 
 // NewHandler creates a new audit handler
-func NewHandler(service Service, logger *zap.Logger) *Handler {
+func NewHandler(service Service, logger *zap.Logger, defaultRetentionDays int) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		service:              service,
+		logger:               logger,
+		defaultRetentionDays: defaultRetentionDays,
 	}
 }
 
@@ -255,9 +259,16 @@ func (h *Handler) PurgeOldLogs(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	retentionDays, err := intQuery(c, "retention_days", 90, MinRetentionDays, 36500)
+	// Without retention_days, what the tenant's own retention says — the
+	// daily clean-up would remove the same entries.
+	retentionDays, err := intQuery(c, "retention_days", 0, MinRetentionDays, 36500)
 	if err != nil {
 		return err
+	}
+	if retentionDays == 0 {
+		if retentionDays, err = h.service.RetentionDays(tenantID, h.defaultRetentionDays); err != nil {
+			return h.failed(c, err, "failed to purge logs")
+		}
 	}
 
 	deleted, err := h.service.PurgeOldLogs(tenantID, retentionDays)

@@ -46,6 +46,10 @@
   cancelled the sign-out — the next sign-in went through without asking for
   the password. The console now shows only a signing-out screen until the
   page leaves.
+- **An audit-log purge that names no `retention_days` keeps what the tenant
+  keeps**: it removed entries older than 90 days, though the tenant keeps its
+  log for its `audit_retention_days` (365 days unless set). It now removes
+  only what the daily clean-up would, and answers the retention it used.
 
 ## [0.19.0] - 2026-10-24
 

@@ -45,7 +45,8 @@ account's address.
 Entries are kept for the tenant's `audit_retention_days` — 365 days unless
 the tenant sets another, at least 30 — and removed daily once older. A tenant
 owner can also remove older entries at once: `DELETE
-/api/v1/audit/logs/purge?retention_days=N`.
+/api/v1/audit/logs/purge?retention_days=N` — without `retention_days`, those
+past the tenant's own retention.
 
 ## What leaves Authway
 
