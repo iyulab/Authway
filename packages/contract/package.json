@@ -2,13 +2,15 @@
   "name": "@authway/contract",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenAPI description of the API Authway login screens use",
+  "description": "The contract every Authway implementation answers: the API the bundled screens use, and their runtime configuration",
   "type": "module",
   "exports": {
-    "./openapi.yaml": "./openapi.yaml"
+    "./openapi.yaml": "./openapi.yaml",
+    "./runtime-config.schema.json": "./runtime-config.schema.json"
   },
   "files": [
-    "openapi.yaml"
+    "openapi.yaml",
+    "runtime-config.schema.json"
   ],
   "license": "Apache-2.0"
 }

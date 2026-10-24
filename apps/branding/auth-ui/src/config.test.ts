@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getConfig } from './config'
+import runtimeConfigSchema from '../../../../packages/contract/runtime-config.schema.json'
 
 describe('getConfig', () => {
   afterEach(() => {
@@ -21,5 +22,13 @@ describe('getConfig', () => {
     vi.stubEnv('VITE_API_URL', 'https://built.example.com')
     window.__AUTHWAY_CONFIG__ = { apiUrl: '' }
     expect(getConfig().apiUrl).toBe('')
+  })
+})
+
+describe('runtime configuration contract', () => {
+  it('reads only keys packages/contract/runtime-config.schema.json declares', () => {
+    for (const key of Object.keys(getConfig())) {
+      expect(Object.keys(runtimeConfigSchema.properties)).toContain(key)
+    }
   })
 })

@@ -10,3 +10,19 @@ this document; a change to the contract is a change to that suite's
 expectations.
 
 For a walk-through of the flows, see `docs/api/login-flows.md`.
+
+## Runtime configuration of the bundled screens
+
+`runtime-config.schema.json` describes `config.js`, the one file a deployment
+changes to point the bundled login UI and console at its own addresses. Each
+screen loads `config.js` from the place it is served (the login UI from its
+root, the console from its base path) before it starts, and reads the object
+that file assigns:
+
+```js
+window.__AUTHWAY_CONFIG__ = { apiUrl: 'https://auth.example.com' }
+```
+
+An implementation that serves the screens itself serves this file, uncached.
+Absent keys fall back to what the screen was built with; an empty `apiUrl`
+means the API is on the screen's own origin.

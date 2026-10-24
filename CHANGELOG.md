@@ -24,6 +24,13 @@
   entering the tenant first (for an operator, without opening support
   access): turning it off asks to confirm. A tenant's own administrators see
   no such control.
+- **The screens' runtime configuration is part of the contract** —
+  `packages/contract/runtime-config.schema.json` describes `config.js`
+  (`window.__AUTHWAY_CONFIG__`: `apiUrl`, `issuerUrl`,
+  `appInsightsConnectionString`), the file a deployment changes instead of
+  rebuilding the login UI or the console. An implementation that serves the
+  bundled screens serves this file; each screen's tests fail if it reads a key
+  the schema does not declare.
 
 ### Changed
 

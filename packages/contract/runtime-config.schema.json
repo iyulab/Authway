@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/iyulab/Authway/packages/contract/runtime-config.schema.json",
+  "title": "Runtime configuration of the bundled screens",
+  "description": "The object a deployment assigns to window.__AUTHWAY_CONFIG__ in config.js, served next to the screen's index.html (the login UI at its root, the console at its base path). The same build of a screen runs under any address: a deployment changes config.js, never the build. Every key is optional; a key that is absent falls back to the value the screen was built with, then to its default. config.js must be served uncached.",
+  "type": "object",
+  "properties": {
+    "apiUrl": {
+      "type": "string",
+      "description": "Base URL of the Authway API, without a trailing slash (one is trimmed). An empty string means the screen's own origin — the API is served on the same address, as in a single-origin installation. Read by both screens."
+    },
+    "issuerUrl": {
+      "type": "string",
+      "description": "The OIDC issuer the deployment's applications are configured with. Shown by the console for reference; nothing is requested from it. Read by the console."
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "description": "An Azure Application Insights connection string. Browser telemetry is off when it is empty or absent. Read by both screens."
+    }
+  },
+  "additionalProperties": false
+}
