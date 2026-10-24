@@ -124,7 +124,8 @@ describe('the account screen entry', () => {
     tenant = undefined
 
     const auth = new URL(`${config.issuer}/oauth2/auth`)
-    for (const [k, v] of Object.entries({ client_id: system.client_id, response_type: 'code', scope: 'openid', redirect_uri: system.redirect_uris![0], state: randomToken(8) }))
+    const { challenge } = createPkce()
+    for (const [k, v] of Object.entries({ client_id: system.client_id, response_type: 'code', scope: 'openid', redirect_uri: system.redirect_uris![0], state: randomToken(8), code_challenge: challenge, code_challenge_method: 'S256' }))
       auth.searchParams.set(k, v)
     const res = await fetch(auth, { redirect: 'manual' })
     expect(res.headers.get('location') ?? '').not.toContain('login_challenge=')

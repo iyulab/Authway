@@ -189,11 +189,10 @@ $clientSecret = $null
 $scopes = @(if ($WithDelegation) { "openid", "delegation" } elseif ($Native) { "openid", "profile", "email", "offline_access" } else { "openid" })
 # 앱이 돌아올 주소. 데스크톱 앱은 포트 없는 루프백을 등록하고, 요청 때 운영체제가 고른 포트를 쓴다(RFC 8252 §7.3).
 $redirectUri = "http://localhost:9999/verify-callback"
-$codeVerifier = $null
+# 공개 client 는 PKCE 를 보내야 한다(인가 서버가 강제 — configs/hydra.shared.env). RFC 7636 §4.1: 43~128 자.
+$codeVerifier = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
 if ($Native) {
     $redirectUri = "http://127.0.0.1:$(Get-Random -Minimum 49152 -Maximum 65535)/callback"
-    # RFC 7636 §4.1: 43~128 자.
-    $codeVerifier = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
 }
 $userCreated = $false
 $failed = $false

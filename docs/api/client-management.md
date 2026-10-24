@@ -171,6 +171,11 @@ the offending `field`, a human `detail`, and an actionable `hint`.
 | Desktop / CLI / mobile     | `true`   | `["authorization_code"]` + PKCE | System browser; loopback or private-use scheme redirect, no `allowed_origins` — see below |
 | M2M / service-to-service   | `false`  | `["client_credentials"]`         | No user, no redirect_uri |
 
+A public client sends PKCE (`code_challenge` with `code_challenge_method=S256`)
+with every authorization request, as RFC 9700 requires: without it the request
+ends at the application's redirect with `error=invalid_request`, not a code.
+The SDKs do this for you.
+
 ### Native apps: desktop, command line, mobile
 
 A native app signs the user in with the system browser and receives the

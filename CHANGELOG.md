@@ -37,6 +37,11 @@
   do**: it names the organization and the application, or — without one —
   who sent the invitation, to ask for the application's address. It said only
   to sign in from the app.
+- **A public client must send PKCE**: an authorization request from a client
+  without a secret that carries no `code_challenge` now ends with
+  `error=invalid_request` instead of a code (RFC 9700). The SDKs always sent
+  it; a hand-written sign-in must add `code_challenge` (S256) and send the
+  `code_verifier` with the code.
 
 ### Fixed
 

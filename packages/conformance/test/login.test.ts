@@ -61,6 +61,19 @@ describe('password login through the authorization-code flow', () => {
     expect(notOffered.hints ?? {}).not.toHaveProperty('sign_in_method')
   })
 
+  it("refuses a public client's authorization request that carries no PKCE", async () => {
+    // RFC 9700 §2.1.1: a public client must send code_challenge. The request
+    // may be refused at once or once the user has signed in — never with a code.
+    const attempt = await provider.startLogin(client, ['openid'], undefined, { code_challenge: '', code_challenge_method: '' }).catch((e: Error) => e)
+    if (attempt instanceof Error) {
+      expect(attempt.message).toMatch(/invalid_request|code_challenge|PKCE/i)
+      return
+    }
+    const outcome = await provider.continueLogin(attempt, user)
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('rejected')
+    if (outcome.kind === 'rejected') expect(outcome.body).toContain('error=invalid_request')
+  })
+
   it('rejects a wrong password without advancing the flow', async () => {
     const outcome = await provider.login(client, { ...user, password: `${user.password}-wrong` })
     expect(outcome.kind).toBe('rejected')
