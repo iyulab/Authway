@@ -68,6 +68,20 @@ POST /api/v1/webhooks/{id}/rotate-secret
 which answers `{ "secret": "…" }`. The previous secret stops signing
 immediately.
 
+To change a webhook — its address when the receiver moves, its events, its
+retries, or to switch it off — send only the members that change:
+
+```http
+PATCH /api/v1/webhooks/{id}
+Content-Type: application/json
+
+{ "url": "https://hooks.example.com/authway" }
+```
+
+The same ranges and address rules as registration apply, and the answer is
+`{ "webhook": … }`. The signing secret stays the same. `PUT` is not a route
+here (`405`).
+
 ---
 
 ## 2. What a delivery looks like
