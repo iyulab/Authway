@@ -7,7 +7,7 @@ import {
   CheckIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi, Tenant, TenantSettings } from '@/lib/api'
+import { tenantsApi, consoleApi, supportAccessApi, needsSupportAccess, refusalAt, Tenant, TenantSettings } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { signOut } from '@/lib/signOut'
 import { Button, Modal, Input, Checkbox } from '@/components/ui'
@@ -23,6 +23,38 @@ const TenantSelectionPage: React.FC = () => {
   // Default (unchecked) is invite-only — the server's own default when
   // signup_mode is omitted, so leaving this off changes nothing.
   const [openSignup, setOpenSignup] = useState(false)
+  // The tenant an operator is about to enter, and why.
+  const [entering, setEntering] = useState<Tenant | null>(null)
+  const [reason, setReason] = useState('')
+
+  // An operator signed in with a console account reaches into a tenant only
+  // through support access — an hour, with a reason the tenant's audit log
+  // records. The admin key and the admin password reach every tenant.
+  const { data: me } = useQuery({
+    queryKey: ['console-me'],
+    queryFn: () => consoleApi.me().then((res) => res.data),
+  })
+  const operatorAccount = needsSupportAccess(me)
+  const { data: openAccess = [] } = useQuery({
+    queryKey: ['support-access'],
+    queryFn: () => supportAccessApi.list().then((res) => res.data.support_access),
+    enabled: operatorAccount,
+  })
+
+  const startMutation = useMutation({
+    mutationFn: ({ tenant, why }: { tenant: Tenant; why: string }) =>
+      supportAccessApi.start(tenant.id, why).then((res) => ({ tenant, access: res.data.support_access })),
+    onSuccess: ({ tenant, access }) => {
+      queryClient.invalidateQueries({ queryKey: ['support-access'] })
+      setEntering(null)
+      setReason('')
+      setSelectedTenant(tenant, access)
+      toast.success(`Support access to ${tenant.name} opened for an hour`)
+    },
+    onError: (error: any) => {
+      if (!refusalAt(error, 'reason')) toast.error(error.response?.data?.detail || 'Failed to open support access')
+    },
+  })
 
   // Fetch tenants
   const { data: tenants = [], isLoading } = useQuery({
@@ -56,7 +88,16 @@ const TenantSelectionPage: React.FC = () => {
   })
 
   const handleSelectTenant = (tenant: Tenant) => {
-    setSelectedTenant(tenant)
+    if (operatorAccount) {
+      const open = openAccess.find((a) => a.tenant_id === tenant.id)
+      if (!open) {
+        setEntering(tenant)
+        return
+      }
+      setSelectedTenant(tenant, open)
+    } else {
+      setSelectedTenant(tenant)
+    }
     toast.success(`Selected tenant: ${tenant.name}`)
   }
 
@@ -121,6 +162,12 @@ const TenantSelectionPage: React.FC = () => {
           <p className="text-gray-600 max-w-md mx-auto">
             Choose a tenant to manage or create a new one to get started.
           </p>
+          {operatorAccount && (
+            <p className="text-sm text-amber-700 max-w-md mx-auto mt-3">
+              As an operator you enter a tenant through support access: give a reason, and
+              the tenant's audit log records that you entered, why, and what you changed.
+            </p>
+          )}
         </div>
 
         {isLoading ? (
@@ -210,6 +257,40 @@ const TenantSelectionPage: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Support access — why the operator enters the tenant */}
+      <Modal
+        isOpen={entering !== null}
+        onClose={() => setEntering(null)}
+        title={entering ? `Open support access to ${entering.name}` : ''}
+        size="md"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (entering) startMutation.mutate({ tenant: entering, why: reason })
+          }}
+        >
+          <Input
+            label="Reason"
+            placeholder="Ticket 1234 — a user cannot sign in"
+            value={reason}
+            maxLength={500}
+            onChange={(e) => setReason(e.target.value)}
+            error={refusalAt(startMutation.error, 'reason')}
+            helperText="The tenant's administrators see it in their audit log. Access lasts an hour."
+          />
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={() => setEntering(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={startMutation.isPending} disabled={!reason.trim()}>
+              Open support access
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Create Tenant Modal */}
       <Modal

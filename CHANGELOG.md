@@ -9,6 +9,10 @@
   changes meanwhile, `support_access_id`. See
   [Console accounts](docs/api/console-accounts.md#support-access). Migration
   052 adds the table.
+  **The console** asks an operator's account for the reason when it picks a
+  tenant (an entry still open is reused), shows a band with the tenant, the
+  reason and the time left, and ends it there; when the hour is up it goes
+  back to the tenant list.
 
 ### Changed
 

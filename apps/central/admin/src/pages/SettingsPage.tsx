@@ -268,7 +268,7 @@ const SettingsPage: React.FC = () => {
             <div>
               <dt className="text-sm font-medium text-gray-500">관리 범위</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {!me ? '-' : me.operator ? '모든 테넌트(운영자)' : `테넌트 ${me.memberships.length} 개`}
+                {!me ? '-' : me.operator ? (me.actor_type === 'console_user' ? '모든 테넌트(운영자 — 테넌트 안은 지원 접근으로)' : '모든 테넌트(운영자)') : `테넌트 ${me.memberships.length} 개`}
               </dd>
             </div>
           </dl>

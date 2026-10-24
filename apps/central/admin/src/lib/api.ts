@@ -40,6 +40,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // An operator's support access ended (expired, or ended elsewhere): back
+    // to the tenant list, where it can open another.
+    if (error.response?.status === 403 && error.response?.data?.code === 'support_access_required') {
+      useTenantStore.getState().clearSelectedTenant()
+    }
     if (error.response?.status === 401) {
       // logout() clears token AND expiry together. Clearing only the token
       // while the app still considered itself signed in is what produced the
@@ -200,6 +205,30 @@ export interface ConsoleMe {
 
 export const consoleApi = {
   me: () => api.get<ConsoleMe>('/api/v1/console/me'),
+}
+
+/**
+ * An operator's entry into one tenant's contents: an hour, with a reason the
+ * tenant's audit log records. An operator signed in with a console account
+ * reaches into a tenant only while it holds one open.
+ */
+export interface SupportAccess {
+  id: string
+  tenant_id: string
+  reason: string
+  started_at: string
+  expires_at: string
+}
+
+/** Whether the caller reaches into a tenant only through support access. */
+export const needsSupportAccess = (me: ConsoleMe | undefined) =>
+  Boolean(me && me.operator && me.actor_type === 'console_user')
+
+export const supportAccessApi = {
+  list: () => api.get<{ support_access: SupportAccess[] }>('/api/v1/console/support-access'),
+  start: (tenantId: string, reason: string) =>
+    api.post<{ support_access: SupportAccess }>('/api/v1/console/support-access', { tenant_id: tenantId, reason }),
+  end: (id: string) => api.delete<void>(`/api/v1/console/support-access/${id}`),
 }
 
 // Users API

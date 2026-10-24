@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { useTenantStore } from '@/stores/tenant'
 import { signOut } from '@/lib/signOut'
+import SupportAccessBand from '@/components/SupportAccessBand'
 import {
   HomeIcon,
   CogIcon,
@@ -194,6 +195,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
           </div>
         </header>
+        <SupportAccessBand />
 
         {/* 페이지 콘텐츠 */}
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
