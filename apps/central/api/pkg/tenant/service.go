@@ -195,7 +195,7 @@ func (s *Service) DeleteTenant(id uuid.UUID) error {
 
 	// Check if tenant has active (non-deleted) users
 	var userCount int64
-	if err := s.db.Table("users").Where("tenant_id = ? AND deleted_at IS NULL", id).Count(&userCount).Error; err != nil {
+	if err := s.db.Table("users").Where("tenant_id = ?", id).Count(&userCount).Error; err != nil {
 		return fmt.Errorf("failed to check user count: %w", err)
 	}
 	if userCount > 0 {

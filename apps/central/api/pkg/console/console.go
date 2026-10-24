@@ -201,7 +201,7 @@ func (s *Service) Put(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID
 			return err
 		}
 		var accounts int64
-		if err := tx.Table("users").Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", userID, system.ID).Count(&accounts).Error; err != nil {
+		if err := tx.Table("users").Where("id = ? AND tenant_id = ?", userID, system.ID).Count(&accounts).Error; err != nil {
 			return err
 		}
 		if accounts == 0 {

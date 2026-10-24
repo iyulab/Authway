@@ -66,12 +66,9 @@ func TestClientSecret_IsStoredOnlyAsAHash(t *testing.T) {
 		t.Fatal("a confidential client was created without a secret")
 	}
 
-	var stored struct{ ClientSecret, ClientSecretHash string }
-	if err := db.Raw(`SELECT client_secret, client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&stored).Error; err != nil {
+	var stored struct{ ClientSecretHash string }
+	if err := db.Raw(`SELECT client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&stored).Error; err != nil {
 		t.Fatal(err)
-	}
-	if stored.ClientSecret != "" {
-		t.Error("the secret itself was stored")
 	}
 	if !strings.HasPrefix(stored.ClientSecretHash, "$2") || strings.Contains(stored.ClientSecretHash, secret) {
 		t.Errorf("stored hash %q, want a password hash that does not contain the secret", stored.ClientSecretHash)
@@ -118,10 +115,10 @@ func TestClientSecret_IsStoredOnlyAsAHash(t *testing.T) {
 	if _, err := svc.ValidateClient(created.ClientID, rotated.ClientSecret); err != nil {
 		t.Errorf("the new secret was refused: %v", err)
 	}
-	if err := db.Raw(`SELECT client_secret, client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&stored).Error; err != nil {
+	if err := db.Raw(`SELECT client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&stored).Error; err != nil {
 		t.Fatal(err)
 	}
-	if stored.ClientSecret != "" {
+	if strings.Contains(stored.ClientSecretHash, rotated.ClientSecret) {
 		t.Error("the new secret itself was stored")
 	}
 }

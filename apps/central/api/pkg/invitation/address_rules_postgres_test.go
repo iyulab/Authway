@@ -97,7 +97,7 @@ func TestAccept_ProvesTheAddressAndHoldsThePasswordToTheRule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
-	defer db.Unscoped().Delete(&user.User{}, "id = ?", u.ID)
+	defer db.Delete(&user.User{}, "id = ?", u.ID)
 
 	stored, err := userService.GetByID(u.ID)
 	if err != nil {
@@ -127,7 +127,7 @@ func TestMarkAcceptedAddressesVerified(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Accept: %v", err)
 		}
-		t.Cleanup(func() { db.Unscoped().Delete(&user.User{}, "id = ?", u.ID) })
+		t.Cleanup(func() { db.Delete(&user.User{}, "id = ?", u.ID) })
 		// As such an account was left before.
 		if err := db.Exec(`UPDATE users SET email_verified = false WHERE id = ?`, u.ID).Error; err != nil {
 			t.Fatalf("seed: %v", err)
@@ -144,7 +144,7 @@ func TestMarkAcceptedAddressesVerified(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create user: %v", err)
 	}
-	t.Cleanup(func() { db.Unscoped().Delete(&user.User{}, "id = ?", uninvited.ID) })
+	t.Cleanup(func() { db.Delete(&user.User{}, "id = ?", uninvited.ID) })
 
 	for range 2 {
 		if err := MarkAcceptedAddressesVerified(db, zap.NewNop()); err != nil {

@@ -74,7 +74,7 @@ func (s *service) standing(ctx context.Context, where string, arg any) (*Standin
 		Table("delegation_grants AS d").
 		Select("d.id, d.tenant_id, d.user_id, c.client_id, d.scopes, u.active AS user_active, t.active AS tenant_active, c.active AS client_active").
 		Joins("JOIN clients c ON c.id = d.client_id AND c.deleted_at IS NULL").
-		Joins("JOIN users u ON u.id = d.user_id AND u.deleted_at IS NULL").
+		Joins("JOIN users u ON u.id = d.user_id").
 		Joins("JOIN tenants t ON t.id = d.tenant_id AND t.deleted_at IS NULL").
 		Where("d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > ?)", s.now().UTC()).
 		Where(where, arg).

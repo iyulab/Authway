@@ -41,7 +41,6 @@ type User struct {
 	LastLoginAt *time.Time     `json:"last_login_at"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
 // BeforeCreate sets UUID if not provided

@@ -29,7 +29,7 @@ func TestPasswordRule_HoldsWhereverAPasswordIsSet(t *testing.T) {
 	create := func(tenantID uuid.UUID, password string) (*User, error) {
 		u, err := svc.Create(tenantID, &CreateUserRequest{Email: "pw-" + uuid.NewString()[:8] + "@example.com", Name: "P", Password: password})
 		if err == nil {
-			t.Cleanup(func() { db.Unscoped().Delete(&User{}, "id = ?", u.ID) })
+			t.Cleanup(func() { db.Delete(&User{}, "id = ?", u.ID) })
 		}
 		return u, err
 	}

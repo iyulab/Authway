@@ -143,7 +143,7 @@ func (s *service) inForce(ctx context.Context) *gorm.DB {
 		Table("delegation_grants AS d").
 		Select("d.id, d.tenant_id, d.user_id, c.client_id, c.name AS client_name, d.scopes, d.created_at, d.expires_at").
 		Joins("JOIN clients c ON c.id = d.client_id AND c.deleted_at IS NULL").
-		Joins("JOIN users u ON u.id = d.user_id AND u.deleted_at IS NULL").
+		Joins("JOIN users u ON u.id = d.user_id").
 		Where("d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > ?)", s.now().UTC())
 }
 

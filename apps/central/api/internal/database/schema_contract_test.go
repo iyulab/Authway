@@ -336,12 +336,7 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 var awaitingDrop = map[string]bool{}
 
 // awaitingDropColumns is the same for columns, as table.column.
-var awaitingDropColumns = map[string]bool{
-	// The secret itself, before secrets were hashed (every row emptied), and
-	// a second switch for password sign-in nothing reads (migration 050).
-	"clients.client_secret":     true,
-	"clients.allow_email_login": true,
-}
+var awaitingDropColumns = map[string]bool{}
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
 // falsified audit trail: a field that declares a default is left out of the

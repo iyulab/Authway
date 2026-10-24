@@ -160,7 +160,13 @@ func TestDelegationsOfARemovedUserOrClientAreNotInForce(t *testing.T) {
 			if removed == "clients" {
 				id = w.clientRow
 			}
-			db.Exec(`UPDATE `+removed+` SET deleted_at = now() WHERE id = ?`, id)
+			// A client is set aside (deleted_at); an account is deleted
+			// outright, and its delegations with it.
+			if removed == "clients" {
+				db.Exec(`UPDATE clients SET deleted_at = now() WHERE id = ?`, id)
+			} else {
+				db.Exec(`DELETE FROM users WHERE id = ?`, id)
+			}
 			if _, err := s.Find(ctx, g.ID); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("find: %v, want ErrNotFound once the %s row is deleted", err, removed)
 			}

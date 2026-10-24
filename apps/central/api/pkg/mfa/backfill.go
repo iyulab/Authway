@@ -35,9 +35,8 @@ func ResealTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error {
 		return nil
 	}
 
-	// Deleted users are included: their rows hold the secret all the same.
 	var users []user.User
-	if err := db.Unscoped().Model(&user.User{}).
+	if err := db.Model(&user.User{}).
 		Where("totp_secret IS NOT NULL AND totp_secret <> ''").
 		Find(&users).Error; err != nil {
 		return fmt.Errorf("reseal: failed to load users with TOTP secrets: %w", err)
@@ -60,7 +59,7 @@ func ResealTOTPSecrets(db *gorm.DB, c crypto.Cipher, logger *zap.Logger) error {
 		if !changed {
 			continue
 		}
-		res := db.Unscoped().Model(&user.User{}).
+		res := db.Model(&user.User{}).
 			Where("id = ? AND totp_secret = ?", u.ID, *u.TOTPSecret).
 			Update("totp_secret", value)
 		if res.Error != nil {
