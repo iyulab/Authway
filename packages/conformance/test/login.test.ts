@@ -130,6 +130,20 @@ describe('password login through the authorization-code flow', () => {
     expect(await res.json()).not.toHaveProperty('redirect_url')
   })
 
+  it('does not send a signed-out browser to an address the client did not register', async () => {
+    const outcome = await provider.login(client, user)
+    if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)
+    subjects.add(outcome.sub)
+    if (!outcome.tokens.id_token) throw new Error('no id_token to hint the logout with')
+    // Refused before the logout screen (no flow id), or ended anywhere but there.
+    const landed = await provider.rpInitiatedLogout(outcome.browser, outcome.tokens.id_token, 'https://elsewhere.invalid/back').catch((e: Error) => e)
+    if (landed instanceof Error) {
+      expect(landed.message).toMatch(/without a flow id.*error=invalid_request/)
+      return
+    }
+    expect(landed.origin).not.toBe('https://elsewhere.invalid')
+  })
+
   it('signs a user out through RP-initiated logout and invalidates their tokens', async () => {
     const outcome = await provider.login(client, user)
     if (outcome.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(outcome)}`)

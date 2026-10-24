@@ -396,14 +396,14 @@ export class Provider {
    * only knows its flow id, as the real one does. Returns where the browser
    * finally lands.
    */
-  async rpInitiatedLogout(browser: Browser, idToken: string): Promise<URL> {
+  async rpInitiatedLogout(browser: Browser, idToken: string, postLogoutRedirectUri = POST_LOGOUT_REDIRECT_URI): Promise<URL> {
     const d = await this.discovery()
     const endSession = d.end_session_endpoint as string | undefined
     if (!endSession) throw new Error('Discovery publishes no end_session_endpoint')
     const start = new URL(endSession)
     start.search = new URLSearchParams({
       id_token_hint: idToken,
-      post_logout_redirect_uri: POST_LOGOUT_REDIRECT_URI,
+      post_logout_redirect_uri: postLogoutRedirectUri,
       state: randomToken(),
     }).toString()
     const issuer = new URL(this.config.issuer).origin
