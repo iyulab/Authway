@@ -15,6 +15,7 @@ import { tenantsApi, consoleApi, healthApi, capabilitiesApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Modal, Input, ConfirmDialog } from '@/components/ui'
 import { getConfig } from '../config'
+import { useTenantActive } from '@/lib/tenantActive'
 import TenantSettingsForm from '@/components/settings/TenantSettingsForm'
 
 // Why the API refused to delete the tenant (its 409/403 codes), in the console's words.
@@ -26,11 +27,6 @@ const DELETE_REFUSALS: Record<string, string> = {
 }
 
 // Why the API refused to turn the tenant off or on, in the console's words.
-const ACTIVE_REFUSALS: Record<string, string> = {
-  default_tenant_protected: '기본 테넌트는 끌 수 없습니다.',
-  upstream_sync_failed: '일부 클라이언트를 인가 서버에 반영하지 못했습니다. 같은 작업을 다시 하면 마저 반영됩니다.',
-}
-
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient()
   const { selectedTenant, setSelectedTenant, clearSelectedTenant } = useTenantStore()
@@ -56,21 +52,10 @@ const SettingsPage: React.FC = () => {
     },
   })
 
-  // Turning the tenant off or on — only `active` is sent. Off, none of its
-  // clients signs anyone in or gets tokens; on, each is as its own setting says.
-  const activeMutation = useMutation({
-    mutationFn: (active: boolean) => tenantsApi.update(selectedTenant!.id, { active }),
-    onSuccess: (res, active) => {
-      setShowTurnOffConfirm(false)
-      setSelectedTenant(res.data)
-      queryClient.invalidateQueries({ queryKey: ['tenants'] })
-      toast.success(active ? '테넌트를 켰습니다' : '테넌트를 껐습니다')
-    },
-    onError: (error: any) => {
-      setShowTurnOffConfirm(false)
-      const code: string | undefined = error.response?.data?.code
-      toast.error((code && ACTIVE_REFUSALS[code]) || error.response?.data?.detail || '테넌트를 바꾸지 못했습니다')
-    },
+  // Turning the tenant off or on (see useTenantActive).
+  const activeMutation = useTenantActive((tenant) => {
+    setShowTurnOffConfirm(false)
+    if (tenant) setSelectedTenant(tenant)
   })
 
   const handleSwitchTenant = () => {
@@ -395,7 +380,7 @@ const SettingsPage: React.FC = () => {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => activeMutation.mutate(true)}
+                  onClick={() => activeMutation.mutate({ tenant: selectedTenant, active: true })}
                   isLoading={activeMutation.isPending}
                 >
                   테넌트 켜기
@@ -430,7 +415,7 @@ const SettingsPage: React.FC = () => {
       <ConfirmDialog
         isOpen={showTurnOffConfirm}
         onClose={() => setShowTurnOffConfirm(false)}
-        onConfirm={() => activeMutation.mutate(false)}
+        onConfirm={() => selectedTenant && activeMutation.mutate({ tenant: selectedTenant, active: false })}
         title="테넌트 끄기"
         message={`"${selectedTenant?.name}" 의 사용자는 어떤 클라이언트로도 로그인할 수 없고, 클라이언트가 가진 토큰은 끝납니다. 다시 켜도 끝난 세션은 돌아오지 않습니다. 계속할까요?`}
         confirmText="끄기"

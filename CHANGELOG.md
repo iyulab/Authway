@@ -19,6 +19,11 @@
   reaches the registry names them in `.env` instead of loading `images.tar`.
   The npm SDK's release tags are now `js-v<version>` (they were `v<version>`
   up to `v0.5.0`).
+- **The console turns a tenant off or on from the tenant list** for the
+  platform — an operator's console account, the admin password — without
+  entering the tenant first (for an operator, without opening support
+  access): turning it off asks to confirm. A tenant's own administrators see
+  no such control.
 
 ### Changed
 

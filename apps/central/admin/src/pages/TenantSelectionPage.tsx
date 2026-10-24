@@ -10,7 +10,8 @@ import {
 import { tenantsApi, consoleApi, supportAccessApi, needsSupportAccess, refusalAt, Tenant, TenantSettings } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { signOut } from '@/lib/signOut'
-import { Button, Modal, Input, Checkbox } from '@/components/ui'
+import { Button, Modal, Input, Checkbox, ConfirmDialog } from '@/components/ui'
+import { useTenantActive } from '@/lib/tenantActive'
 import { consolePath } from '../config'
 
 const TenantSelectionPage: React.FC = () => {
@@ -35,6 +36,11 @@ const TenantSelectionPage: React.FC = () => {
     queryFn: () => consoleApi.me().then((res) => res.data),
   })
   const operatorAccount = needsSupportAccess(me)
+  // Turning a tenant off or on is the platform's to do — from the list, with
+  // no support access to open first.
+  const platform = Boolean(me?.operator)
+  const [turningOff, setTurningOff] = useState<Tenant | null>(null)
+  const activeMutation = useTenantActive(() => setTurningOff(null))
   const { data: openAccess = [] } = useQuery({
     queryKey: ['support-access'],
     queryFn: () => supportAccessApi.list().then((res) => res.data.support_access),
@@ -199,46 +205,60 @@ const TenantSelectionPage: React.FC = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {tenants.map((tenant: Tenant) => (
-                <button
-                  key={tenant.id}
-                  onClick={() => handleSelectTenant(tenant)}
-                  className="group relative bg-white rounded-xl border border-gray-200 p-6 text-left hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-200"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
-                      <span className="text-lg font-bold text-white">
-                        {tenant.name.charAt(0).toUpperCase()}
+                <div key={tenant.id} className="relative">
+                  <button
+                    onClick={() => handleSelectTenant(tenant)}
+                    className="group relative w-full h-full bg-white rounded-xl border border-gray-200 p-6 text-left hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-200"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                        <span className="text-lg font-bold text-white">
+                          {tenant.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-semibold text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
+                          {tenant.name}
+                        </h3>
+                        <p className="text-sm text-gray-500 truncate">
+                          {tenant.slug}
+                        </p>
+                        {tenant.description && (
+                          <p className="text-sm text-gray-400 mt-1 line-clamp-2">
+                            {tenant.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                        <CheckIcon className="h-5 w-5 text-indigo-600" />
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        tenant.active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {tenant.active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
-                        {tenant.name}
-                      </h3>
-                      <p className="text-sm text-gray-500 truncate">
-                        {tenant.slug}
-                      </p>
-                      {tenant.description && (
-                        <p className="text-sm text-gray-400 mt-1 line-clamp-2">
-                          {tenant.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <CheckIcon className="h-5 w-5 text-indigo-600" />
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      tenant.active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {tenant.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </button>
+                  </button>
+                  {platform && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        tenant.active ? setTurningOff(tenant) : activeMutation.mutate({ tenant, active: true })
+                      }
+                      disabled={activeMutation.isPending}
+                      aria-label={`${tenant.name} ${tenant.active ? '끄기' : '켜기'}`}
+                      className="absolute bottom-5 right-4 text-xs font-medium text-gray-500 hover:text-gray-900 hover:underline disabled:opacity-50"
+                    >
+                      {tenant.active ? '끄기' : '켜기'}
+                    </button>
+                  )}
+                </div>
               ))}
 
               {/* Create new tenant card */}
@@ -257,6 +277,17 @@ const TenantSelectionPage: React.FC = () => {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        isOpen={turningOff !== null}
+        onClose={() => setTurningOff(null)}
+        onConfirm={() => turningOff && activeMutation.mutate({ tenant: turningOff, active: false })}
+        title="테넌트 끄기"
+        message={`"${turningOff?.name}" 의 사용자는 어떤 클라이언트로도 로그인할 수 없고, 클라이언트가 가진 토큰은 끝납니다. 다시 켜도 끝난 세션은 돌아오지 않습니다. 계속할까요?`}
+        confirmText="끄기"
+        variant="danger"
+        isLoading={activeMutation.isPending}
+      />
 
       {/* Support access — why the operator enters the tenant */}
       <Modal
