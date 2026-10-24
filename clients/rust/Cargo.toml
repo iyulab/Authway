@@ -1,6 +1,6 @@
 [package]
 name = "authway-native"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Sign a desktop or command-line app's user in with the system browser (OAuth 2.0 for Native Apps: loopback redirect + PKCE), keep the tokens in a store the app chooses, and refresh them before they expire."

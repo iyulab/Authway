@@ -3,7 +3,7 @@
 All notable changes to `Authway.Native` are recorded here. It is released together with `authway-native` (the same client for
 another language), under the same version, apart from the Authway service.
 
-## Unreleased
+## 0.1.1 — 2026-10-24
 
 ### Changed
 
