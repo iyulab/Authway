@@ -213,7 +213,7 @@ func TestSMTP_AnUnreachableServerIsTriedAgain(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().(*net.TCPAddr)
 	ln.Close()
-	s := NewService(Config{SMTPHost: "127.0.0.1", SMTPPort: addr.Port, FromEmail: "a@example.com"}, zap.NewNop())
+	s := NewService(Config{SMTPHost: "127.0.0.1", SMTPPort: addr.Port, FromEmail: "a@example.com", FrontendURL: "https://login.example.com"}, zap.NewNop())
 	start := time.Now()
 	if err := s.SendVerificationEmail("user@example.com", "", "t"); !errors.Is(err, ErrTransient) {
 		t.Fatalf("closed port: %v, want ErrTransient", err)
@@ -227,7 +227,7 @@ func TestSMTP_RequiredStartTLSIsNotSkipped(t *testing.T) {
 	f := startFakeSMTP(t, "250 ok")
 	host, port, _ := net.SplitHostPort(f.addr)
 	p, _ := strconv.Atoi(port)
-	s := NewService(Config{SMTPHost: host, SMTPPort: p, SMTPSecurity: SMTPSecurityStartTLS, FromEmail: "a@example.com"}, zap.NewNop())
+	s := NewService(Config{SMTPHost: host, SMTPPort: p, SMTPSecurity: SMTPSecurityStartTLS, FromEmail: "a@example.com", FrontendURL: "https://login.example.com"}, zap.NewNop())
 	if err := s.SendVerificationEmail("user@example.com", "", "t"); err == nil || !strings.Contains(err.Error(), "STARTTLS") {
 		t.Fatalf("server without STARTTLS: %v, want a refusal", err)
 	}
@@ -240,14 +240,5 @@ func TestSMTP_ImplicitTLSOnPort465(t *testing.T) {
 	if !(smtpTransport{port: 465}).implicitTLS() || (smtpTransport{port: 587}).implicitTLS() ||
 		!(smtpTransport{port: 2525, security: SMTPSecurityTLS}).implicitTLS() || (smtpTransport{port: 465, security: SMTPSecurityNone}).implicitTLS() {
 		t.Fatal("implicit TLS is not chosen by port 465 or security=tls alone")
-	}
-}
-
-func TestPlainText_KeepsWordsAndLinks(t *testing.T) {
-	got := plainText(`<html><head><style>a{color:red}</style></head><body><h1>Hello &amp; welcome</h1>` +
-		`<p>Click <a href="https://x.example/a?b=1&amp;c=2" style="color:#fff">Sign in</a> now.</p></body></html>`)
-	if strings.Contains(got, "color") || !strings.Contains(got, "Hello & welcome") ||
-		!strings.Contains(got, "Sign in: https://x.example/a?b=1&c=2") {
-		t.Fatalf("plainText = %q", got)
 	}
 }

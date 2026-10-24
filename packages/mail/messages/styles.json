@@ -1,0 +1,6 @@
+{
+  "verification": { "color": "#4F46E5" },
+  "reset": { "color": "#DC2626" },
+  "invitation": { "color": "#4F46E5" },
+  "magiclink": { "color": "#4F46E5" }
+}

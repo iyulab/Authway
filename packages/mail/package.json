@@ -1,0 +1,12 @@
+{
+  "name": "@authway/mail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The messages Authway sends, as Mustache files every Authway implementation renders",
+  "files": [
+    "messages",
+    "locales",
+    "README.md"
+  ],
+  "license": "Apache-2.0"
+}

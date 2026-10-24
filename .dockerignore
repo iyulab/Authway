@@ -39,8 +39,10 @@ Thumbs.db
 *.dylib
 vendor/
 
-# Ignore frontend packages during backend build
+# Ignore frontend packages during backend build — except the message files,
+# which the API renders its mail from
 packages/
+!packages/mail/
 
 # Ignore apps not needed for Central API build
 apps/branding/

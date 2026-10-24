@@ -19,6 +19,7 @@ RUN go mod download
 
 # Copy source code
 COPY apps/central/ ./apps/central/
+COPY packages/mail/ ./packages/mail/
 
 # Build the application with optimizations
 # Central API is part of the authway module, so we build from the module root

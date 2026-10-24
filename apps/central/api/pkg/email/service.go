@@ -1,13 +1,12 @@
 package email
 
 import (
-	"bytes"
 	"fmt"
-	"html/template"
 	"strings"
 	"time"
 
 	"authway/apps/central/api/pkg/maillink"
+	"authway/packages/mail"
 	"go.uber.org/zap"
 )
 
@@ -54,373 +53,47 @@ func NewService(config Config, logger *zap.Logger) *Service {
 
 // SendVerificationEmail sends an email verification link
 func (s *Service) SendVerificationEmail(toEmail, organization, token string) error {
-	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
-
-	subject := subjectFor("Authway - 이메일 인증", organization)
-	body, err := renderEmailTemplate("verification", organization, verificationLink)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subject, body)
+	return s.send(toEmail)(verificationMessage(organization, maillink.VerifyEmail(s.frontendURL, token)))
 }
 
 // SendPasswordResetEmail sends a password reset link
 func (s *Service) SendPasswordResetEmail(toEmail, organization, token string) error {
-	resetLink := maillink.ResetPassword(s.frontendURL, token)
-
-	subject := subjectFor("Authway - 비밀번호 재설정", organization)
-	body, err := renderEmailTemplate("reset", organization, resetLink)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subject, body)
+	return s.send(toEmail)(resetMessage(organization, maillink.ResetPassword(s.frontendURL, token)))
 }
 
 // SendInvitationEmail sends a tenant invitation link via SMTP
 func (s *Service) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	subject := fmt.Sprintf("Authway - %s 초대", tenantName)
-	body, err := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subject, body)
+	return s.send(toEmail)(invitationMessage(inviterName, tenantName, message, inviteURL))
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via SMTP
 func (s *Service) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	subject := subjectFor(magicLinkSubject(isNewUser), organization)
-	body, err := renderMagicLinkTemplate(organization, linkURL, code, isNewUser)
-	if err != nil {
-		return err
-	}
+	return s.send(toEmail)(magicLinkMessage(organization, linkURL, code, isNewUser))
+}
 
-	return s.sendEmail(toEmail, subject, body)
+// send sends a rendered message to `to`; a message that failed to render is
+// not sent.
+func (s *Service) send(to string) func(mail.Message, error) error {
+	return func(m mail.Message, err error) error {
+		if err != nil {
+			return err
+		}
+		return s.sendEmail(to, m)
+	}
 }
 
 // sendEmail sends an email via SMTP. A failure worth trying again wraps
 // ErrTransient (Async retries it).
-func (s *Service) sendEmail(to, subject, body string) error {
-	message, err := smtpMessage(s.fromName, s.fromEmail, to, subject, body, time.Now())
+func (s *Service) sendEmail(to string, m mail.Message) error {
+	message, err := smtpMessage(s.fromName, s.fromEmail, to, m, time.Now())
 	if err != nil {
 		return err
 	}
 	if err := s.transport.send(s.fromEmail, to, message); err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
-	s.logger.Info("Email sent", zap.String("to", to), zap.String("subject", subject))
+	s.logger.Info("Email sent", zap.String("to", to), zap.String("subject", m.Subject))
 	return nil
-}
-
-// The call-to-action link every message carries is styled inline. Mail
-// clients drop a <style> block or apply only part of it, and paint links in
-// their own colour, so a button styled only by a class came out as link-blue
-// text on the button colour — unreadable. The colour is on the table cell
-// (bgcolor survives without any CSS), on the link and on a span inside it,
-// which is the usual way to make a link look like a button in mail.
-const emailButtonTemplate = `{{define "button"}}<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;border-collapse:separate;"><tr><td bgcolor="{{.Color}}" style="background-color:{{.Color}};border-radius:6px;"><a href="{{.Link}}" target="_blank" style="display:inline-block;padding:12px 30px;font-size:16px;font-weight:600;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:6px;background-color:{{.Color}};"><span style="color:#ffffff;">{{.Label}}</span></a></td></tr></table>{{end}}`
-
-// The account a message is about. One address can have accounts in several
-// organizations (tenants); a message about one of them says which.
-const emailOrganizationTemplate = `{{define "organization"}}{{if .}}<p style="background:#EEF2FF;border-radius:4px;padding:10px 12px;color:#3730A3;">이 메일은 <strong>{{.}}</strong> 의 계정에 대한 것입니다.</p>{{end}}{{end}}`
-
-// subjectFor names the organization in a subject, when there is one.
-func subjectFor(subject, organization string) string {
-	if organization == "" {
-		return subject
-	}
-	return subject + " (" + organization + ")"
-}
-
-// organizationLine is the plain-text counterpart of the "organization"
-// template, ending in a blank line; "" without one.
-func organizationLine(organization string) string {
-	if organization == "" {
-		return ""
-	}
-	return "이 메일은 «" + organization + "» 의 계정에 대한 것입니다.\n\n"
-}
-
-func magicLinkSubject(isNewUser bool) string {
-	if isNewUser {
-		return "Authway - 가입 및 로그인 링크"
-	}
-	return "Authway - 로그인 링크"
-}
-
-type emailButton struct {
-	Link  string
-	Label string
-	Color template.CSS
-}
-
-// parseEmailTemplate parses a message template together with the shared
-// button, {{template "button" (button <link> <label> <colour>)}}, and the
-// organization line, {{template "organization" <name>}}.
-func parseEmailTemplate(name, body string) (*template.Template, error) {
-	t := template.New(name).Funcs(template.FuncMap{
-		"button": func(link, label, color string) emailButton {
-			return emailButton{Link: link, Label: label, Color: template.CSS(color)}
-		},
-	})
-	if _, err := t.Parse(emailButtonTemplate); err != nil {
-		return nil, err
-	}
-	if _, err := t.Parse(emailOrganizationTemplate); err != nil {
-		return nil, err
-	}
-	return t.Parse(body)
-}
-
-// renderEmailTemplate renders the verification or password reset message.
-func renderEmailTemplate(templateType, organization, link string) (string, error) {
-	var tmpl string
-	switch templateType {
-	case "verification":
-		tmpl = getVerificationTemplate()
-	case "reset":
-		tmpl = getPasswordResetTemplate()
-	default:
-		return "", fmt.Errorf("email: no %q template", templateType)
-	}
-	return executeEmailTemplate(templateType, tmpl, map[string]string{"Link": link, "Organization": organization})
-}
-
-// executeEmailTemplate renders a message. A message that fails to render is
-// an error, never a partial body: a partial body would still be sent.
-func executeEmailTemplate(name, body string, data any) (string, error) {
-	t, err := parseEmailTemplate(name, body)
-	if err != nil {
-		return "", fmt.Errorf("email: %s template: %w", name, err)
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("email: rendering the %s message: %w", name, err)
-	}
-	return buf.String(), nil
-}
-
-// getVerificationTemplate returns verification email template
-func getVerificationTemplate() string {
-	return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #4F46E5;
-            margin-bottom: 20px;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #666;
-            font-size: 14px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔐 Authway 이메일 인증</h1>
-        {{template "organization" .Organization}}
-        <p>안녕하세요!</p>
-        <p>Authway 회원가입을 환영합니다. 아래 버튼을 클릭하여 이메일 주소를 인증해주세요.</p>
-        {{template "button" (button .Link "이메일 인증하기" "#4F46E5")}}
-        <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
-        <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
-            {{.Link}}
-        </p>
-        <div class="footer">
-            <p>이 링크는 6시간 동안 유효합니다.</p>
-            <p>본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
-}
-
-// getPasswordResetTemplate returns password reset email template
-func getPasswordResetTemplate() string {
-	return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #DC2626;
-            margin-bottom: 20px;
-        }
-        .warning {
-            background: #FEF3C7;
-            border-left: 4px solid #F59E0B;
-            padding: 12px;
-            margin: 20px 0;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #666;
-            font-size: 14px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔑 비밀번호 재설정</h1>
-        {{template "organization" .Organization}}
-        <p>안녕하세요!</p>
-        <p>Authway 계정의 비밀번호 재설정을 요청하셨습니다.</p>
-        <p>아래 버튼을 클릭하여 새로운 비밀번호를 설정하세요.</p>
-        {{template "button" (button .Link "비밀번호 재설정하기" "#DC2626")}}
-        <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
-        <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
-            {{.Link}}
-        </p>
-        <div class="warning">
-            <strong>⚠️ 보안 안내</strong><br>
-            본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.
-        </div>
-        <div class="footer">
-            <p>이 링크는 1시간 동안 유효합니다.</p>
-            <p>보안을 위해 비밀번호 재설정 후 모든 기기에서 재로그인이 필요합니다.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
-}
-
-// renderInvitationTemplate renders tenant invitation HTML template
-func renderInvitationTemplate(inviterName, tenantName, message, inviteURL string) (string, error) {
-	tmpl := `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .container { background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #4F46E5; margin-bottom: 20px; }
-        .message { background: #F9FAFB; border-left: 4px solid #4F46E5; padding: 12px; margin: 20px 0; white-space: pre-wrap; }
-        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📨 워크스페이스 초대</h1>
-        <p><strong>{{.InviterName}}</strong> 님이 <strong>{{.TenantName}}</strong> 워크스페이스에 초대했습니다.</p>
-        {{if .Message}}<div class="message">{{.Message}}</div>{{end}}
-        <p>아래 버튼을 클릭하여 초대를 수락하세요.</p>
-        {{template "button" (button .InviteURL "초대 수락" "#4F46E5")}}
-        <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
-        <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">{{.InviteURL}}</p>
-        <div class="footer">
-            <p>본인이 알지 못하는 초대인 경우, 이 이메일을 무시하셔도 됩니다.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
-	return executeEmailTemplate("invitation", tmpl, map[string]string{
-		"InviterName": inviterName,
-		"TenantName":  tenantName,
-		"Message":     message,
-		"InviteURL":   inviteURL,
-	})
-}
-
-// renderMagicLinkTemplate renders passwordless magic link HTML template. The
-// code does what the link does, typed into the screen that started the
-// sign-in — for a reader on another device than that screen.
-func renderMagicLinkTemplate(organization, linkURL, code string, isNewUser bool) (string, error) {
-	headline := "🔗 로그인 링크"
-	intro := "아래 버튼을 클릭하여 Authway에 로그인하세요."
-	if isNewUser {
-		headline = "🎉 환영합니다 — 가입 및 로그인 링크"
-		intro = "Authway에 가입과 로그인을 함께 진행할 링크를 보내드렸습니다. 아래 버튼을 클릭하여 시작하세요."
-	}
-
-	tmpl := `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .container { background: #ffffff; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #4F46E5; margin-bottom: 20px; }
-        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>{{.Headline}}</h1>
-        {{template "organization" .Organization}}
-        <p>{{.Intro}}</p>
-        {{template "button" (button .LinkURL "로그인하기" "#4F46E5")}}
-        <p>또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:</p>
-        <p style="background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">{{.LinkURL}}</p>
-        <p>다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 아래 코드를 입력하세요:</p>
-        <p style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #111827; text-align: center; background: #f5f5f5; padding: 14px; border-radius: 6px;">{{.Code}}</p>
-        <div class="footer">
-            <p>링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.</p>
-            <p>본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.</p>
-        </div>
-    </div>
-</body>
-</html>
-`
-	return executeEmailTemplate("magiclink", tmpl, map[string]string{
-		"Headline": headline,
-		"Intro":    intro,
-		"LinkURL":  linkURL,
-		"Code":     code,
-
-		"Organization": organization,
-	})
 }
 
 // ValidateEmail performs basic email validation

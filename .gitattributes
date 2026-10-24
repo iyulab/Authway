@@ -5,3 +5,7 @@
 # The on-premises bundle runs on Linux hosts: a shell script or an env file
 # with carriage returns fails there, whatever machine packed it.
 deploy/onprem/** text eol=lf
+
+# Message files are rendered byte for byte into mail: a carriage return a
+# Windows checkout adds would reach the plain-text body.
+packages/mail/** text eol=lf

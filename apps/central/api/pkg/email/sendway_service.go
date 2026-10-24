@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/pkg/maillink"
+	"authway/packages/mail"
 )
 
 // SendwayEmailService sends email through a Sendway deployment
@@ -90,59 +91,33 @@ func NewSendwayEmailService(config SendwayEmailConfig, logger *zap.Logger) *Send
 
 // SendVerificationEmail sends an email verification link via Sendway.
 func (s *SendwayEmailService) SendVerificationEmail(toEmail, organization, token string) error {
-	verificationLink := maillink.VerifyEmail(s.frontendURL, token)
-
-	body := fmt.Sprintf("Authway 이메일 인증\n\n%s아래 링크를 클릭하여 이메일을 인증해주세요:\n%s\n\n이 링크는 6시간 동안 유효합니다.", organizationLine(organization), verificationLink)
-	htmlBody, err := renderEmailTemplate("verification", organization, verificationLink)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subjectFor("Authway - 이메일 인증", organization), body, htmlBody)
+	return s.send(toEmail)(verificationMessage(organization, maillink.VerifyEmail(s.frontendURL, token)))
 }
 
 // SendPasswordResetEmail sends a password reset link via Sendway.
 func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, organization, token string) error {
-	resetLink := maillink.ResetPassword(s.frontendURL, token)
-
-	body := fmt.Sprintf("Authway 비밀번호 재설정\n\n%s아래 링크를 클릭하여 비밀번호를 재설정하세요:\n%s\n\n이 링크는 1시간 동안 유효합니다.\n\n본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.", organizationLine(organization), resetLink)
-	htmlBody, err := renderEmailTemplate("reset", organization, resetLink)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subjectFor("Authway - 비밀번호 재설정", organization), body, htmlBody)
+	return s.send(toEmail)(resetMessage(organization, maillink.ResetPassword(s.frontendURL, token)))
 }
 
 // SendInvitationEmail sends a tenant invitation link via Sendway.
 func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	subject := fmt.Sprintf("Authway - %s 초대", tenantName)
-
-	body := fmt.Sprintf("Authway 초대\n\n%s 님이 %s 워크스페이스에 초대했습니다.\n\n초대 링크:\n%s\n\n",
-		inviterName, tenantName, inviteURL)
-	if message != "" {
-		body += fmt.Sprintf("메시지:\n%s\n\n", message)
-	}
-	body += "본인이 알지 못하는 초대인 경우 이 이메일을 무시하셔도 됩니다."
-	htmlBody, err := renderInvitationTemplate(inviterName, tenantName, message, inviteURL)
-	if err != nil {
-		return err
-	}
-
-	return s.sendEmail(toEmail, subject, body, htmlBody)
+	return s.send(toEmail)(invitationMessage(inviterName, tenantName, message, inviteURL))
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via Sendway.
 func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	subject := subjectFor(magicLinkSubject(isNewUser), organization)
+	return s.send(toEmail)(magicLinkMessage(organization, linkURL, code, isNewUser))
+}
 
-	body := fmt.Sprintf("Authway 매직 링크\n\n%s아래 링크를 클릭하여 로그인하세요:\n%s\n\n다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 이 코드를 입력하세요: %s\n\n링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다.\n\n본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다.", organizationLine(organization), linkURL, code)
-	htmlBody, err := renderMagicLinkTemplate(organization, linkURL, code, isNewUser)
-	if err != nil {
-		return err
+// send hands a rendered message to Sendway; a message that failed to render
+// is not sent.
+func (s *SendwayEmailService) send(to string) func(mail.Message, error) error {
+	return func(m mail.Message, err error) error {
+		if err != nil {
+			return err
+		}
+		return s.sendEmail(to, m.Subject, m.Text, m.HTML)
 	}
-
-	return s.sendEmail(toEmail, subject, body, htmlBody)
 }
 
 // sendEmail hands an email to Sendway's POST /messages/email, with an HTML

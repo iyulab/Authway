@@ -287,3 +287,20 @@ func TestSendwayEmailService_LogsHowLongEachAttemptTook(t *testing.T) {
 		}
 	}
 }
+
+// A message whose link is not an http(s) address — a deployment without a
+// login UI address configured makes a relative one — is refused before
+// anything is handed to the mail service.
+func TestSendwayEmailService_SendsNothingWhenTheLinkIsNotAnAddress(t *testing.T) {
+	calls := 0
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
+	defer ts.Close()
+	svc := newTestSendwayService(t, ts)
+	svc.frontendURL = ""
+	if err := svc.SendVerificationEmail("user@example.com", "", "tok"); err == nil {
+		t.Fatal("a message with a relative link was sent")
+	}
+	if calls != 0 {
+		t.Fatalf("the mail service was called %d times", calls)
+	}
+}

@@ -34,6 +34,16 @@
 
 ### Changed
 
+- **Mail is rendered from shared message files** (`packages/mail`): the four
+  messages are Mustache files with their strings in `locales/<locale>.json`,
+  which any Authway implementation renders the same way (see the package's
+  README). What a recipient sees: the organization line quotes the name
+  («…») instead of setting it in bold, the invitation's names are no longer
+  bold, and the plain-text part sent over SMTP is written out like the one
+  sent through the mail service instead of being derived from the HTML. A
+  message whose link is not an `http`/`https` address is refused instead of
+  sent.
+
 - **An operator's console account reaches into a tenant only through support
   access.** It keeps the platform's actions on every tenant — creating,
   turning off and on, deleting, the tenant's settings, who administers it,

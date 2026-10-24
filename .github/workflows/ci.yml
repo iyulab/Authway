@@ -77,14 +77,14 @@ jobs:
           docker logs hydra-ci
           exit 1
 
-      - name: Test (central API)
+      - name: Test (central API and the message files it renders)
         # Each migration test creates and drops its own throwaway database on
         # this server, so the DSN's own database is only used by the client
         # persistence tests, which bring the schema up via the real migrator.
         env:
           MIGRATE_SMOKE_DSN: postgres://authway:authway@localhost:5432/authway?sslmode=disable
           HYDRA_ADMIN_URL: http://localhost:4445
-        run: go test ./apps/central/api/...
+        run: go test ./apps/central/api/... ./packages/mail/...
 
       # Fails the build if the Postgres-gated tests silently stop running — a
       # skip here looks identical to a pass in the summary above. The

@@ -65,6 +65,8 @@ importers:
 
   packages/contract: {}
 
+  packages/mail: {}
+
   packages/react:
     dependencies:
       '@authway/client':

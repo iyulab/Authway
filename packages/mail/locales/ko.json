@@ -1,0 +1,48 @@
+{
+  "common": {
+    "organization": "이 메일은 «{{organization}}» 의 계정에 대한 것입니다.",
+    "greeting": "안녕하세요!",
+    "copyLink": "또는 아래 링크를 복사하여 브라우저에 붙여넣으세요:",
+    "notRequested": "본인이 요청하지 않은 경우, 이 이메일을 무시하셔도 됩니다."
+  },
+  "verification": {
+    "subject": "Authway - 이메일 인증{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "🔐 Authway 이메일 인증",
+    "intro": "Authway 회원가입을 환영합니다. 아래 버튼을 클릭하여 이메일 주소를 인증해주세요.",
+    "textIntro": "아래 링크를 클릭하여 이메일을 인증해주세요:",
+    "button": "이메일 인증하기",
+    "expiry": "이 링크는 6시간 동안 유효합니다."
+  },
+  "reset": {
+    "subject": "Authway - 비밀번호 재설정{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "🔑 비밀번호 재설정",
+    "intro": "Authway 계정의 비밀번호 재설정을 요청하셨습니다.",
+    "action": "아래 버튼을 클릭하여 새로운 비밀번호를 설정하세요.",
+    "textIntro": "아래 링크를 클릭하여 비밀번호를 재설정하세요:",
+    "button": "비밀번호 재설정하기",
+    "warningTitle": "⚠️ 보안 안내",
+    "warning": "본인이 요청하지 않은 경우, 즉시 비밀번호를 변경하시기 바랍니다.",
+    "expiry": "이 링크는 1시간 동안 유효합니다.",
+    "relogin": "보안을 위해 비밀번호 재설정 후 모든 기기에서 재로그인이 필요합니다."
+  },
+  "invitation": {
+    "subject": "Authway - {{tenantName}} 초대",
+    "heading": "📨 워크스페이스 초대",
+    "invited": "{{inviterName}} 님이 {{tenantName}} 워크스페이스에 초대했습니다.",
+    "intro": "아래 버튼을 클릭하여 초대를 수락하세요.",
+    "button": "초대 수락",
+    "linkLabel": "초대 링크:",
+    "messageLabel": "메시지:",
+    "notRequested": "본인이 알지 못하는 초대인 경우, 이 이메일을 무시하셔도 됩니다."
+  },
+  "magiclink": {
+    "subject": "{{#newUser}}Authway - 가입 및 로그인 링크{{/newUser}}{{^newUser}}Authway - 로그인 링크{{/newUser}}{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "{{#newUser}}🎉 환영합니다 — 가입 및 로그인 링크{{/newUser}}{{^newUser}}🔗 로그인 링크{{/newUser}}",
+    "intro": "{{#newUser}}Authway에 가입과 로그인을 함께 진행할 링크를 보내드렸습니다. 아래 버튼을 클릭하여 시작하세요.{{/newUser}}{{^newUser}}아래 버튼을 클릭하여 Authway에 로그인하세요.{{/newUser}}",
+    "textIntro": "아래 링크를 클릭하여 로그인하세요:",
+    "button": "로그인하기",
+    "codeIntro": "다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 아래 코드를 입력하세요:",
+    "textCode": "다른 기기에서 이 메일을 읽고 있다면, 로그인을 시작한 화면에 이 코드를 입력하세요: {{code}}",
+    "expiry": "링크와 코드는 일정 시간 후 만료되며, 한 번만 쓸 수 있습니다."
+  }
+}
