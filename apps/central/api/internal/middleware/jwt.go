@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"authway/apps/central/api/pkg/apierror"
+	"errors"
 	"strings"
 	"time"
 
@@ -49,7 +50,15 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		// trivial token forgery for `sub` and `tenant_id` claims.
 		found, err := introspectToken(token, hydraClient, logger)
 		if err != nil {
-			logger.Error("Token introspection failed", zap.Error(err))
+			// A token that is expired, revoked or malformed is the caller's
+			// to fix and is answered 401; only a failure to ask the
+			// authorization server is this service's.
+			var refused *fiber.Error
+			if errors.As(err, &refused) && refused.Code == fiber.StatusUnauthorized {
+				logger.Debug("Bearer token refused", zap.String("reason", refused.Message))
+			} else {
+				logger.Error("Token introspection failed", zap.Error(err))
+			}
 			c.Set(fiber.HeaderWWWAuthenticate, `Bearer error="invalid_token"`)
 			return apierror.Refuse(c, fiber.StatusUnauthorized, "unauthorized", "Invalid token")
 		}
