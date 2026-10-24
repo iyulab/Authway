@@ -139,7 +139,7 @@ if (-not $Tenant) { $WithTerms = $true }
 # 같은 이름 꼴의 자원이 다른 실행에서 진행 중일 수 있다.
 $leftoverQuery = @"
 SELECT 'tenants', count(*) FROM tenants WHERE slug LIKE 'verify-terms-%' AND deleted_at IS NULL
-UNION ALL SELECT 'users', count(*) FROM users WHERE email LIKE 'verify-oauth-smoke-%@authway.invalid' AND deleted_at IS NULL
+UNION ALL SELECT 'users', count(*) FROM users WHERE email LIKE 'verify-oauth-smoke-%@authway.invalid'
 UNION ALL SELECT 'clients', count(*) FROM clients WHERE name LIKE 'verify-oauth-smoke-%' AND deleted_at IS NULL;
 "@
 $leftover = Invoke-FastQuery -Query $leftoverQuery -EnvVars $envVars
