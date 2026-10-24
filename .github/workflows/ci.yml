@@ -90,7 +90,8 @@ jobs:
       # skip here looks identical to a pass in the summary above. The
       # service-client tests are listed too: they are gated on the same DSN but
       # additionally need Hydra, so dropping the Hydra step above would put them
-      # right back in that blind spot.
+      # right back in that blind spot. So is the route table's comparison with
+      # the contract, which builds the whole server on the database.
       - name: Verify Postgres-gated tests actually ran
         env:
           MIGRATE_SMOKE_DSN: postgres://authway:authway@localhost:5432/authway?sslmode=disable
@@ -98,14 +99,15 @@ jobs:
         run: |
           set -euo pipefail
           out="$(go test -v -count=1 \
-            -run 'TestMigrateFreshDatabase|TestInitialSchemaIsIdempotentOnPopulatedDatabase|TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs|TestCreate_RegistersInHydraAndDB|TestRevoke_SetsRevokedAtAndDeletesHydraClient' \
-            ./apps/central/api/internal/database/ ./apps/central/api/pkg/client/ ./apps/central/api/pkg/serviceclient/)"
+            -run 'TestMigrateFreshDatabase|TestInitialSchemaIsIdempotentOnPopulatedDatabase|TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs|TestCreate_RegistersInHydraAndDB|TestRevoke_SetsRevokedAtAndDeletesHydraClient|TestRoutesMatchTheContract' \
+            ./apps/central/api/internal/database/ ./apps/central/api/pkg/client/ ./apps/central/api/pkg/serviceclient/ ./apps/central/api/cmd/)"
           echo "$out"
           for name in TestMigrateFreshDatabase \
                       TestInitialSchemaIsIdempotentOnPopulatedDatabase \
                       TestCreateClient_MachineToMachine_PersistsEmptyRedirectURIs \
                       TestCreate_RegistersInHydraAndDB \
-                      TestRevoke_SetsRevokedAtAndDeletesHydraClient; do
+                      TestRevoke_SetsRevokedAtAndDeletesHydraClient \
+                      TestRoutesMatchTheContract; do
             if ! grep -q "^--- PASS: $name" <<<"$out"; then
               echo "::error::$name did not run against Postgres (skipped or failed)"
               exit 1
