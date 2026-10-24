@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,13 +16,50 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/delegation"
+	"authway/apps/central/api/pkg/serviceclient"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 // grantTypeTokenExchange is the grant of RFC 8693 (OAuth 2.0 Token Exchange).
 const grantTypeTokenExchange = "urn:ietf:params:oauth:grant-type:token-exchange"
+
+// grantTypeClientCredentials is the grant by which a client gets a token about
+// itself (RFC 6749 section 4.4).
+const grantTypeClientCredentials = "client_credentials"
+
+// ClientRegistrations reads what the token endpoint and the token hook need
+// of a client's registration: its tenant and the resource servers it is
+// registered for (audience).
+type ClientRegistrations interface {
+	Registration(clientID string) (tenantID string, audience []string, err error)
+}
+
+// RegisteredClients reads ClientRegistrations from the client registrations,
+// and from the service credentials — the clients a tenant's backend
+// administers it with, which are registered for no resource server.
+func RegisteredClients(clients client.Service, services serviceclient.Service) ClientRegistrations {
+	return registeredClients{clients, services}
+}
+
+type registeredClients struct {
+	clients  client.Service
+	services serviceclient.Service
+}
+
+func (r registeredClients) Registration(clientID string) (string, []string, error) {
+	cl, err := r.clients.GetByClientID(clientID)
+	if err == nil {
+		return cl.TenantID.String(), []string(cl.Audience), nil
+	}
+	sc, scErr := r.services.GetByHydraClientID(clientID)
+	if scErr != nil {
+		return "", nil, errors.Join(err, scErr)
+	}
+	return sc.TenantID.String(), nil, nil
+}
 
 // TokenEndpoint is the token endpoint that discovery advertises
 // (token_endpoint). It stands in front of the authorization server's own: the
@@ -39,6 +77,7 @@ type TokenEndpoint struct {
 	logger      *zap.Logger
 	exchanger   *delegation.Exchanger
 	audit       audit.Service
+	clients     ClientRegistrations
 }
 
 // ExchangesDelegations has the endpoint answer token exchange (RFC 8693) of a
@@ -50,10 +89,12 @@ func (h *TokenEndpoint) ExchangesDelegations(x *delegation.Exchanger, auditServi
 
 // NewTokenEndpoint forwards to the token endpoint of the authorization server
 // reachable at engineURL (its public address, or one inside the deployment's
-// network that reaches the same server).
-func NewTokenEndpoint(engineURL string, logger *zap.Logger) *TokenEndpoint {
+// network that reaches the same server). clients may be nil: then a client's
+// own token is for the resource servers its request names, and no others.
+func NewTokenEndpoint(engineURL string, clients ClientRegistrations, logger *zap.Logger) *TokenEndpoint {
 	return &TokenEndpoint{
 		engineToken: strings.TrimRight(engineURL, "/") + "/oauth2/token",
+		clients:     clients,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 			// An answer is passed back as it is, a redirect included.
@@ -104,8 +145,35 @@ func (h *TokenEndpoint) Token(c *fiber.Ctx) error {
 			return tokenError(c, fiber.StatusBadRequest, "unsupported_grant_type", "Approval requests are not offered by this deployment.")
 		}
 		return h.approved(c)
+	case grantTypeClientCredentials:
+		return h.forward(c, h.withRegisteredAudience(c))
 	}
 	return h.forward(c, c.Body())
+}
+
+// withRegisteredAudience is the body of a client credentials request, with
+// the resource servers the client is registered for when the request names
+// none — the rule a user's token follows (the contract's JwtAccessToken
+// `aud`), where the authorization server would issue a token for none. The
+// authorization server still authenticates the client and checks each value
+// against the same registration.
+func (h *TokenEndpoint) withRegisteredAudience(c *fiber.Ctx) []byte {
+	form, err := url.ParseQuery(string(c.Body()))
+	if h.clients == nil || err != nil || form.Has("audience") {
+		return c.Body()
+	}
+	clientID := delegation.ClientFromRequest(c.Get(fiber.HeaderAuthorization), form)
+	if clientID == "" {
+		return c.Body()
+	}
+	_, audience, err := h.clients.Registration(clientID)
+	if err != nil || len(audience) == 0 {
+		return c.Body()
+	}
+	for _, value := range audience {
+		form.Add("audience", value)
+	}
+	return []byte(form.Encode())
 }
 
 // exchange answers a token exchange of a delegation: the authorization server
@@ -315,19 +383,23 @@ const TokenHookHeader = "X-Authway-Hook-Key"
 // TokenHook is called by the authorization server before it issues any token
 // (its OAUTH2_TOKEN_HOOK_URL). For the assertion grant — the token of a
 // delegation exchange — it decides whether the token may be issued and names
-// the client as the actor; every other token it leaves as it is.
+// the client as the actor. A client's own token (client credentials) gets the
+// client's tenant, as a user's token carries the user's. Every other token it
+// leaves as it is.
 type TokenHook struct {
 	keys     [][]byte
 	exchange *delegation.Exchanger
+	clients  ClientRegistrations
 	logger   *zap.Logger
 }
 
 // NewTokenHook accepts calls that present one of keys in TokenHookHeader.
 // More than one key is accepted while the key is being changed. exchange may
 // be nil: then an assertion grant is refused, since only Authway's own
-// assertions are meant to reach the authorization server.
-func NewTokenHook(keys []string, exchange *delegation.Exchanger, logger *zap.Logger) *TokenHook {
-	h := &TokenHook{exchange: exchange, logger: logger}
+// assertions are meant to reach the authorization server. clients may be nil:
+// then a client's own token is issued as the authorization server makes it.
+func NewTokenHook(keys []string, exchange *delegation.Exchanger, clients ClientRegistrations, logger *zap.Logger) *TokenHook {
+	h := &TokenHook{exchange: exchange, clients: clients, logger: logger}
 	for _, k := range keys {
 		if k != "" {
 			h.keys = append(h.keys, []byte(k))
@@ -356,6 +428,9 @@ func (h *TokenHook) Hook(c *fiber.Ctx) error {
 	if err := json.Unmarshal(c.Body(), &call); err != nil {
 		return c.SendStatus(fiber.StatusBadRequest)
 	}
+	if slices.Contains(call.Request.GrantTypes, grantTypeClientCredentials) && h.clients != nil {
+		return h.clientToken(c, call.Request.ClientID)
+	}
 	if !slices.Contains(call.Request.GrantTypes, hydra.JWTBearerGrant) {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
@@ -368,6 +443,25 @@ func (h *TokenHook) Hook(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusForbidden)
 	}
 	return c.JSON(fiber.Map{"session": fiber.Map{"access_token": answer.Claims}})
+}
+
+// clientToken adds the client's tenant to its own token. A token without it
+// would not be one the contract describes (JwtClientAccessToken), so when the
+// registration cannot be read the token is refused.
+func (h *TokenHook) clientToken(c *fiber.Ctx, clientID string) error {
+	// Its subject is its client_id, and resource servers tell it from a
+	// user's token by that: one in the form of a user's id is not issued,
+	// whenever it was registered.
+	if _, err := uuid.Parse(clientID); err == nil {
+		h.logger.Warn("Token hook refused a client token: the client_id has the form of a user's id", zap.String("client_id", clientID))
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	tenantID, _, err := h.clients.Registration(clientID)
+	if err != nil {
+		h.logger.Error("Token hook could not read the client's tenant", zap.String("client_id", clientID), zap.Error(err))
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	return c.JSON(fiber.Map{"session": fiber.Map{"access_token": fiber.Map{"tenant_id": tenantID}}})
 }
 
 // payloadValue reads a request parameter the authorization server passes on

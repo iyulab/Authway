@@ -152,6 +152,7 @@ the offending `field`, a human `detail`, and an actionable `hint`.
 | `invalid_initiate_login_uri`, `invalid_client_uri` | The address is not an absolute `https` URL, or has a fragment | Give the application's own https address |
 | `invalid_backchannel_logout_uri` | `backchannel_logout_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address (as written, or by what its host name resolves to) | Give the URL of an endpoint on the application's backend, e.g. `https://app.example.com/backchannel-logout` |
 | `invalid_audience` | An `audience` entry is empty, longer than 255 characters, contains whitespace or is repeated | Name each API by one identifier, usually its URL |
+| `invalid_client_id` | A chosen `client_id` has the form of a UUID (with or without hyphens) — the form of a user's id, which the client's own token (`sub` = `client_id`) would then read as | Choose a name such as `orders-backend`, or leave `client_id` out |
 | `invalid_token_endpoint_auth_method` | `token_endpoint_auth_method` is not one of `client_secret_post`, `private_key_jwt`, `none`; or does not fit the kind of client (`none` for a confidential one, a secret or a key for a public one); or a `client_secret` is given to a client that authenticates with a key | Leave it out for the default, or see [below](#clients-that-hold-a-key-instead-of-a-secret-private_key_jwt) |
 | `invalid_jwks` | A client that authenticates with a key gives neither or both of `jwks` and `jwks_uri`; `jwks` is not a set of 1 to 10 RSA, EC or OKP public keys, or holds a private key; or keys are given to a client that does not authenticate with one | Register the public half only: `{"keys": [{"kty": "RSA", "kid": "…", "n": "…", "e": "AQAB"}]}` |
 | `invalid_jwks_uri` | `jwks_uri` is not an absolute `https` URL, has a fragment, or points at a local or private address | Give the public address the key set is served at |
@@ -286,9 +287,11 @@ client:
 - `PUT /api/v1/clients/{id}` with `"audience": []` clears it; leaving the field
   out keeps it.
 
-This applies to tokens issued to a user (authorization code). A
-machine-to-machine client (`client_credentials`) names the audience it wants in
-its token request (`audience` parameter).
+The same holds for a machine-to-machine client (`client_credentials`): its
+token is for the resource servers it is registered for, or the ones among them
+its token request names (`audience` parameter). That token is about the client,
+not a user — `sub` is its `client_id`, and it carries the client's `tenant_id`
+(see [the resource server's side](../BACKEND_INTEGRATION.md#a-clients-own-token)).
 
 ### Clients that hold a key instead of a secret: `private_key_jwt`
 

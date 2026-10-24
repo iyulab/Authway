@@ -115,6 +115,9 @@ func (s *service) Create(req *CreateClientRequest) (*Client, *ClientCredentials,
 	if cerr := validateAudience(req.Audience); cerr != nil {
 		return nil, nil, cerr
 	}
+	if cerr := validateChosenClientID(req.ClientID); cerr != nil {
+		return nil, nil, cerr
+	}
 	if cerr := validateApplicationURI("initiate_login_uri", req.InitiateLoginURI); cerr != nil {
 		return nil, nil, cerr
 	}

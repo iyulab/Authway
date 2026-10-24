@@ -140,3 +140,82 @@ describe('resource server', () => {
     }
   })
 })
+
+// A client that calls an API on its own behalf (client credentials) gets a
+// token about itself, not about a user. A resource server reads it with the
+// same keys and the same audience check, and tells it from a user's token by
+// its subject: the client itself.
+describe("resource server — a client's own token", () => {
+  let client: TestClient & { secret: string }
+  let tokenEndpoint: string
+  let issuer: string
+  let keys: ReturnType<typeof createRemoteJWKSet>
+
+  beforeAll(async () => {
+    const d = await provider.discovery()
+    issuer = d.issuer
+    tokenEndpoint = d.token_endpoint
+    keys = createRemoteJWKSet(new URL(d.jwks_uri))
+
+    const res = await provider.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: await provider.tenantId(),
+        name: `conformance-rs-m2m-${randomToken(4)}`,
+        public: false,
+        grant_types: ['client_credentials'],
+        scopes: ['openid'],
+        access_token_strategy: 'jwt',
+        audience: [API],
+      }),
+    })
+    expect(res.status, await res.clone().text()).toBe(201)
+    const { client: created, credentials } = (await res.json()) as {
+      client: { id: string; client_id: string }
+      credentials: { client_secret: string }
+    }
+    client = { id: created.id, clientId: created.client_id, secret: credentials.client_secret }
+  })
+
+  afterAll(async () => {
+    if (client) await provider.deleteClient(client)
+  })
+
+  async function clientToken(extra: Record<string, string> = {}): Promise<Response> {
+    return fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: client.clientId, client_secret: client.secret, ...extra }),
+    })
+  }
+
+  it('is for the resource servers the client is registered for when the request names none', async () => {
+    const res = await clientToken()
+    expect(res.status, await res.clone().text()).toBe(200)
+    const { access_token } = (await res.json()) as { access_token: string }
+    const { payload } = await jwtVerify(access_token, keys, { issuer, audience: API })
+
+    conformTo('JwtClientAccessToken', payload)
+    // About the client, of the client's tenant — and about no user.
+    expect(payload.sub).toBe(client.clientId)
+    expect(payload.client_id).toBe(client.clientId)
+    expect(payload.tenant_id).toBe(await provider.tenantId())
+    expect(payload.email).toBeUndefined()
+    expect(payload.auth_time).toBeUndefined()
+    expect(() => conformTo('JwtAccessToken', payload)).toThrow()
+  })
+
+  it('is for the one resource server the request names', async () => {
+    const res = await clientToken({ audience: API })
+    expect(res.status, await res.clone().text()).toBe(200)
+    const { access_token } = (await res.json()) as { access_token: string }
+    const { payload } = await jwtVerify(access_token, keys, { issuer, audience: API })
+    expect(payload.aud).toEqual([API])
+  })
+
+  it('is refused for a resource server the client is not registered for', async () => {
+    const res = await clientToken({ audience: 'https://billing-api.conformance.example' })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_request')
+  })
+})

@@ -384,7 +384,8 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// The token endpoint discovery advertises: it passes every grant the
 	// authorization server knows on to it unchanged, and answers the ones
 	// Authway assembles itself.
-	tokenEndpoint := handler.NewTokenEndpoint(cfg.Hydra.EngineURL(), zapLogger)
+	registrations := handler.RegisteredClients(clientService, serviceClientService)
+	tokenEndpoint := handler.NewTokenEndpoint(cfg.Hydra.EngineURL(), registrations, zapLogger)
 	// A client exchanges a delegation there (RFC 8693): the authorization
 	// server issues the token by its assertion grant, on an assertion signed
 	// with a key kept in the database. Without the key, no exchange.
@@ -409,7 +410,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// The authorization server calls this before it issues a token. Served
 	// only when the deployment set the key the authorization server presents.
 	if len(cfg.Hydra.TokenHookKeys) > 0 {
-		app.Post("/internal/token-hook", handler.NewTokenHook(cfg.Hydra.TokenHookKeys, exchanger, zapLogger).Hook)
+		app.Post("/internal/token-hook", handler.NewTokenHook(cfg.Hydra.TokenHookKeys, exchanger, registrations, zapLogger).Hook)
 	}
 
 	// API routes

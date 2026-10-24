@@ -51,8 +51,20 @@
   characters and not an example value** — the API refused only `admin123`,
   so `.env.example`'s value started a deployment. The on-premises setup
   generates 32 characters.
+- **A client's own token (client credentials) carries the client's
+  `tenant_id`** — `aud` says which API a token is for, not whose client asked,
+  and clients of different tenants may be registered for the same API. Its
+  `sub` is the client's `client_id`; the contract describes it as
+  `JwtClientAccessToken`. A service credential's token carries its tenant too.
+- **A chosen `client_id` in the form of a UUID is refused** (`400
+  invalid_client_id`) — the form of a user's id, which a client's own token
+  would then read as. Generated ones never had it.
 
 ### Fixed
+
+- **A client's own token is for the APIs the client is registered for** when
+  its token request names none, as a user's token is — it was issued for none,
+  so an API that checks its audience refused it.
 
 - **Signing a console account out of the console ends its Authway session
   every time**: the console showed its sign-in page while it was still

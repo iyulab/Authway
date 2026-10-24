@@ -197,6 +197,25 @@ describe('admin API: a chosen client_id', () => {
     expect((await token(again)).status).toBe(200)
     expect((await token(first)).status).toBe(401)
   })
+
+  // A client's own token has the client as its subject, so a client_id in
+  // the form of a user id would let that token read as a user's.
+  it('is refused in the form of a user id', async () => {
+    const res = await provider.admin('/api/v1/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: await provider.tenantId(),
+        name: 'conformance-user-id-form',
+        client_id: crypto.randomUUID(),
+        client_secret: `secret-${randomToken(24)}`,
+        grant_types: ['client_credentials'],
+        scopes: ['openid'],
+      }),
+    })
+    await conform('POST', '/api/v1/clients', res.clone())
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'invalid_client_id', field: 'client_id' })
+  })
 })
 
 // The application's own sign-in provider apps follow one rule for all four

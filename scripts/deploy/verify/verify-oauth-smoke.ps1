@@ -184,6 +184,7 @@ $cookieJar = [System.IO.Path]::GetTempFileName()
 $clientId = $null
 $clientDbId = $null
 $clientSecret = $null
+$m2mDbId = $null
 # 요청·동의하는 scope: 위임까지 보면 delegation 을 더한다.
 # @(...) 로 감싼다: if 식은 원소 하나짜리 배열을 문자열로 풀어 scopes 가 JSON 문자열로 나간다.
 $scopes = @(if ($WithDelegation) { "openid", "delegation" } elseif ($Native) { "openid", "profile", "email", "offline_access" } else { "openid" })
@@ -679,6 +680,50 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         }
     }
 
+    # --- 8-5. 클라이언트 자신의 토큰 (client_credentials) ---
+    # 계약 JwtClientAccessToken: sub = client_id, 클라이언트의 tenant_id(토큰 훅),
+    # 요청이 audience 를 안 적으면 등록된 audience(토큰 앞단). 훅이 등록을 못 읽으면
+    # 발급 자체가 거절되므로 운영의 M2M 발급이 살아 있는지도 여기서 본다.
+    Write-Host "7️⃣-5 클라이언트 자신의 토큰 (client_credentials)" -ForegroundColor Yellow
+    $m2mAudience = "https://verify-oauth-smoke.invalid/api"
+    $m2mBody = @{
+        tenant_id             = $Tenant
+        name                  = "verify-oauth-smoke-m2m-$suffix"
+        public                = $false
+        grant_types           = @("client_credentials")
+        scopes                = @("openid")
+        access_token_strategy = "jwt"
+        audience              = @($m2mAudience)
+    } | ConvertTo-Json -Compress
+    $tmpBody = [System.IO.Path]::GetTempFileName()
+    Set-Content -Path $tmpBody -Value $m2mBody -NoNewline -Encoding UTF8
+    $m2mResp = & curl.exe -s -X POST "$apiUrl/api/v1/clients" `
+        -H "Content-Type: application/json" -H "Authorization: Bearer $adminKey" `
+        --data "@$tmpBody"
+    Remove-Item $tmpBody -ErrorAction SilentlyContinue
+    $m2mParsed = $m2mResp | ConvertFrom-Json
+    if (-not $m2mParsed.client.client_id -or -not $m2mParsed.credentials.client_secret) {
+        Write-Host "❌ M2M client 생성 실패: $m2mResp" -ForegroundColor Red
+        exit 1
+    }
+    $m2mDbId = $m2mParsed.client.id
+    $m2mClientId = $m2mParsed.client.client_id
+    $m2mJson = & curl.exe -s -X POST $tokenEndpoint -d 'grant_type=client_credentials' `
+        -d "client_id=$m2mClientId" --data-urlencode "client_secret=$($m2mParsed.credentials.client_secret)" | ConvertFrom-Json
+    if (-not $m2mJson.access_token) {
+        Write-Host "❌ client_credentials 토큰을 받지 못함: $($m2mJson | ConvertTo-Json -Compress)" -ForegroundColor Red
+        exit 1
+    }
+    $m2mParts = $m2mJson.access_token.Split('.')
+    $mb64 = $m2mParts[1].Replace('-', '+').Replace('_', '/')
+    $mb64 += '=' * ((4 - $mb64.Length % 4) % 4)
+    $m2mClaims = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($mb64)) | ConvertFrom-Json
+    if ($m2mClaims.sub -ne $m2mClientId -or $m2mClaims.tenant_id -ne $Tenant -or @($m2mClaims.aud) -notcontains $m2mAudience) {
+        Write-Host "❌ 클라이언트 자신의 토큰 모양이 계약과 다름 (sub='$($m2mClaims.sub)', tenant_id='$($m2mClaims.tenant_id)', aud='$(@($m2mClaims.aud) -join ',')')" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   ✅ sub = client_id · tenant_id · 등록된 aud (요청에 audience 없이)" -ForegroundColor Green
+
     # --- 9. 방금 로그인한 토큰으로 본인 계정 삭제 ---
     # 토큰의 auth_time(로그인 → 동의 → 토큰으로 이어지는 값)이 살아 있어야 200 이
     # 나온다 — 그 사슬 전체의 검증이다. 삭제는 인가 서버의 세션·토큰도 끝내므로
@@ -724,6 +769,12 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
         $delCode = & curl.exe -s -o NUL -w "%{http_code}" -X DELETE "$apiUrl/api/v1/clients/$clientDbId" -H "Authorization: Bearer $adminKey"
         if ($delCode -notin @('200', '204')) {
             Write-Host "⚠️  검증용 client 삭제 실패(HTTP $delCode) — 수동 확인 필요: $clientId" -ForegroundColor Yellow
+        }
+    }
+    if ($m2mDbId) {
+        $delCode = & curl.exe -s -o NUL -w "%{http_code}" -X DELETE "$apiUrl/api/v1/clients/$m2mDbId" -H "Authorization: Bearer $adminKey"
+        if ($delCode -notin @('200', '204')) {
+            Write-Host "⚠️  검증용 M2M client 삭제 실패(HTTP $delCode) — 수동 확인 필요: $m2mDbId" -ForegroundColor Yellow
         }
     }
     if ($termsTenantCreated) {

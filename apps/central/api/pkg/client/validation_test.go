@@ -361,3 +361,16 @@ func TestClient_AllowsSignInMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateChosenClientID_RefusesTheFormOfAUserID(t *testing.T) {
+	for _, id := range []string{"6f1c1e0e-3b4a-4f2a-9d55-6a2b1c3d4e5f", "6F1C1E0E-3B4A-4F2A-9D55-6A2B1C3D4E5F", "{6f1c1e0e-3b4a-4f2a-9d55-6a2b1c3d4e5f}", "urn:uuid:6f1c1e0e-3b4a-4f2a-9d55-6a2b1c3d4e5f", "6f1c1e0e3b4a4f2a9d556a2b1c3d4e5f"} {
+		if r := validateChosenClientID(id); r == nil || r.Code != "invalid_client_id" {
+			t.Errorf("%q: %v, want invalid_client_id", id, r)
+		}
+	}
+	for _, id := range []string{"", "bohm-desktop", "authway_3ieY-CYyuMSC1Y8KElqBPw"} {
+		if r := validateChosenClientID(id); r != nil {
+			t.Errorf("%q refused: %v", id, r)
+		}
+	}
+}

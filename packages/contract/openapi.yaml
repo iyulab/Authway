@@ -1491,7 +1491,9 @@ paths:
                   description: |
                     The OAuth client_id to register under; left out, Authway
                     generates one. One already registered is 409
-                    client_id_taken (field client_id). A confidential client
+                    client_id_taken (field client_id); one in the form of a
+                    UUID — the form of a user's id, which a client's own
+                    token would then read as — is 400 invalid_client_id. A confidential client
                     that names one names client_secret too, and the reverse
                     (400 confidential_client_partial_credentials).
                 client_secret: { type: string, description: A confidential client's secret, given with client_id; left out with it, Authway generates both. }
@@ -3718,6 +3720,11 @@ components:
         Access tokens of other clients are opaque to everyone but the
         provider. Whether and how a resource server can ask the provider about
         one (token introspection) is not part of this contract.
+
+        This is a token about a user. A token a client got for itself (client
+        credentials) is a JwtClientAccessToken: its `sub` is its `client_id`.
+        A resource server that serves both tells them apart by that alone —
+        a client_id never has the form of a user's id.
       allOf:
         - $ref: '#/components/schemas/TokenClaims'
         - type: object
@@ -3739,6 +3746,44 @@ components:
                 it is empty for a client registered for none.
               type: array
               items: { type: string }
+
+    JwtClientAccessToken:
+      description: |
+        **The resource server profile of a client's own token.** A client that
+        calls an API on its own behalf (the client credentials grant, with
+        `access_token_strategy: jwt`) gets a token about itself, verified the
+        same way as a user's (JwtAccessToken): the issuer's keys, `iss`, and
+        the resource server's own identifier among `aud`.
+
+        It is about no user: `sub` is the client's `client_id`, and it carries
+        none of a user's claims (`email`, `name`, `auth_time`). It carries the
+        client's tenant, so a resource server that serves one tenant accepts
+        only that tenant's clients — `aud` alone does not say whose client
+        asked, since clients of different tenants may be registered for the
+        same resource server.
+      type: object
+      required: [iss, sub, exp, iat, client_id, scope, tenant_id]
+      properties:
+        iss: { type: string, description: The issuer. }
+        sub: { type: string, description: The client's client_id. }
+        exp: { type: integer }
+        iat: { type: integer }
+        client_id: { type: string, description: The client the token was issued to. }
+        tenant_id: { type: string, description: The tenant the client is registered in. }
+        scope:
+          type: string
+          description: The granted scopes, space-separated (RFC 9068) — those the request named, among the client's.
+        aud:
+          description: |
+            The resource servers the token is for: those the client is
+            registered for, or the ones among them the token request named
+            (`audience` parameter). Empty for a client registered for none.
+          type: array
+          items: { type: string }
+      not:
+        anyOf:
+          - required: [email]
+          - required: [auth_time]
 
     StoredClaims:
       type: object
@@ -4313,7 +4358,7 @@ components:
             unknown_client, account_unavailable, invalid_current_password,
             insufficient_user_authentication, not_connected,
             last_sign_in_method, invalid_scope, internal_error,
-            invalid_enabled_auth_providers, client_id_taken,
+            invalid_enabled_auth_providers, client_id_taken, invalid_client_id,
             incomplete_provider_credentials,
             internal_server_error. A refusal that carries only an HTTP status
             uses the code named after it.

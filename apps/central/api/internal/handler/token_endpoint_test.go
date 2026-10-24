@@ -2,9 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,7 +37,7 @@ func newTokenEndpointApp(t *testing.T, answer func(w http.ResponseWriter)) (*fib
 	t.Cleanup(engine.Close)
 
 	app := fiber.New()
-	app.Post("/oauth2/token", NewTokenEndpoint(engine.URL+"/", zap.NewNop()).Token)
+	app.Post("/oauth2/token", NewTokenEndpoint(engine.URL+"/", nil, zap.NewNop()).Token)
 	return app, seen
 }
 
@@ -140,7 +143,7 @@ func TestTokenEndpoint_AnEngineThatDoesNotAnswerIsTemporarilyUnavailable(t *test
 	engine := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	engine.Close()
 	app := fiber.New()
-	app.Post("/oauth2/token", NewTokenEndpoint(engine.URL, zap.NewNop()).Token)
+	app.Post("/oauth2/token", NewTokenEndpoint(engine.URL, nil, zap.NewNop()).Token)
 
 	resp := postToken(t, app, "grant_type=client_credentials", nil)
 	if resp.StatusCode != http.StatusServiceUnavailable {
@@ -155,7 +158,7 @@ func TestTokenEndpoint_AnEngineThatDoesNotAnswerIsTemporarilyUnavailable(t *test
 
 func TestTokenHook_ChangesNothingForTheAuthorizationServerAndNothingForAnyoneElse(t *testing.T) {
 	app := fiber.New()
-	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key", "previous-key"}, nil, zap.NewNop()).Hook)
+	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key", "previous-key"}, nil, nil, zap.NewNop()).Hook)
 	call := func(key string) int {
 		req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"session":{},"request":{"grant_types":["authorization_code"]}}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -184,7 +187,7 @@ func TestTokenHook_ChangesNothingForTheAuthorizationServerAndNothingForAnyoneEls
 // assertion grant; a deployment that cannot judge them refuses the token.
 func TestTokenHook_RefusesAnAssertionGrantItCannotJudge(t *testing.T) {
 	app := fiber.New()
-	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key"}, nil, zap.NewNop()).Hook)
+	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key"}, nil, nil, zap.NewNop()).Hook)
 	req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"request":{"client_id":"c","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"],"payload":{"assertion":["x"]}}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(TokenHookHeader, "hook-key")
@@ -208,3 +211,114 @@ func TestPayloadValueReadsAStringOrAList(t *testing.T) {
 		t.Errorf("absent: %q", got)
 	}
 }
+
+// stubRegistrations answers one registered client, "m2m".
+type stubRegistrations struct{ err error }
+
+func (s stubRegistrations) Registration(clientID string) (string, []string, error) {
+	if s.err != nil {
+		return "", nil, s.err
+	}
+	if clientID != "m2m" {
+		return "", nil, errors.New("not registered")
+	}
+	return "tenant-1", []string{"https://orders.example", "https://billing.example"}, nil
+}
+
+// A client's own token follows the rule of a user's: for the resource servers
+// the client is registered for when the request names none.
+func TestTokenEndpoint_AClientsOwnTokenIsForItsRegisteredAudienceWhenTheRequestNamesNone(t *testing.T) {
+	seen := &engineSeen{}
+	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen.body = string(b)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(engine.Close)
+	app := fiber.New()
+	app.Post("/oauth2/token", NewTokenEndpoint(engine.URL, stubRegistrations{}, zap.NewNop()).Token)
+
+	cases := []struct {
+		name, body string
+		headers    map[string]string
+		want       []string
+	}{
+		{"none named, secret in the form", "grant_type=client_credentials&client_id=m2m&client_secret=s", nil, []string{"https://orders.example", "https://billing.example"}},
+		{"none named, HTTP Basic", "grant_type=client_credentials", map[string]string{"Authorization": "Basic bTJtOnM="}, []string{"https://orders.example", "https://billing.example"}},
+		{"one named", "grant_type=client_credentials&client_id=m2m&client_secret=s&audience=https%3A%2F%2Forders.example", nil, []string{"https://orders.example"}},
+		{"an unknown client", "grant_type=client_credentials&client_id=other&client_secret=s", nil, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			postToken(t, app, tc.body, tc.headers)
+			form, err := url.ParseQuery(seen.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := form["audience"]; !slices.Equal(got, tc.want) {
+				t.Errorf("audience reached the engine as %q, want %q", got, tc.want)
+			}
+			if form.Get("grant_type") != "client_credentials" {
+				t.Errorf("grant_type lost: %q", seen.body)
+			}
+		})
+	}
+}
+
+func TestTokenHook_AClientsOwnTokenGetsTheClientsTenant(t *testing.T) {
+	call := func(regs ClientRegistrations) *http.Response {
+		app := fiber.New()
+		app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key"}, nil, regs, zap.NewNop()).Hook)
+		req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"request":{"client_id":"m2m","grant_types":["client_credentials"]}}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(TokenHookHeader, "hook-key")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	resp := call(stubRegistrations{})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d, want 200 with claims", resp.StatusCode)
+	}
+	var answer struct {
+		Session struct {
+			AccessToken map[string]string `json:"access_token"`
+		} `json:"session"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Session.AccessToken["tenant_id"] != "tenant-1" {
+		t.Errorf("access token claims %v, want tenant_id tenant-1", answer.Session.AccessToken)
+	}
+
+	// A token the contract would not describe is not issued.
+	if got := call(stubRegistrations{err: errors.New("database down")}).StatusCode; got != http.StatusForbidden {
+		t.Errorf("unreadable registration: %d, want 403", got)
+	}
+}
+
+// A client_id in the form of a user's id, registered before registration
+// refused one, gets no token: its sub would read as that user's.
+func TestTokenHook_RefusesAClientTokenWhoseClientIDHasTheFormOfAUserID(t *testing.T) {
+	app := fiber.New()
+	app.Post("/internal/token-hook", NewTokenHook([]string{"hook-key"}, nil, uuidRegistered{}, zap.NewNop()).Hook)
+	req := httptest.NewRequest(fiber.MethodPost, "/internal/token-hook", strings.NewReader(`{"request":{"client_id":"6f1c1e0e-3b4a-4f2a-9d55-6a2b1c3d4e5f","grant_types":["client_credentials"]}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHookHeader, "hook-key")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", resp.StatusCode)
+	}
+}
+
+// uuidRegistered answers every client as registered.
+type uuidRegistered struct{}
+
+func (uuidRegistered) Registration(string) (string, []string, error) { return "tenant-1", nil, nil }

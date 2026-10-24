@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"authway/apps/central/api/internal/hydra"
+
+	"github.com/google/uuid"
 )
 
 // validateClientConfig checks the combination of public/grant_types/secret/origins
@@ -266,6 +268,25 @@ func validateAudience(audience []string) *apierror.Refusal {
 			}
 		}
 		seen[value] = true
+	}
+	return nil
+}
+
+// validateChosenClientID checks a client_id the caller chose. A client's own
+// token (client credentials) has the client as its subject, and a user's token
+// has the user's id — a UUID. A client_id in that form would let the client's
+// token read as a user's to a resource server that looks at sub alone.
+func validateChosenClientID(clientID string) *apierror.Refusal {
+	if clientID == "" {
+		return nil
+	}
+	if _, err := uuid.Parse(clientID); err == nil {
+		return &apierror.Refusal{
+			Code:    "invalid_client_id",
+			Field:   "client_id",
+			Message: "client_id must not be in the form of a UUID, the form of a user's id",
+			Hint:    "Choose a name such as my-app-backend, or omit client_id and let Authway generate one.",
+		}
 	}
 	return nil
 }

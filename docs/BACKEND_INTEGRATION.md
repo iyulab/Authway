@@ -68,9 +68,9 @@ with `"public": false` and `"grant_types": ["client_credentials"]`.
 `audience` names the API the client's tokens are for — the identifier your API
 validates `aud` against (`"api"` in the examples below). A client registered
 for none gets tokens with an empty `aud`, which an API that checks its audience
-refuses. A client that signs users in gets its registered audience in every
-access token; a machine-to-machine client also names it in its token request
-(`audience` parameter). See
+refuses. A client gets its registered audience in every access token — one
+that signs users in and a machine-to-machine client alike; a token request
+that names some of them (`audience` parameter) gets those only. See
 [client management](api/client-management.md#clients-whose-tokens-go-to-an-api-audience).
 
 Existing clients can be switched with `PUT /api/v1/clients/{id}`
@@ -176,6 +176,34 @@ they live in deployment configuration, never in Authway's code.
 
 Whichever claims you read, decode a real token and look before writing the
 mapping code.
+
+### A client's own token
+
+A service that calls your API on its own behalf (`client_credentials`) gets a
+token about itself, verified the same way — issuer, keys, your identifier in
+`aud`. Its `sub` is the client's `client_id`, it carries the client's
+`tenant_id`, and none of a user's claims (`email`, `name`, `auth_time`):
+
+```json
+{
+  "sub": "orders-backend",
+  "client_id": "orders-backend",
+  "aud": ["api"],
+  "scope": "",
+  "tenant_id": "662667c1…"
+}
+```
+
+- **Tell it from a user's token by `sub` = `client_id`.** A `client_id` never
+  has the form of a user's id, so the two cannot be confused.
+- **Check `tenant_id` when your API serves one tenant.** `aud` says the token is
+  for your API, not whose client asked: clients of different tenants may be
+  registered for the same audience.
+- Its `scope` holds the scopes the token request named (`scope` parameter),
+  among those the client is registered for — none when it names none.
+
+The contract describes it as
+[`JwtClientAccessToken`](../packages/contract/openapi.yaml).
 
 ---
 
