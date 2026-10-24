@@ -138,8 +138,8 @@ func TestMemberships(t *testing.T) {
 	if err != nil || len(ms) != 2 {
 		t.Fatalf("MembershipsOf = %d, %v; want 2", len(ms), err)
 	}
-	if !ScopeOf(ms).IsAll() {
-		t.Fatal("an operator's scope does not cover every tenant")
+	if s := ScopeOf(ms, nil); !s.IsPlatform() || s.IsAll() || s.Covers(w.other) {
+		t.Fatal("an operator's scope: the platform, and inside no tenant — not even one it is a member of — without support access")
 	}
 	listed, err := s.List(ctx, []uuid.UUID{w.other}, false)
 	if err != nil || len(listed) != 1 || listed[0].ID != m.ID {
@@ -185,3 +185,89 @@ func TestMemberships(t *testing.T) {
 }
 
 func ptr(id uuid.UUID) *uuid.UUID { return &id }
+
+func TestSupportAccess(t *testing.T) {
+	db := setupPostgres(t)
+	w := fixture(t, db)
+	ctx := context.Background()
+	s := NewService(db)
+	if _, err := s.SetSystemTenant(ctx, w.system); err != nil {
+		t.Fatalf("SetSystemTenant: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM console_memberships WHERE user_id = ?`, w.account) })
+
+	if _, err := s.StartSupport(ctx, w.account, w.other, "ticket 12"); !errors.Is(err, ErrNotOperator) {
+		t.Fatalf("StartSupport without the operator role = %v, want ErrNotOperator", err)
+	}
+	if _, _, err := s.Put(ctx, w.account, nil, RoleOperator); err != nil {
+		t.Fatalf("Put operator: %v", err)
+	}
+	for _, reason := range []string{"", "   ", string(make([]rune, SupportReasonMaxLength+1))} {
+		if _, err := s.StartSupport(ctx, w.account, w.other, reason); !errors.Is(err, ErrSupportReason) {
+			t.Fatalf("StartSupport with reason of %d runes = %v, want ErrSupportReason", len([]rune(reason)), err)
+		}
+	}
+	if _, err := s.StartSupport(ctx, w.account, uuid.New(), "ticket 12"); !errors.Is(err, ErrUnknownTenant) {
+		t.Fatalf("StartSupport to an unknown tenant = %v, want ErrUnknownTenant", err)
+	}
+
+	a, err := s.StartSupport(ctx, w.account, w.other, "  ticket 12  ")
+	if err != nil {
+		t.Fatalf("StartSupport: %v", err)
+	}
+	if a.Reason != "ticket 12" || a.ExpiresAt.Sub(a.StartedAt) != SupportAccessDuration {
+		t.Fatalf("started = %+v", a)
+	}
+	open, err := s.OpenSupportTenants(ctx, w.account)
+	if err != nil || len(open) != 1 || open[w.other] != a.ID {
+		t.Fatalf("OpenSupportTenants = %v, %v; want [other]", open, err)
+	}
+	if s := ScopeOf([]Membership{{Role: RoleOperator}}, open); !s.Covers(w.other) || s.Covers(w.system) {
+		t.Fatal("an operator with support access reaches that tenant only")
+	}
+
+	if _, err := s.EndSupport(ctx, w.outsider, a.ID); !errors.Is(err, ErrSupportNotFound) {
+		t.Fatalf("EndSupport by another account = %v, want ErrSupportNotFound", err)
+	}
+	ended, err := s.EndSupport(ctx, w.account, a.ID)
+	if err != nil || ended.EndedBy == nil || *ended.EndedBy != SupportEndedByOperator {
+		t.Fatalf("EndSupport = %+v, %v", ended, err)
+	}
+	if _, err := s.EndSupport(ctx, w.account, a.ID); !errors.Is(err, ErrSupportNotFound) {
+		t.Fatalf("ending it twice = %v, want ErrSupportNotFound", err)
+	}
+	if open, _ := s.OpenSupportTenants(ctx, w.account); len(open) != 0 {
+		t.Fatalf("after ending: open = %v", open)
+	}
+
+	// Expiry: an entry past its hour is not open, and the daily close records
+	// its end once.
+	b, err := s.StartSupport(ctx, w.account, w.other, "ticket 13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec(`UPDATE console_support_access SET expires_at = now() - interval '1 minute' WHERE id = ?`, b.ID)
+	if open, _ := s.OpenSupportTenants(ctx, w.account); len(open) != 0 {
+		t.Fatalf("an expired entry is open: %v", open)
+	}
+	closed, err := s.CloseExpiredSupport(ctx, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mine []SupportAccess
+	for _, c := range closed {
+		if c.UserID == w.account {
+			mine = append(mine, c)
+		}
+	}
+	if len(mine) != 1 || mine[0].ID != b.ID || mine[0].TenantID != w.other || mine[0].EndedBy == nil || *mine[0].EndedBy != SupportEndedByExpiry {
+		t.Fatalf("CloseExpiredSupport = %+v", mine)
+	}
+	if again, _ := s.CloseExpiredSupport(ctx, time.Now()); len(again) != 0 {
+		for _, c := range again {
+			if c.ID == b.ID {
+				t.Fatal("an expired entry was closed twice")
+			}
+		}
+	}
+}

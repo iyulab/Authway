@@ -54,6 +54,8 @@ const (
 	ActionConsoleSystemTenant   AuditAction = "console.system_tenant_set"
 	ActionConsoleMemberPut      AuditAction = "console.membership_set"
 	ActionConsoleMemberRemoved  AuditAction = "console.membership_removed"
+	ActionSupportAccessStarted  AuditAction = "support_access.started"
+	ActionSupportAccessEnded    AuditAction = "support_access.ended"
 )
 
 // AuditSeverity represents the severity level of the audit event
@@ -117,6 +119,8 @@ var Actions = []struct {
 	{ActionConsoleSystemTenant, "Tenant whose accounts sign in to the console chosen"},
 	{ActionConsoleMemberPut, "Console account given a role"},
 	{ActionConsoleMemberRemoved, "Console account's role removed"},
+	{ActionSupportAccessStarted, "Operator opened support access to the tenant"},
+	{ActionSupportAccessEnded, "Operator's support access to the tenant ended"},
 }
 
 // Severities lists the severities an entry can carry.

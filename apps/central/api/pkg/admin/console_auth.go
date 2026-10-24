@@ -7,6 +7,7 @@ import (
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/console"
 	"authway/apps/central/api/pkg/tenantscope"
 
@@ -25,6 +26,7 @@ type Introspector interface {
 type ConsoleAccounts interface {
 	SystemTenantID(ctx context.Context) (uuid.UUID, error)
 	MembershipsOf(ctx context.Context, userID uuid.UUID) ([]console.Membership, error)
+	OpenSupportTenants(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
 }
 
 // UseConsoleAccounts lets the administration API take a console account's
@@ -86,14 +88,24 @@ func (h *Handler) consoleAccount(c *fiber.Ctx, resp *hydra.IntrospectResponse) (
 	if len(ms) == 0 {
 		return true, apierror.Reject(fiber.StatusForbidden, "no_console_access", "This account administers nothing in this Authway.")
 	}
+	var support map[uuid.UUID]uuid.UUID
+	if console.IsOperator(ms) {
+		if support, err = h.accounts.OpenSupportTenants(c.Context(), userID); err != nil {
+			h.logger.Error("Failed to read support access", zap.Error(err))
+			return true, apierror.Reject(fiber.StatusInternalServerError, "internal_server_error", "Failed to validate session")
+		}
+	}
 	c.Locals("admin_authenticated", true)
 	c.Locals("is_admin_console", true)
 	c.Locals("auth_method", "console_token")
 	c.Locals("actor_type", "console_user")
 	c.Locals("actor_id", userID)
 	c.Locals(console.AccountLocal, userID)
+	if len(support) > 0 {
+		c.Locals(audit.SupportAccessLocal, support)
+	}
 	h.setTenantIDLocal(c)
-	return true, enterScope(c, console.ScopeOf(ms))
+	return true, enterScope(c, console.ScopeOf(ms, support))
 }
 
 // introspect asks the authorization server about token; nil when there is

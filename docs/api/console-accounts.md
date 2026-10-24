@@ -41,7 +41,7 @@ with `403 no_console_access`.
 
 | Role | Tenant | May |
 |---|---|---|
-| `operator` | none | everything the admin key may |
+| `operator` | none | the platform's actions on every tenant — creating, turning off and on, deleting, its settings, who administers it — and a tenant's contents through [support access](#support-access) |
 | `owner` | one | everything in the tenant, its settings (`PUT /api/v1/tenants/{id}` — except turning it off or on), its service credentials, its audit-log purge, and who administers it |
 | `admin` | one | the tenant's applications, users, invitations, webhooks, delegations, documents, claims and audit records |
 
@@ -81,7 +81,37 @@ The server decides, not the caller:
   tenant and synchronising every client with the authorization server are an
   operator's: anyone else gets `403 insufficient_scope`. So are an owner's
   operations for an `admin`.
-- `GET /api/v1/tenants` lists the tenants the caller administers.
+- `GET /api/v1/tenants` lists the tenants the caller administers — every
+  tenant for an operator.
+
+## Support access
+
+An operator's account does not reach into a tenant as a matter of course. A
+call about a tenant's contents — its users, applications, invitations,
+webhooks, audit log, service credentials and the rest — is answered
+`403 support_access_required` unless the operator holds open **support
+access** to that tenant. A tenant role the operator's account also holds does
+not count: giving roles is the platform's own, and an operator could give
+itself one.
+
+```
+POST /api/v1/console/support-access
+{ "tenant_id": "<tenant>", "reason": "ticket 1234 — sign-in fails for one user" }
+→ 201 { "support_access": { "id", "tenant_id", "reason", "started_at", "expires_at", … } }
+```
+
+- It lasts an hour. Starting again opens a new entry with its own reason —
+  an entry is not extended.
+- The tenant's audit log records `support_access.started` (who, the reason,
+  when it ends), `support_access.ended` (`ended_by`: `operator`, or
+  `expired` within a quarter hour of its end), and on everything the operator
+  changes meanwhile the `support_access_id`. Its administrators see who
+  entered, when and why.
+- `GET /api/v1/console/support-access` lists the caller's open entries;
+  `DELETE /api/v1/console/support-access/{id}` ends one.
+- Only an operator's console account opens it. The admin key and the console
+  session reach every tenant without it, and get
+  `403 console_account_required`.
 
 ## Setting it up
 

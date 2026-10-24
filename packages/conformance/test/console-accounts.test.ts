@@ -310,7 +310,7 @@ describe('console accounts: a system tenant user administers what its membership
     expect(listed.status).toBe(200)
   })
 
-  it('lets an operator administer every tenant', async () => {
+  it("lets an operator take the platform's actions on every tenant", async () => {
     await put({ user_id: sub, role: 'operator' })
     const tenants = await asAccount(token, '/api/v1/tenants')
     const ids = ((await tenants.json()) as { id: string }[]).map((t) => t.id)
@@ -318,6 +318,77 @@ describe('console accounts: a system tenant user administers what its membership
     const read = await asAccount(token, '/api/v1/console/system-tenant')
     await conform('GET', '/api/v1/console/system-tenant', read.clone())
     expect(((await read.json()) as { tenant: { id: string; is_system: boolean } }).tenant).toMatchObject({ id: systemTenant, is_system: true })
+    const record = await asAccount(token, `/api/v1/tenants/${administered}`)
+    await conform('GET', '/api/v1/tenants/{id}', record.clone())
+    expect(record.status).toBe(200)
+  })
+
+  // An operator reaches into a tenant's contents only through support access
+  // the tenant's audit log records — not through a role it also holds there
+  // (the account is still the earlier test's owner of `administered`).
+  it('lets an operator into a tenant only through support access, on the record', async () => {
+    await put({ user_id: sub, role: 'operator' })
+    const users = () => asAccount(token, '/api/v1/users', { tenant: administered })
+
+    const shut = await users()
+    await conform('GET', '/api/v1/users', shut.clone())
+    expect(shut.status).toBe(403)
+    expect(await code(shut)).toBe('support_access_required')
+
+    const start = (body: Record<string, string>) =>
+      asAccount(token, '/api/v1/console/support-access', { method: 'POST', body: JSON.stringify(body) })
+    const noReason = await start({ tenant_id: administered, reason: '  ' })
+    await conform('POST', '/api/v1/console/support-access', noReason.clone())
+    expect(noReason.status).toBe(400)
+    expect(((await noReason.json()) as { field?: string }).field).toBe('reason')
+    const byKey = await asOperatorKey('/api/v1/console/support-access', {
+      method: 'POST',
+      body: JSON.stringify({ tenant_id: administered, reason: 'conformance' }),
+    })
+    await conform('POST', '/api/v1/console/support-access', byKey.clone())
+    expect(byKey.status).toBe(403)
+    expect(await code(byKey)).toBe('console_account_required')
+
+    const reason = `conformance ${randomToken(6)}`
+    const opened = await start({ tenant_id: administered, reason })
+    await conform('POST', '/api/v1/console/support-access', opened.clone())
+    expect(opened.status, await opened.clone().text()).toBe(201)
+    const access = ((await opened.json()) as { support_access: { id: string; tenant_id: string; started_at: string; expires_at: string } }).support_access
+    expect(access.tenant_id).toBe(administered)
+    expect(Date.parse(access.expires_at) - Date.parse(access.started_at)).toBe(60 * 60 * 1000)
+
+    const inside = await users()
+    await conform('GET', '/api/v1/users', inside.clone())
+    expect(inside.status, await inside.clone().text()).toBe(200)
+    // Another tenant stays shut.
+    const elsewhere = await asAccount(token, '/api/v1/users', { tenant: systemTenant })
+    expect(elsewhere.status).toBe(403)
+
+    const listed = await asAccount(token, '/api/v1/console/support-access')
+    await conform('GET', '/api/v1/console/support-access', listed.clone())
+    expect(((await listed.json()) as { support_access: { id: string }[] }).support_access.map((a) => a.id)).toContain(access.id)
+
+    const recorded = async (action: string) => {
+      const deadline = Date.now() + 20_000
+      for (;;) {
+        const res = await provider.admin(`/api/v1/audit/logs?action=${action}&resource_id=${access.id}&limit=5`)
+        expect(res.status).toBe(200)
+        const logs = ((await res.json()) as { logs: { actor_id: string | null; details?: Record<string, unknown> }[] }).logs
+        if (logs.length > 0 || Date.now() > deadline) return logs
+        await new Promise((r) => setTimeout(r, 250))
+      }
+    }
+    const started = await recorded('support_access.started')
+    expect(started).toHaveLength(1)
+    expect(started[0].actor_id).toBe(sub)
+
+    const end = await asAccount(token, `/api/v1/console/support-access/${access.id}`, { method: 'DELETE' })
+    await conform('DELETE', '/api/v1/console/support-access/{id}', end.clone())
+    expect(end.status).toBe(204)
+    const again = await asAccount(token, `/api/v1/console/support-access/${access.id}`, { method: 'DELETE' })
+    expect(again.status).toBe(404)
+    expect((await users()).status).toBe(403)
+    expect(await recorded('support_access.ended')).toHaveLength(1)
   })
 
   it('keeps the system tenant on and in place', async () => {

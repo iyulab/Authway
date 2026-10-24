@@ -2100,8 +2100,10 @@ paths:
       summary: Who the caller is and what it administers
       description: |
         For a console account, its memberships: what the console offers to
-        pick from. For the admin key or a console session, operator is true
-        and there are no memberships.
+        pick from. operator is true for the admin key, a console session and
+        an operator's account — which reaches into a tenant through support
+        access (startSupportAccess). The admin key and a console session
+        have no memberships.
       security: [{ adminKey: [] }]
       responses:
         '200':
@@ -2261,6 +2263,85 @@ paths:
       security: [{ adminKey: [] }]
       responses:
         '204': { description: Removed }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/console/support-access:
+    get:
+      tags: [admin]
+      operationId: listSupportAccess
+      summary: The support access the caller holds open
+      description: |
+        A console account's own, newest first. Any other caller is
+        `403 console_account_required`.
+      security: [{ adminKey: [] }]
+      responses:
+        '200':
+          description: The open support access
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [support_access]
+                properties:
+                  support_access:
+                    type: array
+                    items: { $ref: '#/components/schemas/SupportAccess' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [admin]
+      operationId: startSupportAccess
+      summary: Open support access to a tenant
+      description: |
+        An operator's console account takes the platform's actions on every
+        tenant, but reaches into a tenant's contents — its users,
+        applications, invitations, audit log and the rest — only while it
+        holds open support access to it; elsewhere such a call is
+        `403 support_access_required`. Support access lasts an hour and
+        carries a reason; starting it again opens a new entry. Its start, its
+        end and what the operator changes meanwhile (`support_access_id`) go
+        into the tenant's audit log. Only an operator opens it
+        (`403 insufficient_scope`); the admin key and the console session,
+        which reach every tenant, do not (`403 console_account_required`).
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_id, reason]
+              properties:
+                tenant_id: { type: string, format: uuid }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '201':
+          description: Support access opened
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [support_access]
+                properties:
+                  support_access: { $ref: '#/components/schemas/SupportAccess' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/console/support-access/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [admin]
+      operationId: endSupportAccess
+      summary: End the caller's open support access
+      description: One that is not the caller's, not open or unknown is `404 not_found`.
+      security: [{ adminKey: [] }]
+      responses:
+        '204': { description: Ended }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
@@ -3869,6 +3950,21 @@ components:
         created_at: { type: string }
         updated_at: { type: string }
 
+    SupportAccess:
+      type: object
+      required: [id, user_id, tenant_id, reason, started_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id:
+          description: The operator's console account.
+          type: string
+          format: uuid
+        tenant_id: { type: string, format: uuid }
+        reason: { type: string }
+        started_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        ended_by: { type: string, enum: [operator, expired] }
     ConsoleMembership:
       type: object
       required: [id, user_id, tenant_id, role, created_at]

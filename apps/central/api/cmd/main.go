@@ -527,7 +527,7 @@ func main() {
 	// Client Google OAuth configuration routes (admin-only)
 
 	// Client Hydra sync (admin operation for one-time migration)
-	v1.Post("/clients/sync-hydra", adminAuth, tenantscope.RequireAll(), clientHandler.SyncToHydra)
+	v1.Post("/clients/sync-hydra", adminAuth, tenantscope.RequirePlatform(), clientHandler.SyncToHydra)
 
 	// Claims stored for a user go into the tokens issued to them, so only a
 	// trusted party writes them: the admin API, or a tenant's service
@@ -593,7 +593,19 @@ func main() {
 	// Public: which client the console signs console accounts in with.
 	// Registered before the authenticated /console routes.
 	v1.Get("/console/entry", handler.NewConsoleEntryHandler(clientService, consoleService, cfg.App.ConsoleURL, zapLogger).Get)
-	console.NewHandler(consoleService, newFeatureServices.AuditService, zapLogger).RegisterRoutes(v1, adminAuth)
+	consoleHandler := console.NewHandler(consoleService, newFeatureServices.AuditService, zapLogger)
+	consoleHandler.RegisterRoutes(v1, adminAuth)
+	// Support access lasts an hour; its end goes into the tenant's audit log
+	// within the next quarter hour, and at start for any that ended while no
+	// instance ran.
+	go func() {
+		consoleHandler.CloseExpiredSupport(context.Background())
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			consoleHandler.CloseExpiredSupport(context.Background())
+		}
+	}()
 
 	// Admin Console routes
 	adminHandler.RegisterRoutes(app)

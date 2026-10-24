@@ -28,7 +28,7 @@ func Named(c *fiber.Ctx) (uuid.UUID, bool, error) {
 		return id, ok, err
 	}
 	if s, set := ScopeOf(c); set && !s.Covers(id) {
-		return uuid.Nil, false, outside("tenant not found")
+		return uuid.Nil, false, s.outside("tenant not found")
 	}
 	return id, true, nil
 }
@@ -72,10 +72,10 @@ func FromRequest(c *fiber.Ctx) (uuid.UUID, error) {
 // message — the same answer as for an id that does not exist, so it learns
 // nothing about other tenants. A resource of a tenant outside the caller's
 // scope gets the same answer. A request that names no tenant is otherwise
-// admitted: the admin key and an operator administer every tenant.
+// admitted: the admin key and the console session reach every tenant.
 func Admit(c *fiber.Ctx, owner uuid.UUID, notFound string) error {
 	if s, set := ScopeOf(c); set && !s.Covers(owner) {
-		return outside(notFound)
+		return s.outside(notFound)
 	}
 	id, ok, err := named(c)
 	if err != nil {

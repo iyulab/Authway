@@ -1,7 +1,9 @@
 package console
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/audit"
@@ -33,11 +35,14 @@ func NewHandler(service *Service, auditService audit.Service, logger *zap.Logger
 func (h *Handler) RegisterRoutes(v1 fiber.Router, adminAuth fiber.Handler) {
 	g := v1.Group("/console", adminAuth)
 	g.Get("/me", h.Me)
-	g.Get("/system-tenant", tenantscope.RequireAll(), h.GetSystemTenant)
-	g.Put("/system-tenant", tenantscope.RequireAll(), h.PutSystemTenant)
+	g.Get("/system-tenant", tenantscope.RequirePlatform(), h.GetSystemTenant)
+	g.Put("/system-tenant", tenantscope.RequirePlatform(), h.PutSystemTenant)
 	g.Get("/memberships", h.ListMemberships)
 	g.Put("/memberships", h.PutMembership)
 	g.Delete("/memberships/:id", h.RemoveMembership)
+	g.Get("/support-access", h.ListSupportAccess)
+	g.Post("/support-access", h.StartSupportAccess)
+	g.Delete("/support-access/:id", h.EndSupportAccess)
 }
 
 // Me handles GET /api/v1/console/me: who the caller is and what it
@@ -45,7 +50,7 @@ func (h *Handler) RegisterRoutes(v1 fiber.Router, adminAuth fiber.Handler) {
 func (h *Handler) Me(c *fiber.Ctx) error {
 	s, _ := tenantscope.ScopeOf(c)
 	actorType, _ := c.Locals("actor_type").(string)
-	body := fiber.Map{"actor_type": actorType, "operator": s.IsAll()}
+	body := fiber.Map{"actor_type": actorType, "operator": s.IsPlatform()}
 	account, ok := c.Locals(AccountLocal).(uuid.UUID)
 	if !ok {
 		body["memberships"] = []Membership{}
@@ -111,13 +116,13 @@ func (h *Handler) PutSystemTenant(c *fiber.Ctx) error {
 func (h *Handler) ListMemberships(c *fiber.Ctx) error {
 	s, _ := tenantscope.ScopeOf(c)
 	tenants := s.Tenants()
-	all := s.IsAll()
+	all := s.IsPlatform()
 	if v := c.Query("tenant_id"); v != "" {
 		id, err := uuid.Parse(v)
 		if err != nil {
 			return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request", "tenant_id is not a valid id", fiber.Map{"field": "tenant_id"})
 		}
-		if !s.Covers(id) {
+		if !s.Sees(id) {
 			return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "tenant not found")
 		}
 		tenants, all = []uuid.UUID{id}, false
@@ -201,7 +206,7 @@ func (h *Handler) RemoveMembership(c *fiber.Ctx) error {
 		h.logger.Error("Failed to read a console membership", zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to read the membership")
 	}
-	if s, _ := tenantscope.ScopeOf(c); m.TenantID != nil && !s.Covers(*m.TenantID) || m.TenantID == nil && !s.IsAll() {
+	if s, _ := tenantscope.ScopeOf(c); m.TenantID != nil && !s.Sees(*m.TenantID) || m.TenantID == nil && !s.IsPlatform() {
 		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "membership not found")
 	}
 	if refusal := mayManage(c, m.TenantID); refusal != nil {
@@ -222,7 +227,7 @@ func (h *Handler) RemoveMembership(c *fiber.Ctx) error {
 // its tenant.
 func mayManage(c *fiber.Ctx, tenantID *uuid.UUID) *apierror.Refusal {
 	s, _ := tenantscope.ScopeOf(c)
-	if s.IsAll() {
+	if s.IsPlatform() {
 		return nil
 	}
 	if tenantID == nil {
@@ -256,4 +261,119 @@ func (h *Handler) log(c *fiber.Ctx, tenantID uuid.UUID, action audit.AuditAction
 		entry.Details[k] = v
 	}
 	h.audit.LogAsync(entry)
+}
+
+// account is the console account a request was made with; a refusal for any
+// other caller — support access is a person's, recorded under their name.
+func account(c *fiber.Ctx) (uuid.UUID, *apierror.Refusal) {
+	if id, ok := c.Locals(AccountLocal).(uuid.UUID); ok {
+		return id, nil
+	}
+	return uuid.Nil, apierror.Reject(fiber.StatusForbidden, "console_account_required",
+		"Support access is opened by an operator signed in with a console account.")
+}
+
+// ListSupportAccess handles GET /api/v1/console/support-access: the support
+// access the caller holds open, newest first.
+func (h *Handler) ListSupportAccess(c *fiber.Ctx) error {
+	user, refusal := account(c)
+	if refusal != nil {
+		return apierror.Write(c, refusal)
+	}
+	open, err := h.service.OpenSupport(c.Context(), user)
+	if err != nil {
+		h.logger.Error("Failed to read support access", zap.Error(err))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to read the support access")
+	}
+	return c.JSON(fiber.Map{"support_access": open})
+}
+
+// StartSupportAccessRequest opens support access to a tenant.
+type StartSupportAccessRequest struct {
+	TenantID string `json:"tenant_id"`
+	Reason   string `json:"reason"`
+}
+
+// StartSupportAccess handles POST /api/v1/console/support-access: an operator
+// opens support access to a tenant for an hour, with a reason the tenant's
+// audit log records.
+func (h *Handler) StartSupportAccess(c *fiber.Ctx) error {
+	user, refusal := account(c)
+	if refusal != nil {
+		return apierror.Write(c, refusal)
+	}
+	var req StartSupportAccessRequest
+	if err := c.BodyParser(&req); err != nil {
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "the body is not valid JSON")
+	}
+	tenantID, err := uuid.Parse(req.TenantID)
+	if err != nil {
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request", "tenant_id is not a valid id", fiber.Map{"field": "tenant_id"})
+	}
+	a, err := h.service.StartSupport(c.Context(), user, tenantID, req.Reason)
+	switch {
+	case errors.Is(err, ErrSupportReason):
+		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request", "give a reason of 1 to 500 characters", fiber.Map{"field": "reason"})
+	case errors.Is(err, ErrNotOperator):
+		return apierror.Refuse(c, fiber.StatusForbidden, "insufficient_scope", "Only an operator opens support access.")
+	case errors.Is(err, ErrUnknownTenant):
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "tenant not found")
+	case err != nil:
+		h.logger.Error("Failed to open support access", zap.Error(err))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to open the support access")
+	}
+	h.log(c, a.TenantID, audit.ActionSupportAccessStarted, "support_access", a.ID.String(), map[string]any{
+		"reason": a.Reason, "expires_at": a.ExpiresAt, "support_access_id": a.ID.String(),
+	})
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"support_access": a})
+}
+
+// EndSupportAccess handles DELETE /api/v1/console/support-access/{id}: the
+// operator ends its own open support access.
+func (h *Handler) EndSupportAccess(c *fiber.Ctx) error {
+	user, refusal := account(c)
+	if refusal != nil {
+		return apierror.Write(c, refusal)
+	}
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "the id is not a valid id")
+	}
+	a, err := h.service.EndSupport(c.Context(), user, id)
+	if errors.Is(err, ErrSupportNotFound) {
+		return apierror.Refuse(c, fiber.StatusNotFound, "not_found", "no such open support access")
+	}
+	if err != nil {
+		h.logger.Error("Failed to end support access", zap.Error(err))
+		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", "Failed to end the support access")
+	}
+	h.log(c, a.TenantID, audit.ActionSupportAccessEnded, "support_access", a.ID.String(), map[string]any{
+		"ended_by": SupportEndedByOperator, "support_access_id": a.ID.String(),
+	})
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// CloseExpiredSupport records the end of the support access that expired:
+// each in its tenant's audit log, by the system.
+func (h *Handler) CloseExpiredSupport(ctx context.Context) {
+	closed, err := h.service.CloseExpiredSupport(ctx, time.Now().UTC())
+	if err != nil {
+		h.logger.Error("Failed to close expired support access", zap.Error(err))
+		return
+	}
+	for _, a := range closed {
+		if h.audit == nil {
+			return
+		}
+		h.audit.LogAsync(&audit.AuditEntry{
+			TenantID:     a.TenantID,
+			ActorType:    "system",
+			Action:       audit.ActionSupportAccessEnded,
+			Severity:     audit.SeverityInfo,
+			ResourceType: "support_access",
+			ResourceID:   a.ID.String(),
+			Details:      map[string]any{"ended_by": SupportEndedByExpiry, "support_access_id": a.ID.String(), "user_id": a.UserID.String()},
+			Success:      true,
+		})
+	}
 }

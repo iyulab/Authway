@@ -126,13 +126,13 @@ func guarded(t *testing.T, s Scope, header string, route string, mw fiber.Handle
 	}()
 }
 
-func TestRequireAll(t *testing.T) {
+func TestRequirePlatform(t *testing.T) {
 	id := uuid.New()
-	if got := guarded(t, All(), "", "/t", RequireAll()); got != fiber.StatusNoContent {
-		t.Fatalf("RequireAll with every tenant = %d", got)
+	if got := guarded(t, All(), "", "/t", RequirePlatform()); got != fiber.StatusNoContent {
+		t.Fatalf("RequirePlatform for the admin key = %d", got)
 	}
-	if got := guarded(t, Only(map[uuid.UUID]Role{id: RoleOwner}), "", "/t", RequireAll()); got != fiber.StatusForbidden {
-		t.Fatalf("RequireAll for an owner = %d, want 403", got)
+	if got := guarded(t, Only(map[uuid.UUID]Role{id: RoleOwner}), "", "/t", RequirePlatform()); got != fiber.StatusForbidden {
+		t.Fatalf("RequirePlatform for an owner = %d, want 403", got)
 	}
 }
 
@@ -168,5 +168,49 @@ func TestAdmitParam(t *testing.T) {
 	}
 	if got := guarded(t, s, other.String(), "/t/:id", AdmitParam("id")); got != fiber.StatusNotFound {
 		t.Errorf("another tenant = %d, want 404", got)
+	}
+}
+
+// An operator takes the platform's actions and sees every tenant's record,
+// but reaches into a tenant only where its scope says — elsewhere it is told
+// to open support access, not that the tenant does not exist.
+func TestOperator(t *testing.T) {
+	opened, other := uuid.New(), uuid.New()
+	s := Operator(map[uuid.UUID]Role{opened: RoleOwner})
+	if got := guarded(t, s, "", "/t", RequirePlatform()); got != fiber.StatusNoContent {
+		t.Errorf("platform action = %d", got)
+	}
+	if got := guarded(t, s, opened.String(), "/t/:id", AdmitParam("id")); got != fiber.StatusNoContent {
+		t.Errorf("into the opened tenant = %d", got)
+	}
+	if got := guarded(t, s, other.String(), "/t/:id", AdmitParam("id")); got != fiber.StatusForbidden {
+		t.Errorf("into another tenant = %d, want 403", got)
+	}
+	if got := guarded(t, s, other.String(), "/t", RequireOwnerOf("")); got != fiber.StatusForbidden {
+		t.Errorf("an owner's action in another tenant = %d, want 403", got)
+	}
+	for _, guard := range []fiber.Handler{AdmitRecord("id"), RequireRecordOwnerOf("id")} {
+		if got := guarded(t, s, other.String(), "/t/:id", guard); got != fiber.StatusNoContent {
+			t.Errorf("another tenant's record = %d, want admitted", got)
+		}
+	}
+	if got := guarded(t, Only(map[uuid.UUID]Role{opened: RoleAdmin}), other.String(), "/t/:id", AdmitRecord("id")); got != fiber.StatusNotFound {
+		t.Errorf("an admin reading another tenant's record = %d, want 404", got)
+	}
+	if got := guarded(t, Only(map[uuid.UUID]Role{opened: RoleAdmin}), opened.String(), "/t/:id", RequireRecordOwnerOf("id")); got != fiber.StatusForbidden {
+		t.Errorf("an admin changing its tenant's record = %d, want 403", got)
+	}
+
+	c := ctxWith(t, other.String())
+	SetScope(c, s)
+	if _, _, err := Named(c); err == nil {
+		t.Fatal("Named admitted a tenant the operator has not opened")
+	} else if status, code := refusalCode(t, err); status != fiber.StatusForbidden || code != "support_access_required" {
+		t.Fatalf("Named = %d %s, want 403 support_access_required", status, code)
+	}
+	c = ctxWith(t, nil)
+	SetScope(c, s)
+	if _, err := FromRequest(c); err == nil {
+		t.Fatal("an operator naming no tenant was given the one it opened")
 	}
 }

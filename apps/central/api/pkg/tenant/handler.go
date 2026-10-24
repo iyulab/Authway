@@ -68,13 +68,15 @@ func (h *Handler) RegisterRoutes(app *fiber.App, adminMiddleware fiber.Handler) 
 	// in front of every /api/v1/tenants/:id/… route registered after these.
 	api := app.Group("/api/v1/tenants")
 
-	// Creating and deleting a tenant is the platform's; a tenant's owner
-	// changes its settings; whoever administers it reads it.
-	api.Post("/", adminMiddleware, tenantscope.RequireAll(), h.CreateTenant)
+	// Creating and deleting a tenant is the platform's; the platform or a
+	// tenant's owner changes its settings; the platform or whoever
+	// administers it reads it. The tenant's record is not its contents: the
+	// platform reaches into those only through support access.
+	api.Post("/", adminMiddleware, tenantscope.RequirePlatform(), h.CreateTenant)
 	api.Get("/", adminMiddleware, h.ListTenants)
-	api.Get("/:id", adminMiddleware, tenantscope.AdmitParam("id"), h.GetTenant)
-	api.Put("/:id", adminMiddleware, tenantscope.RequireOwnerOf("id"), h.UpdateTenant)
-	api.Delete("/:id", adminMiddleware, tenantscope.RequireAll(), h.DeleteTenant)
+	api.Get("/:id", adminMiddleware, tenantscope.AdmitRecord("id"), h.GetTenant)
+	api.Put("/:id", adminMiddleware, tenantscope.RequireRecordOwnerOf("id"), h.UpdateTenant)
+	api.Delete("/:id", adminMiddleware, tenantscope.RequirePlatform(), h.DeleteTenant)
 }
 
 // CreateTenant creates a new tenant
@@ -115,11 +117,12 @@ func (h *Handler) ListTenants(c *fiber.Ctx) error {
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_server_error", apierror.Message(err, "failed to list tenants"))
 	}
 
-	// A caller that administers some tenants sees those.
+	// The platform sees every tenant; a caller that administers some sees
+	// those.
 	scope, _ := tenantscope.ScopeOf(c)
 	publicTenants := make([]PublicTenant, 0, len(tenants))
 	for _, tenant := range tenants {
-		if scope.Covers(tenant.ID) {
+		if scope.Sees(tenant.ID) {
 			publicTenants = append(publicTenants, tenant.ToPublic())
 		}
 	}
@@ -175,7 +178,7 @@ func (h *Handler) UpdateTenant(c *fiber.Ctx) error {
 
 	// Turning a tenant off or on is the platform's, not its owner's. Sending
 	// the value it already has changes nothing and is let through.
-	if scope, _ := tenantscope.ScopeOf(c); req.Active != nil && !scope.IsAll() &&
+	if scope, _ := tenantscope.ScopeOf(c); req.Active != nil && !scope.IsPlatform() &&
 		(beforeTenant == nil || *req.Active != beforeTenant.Active) {
 		return apierror.RefuseWith(c, fiber.StatusForbidden, "insufficient_scope",
 			"Only an operator of this Authway can turn a tenant off or on.", fiber.Map{"field": "active"})

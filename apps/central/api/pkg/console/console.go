@@ -29,7 +29,8 @@ import (
 // tenant holds — administers nothing.
 const Audience = client.ConsoleAudience
 
-// RoleOperator administers every tenant.
+// RoleOperator takes the platform's actions on every tenant, and reaches
+// into one through support access.
 const RoleOperator = "operator"
 
 // Membership is what one console account administers.
@@ -141,18 +142,26 @@ func (s *Service) MembershipsOf(ctx context.Context, userID uuid.UUID) ([]Member
 	return ms, err
 }
 
-// ScopeOf turns an account's memberships into what it administers.
-func ScopeOf(ms []Membership) tenantscope.Scope {
+// ScopeOf turns an account's memberships, and the tenants it holds open
+// support access to, into what it administers. An operator takes the
+// platform's actions and reaches into the tenants it has opened support
+// access to — as their owner — and no others: a tenant membership it also
+// holds does not count, since giving roles is the platform's and an operator
+// could otherwise give itself one and enter unrecorded.
+func ScopeOf(ms []Membership, support map[uuid.UUID]uuid.UUID) tenantscope.Scope {
 	tenants := map[uuid.UUID]tenantscope.Role{}
-	for _, m := range ms {
-		if m.Role == RoleOperator {
-			return tenantscope.All()
+	if !IsOperator(ms) {
+		for _, m := range ms {
+			if m.TenantID != nil {
+				tenants[*m.TenantID] = tenantscope.Role(m.Role)
+			}
 		}
-		if m.TenantID != nil {
-			tenants[*m.TenantID] = tenantscope.Role(m.Role)
-		}
+		return tenantscope.Only(tenants)
 	}
-	return tenantscope.Only(tenants)
+	for id := range support {
+		tenants[id] = tenantscope.RoleOwner
+	}
+	return tenantscope.Operator(tenants)
 }
 
 // List returns the memberships of the given tenants, or, with all set, every

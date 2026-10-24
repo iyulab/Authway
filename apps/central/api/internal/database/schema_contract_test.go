@@ -260,6 +260,7 @@ func mappedModels() []any {
 		&terms.Document{}, &terms.Acceptance{},
 		&delegation.Grant{}, &delegation.SigningKey{}, &delegation.Approval{},
 		&console.Membership{},
+		&console.SupportAccess{},
 	}
 }
 

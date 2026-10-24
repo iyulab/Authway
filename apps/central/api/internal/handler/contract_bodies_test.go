@@ -62,6 +62,7 @@ func TestRequestBodies_AreTheContractsOwn(t *testing.T) {
 		{"PUT /api/v1/users/{id}", user.UpdateUserRequest{}},
 		{"PUT /api/v1/console/system-tenant", console.PutSystemTenantRequest{}},
 		{"PUT /api/v1/console/memberships", console.PutMembershipRequest{}},
+		{"POST /api/v1/console/support-access", console.StartSupportAccessRequest{}},
 		{"PATCH /api/v1/users/{id}/claims", claims.PatchClaimsRequest{}},
 		{"DELETE /api/v1/users/mfa", FactorProofRequest{}},
 		{"POST /api/v1/users/mfa/recovery/regenerate", FactorProofRequest{}},

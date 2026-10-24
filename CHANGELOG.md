@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Added
+
+- **Support access** — an operator opens a tenant's contents for an hour,
+  with a reason: `POST /api/v1/console/support-access` (`GET` lists the open
+  ones, `DELETE …/{id}` ends one). The tenant's audit log records its start,
+  its end (by the operator, or on expiry) and, on everything the operator
+  changes meanwhile, `support_access_id`. See
+  [Console accounts](docs/api/console-accounts.md#support-access). Migration
+  052 adds the table.
+
+### Changed
+
+- **An operator's console account reaches into a tenant only through support
+  access.** It keeps the platform's actions on every tenant — creating,
+  turning off and on, deleting, the tenant's settings, who administers it,
+  and listing every tenant — but a call about a tenant's contents without
+  open support access is `403 support_access_required`, and a tenant role
+  the operator's account also holds does not let it in. The admin key and
+  the console session are unchanged.
+
 ## [0.19.0] - 2026-10-24
 
 > Minor. Console accounts (people sign in to the console with an account of

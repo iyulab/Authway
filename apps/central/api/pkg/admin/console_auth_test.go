@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/console"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenantscope"
@@ -29,6 +30,7 @@ func (f fakeIntrospector) IntrospectToken(string) (*hydra.IntrospectResponse, er
 type fakeAccounts struct {
 	system  uuid.UUID
 	members map[uuid.UUID][]console.Membership
+	support map[uuid.UUID]map[uuid.UUID]uuid.UUID
 }
 
 func (f fakeAccounts) SystemTenantID(context.Context) (uuid.UUID, error) {
@@ -40,6 +42,10 @@ func (f fakeAccounts) SystemTenantID(context.Context) (uuid.UUID, error) {
 
 func (f fakeAccounts) MembershipsOf(_ context.Context, id uuid.UUID) ([]console.Membership, error) {
 	return f.members[id], nil
+}
+
+func (f fakeAccounts) OpenSupportTenants(_ context.Context, id uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	return f.support[id], nil
 }
 
 func userToken(sub, tenant uuid.UUID, aud ...string) *hydra.IntrospectResponse {
@@ -61,6 +67,10 @@ func consoleApp(h *Handler, mw fiber.Handler) *fiber.App {
 			return c.SendString("all")
 		}
 		id, err := tenantscope.FromRequest(c)
+		var refused *apierror.Refusal
+		if errors.As(err, &refused) {
+			return apierror.Write(c, refused)
+		}
 		if err != nil {
 			return err
 		}
@@ -86,12 +96,15 @@ func call(t *testing.T, app *fiber.App, header string) (int, string) {
 }
 
 func TestConsoleAccount(t *testing.T) {
-	system, owned, other := uuid.New(), uuid.New(), uuid.New()
+	system, owned, other, opened := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	operator, owner, nobody := uuid.New(), uuid.New(), uuid.New()
 	accounts := fakeAccounts{system: system, members: map[uuid.UUID][]console.Membership{
-		operator: {{UserID: operator, Role: console.RoleOperator}},
+		// An operator that gave itself a tenant role reaches that tenant no
+		// more than any other: only support access lets it in.
+		operator: {{UserID: operator, Role: console.RoleOperator}, {UserID: operator, TenantID: &owned, Role: "owner"}},
 		owner:    {{UserID: owner, TenantID: &owned, Role: "owner"}},
-	}}
+		// Support access is an operator's only: an owner's open row is not read.
+	}, support: map[uuid.UUID]map[uuid.UUID]uuid.UUID{operator: {opened: uuid.New()}, owner: {other: uuid.New()}}}
 	cases := []struct {
 		name   string
 		token  *hydra.IntrospectResponse
@@ -99,9 +112,13 @@ func TestConsoleAccount(t *testing.T) {
 		status int
 		body   string
 	}{
-		{"operator administers every tenant", userToken(operator, system, console.Audience), "", 200, "all"},
+		{"operator reaches a tenant it opened support access to", userToken(operator, system, console.Audience), opened.String(), 200, opened.String()},
+		{"operator naming a tenant without support access", userToken(operator, system, console.Audience), other.String(), 403, ""},
+		{"operator naming a tenant it holds a role in", userToken(operator, system, console.Audience), owned.String(), 403, ""},
+		{"operator naming no tenant does not mean the one it opened", userToken(operator, system, console.Audience), "", 400, ""},
 		{"owner acts on its tenant", userToken(owner, system, console.Audience), "", 200, owned.String()},
 		{"owner naming another tenant", userToken(owner, system, console.Audience), other.String(), 404, ""},
+		{"an owner's support row admits nothing", userToken(owner, system, console.Audience), other.String(), 404, ""},
 		{"account without memberships", userToken(nobody, system, console.Audience), "", 403, ""},
 		{"console audience from another tenant", userToken(operator, other, console.Audience), "", 401, ""},
 		{"system tenant token for another application", userToken(operator, system, "https://app.example"), "", 401, ""},
