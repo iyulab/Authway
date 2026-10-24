@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-24
+
+> Minor. Console accounts (people sign in to the console with an account of
+> their own), a tenant's service credential answering its users and audit log,
+> sign-in from the API's own `/flows/*` paths, an on-premises installation from
+> images with Redis optional, records kept for a stated time, and deleting an
+> account removing it. Migrations 048 to 051 — 051 deletes data (the accounts
+> only marked deleted) and drops columns, in a deployment of its own.
+
 ### Added
 
 - **Redis is optional for one instance** — `AUTHWAY_REDIS_ENABLED=false`
@@ -63,101 +72,6 @@
   delete) and `admin.audit:read` (the audit log, not its purge). Until now
   these calls took the deployment's admin key. See
   [Service clients](docs/api/service-clients.md).
-
-### Changed
-
-- **What an administration call may touch is decided by the server.** A
-  caller that administers some tenants — a console account, or a tenant's
-  service credential — reaches only those: a tenant outside them is answered
-  as one that does not exist (`404 not_found`), whether it is named in
-  `X-Tenant-ID`, the `tenant_id` query, the path or a request body; creating
-  or deleting a tenant, turning one off or on and synchronising every client
-  with the authorization server are an operator's (`403 insufficient_scope`);
-  a tenant's settings, its service credentials, its audit-log purge and who
-  administers it are its owner's. `GET /api/v1/tenants` lists the tenants the
-  caller administers. Nothing changes
-  for the admin key or the console session, which administer every tenant.
-  Every administration operation in the contract now lists `403` and `404`.
-
-- **A new database starts without the two sample tenants** («Fruits Company»,
-  «Sweets Company») migration 002 used to insert. Databases that have them
-  keep them.
-- **`AUTHWAY_APP_FRONTEND_URL` may equal `AUTHWAY_APP_BASE_URL`** — an
-  installation serving the API and the login UI from one origin has them
-  equal. A missing or loopback frontend URL is still refused.
-- **The authorization server sends the browser to the API at `/flows/login`,
-  `/flows/consent`, `/flows/logout` and `/flows/device`** — no longer `/login`,
-  `/consent`, `/logout` and `/device`, which are the login UI's own screens.
-  The API and the login UI can now be served from one origin. **Migration:**
-  point the authorization server's `URLS_LOGIN`, `URLS_CONSENT`, `URLS_LOGOUT`
-  and `URLS_DEVICE_VERIFICATION` at `<API>/flows/…` together with this
-  upgrade (the deploy scripts derive them) — the API no longer answers the
-  old paths, so an authorization server left on them sends sign-ins to a
-  404. Nothing to change for applications; a device shows the verification
-  address discovery gives it.
-
-- **A sign-in through another provider continues with a redirect** (`303 See
-  Other`) instead of a page whose script navigated onward. Nothing to change
-  for applications; a page that blocks scripts no longer stalls there.
-
-- **Discovery's `token_endpoint` is the API's `/oauth2/token`.** It passes
-  every grant the authorization server serves on to it unchanged — the body,
-  the client's authentication (a secret, a signed assertion, PKCE), the answer
-  and its errors — and answers `unsupported_grant_type` for token exchange
-  (RFC 8693), which it will assemble itself. A client that reads the endpoint
-  from discovery, as the SDKs do, follows on its own; one that wrote down the
-  authorization server's address keeps working there. A client that signs an
-  assertion (`private_key_jwt`) may address it to either. A page on any origin
-  can read the endpoint's answer, as before. Deployments set the authorization
-  server's `WEBFINGER_OIDC_DISCOVERY_TOKEN_URL` and the token hook below
-  ([DEPLOYMENT.md](docs/DEPLOYMENT.md)).
-- **The authorization server calls the API before it issues a token** (its
-  token hook, `POST /internal/token-hook`, with the key in
-  `X-Authway-Hook-Key`; the API holds it as `AUTHWAY_HYDRA_TOKEN_HOOK_KEY`).
-  It changes no token yet. Without the hook answering, no token is issued.
-
-- **A client's own sign-in provider apps follow one rule for all four
-  providers.** A provider enabled with `*_oauth_enabled` must have all of its
-  credentials — an id and a secret for Google, GitHub and Microsoft, all four
-  values for Apple — when a client is created and when it is changed (judged
-  with what the change leaves as it is): otherwise `400
-  incomplete_provider_credentials` naming the missing member. Before, only
-  Google and GitHub were checked, only on creation; Microsoft or Apple enabled
-  with a value missing, or a Google or GitHub secret changed to an empty
-  string, silently signed users in with the deployment's app instead.
-  `google_redirect_uri` is no longer required when Google is enabled — without
-  one the deployment's callback is used, as it already was. Credentials given
-  when creating a client for a provider that is not enabled are now kept, as a
-  change keeps them.
-- **A client's `grant_types` are limited to the grants the provider serves:**
-  `authorization_code`, `refresh_token`, `client_credentials` and
-  `urn:ietf:params:oauth:grant-type:device_code`. Anything else is refused
-  with `400 unsupported_grant_type` — `implicit` (a client is registered for
-  the code response type only, so it never worked), `password` (not offered;
-  RFC 9700 says it must not be used) and unknown names, which were stored and
-  did nothing. The codes `public_client_with_password_grant` and
-  `confidential_client_unsupported_grants` are gone with them. The authorization
-  server's discovery document still lists `implicit` among its grant types; it
-  cannot be configured not to.
-- **A user in the administration API names their connections instead of a
-  provider.** `connections` lists the sign-in providers the account is linked
-  to; `provider` is gone — it said `local` for every account, since nothing
-  ever set it. Migration 043 drops the column. Updating a user (`PUT /api/v1/users/{id}`) now clears a field
-  sent empty (a picture could not be removed); a field left out stays.
-- **An invitation has no `role`.** It was kept and returned, and nothing read
-  it — an invitation gives no role or permission (the application decides
-  those). It is no longer accepted, stored or returned; one sent is ignored.
-  The admin console no longer offers a role, nor an expiry it did not apply
-  (an invitation is valid for 7 days), and its invitation list shows the
-  application each invitation is for. Migration 042 drops the column.
-- **Service credential refusals name their reason.** `POST
-  /api/v1/tenants/{id}/service-clients` answers `404 not_found` for a tenant
-  that does not exist or is inactive (a scope a service credential may not
-  have stays `400 invalid_request` naming the `field`); revoking one the tenant does not have is
-  `404 not_found`. A failure on Authway's side is `500` — it was `400` (issuing)
-  or `404` (revoking). The three endpoints are now in the published contract.
-
-### Added
 
 - **The provider's metadata as the deployment offers it**, at the API's
   `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`:
@@ -259,13 +173,105 @@
   invalid_logo`); an empty string clears it. The admin console has a field for
   it. A client that already had a logo shows it once the client is next saved.
 
+### Changed
+
+- **What an administration call may touch is decided by the server.** A
+  caller that administers some tenants — a console account, or a tenant's
+  service credential — reaches only those: a tenant outside them is answered
+  as one that does not exist (`404 not_found`), whether it is named in
+  `X-Tenant-ID`, the `tenant_id` query, the path or a request body; creating
+  or deleting a tenant, turning one off or on and synchronising every client
+  with the authorization server are an operator's (`403 insufficient_scope`);
+  a tenant's settings, its service credentials, its audit-log purge and who
+  administers it are its owner's. `GET /api/v1/tenants` lists the tenants the
+  caller administers. Nothing changes
+  for the admin key or the console session, which administer every tenant.
+  Every administration operation in the contract now lists `403` and `404`.
+
+- **A new database starts without the two sample tenants** («Fruits Company»,
+  «Sweets Company») migration 002 used to insert. Databases that have them
+  keep them.
+- **`AUTHWAY_APP_FRONTEND_URL` may equal `AUTHWAY_APP_BASE_URL`** — an
+  installation serving the API and the login UI from one origin has them
+  equal. A missing or loopback frontend URL is still refused.
+- **The authorization server sends the browser to the API at `/flows/login`,
+  `/flows/consent`, `/flows/logout` and `/flows/device`** — no longer `/login`,
+  `/consent`, `/logout` and `/device`, which are the login UI's own screens.
+  The API and the login UI can now be served from one origin. **Migration:**
+  point the authorization server's `URLS_LOGIN`, `URLS_CONSENT`, `URLS_LOGOUT`
+  and `URLS_DEVICE_VERIFICATION` at `<API>/flows/…` together with this
+  upgrade (the deploy scripts derive them) — the API no longer answers the
+  old paths, so an authorization server left on them sends sign-ins to a
+  404. Nothing to change for applications; a device shows the verification
+  address discovery gives it.
+
+- **A sign-in through another provider continues with a redirect** (`303 See
+  Other`) instead of a page whose script navigated onward. Nothing to change
+  for applications; a page that blocks scripts no longer stalls there.
+
+- **Discovery's `token_endpoint` is the API's `/oauth2/token`.** It passes
+  every grant the authorization server serves on to it unchanged — the body,
+  the client's authentication (a secret, a signed assertion, PKCE), the answer
+  and its errors — and answers `unsupported_grant_type` for token exchange
+  (RFC 8693), which it will assemble itself. A client that reads the endpoint
+  from discovery, as the SDKs do, follows on its own; one that wrote down the
+  authorization server's address keeps working there. A client that signs an
+  assertion (`private_key_jwt`) may address it to either. A page on any origin
+  can read the endpoint's answer, as before. Deployments set the authorization
+  server's `WEBFINGER_OIDC_DISCOVERY_TOKEN_URL` and the token hook below
+  ([DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+- **The authorization server calls the API before it issues a token** (its
+  token hook, `POST /internal/token-hook`, with the key in
+  `X-Authway-Hook-Key`; the API holds it as `AUTHWAY_HYDRA_TOKEN_HOOK_KEY`).
+  It changes no token yet. Without the hook answering, no token is issued.
+
+- **A client's own sign-in provider apps follow one rule for all four
+  providers.** A provider enabled with `*_oauth_enabled` must have all of its
+  credentials — an id and a secret for Google, GitHub and Microsoft, all four
+  values for Apple — when a client is created and when it is changed (judged
+  with what the change leaves as it is): otherwise `400
+  incomplete_provider_credentials` naming the missing member. Before, only
+  Google and GitHub were checked, only on creation; Microsoft or Apple enabled
+  with a value missing, or a Google or GitHub secret changed to an empty
+  string, silently signed users in with the deployment's app instead.
+  `google_redirect_uri` is no longer required when Google is enabled — without
+  one the deployment's callback is used, as it already was. Credentials given
+  when creating a client for a provider that is not enabled are now kept, as a
+  change keeps them.
+- **A client's `grant_types` are limited to the grants the provider serves:**
+  `authorization_code`, `refresh_token`, `client_credentials` and
+  `urn:ietf:params:oauth:grant-type:device_code`. Anything else is refused
+  with `400 unsupported_grant_type` — `implicit` (a client is registered for
+  the code response type only, so it never worked), `password` (not offered;
+  RFC 9700 says it must not be used) and unknown names, which were stored and
+  did nothing. The codes `public_client_with_password_grant` and
+  `confidential_client_unsupported_grants` are gone with them. The authorization
+  server's discovery document still lists `implicit` among its grant types; it
+  cannot be configured not to.
+- **A user in the administration API names their connections instead of a
+  provider.** `connections` lists the sign-in providers the account is linked
+  to; `provider` is gone — it said `local` for every account, since nothing
+  ever set it. Migration 043 drops the column. Updating a user (`PUT /api/v1/users/{id}`) now clears a field
+  sent empty (a picture could not be removed); a field left out stays.
+- **An invitation has no `role`.** It was kept and returned, and nothing read
+  it — an invitation gives no role or permission (the application decides
+  those). It is no longer accepted, stored or returned; one sent is ignored.
+  The admin console no longer offers a role, nor an expiry it did not apply
+  (an invitation is valid for 7 days), and its invitation list shows the
+  application each invitation is for. Migration 042 drops the column.
+- **Service credential refusals name their reason.** `POST
+  /api/v1/tenants/{id}/service-clients` answers `404 not_found` for a tenant
+  that does not exist or is inactive (a scope a service credential may not
+  have stays `400 invalid_request` naming the `field`); revoking one the tenant does not have is
+  `404 not_found`. A failure on Authway's side is `500` — it was `400` (issuing)
+  or `404` (revoking). The three endpoints are now in the published contract.
+
 ### Removed
 
 - `allow_email_login` on a client — a second switch for password sign-in
   beside `"email"` in `enabled_auth_providers`, which it is now alone (every
   client had both on). It was not in the contract; it is no longer accepted or
-  returned, and the admin console no longer shows it. The column goes in a
-  later migration.
+  returned, and the admin console no longer shows it. Migration 051 drops the column.
 - `post_logout_redirect_uri` and `state` on `POST /api/v1/logout`, and the
   `redirect_url` it answered. The address was answered back as sent, checked
   against nothing — an application that navigated to it went wherever the
@@ -297,8 +303,8 @@
   ids — stayed, and so did everything keyed by it (custom claims, accepted
   terms, delegations, approvals, console memberships), since the schema's
   cascades never ran. The account and those rows are now removed; invitations
-  keep their row with the account cleared. Accounts deleted before this
-  version keep their rows until a later release removes them.
+  keep their row with the account cleared. Migration 051 removes the
+  accounts deleted before, with what was keyed by them, and the deletion mark.
 - **Expired verification and reset links are removed.** The cleanup existed
   but nothing ran it, and it skipped links already replaced by newer ones. It
   now runs hourly. [What Authway keeps about a user](docs/data-facts.md) lists
