@@ -56,13 +56,24 @@ describe('accepting an invitation', () => {
   it('from its email, ends on the account-created screen that says to sign in from the app', async () => {
     await accept('/invitation/accept?token=tok')
 
-    expect(screen.getByText(i18n.t('auth:invitation.success.signInFromApp'))).toBeInTheDocument()
+    // It names the organization and who invited them — whom to ask for the app's address.
+    expect(screen.getByText(i18n.t('auth:invitation.success.signInFromAppInviter', { tenant: 'Acme', inviter: 'Admin' }))).toBeInTheDocument()
     expect(screen.queryByText(i18n.t('auth:invitation.success.redirect'))).toBeNull()
     // It stays: nothing takes the person on to the sign-in screen.
     await new Promise((r) => setTimeout(r, 3200))
     expect(screen.queryByText('sign-in screen')).toBeNull()
     expect(screen.getByText(i18n.t('auth:invitation.success.title'))).toBeInTheDocument()
   }, 15000)
+
+  it('sent by no person, says to ask whoever invited them', async () => {
+    await accept('/invitation/accept?token=tok', { ...invitation, inviter_name: 'system' })
+    expect(screen.getByText(i18n.t('auth:invitation.success.signInFromApp', { tenant: 'Acme' }))).toBeInTheDocument()
+  })
+
+  it('for an application with nowhere to send them, names the application', async () => {
+    await accept('/invitation/accept?token=tok', { ...invitation, client: { client_id: 'app-1', name: 'Filer Desktop' } })
+    expect(screen.getByText(i18n.t('auth:invitation.success.signInFromNamedApp', { tenant: 'Acme', name: 'Filer Desktop' }))).toBeInTheDocument()
+  })
 
   it('inside a sign-in an app started, goes on to that sign-in', async () => {
     await accept('/invitation/accept?token=tok&flow=f-1')

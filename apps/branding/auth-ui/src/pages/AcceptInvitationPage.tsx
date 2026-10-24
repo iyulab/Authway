@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import { getConfig } from '../config'
 
@@ -30,6 +31,22 @@ interface InvitationApp {
   name: string
   initiate_login_uri?: string
   client_uri?: string
+}
+
+/** The inviter name the API gives an invitation no person sent (the admin key, the console password). */
+const SYSTEM_INVITER = 'system'
+
+/**
+ * What a person who accepted an invitation is told when Authway has nowhere to
+ * send them: the application by name when the invitation names one, else who
+ * invited them, so they know whom to ask for the address.
+ */
+function nowhereToGo(invitation: InvitationDetails | undefined, t: TFunction): string {
+  const tenant = invitation?.tenant_name ?? ''
+  if (invitation?.client) return t('auth:invitation.success.signInFromNamedApp', { tenant, name: invitation.client.name })
+  const inviter = invitation?.inviter_name
+  if (inviter && inviter !== SYSTEM_INVITER) return t('auth:invitation.success.signInFromAppInviter', { tenant, inviter })
+  return t('auth:invitation.success.signInFromApp', { tenant })
 }
 
 interface InvitationDetails {
@@ -231,7 +248,7 @@ const AcceptInvitationPage: React.FC = () => {
           </a>
         ) : (
           <p className="mt-1 text-sm text-gray-500">
-            {flow ? t('auth:invitation.success.redirect') : t('auth:invitation.success.signInFromApp')}
+            {flow ? t('auth:invitation.success.redirect') : nowhereToGo(invitation, t)}
           </p>
         )}
       </div>

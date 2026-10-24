@@ -33,6 +33,10 @@
   of the tenant's applications has a sign-in start URL or a home page — an
   invitation without one leaves the user on Authway after accepting, with
   nowhere to go. Picking «No particular application» still sends none.
+- **An accepted invitation that has nowhere to send the user says what to
+  do**: it names the organization and the application, or — without one —
+  who sent the invitation, to ask for the application's address. It said only
+  to sign in from the app.
 
 ## [0.19.0] - 2026-10-24
 
