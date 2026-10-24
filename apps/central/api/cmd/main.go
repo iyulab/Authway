@@ -207,9 +207,6 @@ func main() {
 				zapLogger.Error("Failed to remove the authorization server's trust for a deleted client", zap.Error(err), zap.String("client_id", clientID))
 			}
 		}))
-	if err := client.BackfillSecretHashes(clientService, zapLogger); err != nil {
-		zapLogger.Error("Client secret hash backfill failed (non-fatal; retried on next start)", zap.Error(err))
-	}
 	if err := client.ResealStoredSecrets(clientService, zapLogger); err != nil {
 		zapLogger.Error("Resealing stored provider secrets failed (non-fatal; they still read, and it is retried on next start)", zap.Error(err))
 	}

@@ -59,8 +59,8 @@ func fixture(t *testing.T, db *gorm.DB) world {
 		ids[i] = u.ID
 	}
 	w := world{tenantID: tn.ID, userID: ids[0], otherUserID: ids[1], clientRow: uuid.New(), clientID: "delegation-test-" + suffix}
-	if err := db.Exec(`INSERT INTO clients (id, tenant_id, client_id, client_secret, name, grant_types, scopes, created_at, updated_at)
-		VALUES (?, ?, ?, '', 'Delegation Test Client', '{authorization_code}', '{openid}', now(), now())`,
+	if err := db.Exec(`INSERT INTO clients (id, tenant_id, client_id, name, grant_types, scopes, created_at, updated_at)
+		VALUES (?, ?, ?, 'Delegation Test Client', '{authorization_code}', '{openid}', now(), now())`,
 		w.clientRow, tn.ID, w.clientID).Error; err != nil {
 		t.Fatalf("create client: %v", err)
 	}

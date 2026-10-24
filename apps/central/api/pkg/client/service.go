@@ -872,7 +872,7 @@ func (s *service) RegenerateSecret(id uuid.UUID) (*ClientCredentials, SyncStatus
 	if err != nil {
 		return nil, SyncStatus{}, err
 	}
-	if err := s.db.Model(client).Updates(map[string]any{"client_secret": "", "client_secret_hash": newHash}).Error; err != nil {
+	if err := s.db.Model(client).Update("client_secret_hash", newHash).Error; err != nil {
 		s.logger.Error("Failed to regenerate client secret", zap.Error(err), zap.String("id", id.String()))
 		return nil, SyncStatus{}, fmt.Errorf("failed to regenerate client secret: %w", err)
 	}

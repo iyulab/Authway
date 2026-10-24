@@ -122,7 +122,7 @@ func TestCreate_CredentialRules(t *testing.T) {
 				t.Errorf("generated client_id = %q, want the authway_ prefix", created.ClientID)
 			}
 			switch {
-			case tc.public && (created.ClientSecret != "" || creds.ClientSecret != ""):
+			case tc.public && (created.ClientSecretHash != "" || creds.ClientSecret != ""):
 				t.Error("a public client was given a secret")
 			case !tc.public && tc.wantSecret != "" && creds.ClientSecret != tc.wantSecret:
 				t.Errorf("secret = %q, want the supplied one", creds.ClientSecret)

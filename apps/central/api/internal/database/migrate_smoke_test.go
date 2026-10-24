@@ -218,8 +218,8 @@ func TestInitialSchemaIsIdempotentOnPopulatedDatabase(t *testing.T) {
 		t.Fatalf("seed tenant: %v", err)
 	}
 	if err := db.Exec(`
-		INSERT INTO clients (tenant_id, client_id, client_secret, name, redirect_uris, grant_types, scopes, access_token_strategy)
-		VALUES (?::uuid, 'fixture-client', 'secret', 'Fixture', '{}', '{client_credentials}', '{api}', 'jwt')
+		INSERT INTO clients (tenant_id, client_id, name, redirect_uris, grant_types, scopes, access_token_strategy)
+		VALUES (?::uuid, 'fixture-client', 'Fixture', '{}', '{client_credentials}', '{api}', 'jwt')
 	`, tenantID).Error; err != nil {
 		t.Fatalf("seed client: %v", err)
 	}

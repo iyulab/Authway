@@ -15,18 +15,10 @@ type Client struct {
 	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	ClientID string    `json:"client_id" gorm:"uniqueIndex;not null"`
-	// ClientSecret held the secret itself until secrets were hashed; it is
-	// written empty now and read only for rows that predate the hash.
-	ClientSecret string `json:"-" gorm:"not null"`
 	// ClientSecretHash is what the secret is checked against (see secret.go).
 	// The authorization server authenticates the client at the token
 	// endpoint with its own copy; this one lets the API recognise the client.
 	ClientSecretHash string `json:"-" gorm:"column:client_secret_hash;not null;default:''"`
-	// AllowEmailLogin was a second switch for password sign-in beside "email"
-	// in EnabledAuthProviders, outside the contract; nothing reads it now. It
-	// stays mapped, read only, until the column is dropped (docs/DATABASE.md
-	// «Changes that cannot be undone»): TODO(drop): remove with the migration.
-	AllowEmailLogin bool           `json:"-" gorm:"column:allow_email_login;->"`
 	Name            string         `json:"name" gorm:"not null"`
 	Description     string         `json:"description"`
 	Logo            string         `json:"logo"`

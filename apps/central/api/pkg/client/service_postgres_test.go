@@ -155,7 +155,7 @@ func TestRegenerateSecret_RefusesPublicClient(t *testing.T) {
 	}
 
 	var secret string
-	if err := db.Raw(`SELECT coalesce(client_secret, '') FROM clients WHERE id = ?`, created.ID).Scan(&secret).Error; err != nil {
+	if err := db.Raw(`SELECT client_secret_hash FROM clients WHERE id = ?`, created.ID).Scan(&secret).Error; err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if secret != "" {

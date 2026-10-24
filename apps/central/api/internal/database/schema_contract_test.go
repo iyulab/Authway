@@ -295,7 +295,7 @@ func TestMigratedTablesHaveNoUnmappedColumns(t *testing.T) {
 			t.Fatalf("columns of %s: %v", stmt.Schema.Table, err)
 		}
 		for _, c := range columns {
-			if !mapped[c] {
+			if !mapped[c] && !awaitingDropColumns[stmt.Schema.Table+"."+c] {
 				t.Errorf("%s.%s exists in the migrated schema but %T does not map it", stmt.Schema.Table, c, m)
 			}
 		}
@@ -334,6 +334,14 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 // its own, because a dropped table cannot be rolled back with the binary. An
 // entry here is a debt with a due date: it leaves with that migration.
 var awaitingDrop = map[string]bool{}
+
+// awaitingDropColumns is the same for columns, as table.column.
+var awaitingDropColumns = map[string]bool{
+	// The secret itself, before secrets were hashed (every row emptied), and
+	// a second switch for password sign-in nothing reads (migration 050).
+	"clients.client_secret":     true,
+	"clients.allow_email_login": true,
+}
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
 // falsified audit trail: a field that declares a default is left out of the

@@ -367,8 +367,8 @@ func TestDeleteTenant_BlockedByExistingUsersAndClients(t *testing.T) {
 
 	clientID := uuid.New()
 	if err := db.Exec(
-		`INSERT INTO clients (id, tenant_id, client_id, client_secret, name) VALUES (?, ?, ?, ?, ?)`,
-		clientID, tn.ID, "test-client-"+clientID.String()[:8], "secret", "Guard Client",
+		`INSERT INTO clients (id, tenant_id, client_id, name) VALUES (?, ?, ?, ?)`,
+		clientID, tn.ID, "test-client-"+clientID.String()[:8], "Guard Client",
 	).Error; err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
