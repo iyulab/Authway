@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
-import { conform } from '../src/contract.js'
+import { adminOperations, conform } from '../src/contract.js'
 import { randomToken } from '../src/pkce.js'
 import { Provider, REDIRECT_URI, type TestClient, type TestUser } from '../src/provider.js'
 
@@ -11,6 +11,13 @@ const config = loadConfig()
 const provider = new Provider(config)
 
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
+
+/**
+ * The administration routes that answer a console account about itself, not
+ * about a tenant — they succeed whatever tenant the request names.
+ */
+const answersForItself = (method: string, path: string) =>
+  (method === 'GET' && path === '/api/v1/console/me') || (method === 'GET' && path === '/api/v1/tenants')
 
 /** An administration call with a console account's access token. */
 const asAccount = (token: string, path: string, init: RequestInit & { tenant?: string } = {}) => {
@@ -257,6 +264,25 @@ describe('console accounts: a system tenant user administers what its membership
       await provider.admin(`/api/v1/tenants/${administered}/service-clients/${svc.id}`, { method: 'DELETE' })
       await provider.deleteUser(memberId)
     }
+  })
+
+  // Every administration route the contract has, called by an account that
+  // administers one tenant and naming another: none of them answers it.
+  it('keeps every administration route to what the account administers', async () => {
+    await put({ user_id: sub, tenant_id: administered, role: 'admin' })
+    const leaks: string[] = []
+    for (const { method, path } of adminOperations()) {
+      const concrete = path.replace(/\{([^}]+)\}/g, (_, name: string) =>
+        name === 'id' && path.startsWith('/api/v1/tenants/{id}') ? systemTenant : randomUUID(),
+      )
+      const res = await asAccount(token, concrete, {
+        method,
+        tenant: systemTenant,
+        ...(method === 'GET' || method === 'DELETE' ? {} : { body: '{}' }),
+      })
+      if (res.ok && !answersForItself(method, path)) leaks.push(`${method} ${path} → ${res.status}`)
+    }
+    expect(leaks).toEqual([])
   })
 
   it('tells the admin key it is an operator with no memberships', async () => {

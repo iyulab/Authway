@@ -10,8 +10,9 @@ import { parse } from 'yaml'
  * same document another implementation is held to.
  */
 
+type Operation = { responses?: Record<string, ResponseObject>; security?: Record<string, unknown>[] }
 type Spec = {
-  paths: Record<string, Record<string, { responses?: Record<string, ResponseObject> }>>
+  paths: Record<string, Record<string, Operation>>
   [key: string]: unknown
 }
 type ResponseObject = { $ref?: string; content?: Record<string, { schema?: unknown }> }
@@ -97,4 +98,21 @@ export function conformTo(schema: string, value: unknown): void {
     throw new Error(`The value breaks the contract's ${schema}: ${ajv.errorsText(validate.errors)}
 ${JSON.stringify(value).slice(0, 500)}`)
   }
+}
+
+const methods = ['get', 'post', 'put', 'patch', 'delete'] as const
+
+/**
+ * Every operation the contract secures with `adminKey`, as its method and
+ * path template. A scenario that walks these covers an administration route
+ * the day the contract gains it.
+ */
+export function adminOperations(): { method: string; path: string }[] {
+  const ops: { method: string; path: string }[] = []
+  for (const [path, item] of Object.entries(spec.paths)) {
+    for (const method of methods) {
+      if (item[method]?.security?.some((s) => 'adminKey' in s)) ops.push({ method: method.toUpperCase(), path })
+    }
+  }
+  return ops
 }
