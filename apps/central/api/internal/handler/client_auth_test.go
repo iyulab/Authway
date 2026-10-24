@@ -16,6 +16,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +62,7 @@ func TestEngineClientAuth(t *testing.T) {
 	auth := NewEngineClientAuth(engine.URL, clientRowsByID{
 		"agent":  {ID: agentRow, ClientID: "agent"},
 		"public": {ID: publicRow, ClientID: "public", Public: true},
-	}, redis.NewClient(&redis.Options{Addr: mr.Addr()}), zap.NewNop())
+	}, ephemeral.NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()})), zap.NewNop())
 	ctx := context.Background()
 
 	t.Run("a secret the server accepts names the client", func(t *testing.T) {
@@ -128,7 +130,7 @@ func TestEngineClientAuth(t *testing.T) {
 	t.Run("an assertion the server refuses takes no id", func(t *testing.T) {
 		refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }))
 		defer refusing.Close()
-		strict := NewEngineClientAuth(refusing.URL, clientRowsByID{"agent": {ID: agentRow}}, redis.NewClient(&redis.Options{Addr: mr.Addr()}), zap.NewNop())
+		strict := NewEngineClientAuth(refusing.URL, clientRowsByID{"agent": {ID: agentRow}}, ephemeral.NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()})), zap.NewNop())
 		a := unsignedAssertion(t, jwt.MapClaims{"iss": "agent", "sub": "agent", "jti": "four", "exp": time.Now().Add(time.Minute).Unix()})
 		if _, _, ok := strict.VerifyClient(ctx, "", url.Values{"client_assertion_type": {delegation.ClientAssertionType}, "client_assertion": {a}}); ok {
 			t.Fatal("accepted")

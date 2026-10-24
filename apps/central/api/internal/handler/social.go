@@ -48,7 +48,7 @@ func NewSocialHandlerWithAllProviders(
 ) *SocialHandler {
 	var flows *signIn
 	if stateStore != nil {
-		flows = newSignIn(hydraClient, userService, logger, stateStore.redis, policy)
+		flows = newSignIn(hydraClient, userService, logger, stateStore.store, policy)
 	}
 	return &SocialHandler{
 		stateStore:       stateStore,

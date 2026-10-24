@@ -12,9 +12,9 @@ import (
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/delegation"
 
+	"authway/apps/central/api/pkg/ephemeral"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -44,13 +44,13 @@ type EngineClientAuth struct {
 	revoke  string
 	http    *http.Client
 	clients ClientRows
-	seen    redis.UniversalClient
+	seen    ephemeral.Store
 	logger  *zap.Logger
 }
 
 // NewEngineClientAuth returns an EngineClientAuth. engineURL is the
 // authorization server's public address as this API reaches it.
-func NewEngineClientAuth(engineURL string, clients ClientRows, seen redis.UniversalClient, logger *zap.Logger) *EngineClientAuth {
+func NewEngineClientAuth(engineURL string, clients ClientRows, seen ephemeral.Store, logger *zap.Logger) *EngineClientAuth {
 	return &EngineClientAuth{
 		revoke:  strings.TrimRight(engineURL, "/") + "/oauth2/revoke",
 		http:    &http.Client{Timeout: 10 * time.Second},
@@ -132,7 +132,7 @@ func (a *EngineClientAuth) firstUse(ctx context.Context, clientID, assertion str
 	if life <= 0 || life > maxAssertionLife {
 		return false
 	}
-	first, err := a.seen.SetNX(ctx, "client-assertion:"+clientID+":"+jti, 1, life).Result()
+	first, err := a.seen.MarkOnce(ctx, "client-assertion:"+clientID+":"+jti, life)
 	if err != nil {
 		a.logger.Error("Recording a client assertion failed", zap.Error(err))
 		return false

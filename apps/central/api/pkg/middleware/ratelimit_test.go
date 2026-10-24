@@ -11,6 +11,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // TestRealClientIP_TrustsRightmostForwardedFor pins the ACA-specific fix:
@@ -78,7 +80,7 @@ func TestRealClientIP_TrustsRightmostForwardedFor(t *testing.T) {
 // newTestRedis spins up an in-process miniredis instance so the rate limiter's
 // actual block-after-N-failures behavior runs against something Redis-shaped,
 // not just its call sites.
-func newTestRedis(t *testing.T) *redis.Client {
+func newTestRedis(t *testing.T) ephemeral.Store {
 	t.Helper()
 	mr, err := miniredis.Run()
 	if err != nil {
@@ -89,7 +91,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 	// Under a prefix, as a deployment that shares its Redis runs: a command
 	// the prefix cannot place fails here rather than there.
 	database.UseKeyPrefix(client, "test:")
-	return client
+	return ephemeral.NewRedis(client)
 }
 
 // TestLoginRateLimit_BlocksAfterMaxAttemptsThenResetsOnSuccess exercises the
@@ -98,7 +100,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 func TestLoginRateLimit_BlocksAfterMaxAttemptsThenResetsOnSuccess(t *testing.T) {
 	redisClient := newTestRedis(t)
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          redisClient,
 		MaxAttempts:    5,
 		WindowDuration: time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -154,7 +156,7 @@ func TestLoginRateLimit_BlocksAfterMaxAttemptsThenResetsOnSuccess(t *testing.T) 
 func TestLoginRateLimit_SuccessResetsCounter(t *testing.T) {
 	redisClient := newTestRedis(t)
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          redisClient,
 		MaxAttempts:    5,
 		WindowDuration: time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -207,7 +209,7 @@ func TestLoginRateLimit_SuccessResetsCounter(t *testing.T) {
 // attacker restarting the sign-in would, and the limit still applies.
 func TestRateLimit_CountsPerRouteNotPerPath(t *testing.T) {
 	cfg := RateLimitConfig{
-		RedisClient:    newTestRedis(t),
+		Store:          newTestRedis(t),
 		MaxAttempts:    3,
 		WindowDuration: time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -245,7 +247,7 @@ func TestRateLimit_CountsPerRouteNotPerPath(t *testing.T) {
 // a stable code, plus when to retry.
 func TestRateLimit_BlockedAnswerHasCode(t *testing.T) {
 	cfg := RateLimitConfig{
-		RedisClient:    newTestRedis(t),
+		Store:          newTestRedis(t),
 		MaxAttempts:    1,
 		WindowDuration: time.Minute,
 		BlockDuration:  time.Minute,

@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // pendingMFALogin is what the first factor of a sign-in hands off to the MFA
@@ -35,24 +36,6 @@ const maxMFAAttempts = 5
 // stays valid — the same window OAuthStateStore gives a social sign-in.
 const mfaChallengeTTL = 10 * time.Minute
 
-// recordFailureScript atomically increments the attempt counter and, once it
-// reaches maxMFAAttempts, deletes the challenge — mirroring the in-memory
-// implementation's single-mutex-held read-modify-write exactly. A plain
-// HINCRBY would silently resurrect a missing/expired challenge as a
-// one-field hash (attempts=1, no hydra_challenge/user_id, no TTL) instead of
-// reporting "not found", so existence is checked first inside the script.
-var recordFailureScript = redis.NewScript(`
-if redis.call('EXISTS', KEYS[1]) == 0 then
-	return -1
-end
-local n = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
-if n >= tonumber(ARGV[1]) then
-	redis.call('DEL', KEYS[1])
-	return 1
-end
-return 0
-`)
-
 // MFAChallengeStore holds logins that passed a first factor and owe a second,
 // keyed by an opaque challenge handed to the client (OAuthStateStore has the
 // same shape). It moved off in-memory storage because central-api's
@@ -60,12 +43,12 @@ return 0
 // replica must be readable by whichever replica serves the follow-up
 // /mfa/verify request.
 type MFAChallengeStore struct {
-	redis  redis.UniversalClient
+	store  ephemeral.Store
 	prefix string
 }
 
-func NewMFAChallengeStore(redisClient redis.UniversalClient) *MFAChallengeStore {
-	return &MFAChallengeStore{redis: redisClient, prefix: "mfa_challenge:"}
+func NewMFAChallengeStore(store ephemeral.Store) *MFAChallengeStore {
+	return &MFAChallengeStore{store: store, prefix: "mfa_challenge:"}
 }
 
 func (s *MFAChallengeStore) key(challenge string) string {
@@ -73,24 +56,18 @@ func (s *MFAChallengeStore) key(challenge string) string {
 }
 
 func (s *MFAChallengeStore) Set(challenge string, data *pendingMFALogin) {
-	ctx := context.Background()
-	key := s.key(challenge)
-	pipe := s.redis.TxPipeline()
-	pipe.HSet(ctx, key, map[string]any{
+	s.store.Put(context.Background(), s.key(challenge), map[string]string{
 		"hydra_challenge": data.HydraChallenge,
 		"user_id":         data.UserID.String(),
 		"first":           data.First,
 		"provider":        data.Provider,
-		"keep_signed_in":  data.KeepSignedIn,
-		"attempts":        data.Attempts,
-	})
-	pipe.Expire(ctx, key, mfaChallengeTTL)
-	pipe.Exec(ctx)
+		"keep_signed_in":  flag(data.KeepSignedIn),
+		"attempts":        strconv.Itoa(data.Attempts),
+	}, mfaChallengeTTL)
 }
 
 func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
-	ctx := context.Background()
-	vals, err := s.redis.HGetAll(ctx, s.key(challenge)).Result()
+	vals, err := s.store.Fields(context.Background(), s.key(challenge))
 	if err != nil || len(vals) == 0 {
 		return nil, false
 	}
@@ -112,15 +89,20 @@ func (s *MFAChallengeStore) Get(challenge string) (*pendingMFALogin, bool) {
 }
 
 func (s *MFAChallengeStore) Delete(challenge string) {
-	s.redis.Del(context.Background(), s.key(challenge))
+	s.store.Remove(context.Background(), s.key(challenge))
 }
 
 // RecordFailure increments the attempt counter and reports whether the
 // challenge exceeded maxMFAAttempts and was discarded as a result.
 func (s *MFAChallengeStore) RecordFailure(challenge string) (locked bool) {
-	result, err := recordFailureScript.Run(context.Background(), s.redis, []string{s.key(challenge)}, maxMFAAttempts).Int()
-	if err != nil {
-		return false
+	removed, _, err := s.store.CountFailure(context.Background(), s.key(challenge), "attempts", maxMFAAttempts)
+	return err == nil && removed
+}
+
+// flag is how a stored field holds a boolean.
+func flag(b bool) string {
+	if b {
+		return "1"
 	}
-	return result == 1
+	return "0"
 }

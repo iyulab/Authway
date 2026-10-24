@@ -13,6 +13,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
@@ -24,7 +26,7 @@ import (
 // newTestRedisClient spins up an in-process miniredis instance so
 // MFAChallengeStore's real Redis-backed behavior (HSET/TTL/the atomic
 // RecordFailure script) runs in these tests, not just a mock.
-func newTestRedisClient(t *testing.T) *redis.Client {
+func newTestRedisClient(t *testing.T) ephemeral.Store {
 	t.Helper()
 	mr, err := miniredis.Run()
 	if err != nil {
@@ -35,7 +37,7 @@ func newTestRedisClient(t *testing.T) *redis.Client {
 	// Under a prefix, as a deployment that shares its Redis runs: a command
 	// the prefix cannot place fails here rather than there.
 	database.UseKeyPrefix(client, "test:")
-	return client
+	return ephemeral.NewRedis(client)
 }
 
 const testClientID = "test-client"

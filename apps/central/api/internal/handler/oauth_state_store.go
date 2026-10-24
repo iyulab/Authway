@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // oauthState is what a social sign-in remembers between redirecting the user
@@ -27,12 +27,12 @@ const oauthStateTTL = 10 * time.Minute
 // different replica than the one that started the sign-in, so the state cannot
 // live in process memory. Same shape as MFAChallengeStore.
 type OAuthStateStore struct {
-	redis  redis.UniversalClient
+	store  ephemeral.Store
 	prefix string
 }
 
-func NewOAuthStateStore(redisClient redis.UniversalClient) *OAuthStateStore {
-	return &OAuthStateStore{redis: redisClient, prefix: "oauth:state:"}
+func NewOAuthStateStore(store ephemeral.Store) *OAuthStateStore {
+	return &OAuthStateStore{store: store, prefix: "oauth:state:"}
 }
 
 func (s *OAuthStateStore) key(state string) string {
@@ -47,13 +47,10 @@ func (s *OAuthStateStore) Save(ctx context.Context, data oauthState) (string, er
 	}
 	state := base64.RawURLEncoding.EncodeToString(b)
 
-	pipe := s.redis.TxPipeline()
-	pipe.HSet(ctx, s.key(state), map[string]any{
+	if err := s.store.Put(ctx, s.key(state), map[string]string{
 		"login_challenge": data.LoginChallenge,
 		"client_id":       data.ClientID,
-	})
-	pipe.Expire(ctx, s.key(state), oauthStateTTL)
-	if _, err := pipe.Exec(ctx); err != nil {
+	}, oauthStateTTL); err != nil {
 		return "", fmt.Errorf("store state: %w", err)
 	}
 	return state, nil
@@ -62,13 +59,10 @@ func (s *OAuthStateStore) Save(ctx context.Context, data oauthState) (string, er
 // Consume returns the data stored under state and deletes it in the same
 // transaction, so a state value can complete at most one callback.
 func (s *OAuthStateStore) Consume(ctx context.Context, state string) (oauthState, bool, error) {
-	pipe := s.redis.TxPipeline()
-	get := pipe.HGetAll(ctx, s.key(state))
-	pipe.Del(ctx, s.key(state))
-	if _, err := pipe.Exec(ctx); err != nil {
+	vals, err := s.store.Take(ctx, s.key(state))
+	if err != nil {
 		return oauthState{}, false, fmt.Errorf("consume state: %w", err)
 	}
-	vals := get.Val()
 	if len(vals) == 0 {
 		return oauthState{}, false, nil
 	}

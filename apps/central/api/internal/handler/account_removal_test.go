@@ -15,6 +15,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/internal/hydra"
@@ -177,7 +179,7 @@ func newAuthenticationStore(t *testing.T) (*AuthenticationStore, *miniredis.Mini
 		t.Fatalf("miniredis.Run: %v", err)
 	}
 	t.Cleanup(mr.Close)
-	return NewAuthenticationStore(redis.NewClient(&redis.Options{Addr: mr.Addr()})), mr
+	return NewAuthenticationStore(ephemeral.NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()}))), mr
 }
 
 func TestAuthenticationStore_RemembersWhenAndHowASessionAuthenticated(t *testing.T) {

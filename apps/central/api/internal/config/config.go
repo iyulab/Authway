@@ -88,6 +88,10 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
+	// Enabled keeps sign-in state (challenges, state values, rate-limit
+	// counters) in Redis, shared by every instance. Off, it is kept in the
+	// process — for a deployment of one instance only.
+	Enabled    bool   `mapstructure:"enabled"`
 	Host       string `mapstructure:"host"`
 	Port       int    `mapstructure:"port"`
 	Password   string `mapstructure:"password"`
@@ -657,6 +661,7 @@ func setDefaults() {
 	viper.SetDefault("redis.key_prefix", "")
 	viper.SetDefault("redis.tls_enabled", false)
 	viper.SetDefault("redis.cluster", false)
+	viper.SetDefault("redis.enabled", true)
 
 	// OAuth defaults
 	viper.SetDefault("oauth.authorize_code_expiry", "10m")

@@ -25,6 +25,7 @@ import (
 	"authway/apps/central/api/pkg/crypto"
 	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/email"
+	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/mfa"
 	ratelimitmw "authway/apps/central/api/pkg/middleware"
@@ -151,12 +152,21 @@ func main() {
 	adminService := admin.NewService(db, zapLogger, cfg.Admin.Password)
 
 	// Initialize Redis
-	redisClient, err := database.ConnectRedis(cfg.Redis)
-	if err != nil {
-		zapLogger.Fatal("Failed to connect to Redis", zap.Error(err))
-	}
-	if cfg.Redis.KeyPrefix != "" {
-		zapLogger.Info("Redis keys carry this deployment's prefix", zap.String("key_prefix", cfg.Redis.KeyPrefix))
+	// Sign-in state: in Redis, which every instance shares, or — for a
+	// deployment of one instance — in this process.
+	var signInState ephemeral.Store
+	if cfg.Redis.Enabled {
+		redisClient, err := database.ConnectRedis(cfg.Redis)
+		if err != nil {
+			zapLogger.Fatal("Failed to connect to Redis", zap.Error(err))
+		}
+		if cfg.Redis.KeyPrefix != "" {
+			zapLogger.Info("Redis keys carry this deployment's prefix", zap.String("key_prefix", cfg.Redis.KeyPrefix))
+		}
+		signInState = ephemeral.NewRedis(redisClient)
+	} else {
+		zapLogger.Warn("Redis is off (AUTHWAY_REDIS_ENABLED=false): sign-in state is kept in this process — run one instance only, or a sign-in started on one is not found on another")
+		signInState = ephemeral.NewMemory(context.Background())
 	}
 
 	// Initialize Hydra client
@@ -347,12 +357,12 @@ func main() {
 		Sessions: handler.SessionPolicy{Timeout: tenantService.SessionTimeout},
 		Terms:    termsService,
 	}
-	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(redisClient), cfg.App.FrontendURL, signInPolicy)
+	socialHandler := handler.NewSocialHandlerWithAllProviders(googleService, githubService, microsoftService, appleService, userService, clientService, hydraClient, zapLogger, newFeatureServices.AuditService, handler.NewOAuthStateStore(signInState), cfg.App.FrontendURL, signInPolicy)
 	// A consent to a client's delegation scope grants a delegation.
 	delegationService := delegation.NewService(db)
 	approvals := delegation.NewApprovals(db)
 	delegationHandler := delegation.NewHandler(delegationService, hydraClient, newFeatureServices.AuditService, zapLogger)
-	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, redisClient, socialHandler, signInPolicy)
+	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, signInState, socialHandler, signInPolicy)
 	authHandler.GrantsDelegations(delegationService)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name)
@@ -365,7 +375,7 @@ func main() {
 	// /flows so the API and the login UI can share one origin: the UI's own
 	// screens are /login, /consent, /logout and /device.
 	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL, authHandler)
-	loginRateLimit := ratelimitmw.LoginRateLimit(redisClient)
+	loginRateLimit := ratelimitmw.LoginRateLimit(signInState)
 	app.Get("/flows/login", flowEntryHandler.Login)
 	app.Get("/flows/consent", flowEntryHandler.Consent)
 	app.Get("/flows/logout", flowEntryHandler.Logout)
@@ -401,7 +411,7 @@ func main() {
 		exchanger = delegation.NewExchanger(delegationService, signer, hydraClient, handler.ClientExchangeScopes(clientService), cfg.App.BaseURL)
 		// A client acting for a user may ask them to approve one action; the
 		// user answers on the login UI's approval screen.
-		exchanger.HandlesApprovals(approvals, handler.NewEngineClientAuth(cfg.Hydra.EngineURL(), clientService, redisClient, zapLogger), strings.TrimRight(cfg.App.FrontendURL, "/")+"/approve")
+		exchanger.HandlesApprovals(approvals, handler.NewEngineClientAuth(cfg.Hydra.EngineURL(), clientService, signInState, zapLogger), strings.TrimRight(cfg.App.FrontendURL, "/")+"/approve")
 		tokenEndpoint.ExchangesDelegations(exchanger, newFeatureServices.AuditService)
 	}
 	app.Post("/oauth2/token", tokenEndpoint.Token)
@@ -441,7 +451,7 @@ func main() {
 	// caller is a confidential client, not a user and not an administrator.
 	// Wrong credentials count against the caller's address like failed
 	// sign-ins do: each one costs a deliberately slow secret check.
-	v1.Post("/oauth2/introspect", ratelimitmw.LoginRateLimit(redisClient), handler.NewIntrospectionHandler(clientService, hydraClient, zapLogger).Introspect)
+	v1.Post("/oauth2/introspect", ratelimitmw.LoginRateLimit(signInState), handler.NewIntrospectionHandler(clientService, hydraClient, zapLogger).Introspect)
 
 	// What the sign-in screen should do with a login flow: show the form (and
 	// which sign-in methods the client allows) or redirect.
@@ -460,7 +470,7 @@ func main() {
 	// Emailed sign-in links: sent from the login screen, redeemed from the
 	// link's landing page in the same browser.
 	magicLinkHandler := handler.NewMagicLinkFlowHandler(authHandler, newFeatureServices.PasswordlessService)
-	v1.Post("/login-flows/:flow/magic-link", ratelimitmw.MagicLinkRateLimit(redisClient), magicLinkHandler.Send)
+	v1.Post("/login-flows/:flow/magic-link", ratelimitmw.MagicLinkRateLimit(signInState), magicLinkHandler.Send)
 	v1.Post("/magic-links/inspect", magicLinkHandler.Inspect)
 	v1.Post("/magic-links/redeem", loginRateLimit, magicLinkHandler.Redeem)
 	v1.Post("/login-flows/:flow/magic-link/code", loginRateLimit, magicLinkHandler.RedeemCode)

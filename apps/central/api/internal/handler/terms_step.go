@@ -9,11 +9,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/internal/hydra"
 	"authway/apps/central/api/pkg/audit"
+	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/terms"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
@@ -56,30 +56,24 @@ const termsChallengeTTL = mfaChallengeTTL
 // an opaque terms_challenge (MFAChallengeStore has the same shape, without the
 // attempt counter: there is nothing to guess here).
 type TermsChallengeStore struct {
-	redis  redis.UniversalClient
+	store  ephemeral.Store
 	prefix string
 }
 
-func NewTermsChallengeStore(redisClient redis.UniversalClient) *TermsChallengeStore {
-	return &TermsChallengeStore{redis: redisClient, prefix: "terms_challenge:"}
+func NewTermsChallengeStore(store ephemeral.Store) *TermsChallengeStore {
+	return &TermsChallengeStore{store: store, prefix: "terms_challenge:"}
 }
 
 func (s *TermsChallengeStore) Set(challenge string, p *pendingTerms) error {
-	ctx := context.Background()
-	key := s.prefix + challenge
-	pipe := s.redis.TxPipeline()
-	pipe.HSet(ctx, key, map[string]any{
+	return s.store.Put(context.Background(), s.prefix+challenge, map[string]string{
 		"hydra_challenge": p.HydraChallenge,
 		"user_id":         p.UserID.String(),
 		"audit":           p.Audit,
 		"amr":             strings.Join(p.AMR, " "),
 		"provider":        p.Provider,
-		"keep_signed_in":  p.KeepSignedIn,
-		"reused":          p.Reused,
-	})
-	pipe.Expire(ctx, key, termsChallengeTTL)
-	_, err := pipe.Exec(ctx)
-	return err
+		"keep_signed_in":  flag(p.KeepSignedIn),
+		"reused":          flag(p.Reused),
+	}, termsChallengeTTL)
 }
 
 // Get returns the sign-in parked under challenge for flow.
@@ -87,7 +81,7 @@ func (s *TermsChallengeStore) Get(challenge, flow string) (*pendingTerms, bool) 
 	if challenge == "" {
 		return nil, false
 	}
-	vals, err := s.redis.HGetAll(context.Background(), s.prefix+challenge).Result()
+	vals, err := s.store.Fields(context.Background(), s.prefix+challenge)
 	if err != nil || len(vals) == 0 || vals["hydra_challenge"] != flow {
 		return nil, false
 	}
@@ -107,7 +101,7 @@ func (s *TermsChallengeStore) Get(challenge, flow string) (*pendingTerms, bool) 
 }
 
 func (s *TermsChallengeStore) Delete(challenge string) {
-	s.redis.Del(context.Background(), s.prefix+challenge)
+	s.store.Remove(context.Background(), s.prefix+challenge)
 }
 
 // errTermsStep is a failure to read which documents a user owes, or to park

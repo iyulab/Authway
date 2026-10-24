@@ -12,12 +12,12 @@ import (
 	"authway/apps/central/api/pkg/claims"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/delegation"
+	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -49,8 +49,8 @@ type SignInMethodSource interface {
 	SignInMethodsFor(cl *client.Client) []string
 }
 
-func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, redisClient redis.UniversalClient, signInMethods SignInMethodSource, policy SignInPolicy) *AuthHandler {
-	flows := newSignIn(hydraClient, userService, logger, redisClient, policy)
+func NewAuthHandler(userService user.Service, clientService client.Service, claimsService claims.Service, mfaService mfa.Service, hydraClient *hydra.Client, logger *zap.Logger, auditService audit.Service, store ephemeral.Store, signInMethods SignInMethodSource, policy SignInPolicy) *AuthHandler {
+	flows := newSignIn(hydraClient, userService, logger, store, policy)
 	return &AuthHandler{
 		flows:           flows,
 		signInMethods:   signInMethods,

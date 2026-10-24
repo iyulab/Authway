@@ -6,8 +6,10 @@
 #            UI and the console, and the routes to the two services below
 #   api    — the Authway API (sign-in flows, administration, token endpoint)
 #   hydra  — the OAuth 2.0 / OpenID Connect authorization server
-#   postgres, redis — storage; Hydra and the API share one database, as in
-#            every other deployment
+#   postgres — storage; Hydra and the API share one database, as in every
+#            other deployment
+#   redis  — only with COMPOSE_PROFILES=redis: sign-in state the API keeps
+#            in its own process otherwise (one API container, as here)
 #
 # Only web publishes ports. The authorization server's admin port (4445) and
 # the API's internal token hook stay on the internal network.
@@ -56,6 +58,7 @@ services:
       AUTHWAY_DATABASE_USER: authway
       AUTHWAY_DATABASE_PASSWORD: ${AUTHWAY_DATABASE_PASSWORD:?run setup.sh}
       AUTHWAY_DATABASE_SSL_MODE: disable
+      AUTHWAY_REDIS_ENABLED: ${AUTHWAY_REDIS_ENABLED:-false}
       AUTHWAY_REDIS_HOST: redis
       AUTHWAY_REDIS_PORT: "6379"
       AUTHWAY_HYDRA_PUBLIC_URL: *issuer
@@ -84,6 +87,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+        required: false
       hydra-migrate:
         condition: service_completed_successfully
 
@@ -149,6 +153,7 @@ services:
 
   redis:
     image: ${AUTHWAY_REDIS_IMAGE:-redis:7-alpine}
+    profiles: [redis]
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:

@@ -70,7 +70,8 @@ These settings have sensible defaults and can be customized as needed:
 |----------|-------------|---------|
 | `AUTHWAY_APP_NAME` | Application name | `Authway` |
 | `AUTHWAY_APP_PORT` | Server port | `8080` |
-| `AUTHWAY_REDIS_HOST` | Redis host — the API does not start without Redis | `localhost` |
+| `AUTHWAY_REDIS_ENABLED` | Keep sign-in state in Redis; `false` keeps it in the process, for one instance only | `true` |
+| `AUTHWAY_REDIS_HOST` | Redis host — with Redis enabled, the API does not start without it | `localhost` |
 | `AUTHWAY_REDIS_PORT` | Redis port | `6379` |
 | `AUTHWAY_CORS_ALLOWED_ORIGINS` | CORS origins | `http://localhost:3000,...` |
 
@@ -124,8 +125,9 @@ AUTHWAY_DATABASE_SSL_MODE=disable           # disable|require|verify-ca|verify-f
 
 ### Redis Configuration
 
-The API needs Redis and does not start without it. What it keeps there is
-short-lived — see [Redis](docs/DEPLOYMENT.md#redis).
+The API keeps short-lived sign-in state in Redis and, with it enabled, does
+not start without it — see [Redis](docs/DEPLOYMENT.md#redis). A deployment
+of one instance may set `AUTHWAY_REDIS_ENABLED=false` instead.
 
 ```bash
 AUTHWAY_REDIS_HOST=localhost                # Redis server host

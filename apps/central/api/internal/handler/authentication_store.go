@@ -6,9 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"authway/apps/central/api/internal/hydra"
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // authenticationTTL bounds how long a recorded authentication is kept. A
@@ -34,14 +33,14 @@ type Authentication struct {
 // — checks the time. The authorization server keeps both but hands neither to
 // the steps where Authway sets a token's claims; hence this store.
 type AuthenticationStore struct {
-	redis  redis.UniversalClient
+	store  ephemeral.Store
 	prefix string
 }
 
-func NewAuthenticationStore(redisClient redis.UniversalClient) *AuthenticationStore {
+func NewAuthenticationStore(store ephemeral.Store) *AuthenticationStore {
 	// The prefix predates the methods; it stays so that sessions recorded
 	// before keep their authentication time.
-	return &AuthenticationStore{redis: redisClient, prefix: "auth_time:"}
+	return &AuthenticationStore{store: store, prefix: "auth_time:"}
 }
 
 type storedAuthentication struct {
@@ -51,23 +50,23 @@ type storedAuthentication struct {
 
 // Record notes that the session's user has just authenticated.
 func (s *AuthenticationStore) Record(sessionID string, a Authentication) {
-	if s == nil || s.redis == nil || sessionID == "" {
+	if s == nil || s.store == nil || sessionID == "" {
 		return
 	}
 	raw, err := json.Marshal(storedAuthentication{At: a.At.Unix(), Methods: a.Methods})
 	if err != nil {
 		return
 	}
-	s.redis.Set(context.Background(), s.prefix+sessionID, raw, authenticationTTL)
+	s.store.SetValue(context.Background(), s.prefix+sessionID, string(raw), authenticationTTL)
 }
 
 // Lookup returns the session's last authentication, if known.
 func (s *AuthenticationStore) Lookup(sessionID string) (Authentication, bool) {
-	if s == nil || s.redis == nil || sessionID == "" {
+	if s == nil || s.store == nil || sessionID == "" {
 		return Authentication{}, false
 	}
-	raw, err := s.redis.Get(context.Background(), s.prefix+sessionID).Result()
-	if err != nil {
+	raw, ok, err := s.store.Value(context.Background(), s.prefix+sessionID)
+	if err != nil || !ok {
 		return Authentication{}, false
 	}
 	var stored storedAuthentication

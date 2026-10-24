@@ -8,10 +8,17 @@ same images the hosted service runs — with no access to the internet needed.
 | `web` | The one address users and applications reach (TLS): the login UI at `/`, the console at `/console/`, and the routes to the two below |
 | `api` | The Authway API — sign-in flows, administration, token endpoint |
 | `hydra` | The OAuth 2.0 / OpenID Connect authorization server (Ory Hydra) |
-| `postgres`, `redis` | Storage. Hydra and the API share one database |
+| `postgres` | Storage. Hydra and the API share one database |
 | `hydra-migrate` | Runs once at start: the authorization server's schema |
 
 Only `web` publishes ports (80, 443).
+
+Sign-in state that lasts minutes — a challenge between two sign-in steps, a
+state value between a redirect and its callback, rate-limit counters — is
+kept in the API's process, which suits the one API container here; a
+restart drops only the sign-ins in progress. With `COMPOSE_PROFILES=redis`
+and `AUTHWAY_REDIS_ENABLED=true` in `.env` it is kept in a `redis` container
+instead. Running more than one API container needs Redis.
 
 ## Install
 

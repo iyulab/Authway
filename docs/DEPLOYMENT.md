@@ -373,8 +373,16 @@ SERVE_COOKIES_SAME_SITE_MODE=Lax
 
 ## Redis
 
-The API does not start without Redis. Nothing in it is a record: every key
-has a lifetime, and losing all of them costs users a retry, not data.
+The API keeps sign-in state in Redis, which every instance of a deployment
+shares. Nothing in it is a record: every key has a lifetime, and losing all
+of them costs users a retry, not data.
+
+A deployment of **one** API instance can do without it:
+`AUTHWAY_REDIS_ENABLED=false` keeps the same keys in the API's process (the
+on-premises bundle does this by default). A restart then drops sign-ins in
+progress and rate-limit counters. With more than one instance it is wrong — a
+sign-in started on one instance is not found on the next — and the API says
+so in its log when it starts.
 
 | Keys | What | Kept for | If lost |
 |------|------|----------|---------|

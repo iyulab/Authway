@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // RateLimitConfig holds rate limiter configuration
 type RateLimitConfig struct {
-	RedisClient    redis.UniversalClient
+	Store          ephemeral.Store
 	MaxAttempts    int
 	WindowDuration time.Duration
 	BlockDuration  time.Duration
@@ -22,9 +23,9 @@ type RateLimitConfig struct {
 }
 
 // DefaultRateLimitConfig returns default rate limit settings
-func DefaultRateLimitConfig(redisClient redis.UniversalClient) RateLimitConfig {
+func DefaultRateLimitConfig(store ephemeral.Store) RateLimitConfig {
 	return RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    5,
 		WindowDuration: time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -53,7 +54,7 @@ func realClientIP(c *fiber.Ctx) string {
 // RateLimit creates a rate limiting middleware
 func RateLimit(cfg RateLimitConfig) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if cfg.RedisClient == nil {
+		if cfg.Store == nil {
 			return c.Next()
 		}
 		ctx := context.Background()
@@ -65,22 +66,18 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		path := c.Route().Path
 		key := fmt.Sprintf("%s%s:%s", cfg.KeyPrefix, path, ip)
 		blockKey := fmt.Sprintf("%sblock:%s:%s", cfg.KeyPrefix, path, ip)
-		blocked, err := cfg.RedisClient.Exists(ctx, blockKey).Result()
+		ttl, blocked, err := cfg.Store.Remaining(ctx, blockKey)
 		if err != nil && !cfg.SkipOnError {
 			return apierror.Refuse(c, fiber.StatusInternalServerError, apierror.CodeForStatus(fiber.StatusInternalServerError), "rate limit error")
 		}
-		if blocked > 0 {
-			ttl, _ := cfg.RedisClient.TTL(ctx, blockKey).Result()
+		if blocked {
 			return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(ttl.Seconds())})
 		}
-		countStr, err := cfg.RedisClient.Get(ctx, key).Result()
-		var count int64 = 0
-		if err == nil {
-			count, _ = strconv.ParseInt(countStr, 10, 64)
-		}
+		countStr, _, _ := cfg.Store.Value(ctx, key)
+		count, _ := strconv.ParseInt(countStr, 10, 64)
 		if int(count) >= cfg.MaxAttempts {
-			cfg.RedisClient.Set(ctx, blockKey, "1", cfg.BlockDuration)
-			cfg.RedisClient.Del(ctx, key)
+			cfg.Store.SetValue(ctx, blockKey, "1", cfg.BlockDuration)
+			cfg.Store.Remove(ctx, key)
 			return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(cfg.BlockDuration.Seconds())})
 		}
 		c.Locals("rate_limit_key", key)
@@ -96,14 +93,10 @@ func IncrementRateLimitOnFailure(c *fiber.Ctx) {
 		return
 	}
 	cfg, ok := c.Locals("rate_limit_cfg").(RateLimitConfig)
-	if !ok || cfg.RedisClient == nil {
+	if !ok || cfg.Store == nil {
 		return
 	}
-	ctx := context.Background()
-	pipe := cfg.RedisClient.Pipeline()
-	pipe.Incr(ctx, key)
-	pipe.Expire(ctx, key, cfg.WindowDuration)
-	pipe.Exec(ctx)
+	cfg.Store.Count(context.Background(), key, cfg.WindowDuration)
 }
 
 // ResetRateLimitOnSuccess resets rate limit counter on successful attempt
@@ -113,17 +106,16 @@ func ResetRateLimitOnSuccess(c *fiber.Ctx) {
 		return
 	}
 	cfg, ok := c.Locals("rate_limit_cfg").(RateLimitConfig)
-	if !ok || cfg.RedisClient == nil {
+	if !ok || cfg.Store == nil {
 		return
 	}
-	ctx := context.Background()
-	cfg.RedisClient.Del(ctx, key)
+	cfg.Store.Remove(context.Background(), key)
 }
 
 // LoginRateLimit creates rate limiting specifically for login endpoints
-func LoginRateLimit(redisClient redis.UniversalClient) fiber.Handler {
+func LoginRateLimit(store ephemeral.Store) fiber.Handler {
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    5,
 		WindowDuration: time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -139,9 +131,9 @@ func LoginRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 // It is a ceiling for an address many people share (an office, a mobile
 // carrier); how many links one mailbox receives is limited per mailbox, by
 // the passwordless service.
-func MagicLinkRateLimit(redisClient redis.UniversalClient) fiber.Handler {
+func MagicLinkRateLimit(store ephemeral.Store) fiber.Handler {
 	return RateLimit(RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    20,
 		WindowDuration: 15 * time.Minute,
 		BlockDuration:  15 * time.Minute,
@@ -151,9 +143,9 @@ func MagicLinkRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 }
 
 // RegisterRateLimit creates rate limiting for registration endpoints
-func RegisterRateLimit(redisClient redis.UniversalClient) fiber.Handler {
+func RegisterRateLimit(store ephemeral.Store) fiber.Handler {
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    3,
 		WindowDuration: time.Minute,
 		BlockDuration:  30 * time.Minute,
@@ -164,9 +156,9 @@ func RegisterRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 }
 
 // PasswordResetRateLimit creates rate limiting for password reset
-func PasswordResetRateLimit(redisClient redis.UniversalClient) fiber.Handler {
+func PasswordResetRateLimit(store ephemeral.Store) fiber.Handler {
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    3,
 		WindowDuration: time.Hour,
 		BlockDuration:  time.Hour,
@@ -177,9 +169,9 @@ func PasswordResetRateLimit(redisClient redis.UniversalClient) fiber.Handler {
 }
 
 // APIRateLimit creates general API rate limiting
-func APIRateLimit(redisClient redis.UniversalClient, maxRequests int, window time.Duration) fiber.Handler {
+func APIRateLimit(store ephemeral.Store, maxRequests int, window time.Duration) fiber.Handler {
 	cfg := RateLimitConfig{
-		RedisClient:    redisClient,
+		Store:          store,
 		MaxAttempts:    maxRequests,
 		WindowDuration: window,
 		BlockDuration:  window,

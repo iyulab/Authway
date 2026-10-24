@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"authway/apps/central/api/pkg/ephemeral"
 	"go.uber.org/zap"
 
 	"authway/apps/central/api/internal/hydra"
@@ -37,16 +37,16 @@ type SignInPolicy struct {
 	Terms    TermsLedger
 }
 
-func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, redisClient redis.UniversalClient, policy SignInPolicy) *signIn {
+func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, store ephemeral.Store, policy SignInPolicy) *signIn {
 	return &signIn{
 		hydra:           hc,
 		users:           users,
 		logger:          logger,
 		sessions:        policy.Sessions,
 		terms:           policy.Terms,
-		authentications: NewAuthenticationStore(redisClient),
-		pending:         NewMFAChallengeStore(redisClient),
-		owing:           NewTermsChallengeStore(redisClient),
+		authentications: NewAuthenticationStore(store),
+		pending:         NewMFAChallengeStore(store),
+		owing:           NewTermsChallengeStore(store),
 	}
 }
 

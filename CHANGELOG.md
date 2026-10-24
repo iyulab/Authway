@@ -2,6 +2,13 @@
 
 ### Added
 
+- **Redis is optional for one instance** — `AUTHWAY_REDIS_ENABLED=false`
+  keeps sign-in state (challenges between steps, social sign-in state,
+  rate-limit counters, client assertion ids) in the API's process. It suits a
+  deployment of one API instance; a restart drops only sign-ins in progress.
+  The on-premises bundle now runs this way by default — five containers — and
+  starts a `redis` container with `COMPOSE_PROFILES=redis` and
+  `AUTHWAY_REDIS_ENABLED=true` in `.env`.
 - **Records that name people are kept for a stated time.** A tenant's audit
   log keeps an entry for its `audit_retention_days` setting — 365 days unless
   the tenant sets another, at least 30 (the console's settings screen has the

@@ -7,6 +7,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"authway/apps/central/api/pkg/ephemeral"
 )
 
 // newTestStore returns a store backed by its own in-process miniredis
@@ -20,7 +22,7 @@ func newTestStore(t *testing.T) (*MFAChallengeStore, *miniredis.Miniredis) {
 	}
 	t.Cleanup(mr.Close)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return NewMFAChallengeStore(client), mr
+	return NewMFAChallengeStore(ephemeral.NewRedis(client)), mr
 }
 
 func TestMFAChallengeStore_SetGetDelete(t *testing.T) {
