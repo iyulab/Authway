@@ -29,6 +29,10 @@
   open support access is `403 support_access_required`, and a tenant role
   the operator's account also holds does not let it in. The admin key and
   the console session are unchanged.
+- **The console's invitation form chooses the application** when exactly one
+  of the tenant's applications has a sign-in start URL or a home page — an
+  invitation without one leaves the user on Authway after accepting, with
+  nowhere to go. Picking «No particular application» still sends none.
 
 ## [0.19.0] - 2026-10-24
 

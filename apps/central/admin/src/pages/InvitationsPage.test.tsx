@@ -55,7 +55,14 @@ describe('inviting a user to an application', () => {
     expect(await screen.findByRole('option', { name: 'Notes' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Bare' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Account' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Application (optional)')).toHaveValue('')
+  })
+
+  it('chooses the one application that can receive the user, until another is picked', async () => {
+    const user = userEvent.setup()
+    render(<InvitationsPage />)
+    await openDialog(user)
+    // Notes has a sign-in start URL; Bare has nowhere to send the user.
+    await waitFor(() => expect(screen.getByLabelText('Application (optional)')).toHaveValue('notes'))
   })
 
   it('sends the chosen application’s client_id', async () => {
@@ -71,11 +78,13 @@ describe('inviting a user to an application', () => {
     expect(create.mock.calls[0][0]).toMatchObject({ email: 'person@example.com', client_id: 'notes' })
   })
 
-  it('sends no client_id when none is chosen', async () => {
+  it('sends no client_id when the administrator picks no application', async () => {
     const create = vi.spyOn(invitationsApi, 'create').mockResolvedValue(answer({ invitation: {}, message: 'ok' }))
     const user = userEvent.setup()
     render(<InvitationsPage />)
     await openDialog(user)
+    await user.selectOptions(screen.getByLabelText('Application (optional)'), await screen.findByRole('option', { name: 'No particular application' }))
+    expect(screen.getByText(/has to be told where to sign in/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Send Invitation' }))
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))

@@ -27,14 +27,11 @@ import { useTenantStore } from '@/stores/tenant'
 interface InvitationFormData {
   email: string
   message: string
-  // '' = no particular application.
-  client_id: string
 }
 
 const emptyForm: InvitationFormData = {
   email: '',
   message: '',
-  client_id: '',
 }
 
 const InvitationsPage: React.FC = () => {
@@ -72,7 +69,14 @@ const InvitationsPage: React.FC = () => {
     enabled: !!selectedTenantId && showCreateModal,
   })
   const applications = (clientsData?.data.clients || []).filter((c) => !c.system)
-  const chosenApplication = applications.find((c) => c.client_id === formData.client_id)
+  // An invitation without an application ends on Authway with nowhere to go,
+  // so when exactly one of the tenant's applications has an address to send
+  // the user on to, it is chosen unless the administrator picks otherwise.
+  const landing = applications.filter((c) => c.initiate_login_uri || c.client_uri)
+  const defaultApplication = landing.length === 1 ? landing[0].client_id : ''
+  const [pickedApplication, setPickedApplication] = useState<string | null>(null)
+  const applicationId = pickedApplication ?? defaultApplication
+  const chosenApplication = applications.find((c) => c.client_id === applicationId)
 
   const invitations = data?.data.invitations || []
   const totalInvitations = data?.data.total || 0
@@ -129,12 +133,12 @@ const InvitationsPage: React.FC = () => {
   const resetForm = () => {
     createMutation.reset()
     setFormData(emptyForm)
+    setPickedApplication(null)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const { client_id, ...rest } = formData
-    createMutation.mutate(client_id ? { ...rest, client_id } : rest)
+    createMutation.mutate(applicationId ? { ...formData, client_id: applicationId } : formData)
   }
 
   const getStatusBadge = (status: string) => {
@@ -349,17 +353,22 @@ const InvitationsPage: React.FC = () => {
           <Select
             id="invitation-application"
             label="Application (optional)"
-            value={formData.client_id}
-            onChange={(e) => edit({ client_id: e.target.value })}
+            value={applicationId}
+            onChange={(e) => {
+              if (createMutation.error) createMutation.reset()
+              setPickedApplication(e.target.value)
+            }}
             error={refused('client_id')}
             options={[
               { value: '', label: 'No particular application' },
               ...applications.map((c) => ({ value: c.client_id, label: c.name })),
             ]}
             helperText={
-              chosenApplication && !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
-                ? 'This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.'
-                : 'After accepting, the user is sent on to this application to sign in. Without one, they finish on Authway.'
+              !chosenApplication
+                ? 'Without an application the user finishes on Authway after accepting, and has to be told where to sign in.'
+                : !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
+                  ? 'This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.'
+                  : 'After accepting, the user is sent on to this application to sign in.'
             }
           />
 
