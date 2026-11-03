@@ -54,6 +54,8 @@ interface InvitationDetails {
   tenant_name: string
   inviter_name: string
   role: string
+  /** What the sender wrote to the invitee; free text, shown as written. */
+  message?: string
   client?: InvitationApp
 }
 
@@ -239,6 +241,13 @@ const AcceptInvitationPage: React.FC = () => {
         </div>
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:invitation.success.title')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.success.message')}</p>
+        {invitation?.message?.trim() ? (
+          // The sender's own words, as plain text: it is free text from a person, so it is never made a link.
+          <figure className="mt-4 rounded-md bg-gray-50 px-4 py-3 text-left">
+            <figcaption className="text-xs font-medium text-gray-500">{t('auth:invitation.success.senderMessage')}</figcaption>
+            <blockquote className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">{invitation.message}</blockquote>
+          </figure>
+        ) : null}
         {!flow && next && invitation?.client ? (
           <a
             href={next}

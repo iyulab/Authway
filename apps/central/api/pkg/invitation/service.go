@@ -277,7 +277,46 @@ func (s *service) GetByToken(token string) (*Invitation, error) {
 		return nil, apierror.NewPublic("invitation not found")
 	}
 	s.hydrate(&inv)
+	if inv.App == nil {
+		// An invitation that names no application still has somewhere to send
+		// the person who accepts it when the tenant has one to send them to.
+		if app, err := s.soleTenantApp(inv.TenantID); err != nil {
+			s.logger.Warn("Could not look up the tenant's application for an invitation",
+				zap.String("tenant_id", inv.TenantID.String()), zap.Error(err))
+		} else {
+			inv.App = app
+		}
+	}
 	return &inv, nil
+}
+
+// soleTenantApp is the tenant's one application a person can be sent to: the
+// only live, enabled, non-system client with an https address to start a
+// sign-in at (initiate_login_uri) or a home page (client_uri). nil when there
+// is none or more than one — then which application is meant is not for
+// Authway to guess, and the screen says it does not know. Registering a
+// second such client therefore takes the destination away again; an
+// invitation that must always lead somewhere names its client_id.
+func (s *service) soleTenantApp(tenantID uuid.UUID) (*InvitationApp, error) {
+	var rows []struct {
+		ClientID         string
+		Name             string
+		InitiateLoginURI string
+		ClientURI        string
+	}
+	err := s.db.Table("clients").
+		Where("tenant_id = ? AND deleted_at IS NULL AND active AND (system_kind IS NULL OR system_kind = '')", tenantID).
+		Where("(initiate_login_uri LIKE 'https://%' OR client_uri LIKE 'https://%')").
+		Select("client_id, name, initiate_login_uri, client_uri").
+		Limit(2).Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up the tenant's applications: %w", err)
+	}
+	if len(rows) != 1 {
+		return nil, nil
+	}
+	r := rows[0]
+	return &InvitationApp{ClientID: r.ClientID, Name: r.Name, InitiateLoginURI: r.InitiateLoginURI, ClientURI: r.ClientURI}, nil
 }
 
 func (s *service) GetByID(id uuid.UUID) (*Invitation, error) {

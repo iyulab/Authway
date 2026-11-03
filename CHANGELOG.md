@@ -2,6 +2,14 @@
 
 ### Added
 
+- **An invitation that names no application still leads somewhere** — when the
+  tenant has exactly one live, enabled client with an https `initiate_login_uri`
+  or `client_uri`, the person who accepted is sent there
+  (`GET /api/v1/invitations/token/{token}` returns it as `invitation.client`).
+  With none, or more than one, nothing is guessed and the screen says so as
+  before. The account-created screen also shows the sender's message, as plain
+  text, and an invitation sent by no person points at the administrator
+  instead of a person who is not there.
 - **Support access** — an operator opens a tenant's contents for an hour,
   with a reason: `POST /api/v1/console/support-access` (`GET` lists the open
   ones, `DELETE …/{id}` ends one). The tenant's audit log records its start,

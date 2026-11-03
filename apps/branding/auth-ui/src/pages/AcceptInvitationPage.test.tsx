@@ -75,6 +75,26 @@ describe('accepting an invitation', () => {
     expect(screen.getByText(i18n.t('auth:invitation.success.signInFromNamedApp', { tenant: 'Acme', name: 'Filer Desktop' }))).toBeInTheDocument()
   })
 
+  it("shows what the sender wrote on the account-created screen, as plain text and never as a link", async () => {
+    const written = 'Open https://demo.example/app to start.\n<a href="https://evil.example">click</a>'
+    await accept('/invitation/accept?token=tok', { ...invitation, message: written })
+    expect(screen.getByText(i18n.t('auth:invitation.success.senderMessage'))).toBeInTheDocument()
+    const quote = document.querySelector('blockquote')!
+    expect(quote.textContent).toBe(written)
+    expect(quote.querySelector('a')).toBeNull()
+  })
+
+  it('shows no message box when the sender wrote nothing', async () => {
+    await accept('/invitation/accept?token=tok', { ...invitation, message: '  ' })
+    expect(screen.queryByText(i18n.t('auth:invitation.success.senderMessage'))).toBeNull()
+  })
+
+  it('for an invitation sent by no person, points at the administrator and not at a person who is not there', async () => {
+    await accept('/invitation/accept?token=tok', { ...invitation, inviter_name: 'system' })
+    expect(screen.getByText(i18n.t('auth:invitation.success.signInFromApp', { tenant: 'Acme' }))).toBeInTheDocument()
+    expect(i18n.t('auth:invitation.success.signInFromApp', { tenant: 'Acme' })).toMatch(/관리자|administrator/)
+  })
+
   it('inside a sign-in an app started, goes on to that sign-in', async () => {
     await accept('/invitation/accept?token=tok&flow=f-1')
 

@@ -3589,9 +3589,17 @@ components:
         email: { type: string }
         tenant_name: { type: string }
         inviter_name: { type: string }
-        message: { type: string }
+        message: { type: string, description: What the sender wrote to the invitee, free text; shown as written, never as a link. }
         expires_at: { type: string }
         client:
+          description: |
+            The application to send the person to once they have accepted.
+            The one the invitation names; when it names none, the tenant's
+            only live, enabled, non-system client with an https
+            `initiate_login_uri` or `client_uri`. Absent when there is no such
+            client or more than one — which application is meant is then not
+            guessed. (The invitation as an administrator reads it carries the
+            application it names, and nothing else.)
           $ref: '#/components/schemas/InvitationApp'
 
     InvitationApp:
