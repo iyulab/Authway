@@ -2,6 +2,7 @@ package delegation
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +50,56 @@ func TestSigner_LoadsOneKeySealedAndSignsWithIt(t *testing.T) {
 	if !strings.Contains(string(first.PublicJWK()), `"kid":"`+first.KeyID()+`"`) {
 		t.Fatalf("public JWK %s does not name its key", first.PublicJWK())
 	}
+}
+
+// Replicas starting together on an empty deployment agree on one key: the
+// database, not luck, decides who creates it. Each would otherwise find the
+// table empty, insert its own, and sign with a different one.
+func TestSigner_ReplicasStartingTogetherCreateOneKey(t *testing.T) {
+	db := setupPostgres(t)
+	sealer, err := crypto.NewCipher(testSealingKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for round := 0; round < 15; round++ {
+		db.Exec(`DELETE FROM delegation_signing_keys`)
+		const replicas = 12
+		var wg sync.WaitGroup
+		kids := make([]string, replicas)
+		failures := make([]error, replicas)
+		start := make(chan struct{})
+		for i := 0; i < replicas; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				signer, err := LoadSigner(db, sealer)
+				if err != nil {
+					failures[i] = err
+					return
+				}
+				kids[i] = signer.KeyID()
+			}()
+		}
+		close(start)
+		wg.Wait()
+		for i, err := range failures {
+			if err != nil {
+				t.Fatalf("round %d: replica %d: %v", round, i, err)
+			}
+		}
+		var stored int64
+		db.Raw(`SELECT count(*) FROM delegation_signing_keys`).Scan(&stored)
+		if stored != 1 {
+			t.Fatalf("round %d: %d keys were created, want 1", round, stored)
+		}
+		for i := 1; i < replicas; i++ {
+			if kids[i] != kids[0] {
+				t.Fatalf("round %d: replicas signed with different keys: %q and %q", round, kids[0], kids[i])
+			}
+		}
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM delegation_signing_keys`) })
 }
 
 func TestSigner_RefusesWhatItDidNotSign(t *testing.T) {

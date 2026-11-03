@@ -37,8 +37,8 @@ type Signer struct {
 }
 
 // LoadSigner returns the signer of the newest stored key, creating the first
-// one when there is none. Replicas starting together agree on one key: each
-// inserts its own only if no key exists, and all of them then read the
+// one when there is none. Replicas starting together agree on one key: the
+// database lets only one of them create it, and all of them then read the
 // newest. A key sealed with a key the cipher has since replaced is sealed
 // again with the current one.
 func LoadSigner(db *gorm.DB, sealer crypto.Cipher) (*Signer, error) {
@@ -51,9 +51,18 @@ func LoadSigner(db *gorm.DB, sealer crypto.Cipher) (*Signer, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = db.Exec(`INSERT INTO delegation_signing_keys (kid, private_key, created_at)
-			SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM delegation_signing_keys)`,
-			fresh.KID, fresh.PrivateKey, fresh.CreatedAt).Error
+		// "Insert unless one exists" is not atomic: replicas starting together
+		// each see an empty table and each insert, and then sign with different
+		// keys. Taking a lock for the transaction makes them queue — the second
+		// finds the first's key committed and inserts nothing.
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('authway.delegation_signing_keys'))`).Error; err != nil {
+				return err
+			}
+			return tx.Exec(`INSERT INTO delegation_signing_keys (kid, private_key, created_at)
+				SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM delegation_signing_keys)`,
+				fresh.KID, fresh.PrivateKey, fresh.CreatedAt).Error
+		})
 		if err != nil {
 			return nil, err
 		}

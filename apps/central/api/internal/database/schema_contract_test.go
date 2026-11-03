@@ -202,16 +202,24 @@ func TestSchemaContract_FeatureModels(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := db.Create(tc.row).Error; err != nil {
+			// Inside a transaction that is rolled back: the rows are fakes (a
+			// signing key "sealed" with nothing), and committing them even for a
+			// moment lets another package's test, run in parallel against this
+			// database, read one as the newest signing key and fail.
+			tx := db.Begin()
+			if tx.Error != nil {
+				t.Fatal(tx.Error)
+			}
+			defer tx.Rollback()
+			if err := tx.Create(tc.row).Error; err != nil {
 				t.Fatalf("%s does not match the migrated schema of %s: %v", tc.name, tc.table, err)
 			}
 			// Read it back through the same model: a write can succeed while a
 			// read fails if a column the struct selects is missing.
 			var back []map[string]any
-			if err := db.Table(tc.table).Limit(1).Find(&back).Error; err != nil {
+			if err := tx.Table(tc.table).Limit(1).Find(&back).Error; err != nil {
 				t.Fatalf("%s read-back failed: %v", tc.name, err)
 			}
-			db.Delete(tc.row)
 		})
 	}
 }
