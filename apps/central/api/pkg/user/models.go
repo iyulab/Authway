@@ -20,7 +20,6 @@ type User struct {
 	// Active is false while an administrator has suspended the account: it
 	// cannot sign in (see the sign-in steps) and its sessions were ended.
 	Active bool `json:"active"`
-	Picture *string `json:"picture"`
 
 	// Identities are the provider accounts the account signs in with, filled
 	// in by the user service whenever it returns an account. Within a tenant a
@@ -37,9 +36,9 @@ type User struct {
 	TOTPLastStep  *int64  `json:"-" gorm:"column:totp_last_step"`
 	RecoveryCodes *string `json:"-" gorm:"column:recovery_codes"` // JSON array of hashed codes
 
-	LastLoginAt *time.Time     `json:"last_login_at"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	LastLoginAt *time.Time `json:"last_login_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // BeforeCreate sets UUID if not provided

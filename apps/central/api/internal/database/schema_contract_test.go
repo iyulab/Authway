@@ -356,6 +356,9 @@ var awaitingDropColumns = map[string]bool{
 	// showed them; the fields are gone from the API.
 	"tenants.logo":          true,
 	"tenants.primary_color": true,
+	// The account's picture lives in avatar_url; this column from the first
+	// schema was never read and only ever received NULL.
+	"users.picture": true,
 }
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
