@@ -10,6 +10,12 @@ info:
     invitations. Flow ids
     are opaque: a screen only passes them back, URL-encoded in a path segment.
     See docs/api/login-flows.md for the walk-through.
+
+    An email address is the same address whatever the case of its ASCII
+    letters: an account or invitation is found however the address is
+    written, a second one cannot be made by writing it differently, and
+    addresses are returned in lower case. Letters outside ASCII are kept as
+    they are.
   license:
     name: Apache-2.0
     identifier: Apache-2.0

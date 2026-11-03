@@ -278,7 +278,7 @@ func TestVerifyMFARecoveryLogin_CompletesLoginOnCorrectCode(t *testing.T) {
 
 // TestLogin_TenantScoped_SameEmailDifferentTenant: the schema explicitly
 // allows the same email in more than one tenant
-// (idx_users_tenant_email), so Login must authenticate against the
+// (uq_users_tenant_lower_email), so Login must authenticate against the
 // requesting OAuth client's tenant, not match the email globally.
 func TestLogin_TenantScoped_SameEmailDifferentTenant(t *testing.T) {
 	otherTenantHash, err := bcrypt.GenerateFromPassword([]byte("other-tenant-password"), bcrypt.MinCost)

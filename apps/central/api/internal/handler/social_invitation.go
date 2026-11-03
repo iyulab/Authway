@@ -12,6 +12,7 @@ import (
 
 	"authway/apps/central/api/internal/service/social"
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/emailaddr"
 	"authway/apps/central/api/pkg/invitation"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -141,7 +142,7 @@ func (s *SocialHandler) finishInvitationSignIn(c *fiber.Ctx, code, state string,
 	}
 	// An account reached by the Google account's earlier link may carry another
 	// address than the one invited; the invitation is then not this person's.
-	if !strings.EqualFold(strings.TrimSpace(account.Email), strings.TrimSpace(inv.Email)) {
+	if !emailaddr.Equal(account.Email, inv.Email) {
 		s.logSocialLoginFailure(c, inv.TenantID, "google", "invitation_address_mismatch", nil)
 		return s.invitationFailed(c, token, "address_mismatch")
 	}

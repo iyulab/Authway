@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"authway/apps/central/api/pkg/emailaddr"
 	"authway/apps/central/api/pkg/tenant"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -33,7 +34,7 @@ func (g *Gate) HasValidInvitation(tenantID uuid.UUID, email string) (bool, error
 	var count int64
 	if err := g.db.Model(&Invitation{}).
 		Where("tenant_id = ? AND email = ? AND status = ? AND expires_at > ?",
-			tenantID, email, StatusPending, time.Now()).
+			tenantID, emailaddr.Normalize(email), StatusPending, time.Now()).
 		Count(&count).Error; err != nil {
 		return false, fmt.Errorf("failed to check invitations: %w", err)
 	}

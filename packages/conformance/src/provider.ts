@@ -283,12 +283,14 @@ export class Provider {
   }
 
   /** Provisions a user the way a real one arrives: an admin invitation accepted from the mailed link. */
-  async inviteAndAccept(): Promise<TestUser> {
+  async inviteAndAccept(writtenAs?: (address: string) => string): Promise<TestUser> {
     const email = `conformance-${randomToken(6)}@example.test`
     const password = `Cf-${randomToken(12)}`
+    // `writtenAs` changes how the address is typed on the invitation (its
+    // case, say); the mail is then looked for by the plain address.
     const invite = await this.admin('/api/v1/invitations', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email: writtenAs ? writtenAs(email) : email }),
     })
     await conform('POST', '/api/v1/invitations', invite)
     if (!invite.ok) throw new Error(`Creating invitation failed: ${invite.status} ${await invite.text()}`)

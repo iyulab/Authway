@@ -12,7 +12,7 @@ import (
 )
 
 // TestResolveUserByEmail_ScopesByClientTenant: the schema explicitly allows
-// the same email in more than one tenant (idx_users_tenant_email), so the
+// the same email in more than one tenant (uq_users_tenant_lower_email), so the
 // email self-service flows (send-verification, forgot-password) must resolve
 // the requesting OAuth client's tenant when one is provided, not match the
 // email globally.

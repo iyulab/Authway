@@ -57,6 +57,19 @@
 
 ### Changed
 
+- **An address is one address whatever the case of its letters** — accounts
+  and invitations are stored with the address trimmed and its ASCII capitals in
+  lower case, and found by that form (sign-in, invitation, magic link, social
+  sign-in, the check that a Google account holds the invited address, a
+  tenant's allowed domains). Before, `Alice@Corp.com` could not sign in as
+  `alice@corp.com`, and a social sign-in could create a second account beside
+  the first. Only ASCII letters are folded — a letter that merely folds to an
+  ASCII one under Unicode rules (the Kelvin sign) is another letter, so such an
+  address stays itself. Addresses in responses are now lower case. Migration
+  053 brings stored rows to that form and has the database refuse an account
+  address with capitals; a database that already holds two accounts in a tenant
+  whose addresses differ only in ASCII case must resolve the pair first (the
+  migration's header has the query).
 - **Mail is rendered from shared message files** (`packages/mail`): the four
   messages are Mustache files with their strings in `locales/<locale>.json`,
   which any Authway implementation renders the same way (see the package's

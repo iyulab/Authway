@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/emailaddr"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
@@ -19,7 +20,7 @@ type Service interface {
 	GetByID(id uuid.UUID) (*User, error)
 	// GetSoleAccountByEmail returns the account with this address when there
 	// is exactly one, across every tenant. The same address may have an
-	// account in more than one tenant (idx_users_tenant_email allows it);
+	// account in more than one tenant (uq_users_tenant_lower_email allows it);
 	// then there is no telling which one is meant, and it answers not found.
 	// For a request with no tenant to scope by — everywhere else, use
 	// GetByEmailAndTenant.
@@ -109,16 +110,18 @@ func NewService(db *gorm.DB, logger *zap.Logger, opts ...Option) Service {
 }
 
 func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, error) {
+	email := emailaddr.Normalize(req.Email)
+
 	// Check if user already exists in this tenant
 	var existingUser User
-	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, req.Email).First(&existingUser).Error; err == nil {
-		return nil, fmt.Errorf("user with email %s already exists in this tenant", req.Email)
+	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, email).First(&existingUser).Error; err == nil {
+		return nil, fmt.Errorf("user with email %s already exists in this tenant", email)
 	}
 
 	user := &User{
 		ID:            uuid.New(),
 		TenantID:      tenantID,
-		Email:         req.Email,
+		Email:         email,
 		Name:          &req.Name,
 		EmailVerified: false,
 		Active:        true,
@@ -137,7 +140,7 @@ func (s *service) Create(tenantID uuid.UUID, req *CreateUserRequest) (*User, err
 	}
 
 	if err := s.db.Create(user).Error; err != nil {
-		s.logger.Error("Failed to create user", zap.Error(err), zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
+		s.logger.Error("Failed to create user", zap.Error(err), zap.String("email", email), zap.String("tenant_id", tenantID.String()))
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -161,7 +164,7 @@ func (s *service) GetByID(id uuid.UUID) (*User, error) {
 
 func (s *service) GetSoleAccountByEmail(email string) (*User, error) {
 	var users []User
-	if err := s.db.Where("email = ?", email).Limit(2).Find(&users).Error; err != nil {
+	if err := s.db.Where("email = ?", emailaddr.Normalize(email)).Limit(2).Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	if len(users) != 1 {
@@ -329,7 +332,7 @@ func (s *service) UpdatePassword(userID uuid.UUID, newPassword string) error {
 // GetByEmailAndTenant retrieves a user by email and tenant ID
 func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, error) {
 	var user User
-	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, email).First(&user).Error; err != nil {
+	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, emailaddr.Normalize(email)).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, ErrUserNotFound
 		}
@@ -340,7 +343,7 @@ func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, 
 
 func (s *service) FindByEmail(tenantID uuid.UUID, email string) ([]*User, error) {
 	var users []*User
-	if err := s.db.Where("tenant_id = ? AND lower(email) = lower(?)", tenantID, email).
+	if err := s.db.Where("tenant_id = ? AND email = ?", tenantID, emailaddr.Normalize(email)).
 		Order("created_at").Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("failed to find users: %w", err)
 	}

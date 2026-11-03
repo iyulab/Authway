@@ -150,7 +150,7 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 	}
 
 	// The password is checked against the requesting client's tenant: the
-	// same email may exist in more than one tenant (idx_users_tenant_email).
+	// same email may exist in more than one tenant (uq_users_tenant_lower_email).
 	requestedClient, err := h.clientService.GetByClientID(loginReq.Client.ClientID)
 	if err != nil {
 		h.logger.Error("OAuth client is not registered in Authway",

@@ -1,12 +1,12 @@
 package invitation
 
 import (
-	"strings"
 	"errors"
 	"fmt"
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
+	"authway/apps/central/api/pkg/emailaddr"
 	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tokenhash"
@@ -121,6 +121,7 @@ func generateToken() (string, error) {
 }
 
 func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRequest) (*Invitation, error) {
+	email := emailaddr.Normalize(req.Email)
 	inviterID := by.UserID
 	t, err := s.tenantService.GetTenantByID(tenantID)
 	if err != nil {
@@ -139,15 +140,15 @@ func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRe
 		}
 		inviterName = displayName(inviter)
 	}
-	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, req.Email)
+	existingUser, _ := s.userService.GetByEmailAndTenant(tenantID, email)
 	if existingUser != nil {
 		return nil, ErrAlreadyMember
 	}
-	if !t.Settings.AllowsAddress(req.Email) {
+	if !t.Settings.AllowsAddress(email) {
 		return nil, ErrAddressNotAllowed
 	}
 	var existing Invitation
-	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, req.Email, StatusPending).First(&existing).Error; err == nil {
+	if err := s.db.Where("tenant_id = ? AND email = ? AND status = ?", tenantID, email, StatusPending).First(&existing).Error; err == nil {
 		return nil, ErrAlreadyInvited
 	}
 	var app *InvitationApp
@@ -169,7 +170,7 @@ func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRe
 	invitation := &Invitation{
 		TenantID:  tenantID,
 		InviterID: inviterID,
-		Email:     req.Email,
+		Email:     email,
 		TokenHash: tokenhash.Hash(token),
 		Status:    StatusPending,
 		Message:   req.Message,
@@ -184,11 +185,11 @@ func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRe
 	invitation.App = app
 	if s.emailSender != nil {
 		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
-		if err := s.emailSender.SendInvitationEmail(req.Email, inviterName, t.Name, req.Message, inviteURL); err != nil {
-			s.logger.Error("Failed to send invitation email", zap.Error(err), zap.String("email", req.Email))
+		if err := s.emailSender.SendInvitationEmail(email, inviterName, t.Name, req.Message, inviteURL); err != nil {
+			s.logger.Error("Failed to send invitation email", zap.Error(err), zap.String("email", email))
 		}
 	}
-	s.logger.Info("Invitation created", zap.String("invitation_id", invitation.ID.String()), zap.String("email", req.Email), zap.String("tenant_id", tenantID.String()))
+	s.logger.Info("Invitation created", zap.String("invitation_id", invitation.ID.String()), zap.String("email", email), zap.String("tenant_id", tenantID.String()))
 	return invitation, nil
 }
 
@@ -479,7 +480,7 @@ func (s *service) AcceptInvitedUser(id, userID uuid.UUID) error {
 	if err != nil {
 		return apierror.NewPublic("user not found")
 	}
-	if u.TenantID != inv.TenantID || !strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(inv.Email)) {
+	if u.TenantID != inv.TenantID || !emailaddr.Equal(u.Email, inv.Email) {
 		return apierror.NewPublic("user is not the invited one")
 	}
 	if err := s.closeAccepted(inv, u.ID); err != nil {

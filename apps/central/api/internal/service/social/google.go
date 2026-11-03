@@ -13,6 +13,7 @@ import (
 
 	"authway/apps/central/api/internal/config"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/emailaddr"
 	"authway/apps/central/api/pkg/user"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -279,7 +280,7 @@ func (g *GoogleService) HandleCallbackForInvitation(ctx context.Context, code, s
 	if err != nil {
 		return nil, err
 	}
-	if !identity.EmailVerified || !strings.EqualFold(strings.TrimSpace(identity.Email), strings.TrimSpace(invitedEmail)) {
+	if !identity.EmailVerified || !emailaddr.Equal(identity.Email, invitedEmail) {
 		g.logger.Warn("Invitation sign-in refused: the Google address is not the invited one",
 			zap.Bool("verified", identity.EmailVerified), zap.String("client_id", clientID))
 		return nil, ErrInvitationAddressMismatch

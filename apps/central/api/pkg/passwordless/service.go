@@ -10,6 +10,7 @@ import (
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/crypto"
+	"authway/apps/central/api/pkg/emailaddr"
 	"authway/apps/central/api/pkg/maillink"
 	"authway/apps/central/api/pkg/tokenhash"
 	"authway/apps/central/api/pkg/user"
@@ -164,6 +165,7 @@ func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
 }
 
 func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent string) (*MagicLinkResponse, error) {
+	email = emailaddr.Normalize(email)
 	token, err := generateToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
@@ -209,7 +211,7 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 	// cannot never has links to count.
 	var recent int64
 	if err := s.db.Model(&MagicLink{}).
-		Where("tenant_id = ? AND lower(email) = lower(?) AND created_at > ?", tenantID, email, time.Now().Add(-mailboxWindow)).
+		Where("tenant_id = ? AND email = ? AND created_at > ?", tenantID, email, time.Now().Add(-mailboxWindow)).
 		Count(&recent).Error; err != nil {
 		return nil, fmt.Errorf("failed to count recent links: %w", err)
 	}

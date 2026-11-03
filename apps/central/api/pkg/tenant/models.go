@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
+	"authway/apps/central/api/pkg/emailaddr"
 )
 
 // Tenant represents an isolation unit in the system
@@ -114,7 +116,7 @@ func (s TenantSettings) AllowsAddress(email string) bool {
 			continue
 		}
 		restricted = true
-		if at >= 0 && strings.EqualFold(email[at+1:], allowed) {
+		if at >= 0 && emailaddr.Equal(email[at+1:], allowed) {
 			return true
 		}
 	}
