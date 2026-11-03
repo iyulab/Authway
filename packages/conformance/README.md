@@ -4,9 +4,14 @@ Black-box scenarios that any Authway identity provider must pass. The suite talk
 only to the provider's public surfaces — OIDC discovery, authorize, token and
 userinfo; the backend its login screens call; and the admin API — plus an SMTP
 capture service that receives the provider's mail. It never touches a database,
-so the same scenarios run against every implementation.
+so the same scenarios run against every implementation. The suite lives in
+the Authway repository (`packages/conformance`) and is run from there against
+whichever implementation is under test — the Go one or the .NET one.
 
 ## What it checks
+
+One file per area in `test/`; this is some of it, and each file's opening
+comment says what it asserts.
 
 - **Discovery** — required endpoints, `code` + S256 PKCE, a non-empty JWKS.
 - **Login** — an admin invitation is mailed, accepted from the link, and the new
@@ -27,6 +32,20 @@ so the same scenarios run against every implementation.
   routed.
 
 Each scenario provisions its own client and user and deletes them afterwards.
+
+## What a provider must offer to be run against
+
+- The public surfaces in `packages/contract/openapi.yaml`, with the admin API
+  authenticated by the key in `CONFORMANCE_ADMIN_KEY`.
+- Mail sent to an SMTP capture service whose HTTP API the suite reads, with
+  links that point at its login UI.
+- A way to let it call a private, plain-http address (back-channel logout).
+- A way to point its Google sign-in at the suite's stand-in (below), when it
+  offers sign-in through other identity providers.
+- Optionally the console sign-in, announced by `GET /api/v1/console/entry`.
+
+None of this names a database, a host process or a container: an installation
+that is a single process with its own database is run the same way.
 
 ## Running
 
@@ -55,8 +74,9 @@ pnpm --filter @authway/conformance test
 The provider must be able to call the machine running the suite: the
 back-channel logout scenario registers a receiver there, at a private address
 and over plain http. A deployment that refuses such addresses by default has
-to allow them for the run (Authway: `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`, and
-`CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false` on the authorization server).
+to allow them for the run — a switch every implementation names for itself (the
+Go one: `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`, and
+`CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false` on its authorization server).
 
 The provider must send mail to the capture service, and the links in that mail
 must point at its login UI (`/invitation/accept?token=…`). With the repository's
@@ -72,7 +92,8 @@ the profile request (`GET …/userinfo`). The provider under test has to be
 configured to reach those two there, and to send the browser to an address on
 the same origin to sign in (the suite never opens it — it plays the user too).
 
-For Authway, with the stand-in at `http://localhost:9912`:
+For the Go implementation, with the stand-in at `http://localhost:9912` (another
+implementation points its Google settings the same way, under its own names):
 
 ```bash
 AUTHWAY_GOOGLE_ENABLED=true
@@ -83,8 +104,8 @@ AUTHWAY_GOOGLE_TOKEN_URL=http://localhost:9912/token
 AUTHWAY_GOOGLE_USERINFO_URL=http://localhost:9912/userinfo
 ```
 
-Authway accepts the three `…_URL` settings only in development: whatever
-answers there decides who signs in.
+An implementation should accept such address overrides only in development:
+whatever answers there decides who signs in.
 
 A provider that offers no such sign-in has nothing to verify and the scenarios
 are skipped. One that offers it without a stand-in configured fails the suite.
@@ -93,6 +114,7 @@ The suite refuses to run when the variables are missing rather than skipping —
 a skipped conformance run would report success without having checked anything.
 
 One run asks for four sign-in links from the same IP address. A provider that
-limits those requests (Authway allows five per IP address in 15 minutes) answers
+limits those requests (the Go implementation allows five per IP address in 15
+minutes) answers
 `429` to a second run started within that window — wait it out, or clear the
 limiter's state, before running again.
