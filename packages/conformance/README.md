@@ -74,6 +74,7 @@ pnpm --filter @authway/conformance test
 | `CONFORMANCE_TENANT_ID` | Optional. Tenant to provision into; defaults to the `default` tenant |
 | `CONFORMANCE_IDP_STANDIN` | Where the suite serves a stand-in identity provider, e.g. `http://localhost:9912`. Required when the provider offers sign-in through other identity providers (`capabilities.providers` is not empty) — see below |
 | `CONFORMANCE_IDP_STANDIN_AS` | Optional. The sign-in provider the stand-in is put in the place of. Defaults to `google` |
+| `CONFORMANCE_BREACHED_PASSWORD_RANGE` | Where the suite serves a stand-in range service, e.g. `http://localhost:9913`. Required when the provider checks passwords against known breaches (`capabilities.breached_password_check`) — see below |
 | `CONFORMANCE_CONSOLE_URL` | Optional. The console address the provider is configured with (e.g. `http://localhost:3000`), when it signs console accounts in to its console. Unset, the suite expects no console sign-in (`GET /api/v1/console/entry` answers `404`) |
 | `CONFORMANCE_CALLBACK_HOST` | Optional. The name under which the provider reaches the machine running the suite, for the scenarios in which the provider calls the suite (back-channel logout). Defaults to `localhost`; with the authorization server in a container on Docker Desktop, `host.docker.internal` |
 
@@ -115,6 +116,25 @@ whatever answers there decides who signs in.
 
 A provider that offers no such sign-in has nothing to verify and the scenarios
 are skipped. One that offers it without a stand-in configured fails the suite.
+
+### Breached passwords
+
+A provider that refuses passwords found in known data breaches asks a range
+service (the Pwned Passwords range API's shape: `GET <base>/<five hash
+characters>` answers the suffixes that begin so). The suite plays that service
+at `CONFORMANCE_BREACHED_PASSWORD_RANGE`, lists the passwords it says are
+breached, and checks what the provider refuses, what it sends out (five
+characters, never the password) and that it accepts a password when the service
+cannot answer. For the Go implementation, with the stand-in at
+`http://localhost:9913`:
+
+```bash
+AUTHWAY_BREACHED_PASSWORD_CHECK=true
+AUTHWAY_BREACHED_PASSWORD_API_URL=http://localhost:9913/range/
+```
+
+A provider that does not offer the check skips these scenarios; one that offers
+it without the stand-in configured fails the suite.
 
 The suite refuses to run when the variables are missing rather than skipping —
 a skipped conformance run would report success without having checked anything.

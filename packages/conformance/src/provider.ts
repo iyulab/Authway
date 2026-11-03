@@ -285,8 +285,16 @@ export class Provider {
 
   /** Provisions a user the way a real one arrives: an admin invitation accepted from the mailed link. */
   async inviteAndAccept(writtenAs?: (address: string) => string): Promise<TestUser> {
-    const email = `conformance-${randomToken(6)}@example.test`
+    const { email, token } = await this.invite(writtenAs)
     const password = `Cf-${randomToken(12)}`
+    const accept = await this.acceptInvitation(token, password)
+    if (!accept.ok) throw new Error(`Accepting invitation failed: ${accept.status} ${await accept.text()}`)
+    return { email, password }
+  }
+
+  /** An admin invitation, as far as the acceptance screen shows it: the mailed link's token. */
+  async invite(writtenAs?: (address: string) => string): Promise<{ email: string; token: string }> {
+    const email = `conformance-${randomToken(6)}@example.test`
     // `writtenAs` changes how the address is typed on the invitation (its
     // case, say); the mail is then looked for by the plain address.
     const invite = await this.admin('/api/v1/invitations', {
@@ -304,15 +312,18 @@ export class Provider {
     const shown = await fetch(`${this.config.api}/api/v1/invitations/token/${encodeURIComponent(token)}`)
     await conform('GET', '/api/v1/invitations/token/{token}', shown)
     if (!shown.ok) throw new Error(`Showing the invitation failed: ${shown.status} ${await shown.text()}`)
+    return { email, token }
+  }
 
+  /** Submits the acceptance screen's form; the answer is returned whatever it is. */
+  async acceptInvitation(token: string, password: string): Promise<Response> {
     const accept = await fetch(`${this.config.api}/api/v1/invitations/accept`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password, name: 'Conformance User' }),
     })
-    await conform('POST', '/api/v1/invitations/accept', accept)
-    if (!accept.ok) throw new Error(`Accepting invitation failed: ${accept.status} ${await accept.text()}`)
-    return { email, password }
+    await conform('POST', '/api/v1/invitations/accept', accept.clone())
+    return accept
   }
 
   async deleteUser(sub: string): Promise<void> {

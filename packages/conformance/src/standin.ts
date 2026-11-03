@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomToken } from './pkce.js'
 
@@ -95,4 +96,83 @@ export class StandInProvider {
 
     json(404, { error: 'not_found' })
   }
+}
+
+/** What the range stand-in was asked, as the provider under test sent it. */
+export interface RangeRequest {
+  path: string
+  /** The `Add-Padding` header, as sent. */
+  padding: string | undefined
+}
+
+/**
+ * A range service the suite plays itself — the Pwned Passwords range API's
+ * shape: `GET <base>/<first five characters of a SHA-1 hash>` answers every
+ * hash suffix that begins so, one `SUFFIX:COUNT` per line, padded with made-up
+ * entries whose count is 0. It lists the passwords the suite says are in a
+ * breach (`list`), records what it was asked, and can be made to fail.
+ */
+export class RangeStandIn {
+  private server?: Server
+  private readonly listed = new Map<string, Set<string>>()
+  /** Every request, oldest first. */
+  readonly requests: RangeRequest[] = []
+  /** `down` answers every request 503. */
+  mode: 'up' | 'down' = 'up'
+
+  constructor(readonly url: URL) {}
+
+  /** The address the provider under test is configured with: the base the five characters are appended to. */
+  get base(): string {
+    return `${this.url.origin}/range/`
+  }
+
+  async start(): Promise<void> {
+    const server = createServer((req, res) => this.answer(req, res))
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(Number(this.url.port), resolve)
+    })
+    this.server = server
+  }
+
+  async stop(): Promise<void> {
+    const server = this.server
+    if (!server) return
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+
+  /** Says `password` is in a breach. */
+  list(password: string): void {
+    const { prefix, suffix } = hashOf(password)
+    const suffixes = this.listed.get(prefix) ?? new Set<string>()
+    suffixes.add(suffix)
+    this.listed.set(prefix, suffixes)
+  }
+
+  private answer(req: IncomingMessage, res: ServerResponse): void {
+    const path = new URL(req.url ?? '/', this.url).pathname
+    const padding = req.headers['add-padding']
+    this.requests.push({ path, padding: Array.isArray(padding) ? padding[0] : padding })
+
+    const match = /^\/range\/([0-9A-Fa-f]{5})$/.exec(path)
+    if (req.method !== 'GET' || !match) {
+      res.writeHead(404).end()
+      return
+    }
+    if (this.mode === 'down') {
+      res.writeHead(503).end()
+      return
+    }
+    const real = [...(this.listed.get(match[1].toUpperCase()) ?? [])].map((suffix) => `${suffix}:${1 + Math.floor(Math.random() * 5000)}`)
+    const padded = Array.from({ length: 3 }, () => `${hashOf(randomToken(16)).suffix}:0`)
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+    res.end([...real, ...padded].join('\r\n') + '\r\n')
+  }
+}
+
+/** SHA-1 of a password, as the range API keys it: the first five characters, then the other thirty-five. */
+export function hashOf(password: string): { prefix: string; suffix: string } {
+  const hash = createHash('sha1').update(password).digest('hex').toUpperCase()
+  return { prefix: hash.slice(0, 5), suffix: hash.slice(5) }
 }

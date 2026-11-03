@@ -39,6 +39,13 @@ export interface ConformanceConfig {
    * the provider is expected to offer no console sign-in.
    */
   consoleUrl?: string
+  /**
+   * Where the suite serves a stand-in range service (the Pwned Passwords range
+   * API's shape), e.g. `http://localhost:9913`. A provider that checks passwords
+   * against known breaches (`capabilities.breached_password_check`) must be
+   * configured to ask `<this>/range/`. Required for such a provider.
+   */
+  breachedPasswordRange?: string
 }
 
 const REQUIRED = {
@@ -68,5 +75,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConformanceCon
     idpStandIn: env.CONFORMANCE_IDP_STANDIN ? trim(env.CONFORMANCE_IDP_STANDIN) : undefined,
     idpStandInAs: env.CONFORMANCE_IDP_STANDIN_AS || 'google',
     consoleUrl: env.CONFORMANCE_CONSOLE_URL ? trim(env.CONFORMANCE_CONSOLE_URL) : undefined,
+    breachedPasswordRange: env.CONFORMANCE_BREACHED_PASSWORD_RANGE ? trim(env.CONFORMANCE_BREACHED_PASSWORD_RANGE) : undefined,
   }
 }
