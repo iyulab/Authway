@@ -3,7 +3,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,40 +17,8 @@ func newAccount(t *testing.T, svc Service, tenantID uuid.UUID, password string) 
 	return u
 }
 
-// Before the rows are read they are made to match the columns once: a link an
-// API from before the rows made has no row, and one it removed still has one.
-func TestReconcile_MakesTheIdentityRowsMatchTheProviderColumns(t *testing.T) {
-	db := setupPostgres(t)
-	svc, ts := newTestService(t, db)
-	tn := freshTenant(t, db, ts)
-	u := newAccount(t, svc, tn.ID, "correct-horse-9")
-	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
-	gone, kept, replaced := "gh-"+uuid.NewString(), "g-"+uuid.NewString(), "g-"+uuid.NewString()
-
-	// An old API linked google (column only), removed github (row left behind).
-	db.Exec(`UPDATE users SET google_id = ? WHERE id = ?`, replaced, u.ID)
-	db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject, email_at_link) VALUES (?, ?, ?, 'github', ?, ?)`, uuid.New(), tn.ID, u.ID, gone, u.Email)
-	db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject, email_at_link) VALUES (?, ?, ?, 'google', ?, ?)`, uuid.New(), tn.ID, u.ID, kept, u.Email)
-
-	migration, err := os.ReadFile("../../internal/database/migrations/055_reconcile_user_identities.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(string(migration)).Error; err != nil {
-		t.Fatalf("migration: %v", err)
-	}
-	got, err := svc.GetByID(u.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Identities) != 1 || got.Identities[0].Provider != "google" || got.Identities[0].Subject != replaced {
-		t.Fatalf("identities = %+v, want only google %q (the column's)", got.Identities, replaced)
-	}
-}
-
 // An account may sign in with several provider accounts, at one provider and at
-// several; each is found by its own and each is taken away on its own. The
-// provider columns on users are left alone: nothing writes them any more.
+// several; each is found by its own and each is taken away on its own.
 func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 	db := setupPostgres(t)
 	svc, ts := newTestService(t, db)
@@ -92,18 +59,6 @@ func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 			t.Errorf("google %s finds %v, %v; want the account", subject, found, err)
 		}
 	}
-	// Removed together with the column by the migration that drops it.
-	legacyColumnEmpty := func(when string) {
-		t.Helper()
-		var c *string
-		if err := db.Raw(`SELECT google_id FROM users WHERE id = ?`, u.ID).Scan(&c).Error; err != nil {
-			t.Fatalf("reading google_id: %v", err)
-		}
-		if c != nil {
-			t.Errorf("%s: google_id = %q, want it left alone (nothing writes the column any more)", when, *c)
-		}
-	}
-	legacyColumnEmpty("after linking")
 
 	// Another account cannot take either.
 	other := newAccount(t, svc, tn.ID, "correct-horse-9")
@@ -119,14 +74,12 @@ func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 	if err := svc.UnlinkIdentity(u.ID, got.Identities[0].ID); err != nil {
 		t.Fatalf("UnlinkIdentity x: %v", err)
 	}
-	legacyColumnEmpty("after removing the oldest")
 	if _, err := svc.GetByProviderSubject(tn.ID, "google", x); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("the removed link still finds an account: %v", err)
 	}
 	if err := svc.UnlinkProvider(u.ID, "google"); err != nil {
 		t.Fatalf("unlinking the only google by name: %v", err)
 	}
-	legacyColumnEmpty("after removing the last")
 	// Another account's identity is not this account's to remove.
 	if err := svc.UnlinkIdentity(other.ID, got.Identities[2].ID); !errors.Is(err, ErrNotLinked) {
 		t.Errorf("removing another account's identity: %v, want ErrNotLinked", err)

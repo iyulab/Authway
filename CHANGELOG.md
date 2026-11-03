@@ -215,8 +215,9 @@
   provider's name still works while the account has one account there; with
   several it answers `409 several_connections`). The account's last way to sign
   in still stays. Adding a second account from the signed-in account's screen
-  follows; the provider columns are kept at each provider's oldest identity until
-  a later release drops them.
+  follows; the provider columns were kept at each provider's oldest identity
+  until migration 057, which drops them (with the unused `users.picture` and
+  the tenant `logo` and `primary_color` columns).
 - **A sign-in no longer links to an account whose address is unverified** — a
   provider account with a verified address used to be linked, and mark the
   address verified, on an existing account that nobody had proved the address of

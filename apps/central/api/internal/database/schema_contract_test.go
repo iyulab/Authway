@@ -350,21 +350,7 @@ func TestEveryMigratedTableIsMapped(t *testing.T) {
 var awaitingDrop = map[string]bool{}
 
 // awaitingDropColumns is the same for columns, as table.column.
-var awaitingDropColumns = map[string]bool{
-	// The provider links moved to user_identities; nothing reads or writes
-	// these four any more.
-	"users.google_id":    true,
-	"users.github_id":    true,
-	"users.microsoft_id": true,
-	"users.apple_id":     true,
-	// A tenant's logo and primary color were kept and returned, and no screen
-	// showed them; the fields are gone from the API.
-	"tenants.logo":          true,
-	"tenants.primary_color": true,
-	// The account's picture lives in avatar_url; this column from the first
-	// schema was never read and only ever received NULL.
-	"users.picture": true,
-}
+var awaitingDropColumns = map[string]bool{}
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a
 // falsified audit trail: a field that declares a default is left out of the
