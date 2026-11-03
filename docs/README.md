@@ -16,6 +16,11 @@ covered in the CHANGELOG rather than a dedicated guide for now:
 
 ---
 
+## What Authway is
+
+- **[Constitution](./CONSTITUTION.md)** - What Authway is for and the rules it keeps whatever is built next
+- **[Scope](./scope.md)** - What is in Authway and what stays with the applications that use it
+
 ## Core Documentation
 
 ### Getting Started

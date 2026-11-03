@@ -145,6 +145,8 @@ const user = await client.getUser()
 
 **[docs/README.md](./docs/README.md)** is the documentation hub — setup,
 SDK reference, feature guides, backend integration, deployment and database.
+What Authway is for, and where it stops, is in the
+[constitution](./docs/CONSTITUTION.md) and the [scope](./docs/scope.md).
 
 - **[Samples](./samples/)** - Example applications
   - [ASP.NET sample](./samples/asp-sample/) - A server-side application that signs users in and keeps its own session
