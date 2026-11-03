@@ -29,9 +29,12 @@ if (-not (Test-Path $AuthUIPath)) {
 }
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "ci-gate.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
+    # 빨간 CI 위에서는 배포하지 않는다(끄기: AUTHWAY_SKIP_CI_CHECK=1).
+    Assert-CiNotRed -ProjectRoot (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
 } catch {
     Write-Host "❌ env 로드 실패: $_" -ForegroundColor Red
     exit 1

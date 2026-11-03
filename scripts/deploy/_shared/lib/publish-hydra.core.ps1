@@ -19,6 +19,7 @@ $LibDir = $PSScriptRoot
 $SharedDir = Split-Path -Parent $LibDir
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "ci-gate.ps1")
 . (Join-Path $SharedDir "az-retry.ps1")
 . (Join-Path $SharedDir "hydra-flow-urls.ps1")
 . (Join-Path $SharedDir "hydra-shared-env.ps1")
@@ -26,6 +27,8 @@ $SharedDir = Split-Path -Parent $LibDir
 
 try {
     $envVars = Get-DeployEnv -Target $Target
+    # 빨간 CI 위에서는 배포하지 않는다(끄기: AUTHWAY_SKIP_CI_CHECK=1).
+    Assert-CiNotRed -ProjectRoot (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
     Test-DeploySecrets -EnvVars $envVars -RequiredKeys @('HYDRA_SECRETS_SYSTEM', 'ACR_USERNAME', 'ACR_PASSWORD', 'AUTHWAY_DATABASE_PASSWORD', 'AUTHWAY_HYDRA_TOKEN_HOOK_KEY')
     Set-AzureSubscription -EnvVars $envVars
 } catch {

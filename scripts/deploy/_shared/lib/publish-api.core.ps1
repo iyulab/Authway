@@ -28,11 +28,14 @@ $ScriptsDir = Split-Path -Parent $DeployDir
 $ProjectRoot = Split-Path -Parent $ScriptsDir
 
 . (Join-Path $SharedDir "load-env.ps1")
+. (Join-Path $SharedDir "ci-gate.ps1")
 . (Join-Path $SharedDir "az-retry.ps1")
 . (Join-Path $SharedDir "app-secrets.ps1")
 
 try {
     $envVars = Get-DeployEnv -Target $Target
+    # 빨간 CI 위에서는 배포하지 않는다(끄기: AUTHWAY_SKIP_CI_CHECK=1).
+    Assert-CiNotRed -ProjectRoot (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
 
     # 중앙 API는 ADMIN_API_KEY / TOTP 암호화 키가 비어 있으면 기동 시점에
     # fail-closed로 거부한다. 2026-04 prod 사고 재발 방지 게이트.
