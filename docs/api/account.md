@@ -290,6 +290,39 @@ account at that provider.
 
 The [account screen](#the-account-screen) offers this.
 
+### Adding another provider account
+
+```http
+GET  /api/v1/users/connections/available
+POST /api/v1/users/connections/{provider}/link
+GET  /api/v1/users/connections/link/{ticket}          (a page navigation)
+POST /api/v1/users/connections/link/complete
+```
+
+A signed-in user adds a provider account — a second Google account, say, or a
+GitHub one — to their own account, whatever address it has. `available` lists
+the providers the user's client offers. `POST …/{provider}/link` (a recent
+sign-in is needed) answers a one-time `url` that the browser **navigates** to:
+it goes to the provider and, when the provider has answered, back to the
+account screen with `?link=<result>`. The screen then sends
+`{ "result": "<result>" }` to `…/link/complete` with the user's token, and that
+is when the account is linked. A result works once, for ten minutes, and only
+for the user it was started for — a link begun from someone else's address and
+followed in this browser is refused (`403 forbidden`). When it did not work the
+screen is returned with `?link_error=<reason>` (`invalid_request`,
+`provider_unavailable`, `provider_failed`, `server_error`).
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `401` | `insufficient_user_authentication` | Needs a recent sign-in — sign in again with `max_age` and retry (at the start and at the end) |
+| `404` | `provider_unavailable` | The user's client does not offer that provider |
+| `400` | `invalid_request` | The result is missing, expired or already used |
+| `403` | `forbidden` | The result was started for another account |
+| `409` | `linked_to_another` | That provider account already signs in to another account in the tenant — remove it there first |
+
+The address the provider reports is kept with the link (`email` in the list);
+the account's own address and its verification stay as they are.
+
 ---
 
 ## 6. Signing out everywhere

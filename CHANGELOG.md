@@ -2,6 +2,18 @@
 
 ### Added
 
+- **Adding another provider account from the signed-in account** — the account
+  screen offers "Add a Google account" (and GitHub, Microsoft, Apple, for the
+  providers the application offers): `POST /api/v1/users/connections/{provider}/link`
+  answers a one-time address the browser navigates to, the provider answers back
+  to the screen, and the screen finishes with
+  `POST /api/v1/users/connections/link/complete` and the user's token
+  (`GET /api/v1/users/connections/available` lists the providers). The
+  provider account may have any address; it is kept with the link, and the
+  account's own address and its verification stay as they are. A link started
+  from someone else's address and followed in this browser is refused — the
+  result only completes for the user it was started for — and the whole thing
+  needs a recent sign-in. See [Account](docs/api/account.md#adding-another-provider-account).
 - **Accepting an invitation with Google** — when the invitation's application
   lets users in with Google and has credentials for it, the accept screen
   offers "Continue with Google" next to the password form

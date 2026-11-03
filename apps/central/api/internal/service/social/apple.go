@@ -208,33 +208,43 @@ func (a *AppleService) HandleCallback(ctx context.Context, code, state string) (
 }
 
 func (a *AppleService) HandleCallbackForClient(ctx context.Context, code, state string, clientID string) (*user.User, error) {
+	tenantID, identity, err := a.ReadIdentity(ctx, code, state, clientID)
+	if err != nil {
+		return nil, err
+	}
+	return resolveAccount(a.userService, a.invitations, a.logger, tenantID, identity)
+}
+
+// ReadIdentity exchanges the code and reads who Apple says signed in, with the
+// tenant of the client the sign-in was started for.
+func (a *AppleService) ReadIdentity(ctx context.Context, code, state string, clientID string) (uuid.UUID, Identity, error) {
 	a.logger.Info("Processing Apple OAuth callback", zap.String("state", state), zap.String("code_length", fmt.Sprintf("%d", len(code))), zap.String("client_id", clientID))
 	var clientTenantID uuid.UUID
 	if clientID != "" {
 		clientData, err := a.clientService.GetByClientID(clientID)
 		if err != nil {
 			a.logger.Error("Failed to get client for tenant determination", zap.Error(err))
-			return nil, fmt.Errorf("failed to get client: %w", err)
+			return uuid.Nil, Identity{}, fmt.Errorf("failed to get client: %w", err)
 		}
 		clientTenantID = clientData.TenantID
 	} else {
 		a.logger.Warn("No client ID provided, using default tenant")
-		return nil, fmt.Errorf("client_id required for tenant determination")
+		return uuid.Nil, Identity{}, fmt.Errorf("client_id required for tenant determination")
 	}
 	tokenResp, err := a.ExchangeCodeForClient(ctx, code, clientID)
 	if err != nil {
 		a.logger.Error("Failed to exchange authorization code", zap.Error(err))
-		return nil, fmt.Errorf("failed to exchange code: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to exchange code: %w", err)
 	}
 	appleUser, err := a.parseIDToken(tokenResp.IDToken)
 	if err != nil {
 		a.logger.Error("Failed to parse ID token", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse ID token: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to parse ID token: %w", err)
 	}
-	return resolveAccount(a.userService, a.invitations, a.logger, clientTenantID, Identity{
+	return clientTenantID, Identity{
 		Provider:      "apple",
 		Subject:       appleUser.Sub,
 		Email:         appleUser.Email,
 		EmailVerified: appleUser.EmailVerified,
-	})
+	}, nil
 }

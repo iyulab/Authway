@@ -79,4 +79,33 @@ describe('AccountConnections', () => {
     await waitFor(() => expect(call).toHaveBeenCalled())
     expect(container.querySelector('section')).toBeNull()
   })
+  it('offers to add an account at each provider the client has, even to an account with none linked', async () => {
+    const goTo = vi.fn()
+    const call = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === '/api/v1/users/connections/available') return json(200, { providers: ['google', 'github'] })
+      if (init?.method === 'POST') return json(201, { url: '/api/v1/users/connections/link/ticket-1' })
+      return json(200, { connections: [] })
+    })
+    render(<AccountConnections call={call} signInAgain={vi.fn()} goTo={goTo} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add a Google account' }))
+    expect(screen.getByRole('button', { name: 'Add a GitHub account' })).toBeInTheDocument()
+    expect(call).toHaveBeenCalledWith('/api/v1/users/connections/google/link', { method: 'POST' })
+    await waitFor(() => expect(goTo).toHaveBeenCalledTimes(1))
+    expect(String(goTo.mock.calls[0][0])).toMatch(/\/api\/v1\/users\/connections\/link\/ticket-1$/)
+  })
+
+  it('asks for a fresh sign-in when adding an account needs one', async () => {
+    const signInAgain = vi.fn()
+    const call = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === '/api/v1/users/connections/available') return json(200, { providers: ['google'] })
+      if (init?.method === 'POST') return json(401, { code: 'insufficient_user_authentication', max_age: 600 })
+      return json(200, { connections: [] })
+    })
+    render(<AccountConnections call={call} signInAgain={signInAgain} goTo={vi.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add a Google account' }))
+    await user.click(await screen.findByRole('button', { name: 'Sign in again' }))
+    expect(signInAgain).toHaveBeenCalledWith(true)
+  })
 })

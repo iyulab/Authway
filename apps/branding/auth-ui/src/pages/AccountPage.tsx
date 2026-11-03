@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
-import AccountConnections from './AccountConnections'
+import AccountConnections, { PROVIDER_NAMES } from './AccountConnections'
 import AccountDelegations from './AccountDelegations'
 import { useLoad } from '../utils/useLoad'
 import { httpsUrl, readStored, refusal, returnPath, signIn, useAccountSession } from './accountSession'
@@ -69,11 +69,21 @@ export const AccountCallbackPage: React.FC = () => {
 const AccountPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
   const [searchParams] = useSearchParams()
-  const appClientId = searchParams.get('client_id')
+  // Back from adding an account at a provider, the address carries the link's
+  // result (or why it did not work) and not the application that sent the user:
+  // the sign-in remembers that application.
+  const linkResult = searchParams.get('link')
+  const linkError = searchParams.get('link_error')
+  const appClientId = searchParams.get('client_id') ?? (linkResult || linkError ? (readStored()?.appClientId ?? null) : null)
+  const accountPath = `/account?client_id=${encodeURIComponent(appClientId ?? '')}`
   const { entry, email, client, call, fatal, setFatal } = useAccountSession(
     appClientId,
-    `/account?client_id=${encodeURIComponent(appClientId ?? '')}`,
+    linkResult ? `${accountPath}&link=${encodeURIComponent(linkResult)}` : accountPath,
   )
+  const navigate = useNavigate()
+  const [linkNotice, setLinkNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [reloadConnections, setReloadConnections] = useState(0)
+  const completing = useRef<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
   const [setup, setSetup] = useState<Setup | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
@@ -99,6 +109,41 @@ const AccountPage: React.FC = () => {
     }, [client, loadStatus]),
     () => setFatal(t('common:errorOccurred')),
   )
+
+  // The link's result is completed with the user's own token; it works once, so
+  // a second run of the effect leaves it be.
+  useEffect(() => {
+    if (!client) return
+    if (linkError) {
+      setLinkNotice({ ok: false, text: t(`auth:account.connections.linkErrors.${linkError}`, { defaultValue: t('common:errorOccurred') }) })
+      navigate(accountPath, { replace: true })
+      return
+    }
+    if (!linkResult || completing.current === linkResult) return
+    completing.current = linkResult
+    void (async () => {
+      try {
+        const res = await call('/api/v1/users/connections/link/complete', { method: 'POST', body: JSON.stringify({ result: linkResult }) })
+        if (res.ok) {
+          const body = (await res.json()) as { connection: { provider: string } }
+          setLinkNotice({ ok: true, text: t('auth:account.connections.added', { provider: PROVIDER_NAMES[body.connection.provider] ?? body.connection.provider }) })
+          setReloadConnections((n) => n + 1)
+        } else {
+          const problem = await refusal(res)
+          const text =
+            problem.code === 'linked_to_another'
+              ? t('auth:account.connections.linkErrors.linked_to_another')
+              : problem.code === 'insufficient_user_authentication'
+                ? t('auth:account.connections.signInFirst')
+                : t('auth:account.connections.linkErrors.invalid_request')
+          setLinkNotice({ ok: false, text })
+        }
+      } catch {
+        setLinkNotice({ ok: false, text: t('common:errorOccurred') })
+      }
+      navigate(accountPath, { replace: true })
+    })()
+  }, [client, linkResult, linkError, call, navigate, accountPath, t])
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true)
@@ -287,7 +332,13 @@ const AccountPage: React.FC = () => {
       call={call}
       signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
     />
+    {linkNotice && (
+      <p role="status" className={`text-sm ${linkNotice.ok ? 'text-green-700' : 'text-red-600'}`}>
+        {linkNotice.text}
+      </p>
+    )}
     <AccountConnections
+      key={reloadConnections}
       call={call}
       signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
     />

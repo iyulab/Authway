@@ -486,6 +486,12 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1.Post("/users/password", jwtAuth, loginRateLimit, authHandler.ChangePassword)
 	v1.Get("/users/connections", jwtAuth, authHandler.ListConnections)
 	v1.Delete("/users/connections/:connection", jwtAuth, authHandler.RemoveConnection)
+	// Adding another provider account: the token's user starts it, the browser
+	// goes to the provider and back, and the token completes it.
+	v1.Get("/users/connections/available", jwtAuth, socialHandler.ListLinkableProviders)
+	v1.Post("/users/connections/:provider/link", jwtAuth, loginRateLimit, socialHandler.StartConnectionLink)
+	v1.Get("/users/connections/link/:ticket", socialHandler.RunConnectionLink)
+	v1.Post("/users/connections/link/complete", jwtAuth, loginRateLimit, socialHandler.CompleteConnectionLink)
 	// What the user let clients do for them while they are away, and taking
 	// it back.
 	v1.Get("/users/delegations", jwtAuth, delegationHandler.ListMine)

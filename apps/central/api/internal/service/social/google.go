@@ -296,6 +296,12 @@ func (g *GoogleService) HandleCallbackForInvitation(ctx context.Context, code, s
 	return resolveAccount(g.userService, g.invitations, g.logger, tenantID, identity)
 }
 
+// ReadIdentity exchanges the code and reads who Google says signed in, with
+// the tenant of the client the sign-in was started for.
+func (g *GoogleService) ReadIdentity(ctx context.Context, code, state, clientID string) (uuid.UUID, Identity, error) {
+	return g.identityFromCallback(ctx, code, state, clientID)
+}
+
 // identityFromCallback exchanges the code and reads who Google says signed in,
 // with the tenant of the client the sign-in was started for.
 func (g *GoogleService) identityFromCallback(ctx context.Context, code, state, clientID string) (uuid.UUID, Identity, error) {

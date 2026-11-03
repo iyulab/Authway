@@ -152,4 +152,33 @@ describe('AccountPage', () => {
     expect(await screen.findByText('person@example.com')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Notes' })).not.toBeInTheDocument()
   })
+  it('completes a link when it comes back from the provider with a result, and says so', async () => {
+    mockSearchParams.set('client_id', 'notes')
+    mockSearchParams.set('link', 'result-1')
+    let completed: unknown = null
+    server.use(
+      http.get(`${API}/api/v1/users/connections`, () => HttpResponse.json({ connections: [{ id: 'id-1', provider: 'google', email: 'home@gmail.example', linked_at: '2026-11-03T00:00:00Z' }] })),
+      http.get(`${API}/api/v1/users/connections/available`, () => HttpResponse.json({ providers: ['google'] })),
+      http.post(`${API}/api/v1/users/connections/link/complete`, async ({ request }) => {
+        completed = await request.json()
+        return HttpResponse.json({ connection: { id: 'id-1', provider: 'google', email: 'home@gmail.example' } })
+      }),
+    )
+    render(<AccountPage />)
+
+    expect(await screen.findByText('Google account added.')).toBeInTheDocument()
+    expect(completed).toEqual({ result: 'result-1' })
+    expect(await screen.findByText('home@gmail.example')).toBeInTheDocument()
+  })
+
+  it('says why a link did not work when the provider round trip failed', async () => {
+    mockSearchParams.set('client_id', 'notes')
+    mockSearchParams.set('link_error', 'provider_failed')
+    server.use(
+      http.get(`${API}/api/v1/users/connections`, () => HttpResponse.json({ connections: [] })),
+      http.get(`${API}/api/v1/users/connections/available`, () => HttpResponse.json({ providers: [] })),
+    )
+    render(<AccountPage />)
+    expect(await screen.findByText('The provider did not sign you in. Try again.')).toBeInTheDocument()
+  })
 })

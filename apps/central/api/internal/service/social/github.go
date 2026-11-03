@@ -207,28 +207,38 @@ func (g *GitHubService) HandleCallback(ctx context.Context, code, state string) 
 }
 
 func (g *GitHubService) HandleCallbackForClient(ctx context.Context, code, state string, clientID string) (*user.User, error) {
+	tenantID, identity, err := g.ReadIdentity(ctx, code, state, clientID)
+	if err != nil {
+		return nil, err
+	}
+	return resolveAccount(g.userService, g.invitations, g.logger, tenantID, identity)
+}
+
+// ReadIdentity exchanges the code and reads who GitHub says signed in, with
+// the tenant of the client the sign-in was started for.
+func (g *GitHubService) ReadIdentity(ctx context.Context, code, state string, clientID string) (uuid.UUID, Identity, error) {
 	g.logger.Info("Processing GitHub OAuth callback", zap.String("state", state), zap.String("code_length", fmt.Sprintf("%d", len(code))), zap.String("client_id", clientID))
 	var clientTenantID uuid.UUID
 	if clientID != "" {
 		clientData, err := g.clientService.GetByClientID(clientID)
 		if err != nil {
 			g.logger.Error("Failed to get client for tenant determination", zap.Error(err))
-			return nil, fmt.Errorf("failed to get client: %w", err)
+			return uuid.Nil, Identity{}, fmt.Errorf("failed to get client: %w", err)
 		}
 		clientTenantID = clientData.TenantID
 	} else {
 		g.logger.Warn("No client ID provided, using default tenant")
-		return nil, fmt.Errorf("client_id required for tenant determination")
+		return uuid.Nil, Identity{}, fmt.Errorf("client_id required for tenant determination")
 	}
 	tokenResp, err := g.ExchangeCodeForClient(ctx, code, clientID)
 	if err != nil {
 		g.logger.Error("Failed to exchange authorization code", zap.Error(err))
-		return nil, fmt.Errorf("failed to exchange code: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to exchange code: %w", err)
 	}
 	githubUser, err := g.GetUserInfo(ctx, tokenResp.AccessToken)
 	if err != nil {
 		g.logger.Error("Failed to get user info from GitHub", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user info: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to get user info: %w", err)
 	}
 	// The address on the profile is whatever the person chose to show. The
 	// account's verified addresses come from a separate call, and only those
@@ -243,12 +253,12 @@ func (g *GitHubService) HandleCallbackForClient(ctx context.Context, code, state
 	if name == "" {
 		name = githubUser.Login
 	}
-	return resolveAccount(g.userService, g.invitations, g.logger, clientTenantID, Identity{
+	return clientTenantID, Identity{
 		Provider:      "github",
 		Subject:       fmt.Sprintf("%d", githubUser.ID),
 		Email:         email,
 		EmailVerified: verified,
 		Name:          name,
 		Picture:       githubUser.AvatarURL,
-	})
+	}, nil
 }

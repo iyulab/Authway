@@ -21,7 +21,29 @@ type oauthState struct {
 	// invitation's id, not its token: the token is a bearer secret the
 	// database keeps only as a hash.
 	InvitationID string
+	// LinkUserID, set instead of LoginChallenge, says the sign-in adds the
+	// provider account to that account — an explicit link made from the
+	// signed-in user's own account screen — rather than signing anyone in.
+	// LinkProvider names the provider the link was started for. Once the
+	// provider has answered, the same record is kept as the link's result with
+	// LinkSubject and LinkEmail filled in, until the account screen completes
+	// it with the user's token.
+	LinkUserID   string
+	LinkProvider string
+	LinkSubject  string
+	LinkEmail    string
+	// LinkKind says which of the three records of a link this is — a ticket, the
+	// state of the provider round trip, or its result — so that one can never be
+	// taken for another: each step accepts only the record made for it.
+	LinkKind string
 }
+
+// The three records of a link, in the order they are made.
+const (
+	linkTicket = "ticket"
+	linkState  = "state"
+	linkResult = "result"
+)
 
 // oauthStateTTL bounds how long a user may spend at the provider before the
 // callback is refused and the sign-in must restart.
@@ -53,9 +75,14 @@ func (s *OAuthStateStore) Save(ctx context.Context, data oauthState) (string, er
 	state := base64.RawURLEncoding.EncodeToString(b)
 
 	if err := s.store.Put(ctx, s.key(state), map[string]string{
-		"login_challenge":  data.LoginChallenge,
-		"client_id":        data.ClientID,
-		"invitation_id":    data.InvitationID,
+		"login_challenge": data.LoginChallenge,
+		"client_id":       data.ClientID,
+		"invitation_id":   data.InvitationID,
+		"link_user_id":    data.LinkUserID,
+		"link_provider":   data.LinkProvider,
+		"link_subject":    data.LinkSubject,
+		"link_email":      data.LinkEmail,
+		"link_kind":       data.LinkKind,
 	}, oauthStateTTL); err != nil {
 		return "", fmt.Errorf("store state: %w", err)
 	}
@@ -72,5 +99,8 @@ func (s *OAuthStateStore) Consume(ctx context.Context, state string) (oauthState
 	if len(vals) == 0 {
 		return oauthState{}, false, nil
 	}
-	return oauthState{LoginChallenge: vals["login_challenge"], ClientID: vals["client_id"], InvitationID: vals["invitation_id"]}, true, nil
+	return oauthState{
+		LoginChallenge: vals["login_challenge"], ClientID: vals["client_id"], InvitationID: vals["invitation_id"],
+		LinkUserID: vals["link_user_id"], LinkProvider: vals["link_provider"], LinkSubject: vals["link_subject"], LinkEmail: vals["link_email"], LinkKind: vals["link_kind"],
+	}, true, nil
 }

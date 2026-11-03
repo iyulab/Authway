@@ -600,6 +600,119 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users/connections/available:
+    get:
+      tags: [account]
+      operationId: listLinkableProviders
+      summary: The providers the signed-in user can add an account of
+      description: |
+        The providers the signed-in user's client offers for sign-in and has
+        credentials for, in a fixed order — what the account screen shows
+        "add" for. Empty when there are none.
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items: { type: string, description: 'google, github, microsoft or apple' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/connections/{provider}/link:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [account]
+      operationId: startConnectionLink
+      summary: Start adding a provider account to the signed-in user's account
+      description: |
+        Needs a recent sign-in (`401 insufficient_user_authentication` with
+        `max_age` otherwise). Answers a one-time `url` — good for ten minutes —
+        which the browser then **navigates** to (it is not called): it sends the
+        browser to the provider, and the provider's answer returns it to the
+        account screen with `?link=<result>` (or `?link_error=<reason>`). A
+        provider the user's client does not offer is `404 provider_unavailable`.
+        Nothing is linked yet; the account screen finishes it with
+        `POST /api/v1/users/connections/link/complete`.
+      security: [{ userToken: [] }]
+      responses:
+        '201':
+          description: Where to send the browser
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string, description: A path on this API, to be navigated to. }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/connections/link/{ticket}:
+    parameters:
+      - { name: ticket, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: runConnectionLink
+      summary: A page navigation that takes the browser to the provider to add an account
+      description: |
+        Not an API call: the browser navigates here from the account screen,
+        with the `url` from `POST …/{provider}/link`. A ticket works once. The
+        answer is a redirect — to the provider, or, when the ticket is not
+        valid, back to the account screen with `?link_error=invalid_request`.
+      responses:
+        '302': { description: To the provider, or back to the account screen }
+
+  /api/v1/users/connections/link/complete:
+    post:
+      tags: [account]
+      operationId: completeConnectionLink
+      summary: Add the provider account a link's result holds to the signed-in user's account
+      description: |
+        `result` is the id the account screen was returned with. It is refused
+        (`403 forbidden`) unless the token is the user the link was started
+        for, needs a recent sign-in, and works once (`400 invalid_request`
+        after, or when it has expired). A provider account that already signs
+        in to another account in the tenant is `409 linked_to_another`. The
+        address the provider reported is recorded with the link; the account's
+        own address and its verification do not change.
+      security: [{ userToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result: { type: string }
+      responses:
+        '200':
+          description: The link that was added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connection]
+                properties:
+                  connection:
+                    type: object
+                    required: [provider, email]
+                    properties:
+                      id: { type: string, format: uuid }
+                      provider: { type: string }
+                      email: { type: string }
+                      linked_at: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
   /api/v1/users/connections/{connection}:
     parameters:
       - name: connection

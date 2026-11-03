@@ -189,28 +189,38 @@ func (m *MicrosoftService) HandleCallback(ctx context.Context, code, state strin
 }
 
 func (m *MicrosoftService) HandleCallbackForClient(ctx context.Context, code, state string, clientID string) (*user.User, error) {
+	tenantID, identity, err := m.ReadIdentity(ctx, code, state, clientID)
+	if err != nil {
+		return nil, err
+	}
+	return resolveAccount(m.userService, m.invitations, m.logger, tenantID, identity)
+}
+
+// ReadIdentity exchanges the code and reads who Microsoft says signed in, with
+// the tenant of the client the sign-in was started for.
+func (m *MicrosoftService) ReadIdentity(ctx context.Context, code, state string, clientID string) (uuid.UUID, Identity, error) {
 	m.logger.Info("Processing Microsoft OAuth callback", zap.String("state", state), zap.String("code_length", fmt.Sprintf("%d", len(code))), zap.String("client_id", clientID))
 	var clientTenantID uuid.UUID
 	if clientID != "" {
 		clientData, err := m.clientService.GetByClientID(clientID)
 		if err != nil {
 			m.logger.Error("Failed to get client for tenant determination", zap.Error(err))
-			return nil, fmt.Errorf("failed to get client: %w", err)
+			return uuid.Nil, Identity{}, fmt.Errorf("failed to get client: %w", err)
 		}
 		clientTenantID = clientData.TenantID
 	} else {
 		m.logger.Warn("No client ID provided, using default tenant")
-		return nil, fmt.Errorf("client_id required for tenant determination")
+		return uuid.Nil, Identity{}, fmt.Errorf("client_id required for tenant determination")
 	}
 	tokenResp, err := m.ExchangeCodeForClient(ctx, code, clientID)
 	if err != nil {
 		m.logger.Error("Failed to exchange authorization code", zap.Error(err))
-		return nil, fmt.Errorf("failed to exchange code: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to exchange code: %w", err)
 	}
 	msUser, err := m.GetUserInfo(ctx, tokenResp.AccessToken)
 	if err != nil {
 		m.logger.Error("Failed to get user info from Microsoft", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user info: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to get user info: %w", err)
 	}
 	name := msUser.DisplayName
 	if name == "" {
@@ -226,13 +236,13 @@ func (m *MicrosoftService) HandleCallbackForClient(ctx context.Context, code, st
 			email = msUser.UserPrincipalName
 		}
 	}
-	return resolveAccount(m.userService, m.invitations, m.logger, clientTenantID, Identity{
+	return clientTenantID, Identity{
 		Provider:      "microsoft",
 		Subject:       msUser.ID,
 		Email:         email,
 		EmailVerified: verified,
 		Name:          name,
-	})
+	}, nil
 }
 
 // microsoftVerifiedEmail returns the address in a Microsoft ID token when the

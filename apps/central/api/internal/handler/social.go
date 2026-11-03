@@ -210,6 +210,9 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 	if stored.InvitationID != "" {
 		return s.finishInvitationSignIn(c, code, state, stored)
 	}
+	if stored.LinkUserID != "" {
+		return s.finishConnectionLink(c, "google", code, state, stored)
+	}
 
 	// Process Google OAuth callback (client-specific or central)
 	authUser, err := s.googleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
@@ -267,6 +270,10 @@ func (s *SocialHandler) GitHubCallback(c *fiber.Ctx) error {
 		HTTPOnly: true,
 	})
 
+	if stored.LinkUserID != "" {
+		return s.finishConnectionLink(c, "github", code, state, stored)
+	}
+
 	authUser, err := s.githubService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
 		return s.failSocialSignIn(c, "github", retrievedClientID, loginChallenge, err)
@@ -321,6 +328,10 @@ func (s *SocialHandler) MicrosoftCallback(c *fiber.Ctx) error {
 		MaxAge:   -1,
 		HTTPOnly: true,
 	})
+
+	if stored.LinkUserID != "" {
+		return s.finishConnectionLink(c, "microsoft", code, state, stored)
+	}
 
 	authUser, err := s.microsoftService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {
@@ -388,6 +399,10 @@ func (s *SocialHandler) AppleCallback(c *fiber.Ctx) error {
 		MaxAge:   -1,
 		HTTPOnly: true,
 	})
+
+	if stored.LinkUserID != "" {
+		return s.finishConnectionLink(c, "apple", code, state, stored)
+	}
 
 	authUser, err := s.appleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)
 	if err != nil {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Authenticator } from '../src/authenticator.js'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
+import { Browser } from '../src/browser.js'
 import { Provider, type LoginOutcome, type TestClient, type TestUser } from '../src/provider.js'
 import { randomToken } from '../src/pkce.js'
 import { StandInProvider, type StandInIdentity } from '../src/standin.js'
@@ -147,5 +148,74 @@ describe('sign-in through another identity provider', () => {
     const outcome = await signIn({ subject: memberAtProvider, email: member.email, emailVerified: false })
     expect(outcome.kind).not.toBe('code')
     expect(outcome.kind).not.toBe('second_factor')
+  })
+
+  // The signed-in user adds another provider account — at an address that is not
+  // their own — and it then signs in to the same account. The addition is made
+  // in two steps, the provider's answer and the user's token, and the second
+  // is refused for anyone but the user it was started for.
+  it('lets the user add another provider account from their account', async ({ skip }) => {
+    if (offered.length === 0) skip()
+    const call = async (method: string, path: string, body?: unknown): Promise<Response> => {
+      const res = await fetch(`${config.api}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${memberAccessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      const template = path
+        .replace(/\/connections\/[0-9a-f-]{36}$/, '/connections/{connection}')
+        .replace(`/connections/${config.idpStandInAs}/link`, '/connections/{provider}/link')
+      await conform(method, template, res.clone())
+      return res
+    }
+    const available = ((await (await call('GET', '/api/v1/users/connections/available')).json()) as { providers: string[] }).providers
+    expect(available).toContain(config.idpStandInAs)
+
+    // Start, then the browser goes to the provider and back.
+    const started = await call('POST', `/api/v1/users/connections/${config.idpStandInAs}/link`)
+    expect(started.status, await started.clone().text()).toBe(201)
+    const { url } = (await started.json()) as { url: string }
+
+    const browser = new Browser()
+    const toProvider = await browser.redirectFrom(`${config.api}${url.replace(/^\/api\/v1/, '/api/v1')}`)
+    expect(toProvider.origin).toBe(standIn.origin)
+    const state = toProvider.searchParams.get('state')
+    const redirectUri = toProvider.searchParams.get('redirect_uri')
+    if (!state || !redirectUri) throw new Error(`The provider step carries no state or redirect_uri: ${toProvider}`)
+
+    const added = as({ email: `other-address-${randomToken(4)}@example.test`, emailVerified: true })
+    const back = new URL(redirectUri)
+    back.searchParams.set('code', standIn.codeFor(added))
+    back.searchParams.set('state', state)
+    const answered = await browser.fetch(back.toString())
+    const toAccount = new URL(answered.headers.get('location') ?? '', back)
+    const result = toAccount.searchParams.get('link')
+    expect(result, `the callback returned to ${toAccount}`).toBeTruthy()
+
+    // Nothing is linked until the user's token completes it.
+    expect(await (await call('GET', '/api/v1/users/connections')).json()).toMatchObject({ connections: [] })
+    expect((await signIn(added)).kind).not.toBe('code')
+
+    const completed = await call('POST', '/api/v1/users/connections/link/complete', { result })
+    expect(completed.status, await completed.clone().text()).toBe(200)
+    const { connection } = (await completed.json()) as { connection: { id: string; provider: string; email: string } }
+    expect(connection).toMatchObject({ provider: config.idpStandInAs, email: added.email })
+
+    // The account the address belongs to is not the provider account's address:
+    // the provider account is what names the user now.
+    const outcome = await signIn({ ...added, email: `moved-${randomToken(4)}@example.test`, emailVerified: false })
+    // It reached the member's account: that account has a second factor of its
+    // own by now, so what is owed is the code — and an account with none would
+    // have signed in as the member.
+    if (outcome.kind === 'code') expect(outcome.sub).toBe(memberSub)
+    else expect(outcome.kind, JSON.stringify(outcome).slice(0, 300)).toBe('second_factor')
+
+    // A result works once.
+    const again = await call('POST', '/api/v1/users/connections/link/complete', { result })
+    expect(again.status).toBe(400)
+
+    // Taking it away is by its id.
+    const removed = await call('DELETE', `/api/v1/users/connections/${connection.id}`)
+    expect(removed.status, await removed.clone().text()).toBe(200)
   })
 })
