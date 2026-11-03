@@ -708,10 +708,21 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
     }
     $m2mDbId = $m2mParsed.client.id
     $m2mClientId = $m2mParsed.client.client_id
-    $m2mJson = & curl.exe -s -X POST $tokenEndpoint -d 'grant_type=client_credentials' `
-        -d "client_id=$m2mClientId" --data-urlencode "client_secret=$($m2mParsed.credentials.client_secret)" | ConvertFrom-Json
+    # An empty answer (a dropped connection, not a refusal) is tried once more:
+    # curl -s says nothing about it, and it has happened on a healthy deployment.
+    $m2mJson = $null
+    foreach ($m2mAttempt in 1..2) {
+        $m2mRaw = & curl.exe -s -w "`n%{http_code}" -X POST $tokenEndpoint -d 'grant_type=client_credentials' `
+            -d "client_id=$m2mClientId" --data-urlencode "client_secret=$($m2mParsed.credentials.client_secret)"
+        $m2mCurlExit = $LASTEXITCODE
+        $m2mLines = @($m2mRaw)
+        $m2mStatus = $m2mLines[-1]
+        $m2mBody = ($m2mLines | Select-Object -SkipLast 1) -join "`n"
+        if ($m2mBody) { $m2mJson = $m2mBody | ConvertFrom-Json; break }
+        Start-Sleep -Seconds 2
+    }
     if (-not $m2mJson.access_token) {
-        Write-Host "❌ client_credentials 토큰을 받지 못함: $($m2mJson | ConvertTo-Json -Compress)" -ForegroundColor Red
+        Write-Host "❌ client_credentials 토큰을 받지 못함 (http $m2mStatus, curl exit $m2mCurlExit): $($m2mJson | ConvertTo-Json -Compress)" -ForegroundColor Red
         exit 1
     }
     $m2mParts = $m2mJson.access_token.Split('.')
