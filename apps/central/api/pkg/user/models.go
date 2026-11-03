@@ -20,20 +20,12 @@ type User struct {
 	// Active is false while an administrator has suspended the account: it
 	// cannot sign in (see the sign-in steps) and its sessions were ended.
 	Active bool `json:"active"`
-	// The account at each sign-in provider this account signs in with. Within
-	// a tenant a provider account belongs to one account that is not deleted
-	// (unique indexes uq_users_tenant_<provider>_id).
-	GoogleID    *string `json:"-"`
-	GithubID    *string `json:"-"`
-	MicrosoftID *string `json:"-"`
-	AppleID     *string `json:"-"`
-	Picture     *string `json:"picture"`
+	Picture *string `json:"picture"`
 
 	// Identities are the provider accounts the account signs in with, filled
-	// in by the user service whenever it returns an account. The four columns
-	// above hold the oldest of each provider's identities and are no longer
-	// read; they keep what an API still running from before the rows were read
-	// sees, until they are dropped.
+	// in by the user service whenever it returns an account. Within a tenant a
+	// provider account belongs to one account (unique on tenant, provider and
+	// subject in user_identities).
 	Identities []LinkedIdentity `json:"-" gorm:"-"`
 
 	// MFA/TOTP fields

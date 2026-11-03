@@ -75,13 +75,12 @@ var ErrProviderSubjectTaken = errors.New("another account in this tenant already
 // uniqueViolation is the SQLSTATE of a row refused by a unique index.
 const uniqueViolation = "23505"
 
-// providerColumns names the column holding each sign-in provider's
-// identifier for the account a user signs in with.
-var providerColumns = map[string]string{
-	"google":    "google_id",
-	"github":    "github_id",
-	"microsoft": "microsoft_id",
-	"apple":     "apple_id",
+// signInProviders are the providers an account can sign in with.
+var signInProviders = map[string]bool{
+	"google":    true,
+	"github":    true,
+	"microsoft": true,
+	"apple":     true,
 }
 
 type service struct {
@@ -388,8 +387,7 @@ func (s *service) GetByProviderSubject(tenantID uuid.UUID, provider, subject str
 }
 
 func knownProvider(provider string) bool {
-	_, ok := providerColumns[provider]
-	return ok
+	return signInProviders[provider]
 }
 
 func (s *service) LinkProvider(userID uuid.UUID, link ProviderLink) error {
@@ -426,11 +424,9 @@ func (s *service) LinkProvider(userID uuid.UUID, link ProviderLink) error {
 			return err
 		}
 		if link.VerifiesAddress {
-			if err := tx.Model(&User{}).Where("id = ?", userID).Update("email_verified", true).Error; err != nil {
-				return err
-			}
+			return tx.Model(&User{}).Where("id = ?", userID).Update("email_verified", true).Error
 		}
-		return syncProviderColumn(tx, userID, link.Provider)
+		return nil
 	})
 	var refused *pgconn.PgError
 	if errors.As(err, &refused) && refused.Code == uniqueViolation {
@@ -493,10 +489,7 @@ func (s *service) unlink(u *User, identity LinkedIdentity) error {
 		if err := requireAnotherWayToSignIn(tx, u.ID, 1, 0); err != nil {
 			return err
 		}
-		if err := tx.Where("id = ? AND user_id = ?", identity.ID, u.ID).Delete(&LinkedIdentity{}).Error; err != nil {
-			return err
-		}
-		return syncProviderColumn(tx, u.ID, identity.Provider)
+		return tx.Where("id = ? AND user_id = ?", identity.ID, u.ID).Delete(&LinkedIdentity{}).Error
 	})
 	if errors.Is(err, ErrLastSignInMethod) {
 		return err

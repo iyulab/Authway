@@ -37,8 +37,8 @@ func TestLinkProvider_StoresTheLinkAndFindsTheAccountByIt(t *testing.T) {
 	if err != nil || found.ID != u.ID {
 		t.Fatalf("after linking: %v, %v; want the account", found, err)
 	}
-	if !found.EmailVerified || found.GoogleID == nil || *found.GoogleID != subject {
-		t.Errorf("stored verified=%v google_id=%v, want verified and the subject", found.EmailVerified, found.GoogleID)
+	if !found.EmailVerified || len(found.Identities) != 1 || found.Identities[0].Subject != subject {
+		t.Errorf("stored verified=%v identities=%+v, want verified and the subject", found.EmailVerified, found.Identities)
 	}
 
 	for name, lookup := range map[string]func() error{
@@ -95,8 +95,8 @@ func TestLinkProvider_OneAccountPerProviderAccountInATenant(t *testing.T) {
 	if found, err := svc.GetByProviderSubject(tnA.ID, "google", subject); err != nil || found.ID != first.ID {
 		t.Errorf("after the refused link the provider account finds %v, %v; want the first account", found, err)
 	}
-	if again, err := svc.GetByID(second.ID); err != nil || again.GoogleID != nil || again.EmailVerified {
-		t.Errorf("the refused link changed the second account: google_id=%v verified=%v (%v)", again.GoogleID, again.EmailVerified, err)
+	if again, err := svc.GetByID(second.ID); err != nil || len(again.Identities) != 0 || again.EmailVerified {
+		t.Errorf("the refused link changed the second account: identities=%+v verified=%v (%v)", again.Identities, again.EmailVerified, err)
 	}
 
 	// The rule is per tenant and per provider.

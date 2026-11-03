@@ -50,8 +50,8 @@ func TestReconcile_MakesTheIdentityRowsMatchTheProviderColumns(t *testing.T) {
 }
 
 // An account may sign in with several provider accounts, at one provider and at
-// several; each is found by its own, the column keeps the oldest of a
-// provider, and each is taken away on its own.
+// several; each is found by its own and each is taken away on its own. The
+// provider columns on users are left alone: nothing writes them any more.
 func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 	db := setupPostgres(t)
 	svc, ts := newTestService(t, db)
@@ -92,14 +92,18 @@ func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 			t.Errorf("google %s finds %v, %v; want the account", subject, found, err)
 		}
 	}
-	column := func() *string {
+	// Removed together with the column by the migration that drops it.
+	legacyColumnEmpty := func(when string) {
+		t.Helper()
 		var c *string
-		db.Raw(`SELECT google_id FROM users WHERE id = ?`, u.ID).Scan(&c)
-		return c
+		if err := db.Raw(`SELECT google_id FROM users WHERE id = ?`, u.ID).Scan(&c).Error; err != nil {
+			t.Fatalf("reading google_id: %v", err)
+		}
+		if c != nil {
+			t.Errorf("%s: google_id = %q, want it left alone (nothing writes the column any more)", when, *c)
+		}
 	}
-	if c := column(); c == nil || *c != x {
-		t.Fatalf("google_id = %v, want the oldest (%q)", c, x)
-	}
+	legacyColumnEmpty("after linking")
 
 	// Another account cannot take either.
 	other := newAccount(t, svc, tn.ID, "correct-horse-9")
@@ -115,18 +119,14 @@ func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 	if err := svc.UnlinkIdentity(u.ID, got.Identities[0].ID); err != nil {
 		t.Fatalf("UnlinkIdentity x: %v", err)
 	}
-	if c := column(); c == nil || *c != y {
-		t.Errorf("after removing the oldest, google_id = %v, want %q", c, y)
-	}
+	legacyColumnEmpty("after removing the oldest")
 	if _, err := svc.GetByProviderSubject(tn.ID, "google", x); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("the removed link still finds an account: %v", err)
 	}
 	if err := svc.UnlinkProvider(u.ID, "google"); err != nil {
 		t.Fatalf("unlinking the only google by name: %v", err)
 	}
-	if c := column(); c != nil {
-		t.Errorf("after removing the last, google_id = %v, want none", *c)
-	}
+	legacyColumnEmpty("after removing the last")
 	// Another account's identity is not this account's to remove.
 	if err := svc.UnlinkIdentity(other.ID, got.Identities[2].ID); !errors.Is(err, ErrNotLinked) {
 		t.Errorf("removing another account's identity: %v, want ErrNotLinked", err)

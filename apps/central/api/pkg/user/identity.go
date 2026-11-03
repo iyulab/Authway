@@ -1,12 +1,10 @@
 package user
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // LinkedIdentity is one provider account an account signs in with, as a row of
@@ -100,27 +98,6 @@ func (s *service) loaded(u *User) (*User, error) {
 		return nil, err
 	}
 	return u, nil
-}
-
-// syncProviderColumn sets the provider's column on users to the subject of the
-// account's oldest identity there, or clears it. The columns are not read any
-// more; they are kept so an API still running from before the rows were read
-// sees a link that is there and no link that is gone.
-func syncProviderColumn(tx *gorm.DB, userID uuid.UUID, provider string) error {
-	column, ok := providerColumns[provider]
-	if !ok {
-		return nil
-	}
-	var oldest LinkedIdentity
-	err := tx.Where("user_id = ? AND provider = ?", userID, provider).Order("linked_at, id").First(&oldest).Error
-	switch {
-	case err == nil:
-		return tx.Model(&User{}).Where("id = ?", userID).Update(column, oldest.Subject).Error
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return tx.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error
-	default:
-		return err
-	}
 }
 
 // ProviderLink is a provider account to link to an account.
