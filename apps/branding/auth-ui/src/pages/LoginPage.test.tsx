@@ -115,6 +115,16 @@ describe('LoginPage', () => {
       )
     })
 
+    it("marks the address as the account's username and the password as the current one, so a browser can save and fill them", async () => {
+      render(<LoginPage />)
+
+      await waitFor(() => expect(document.querySelector('input[type="password"]')).not.toBeNull())
+      expect(document.querySelector('input#email')).toHaveAttribute('autocomplete', 'username')
+      expect(document.querySelector('input[type="password"]')).toHaveAttribute('autocomplete', 'current-password')
+      // One real form holds both, which is what a browser offers to save.
+      expect(document.querySelector('input#email')!.closest('form')).toBe(document.querySelector('input[type="password"]')!.closest('form'))
+    })
+
     it('renders login form with client info', async () => {
       render(<LoginPage />)
 
