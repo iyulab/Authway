@@ -9,86 +9,150 @@ import (
 	"github.com/google/uuid"
 )
 
-// Accounts that were linked through the four provider columns get identity
-// rows: the migration copies them, an empty column links nothing, and running
-// it again changes nothing.
-func TestIdentities_AreCopiedFromTheProviderColumns(t *testing.T) {
-	db := setupPostgres(t)
-	svc, ts := newTestService(t, db)
-	tn := freshTenant(t, db, ts)
-	u, err := svc.Create(tn.ID, &CreateUserRequest{Email: fmt.Sprintf("copy-%s@example.com", uuid.NewString()[:8]), Name: "Copied"})
+func newAccount(t *testing.T, svc Service, tenantID uuid.UUID, password string) *User {
+	t.Helper()
+	u, err := svc.Create(tenantID, &CreateUserRequest{Email: fmt.Sprintf("ident-%s@example.com", uuid.NewString()[:8]), Name: "Ident", Password: password})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
-	g, gh := "g-"+uuid.NewString(), "gh-"+uuid.NewString()
-	if err := db.Exec(`UPDATE users SET google_id = ?, github_id = ?, microsoft_id = '' WHERE id = ?`, g, gh, u.ID).Error; err != nil {
-		t.Fatal(err)
-	}
+	return u
+}
 
-	migration, err := os.ReadFile("../../internal/database/migrations/054_add_user_identities.sql")
+// Before the rows are read they are made to match the columns once: a link an
+// API from before the rows made has no row, and one it removed still has one.
+func TestReconcile_MakesTheIdentityRowsMatchTheProviderColumns(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tn := freshTenant(t, db, ts)
+	u := newAccount(t, svc, tn.ID, "correct-horse-9")
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+	gone, kept, replaced := "gh-"+uuid.NewString(), "g-"+uuid.NewString(), "g-"+uuid.NewString()
+
+	// An old API linked google (column only), removed github (row left behind).
+	db.Exec(`UPDATE users SET google_id = ? WHERE id = ?`, replaced, u.ID)
+	db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject, email_at_link) VALUES (?, ?, ?, 'github', ?, ?)`, uuid.New(), tn.ID, u.ID, gone, u.Email)
+	db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject, email_at_link) VALUES (?, ?, ?, 'google', ?, ?)`, uuid.New(), tn.ID, u.ID, kept, u.Email)
+
+	migration, err := os.ReadFile("../../internal/database/migrations/055_reconcile_user_identities.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for run := 1; run <= 2; run++ {
-		if err := db.Exec(string(migration)).Error; err != nil {
-			t.Fatalf("migration, run %d: %v", run, err)
-		}
-		var got []LinkedIdentity
-		db.Where("user_id = ?", u.ID).Order("provider").Find(&got)
-		if len(got) != 2 || got[0].Provider != "github" || got[0].Subject != gh || got[1].Provider != "google" || got[1].Subject != g {
-			t.Fatalf("run %d: identities = %+v, want github and google only (an empty column links nothing)", run, got)
-		}
-		if got[0].TenantID != tn.ID || got[0].EmailAtLink != u.Email {
-			t.Errorf("run %d: tenant %v / address %q, want the account's", run, got[0].TenantID, got[0].EmailAtLink)
-		}
+	if err := db.Exec(string(migration)).Error; err != nil {
+		t.Fatalf("migration: %v", err)
+	}
+	got, err := svc.GetByID(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Identities) != 1 || got.Identities[0].Provider != "google" || got.Identities[0].Subject != replaced {
+		t.Fatalf("identities = %+v, want only google %q (the column's)", got.Identities, replaced)
 	}
 }
 
-// A link is written to the column that is read and to an identity row beside
-// it, a link to another account at the same provider replaces both, and
-// taking the link away removes both.
-func TestIdentities_AreWrittenBesideTheColumns(t *testing.T) {
+// An account may sign in with several provider accounts, at one provider and at
+// several; each is found by its own, the column keeps the oldest of a
+// provider, and each is taken away on its own.
+func TestIdentities_AnAccountMayHaveSeveralAtOneProvider(t *testing.T) {
 	db := setupPostgres(t)
 	svc, ts := newTestService(t, db)
 	tn := freshTenant(t, db, ts)
-	u, err := svc.Create(tn.ID, &CreateUserRequest{Email: fmt.Sprintf("beside-%s@example.com", uuid.NewString()[:8]), Name: "Beside", Password: "correct-horse-9"})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	u := newAccount(t, svc, tn.ID, "correct-horse-9")
 	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
-	first, second := "g-"+uuid.NewString(), "g-"+uuid.NewString()
+	x, y, z := "g-"+uuid.NewString(), "g-"+uuid.NewString(), "gh-"+uuid.NewString()
 
-	state := func() (column *string, rows []LinkedIdentity) {
-		db.Raw(`SELECT google_id FROM users WHERE id = ?`, u.ID).Scan(&column)
-		db.Where("user_id = ?", u.ID).Find(&rows)
-		return
+	for _, link := range []ProviderLink{
+		{Provider: "google", Subject: x, Email: "work@corp.example"},
+		{Provider: "google", Subject: y, Email: "home@gmail.example"},
+		{Provider: "github", Subject: z},
+	} {
+		if err := svc.LinkProvider(u.ID, link); err != nil {
+			t.Fatalf("LinkProvider %s: %v", link.Subject, err)
+		}
 	}
-	if err := svc.LinkProvider(u.ID, "google", first); err != nil {
-		t.Fatalf("LinkProvider: %v", err)
-	}
-	if err := svc.LinkProvider(u.ID, "google", first); err != nil {
+	// The same link again changes nothing.
+	if err := svc.LinkProvider(u.ID, ProviderLink{Provider: "google", Subject: y}); err != nil {
 		t.Errorf("linking again: %v", err)
 	}
-	column, rows := state()
-	if column == nil || *column != first || len(rows) != 1 || rows[0].Subject != first || rows[0].Provider != "google" || rows[0].TenantID != tn.ID {
-		t.Fatalf("after linking: column %v, rows %+v; want both at %q", column, rows, first)
+
+	got, _ := svc.GetByID(u.ID)
+	if len(got.Identities) != 3 || got.Identities[0].Subject != x || got.Identities[1].Subject != y {
+		t.Fatalf("identities = %+v, want x, y, z oldest first", got.Identities)
+	}
+	if got.Identities[0].EmailAtLink != "work@corp.example" || got.Identities[2].EmailAtLink != u.Email {
+		t.Errorf("addresses at link = %q, %q; want the provider's, then the account's own", got.Identities[0].EmailAtLink, got.Identities[2].EmailAtLink)
+	}
+	if providers := got.LinkedProviders(); len(providers) != 2 || providers[0] != "google" || providers[1] != "github" {
+		t.Errorf("providers = %v, want [google github] once each", providers)
+	}
+	if got.EmailVerified {
+		t.Error("a link that does not verify the address verified it")
+	}
+	for _, subject := range []string{x, y} {
+		if found, err := svc.GetByProviderSubject(tn.ID, "google", subject); err != nil || found.ID != u.ID {
+			t.Errorf("google %s finds %v, %v; want the account", subject, found, err)
+		}
+	}
+	column := func() *string {
+		var c *string
+		db.Raw(`SELECT google_id FROM users WHERE id = ?`, u.ID).Scan(&c)
+		return c
+	}
+	if c := column(); c == nil || *c != x {
+		t.Fatalf("google_id = %v, want the oldest (%q)", c, x)
 	}
 
-	if err := svc.LinkProvider(u.ID, "google", second); err != nil {
-		t.Fatalf("LinkProvider to another account: %v", err)
-	}
-	if column, rows = state(); *column != second || len(rows) != 1 || rows[0].Subject != second {
-		t.Fatalf("after replacing: column %v, rows %+v; want both at %q", *column, rows, second)
+	// Another account cannot take either.
+	other := newAccount(t, svc, tn.ID, "correct-horse-9")
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, other.ID) })
+	if err := svc.LinkProvider(other.ID, ProviderLink{Provider: "google", Subject: y}); !errors.Is(err, ErrProviderSubjectTaken) {
+		t.Errorf("a second account taking y: %v, want ErrProviderSubjectTaken", err)
 	}
 
-	if err := svc.UnlinkProvider(u.ID, "google"); err != nil {
-		t.Fatalf("UnlinkProvider: %v", err)
+	// A provider's name no longer says which; the id does.
+	if err := svc.UnlinkProvider(u.ID, "google"); !errors.Is(err, ErrSeveralLinked) {
+		t.Errorf("unlinking google by name with two: %v, want ErrSeveralLinked", err)
 	}
-	if column, rows = state(); column != nil || len(rows) != 0 {
-		t.Errorf("after unlinking: column %v, rows %+v; want none", column, rows)
+	if err := svc.UnlinkIdentity(u.ID, got.Identities[0].ID); err != nil {
+		t.Fatalf("UnlinkIdentity x: %v", err)
 	}
-	if _, err := svc.GetByProviderSubject(tn.ID, "google", second); !errors.Is(err, ErrUserNotFound) {
+	if c := column(); c == nil || *c != y {
+		t.Errorf("after removing the oldest, google_id = %v, want %q", c, y)
+	}
+	if _, err := svc.GetByProviderSubject(tn.ID, "google", x); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("the removed link still finds an account: %v", err)
+	}
+	if err := svc.UnlinkProvider(u.ID, "google"); err != nil {
+		t.Fatalf("unlinking the only google by name: %v", err)
+	}
+	if c := column(); c != nil {
+		t.Errorf("after removing the last, google_id = %v, want none", *c)
+	}
+	// Another account's identity is not this account's to remove.
+	if err := svc.UnlinkIdentity(other.ID, got.Identities[2].ID); !errors.Is(err, ErrNotLinked) {
+		t.Errorf("removing another account's identity: %v, want ErrNotLinked", err)
+	}
+}
+
+// The account's last way to sign in stays, whichever identity is named.
+func TestIdentities_TheLastWayToSignInStays(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	tn := freshTenant(t, db, ts)
+	u := newAccount(t, svc, tn.ID, "")
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+	for _, subject := range []string{"g-" + uuid.NewString(), "g-" + uuid.NewString()} {
+		if err := svc.LinkProvider(u.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := svc.GetByID(u.ID)
+	if err := svc.UnlinkIdentity(u.ID, got.Identities[0].ID); err != nil {
+		t.Fatalf("with two links and no password the first may go: %v", err)
+	}
+	if err := svc.UnlinkIdentity(u.ID, got.Identities[1].ID); !errors.Is(err, ErrLastSignInMethod) {
+		t.Errorf("the last link of an account with no password: %v, want ErrLastSignInMethod", err)
+	}
+	if after, _ := svc.GetByID(u.ID); len(after.Identities) != 1 {
+		t.Errorf("identities after refusing = %d, want 1", len(after.Identities))
 	}
 }

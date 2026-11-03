@@ -13,11 +13,18 @@ const NAMES: Record<string, string> = { google: 'Google', github: 'GitHub', micr
 
 /**
  * The account screen's connections: the provider accounts that sign in to
- * this one, and removing a link — nothing to show when there is none.
+ * this one — one entry for each, with the address it was linked under — and
+ * removing a link; nothing to show when there is none.
  */
+interface Connection {
+  id: string
+  provider: string
+  email: string
+}
+
 const AccountConnections: React.FC<Props> = ({ call, signInAgain }) => {
   const { t } = useTranslation(['auth', 'common'])
-  const [providers, setProviders] = useState<string[] | null>(null)
+  const [connections, setConnections] = useState<Connection[] | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [needsSignIn, setNeedsSignIn] = useState(false)
@@ -27,19 +34,19 @@ const AccountConnections: React.FC<Props> = ({ call, signInAgain }) => {
     async (signal?: AbortSignal) => {
       const res = await call('/api/v1/users/connections', { signal })
       if (!res.ok) throw new Error('connections')
-      const answer = ((await res.json()) as { connections: { provider: string }[] }).connections.map((c) => c.provider)
-      if (!signal?.aborted) setProviders(answer)
+      const answer = ((await res.json()) as { connections: Connection[] }).connections
+      if (!signal?.aborted) setConnections(answer)
     },
     [call],
   )
 
-  useLoad(load, () => setProviders([]))
+  useLoad(load, () => setConnections([]))
 
-  const remove = async (provider: string) => {
+  const remove = async (id: string) => {
     setBusy(true)
     setError(null)
     try {
-      const res = await call(`/api/v1/users/connections/${encodeURIComponent(provider)}`, { method: 'DELETE' })
+      const res = await call(`/api/v1/users/connections/${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (res.ok) {
         setConfirming(null)
         await load()
@@ -56,32 +63,35 @@ const AccountConnections: React.FC<Props> = ({ call, signInAgain }) => {
     }
   }
 
-  if (!providers || providers.length === 0) return null
+  if (!connections || connections.length === 0) return null
 
   return (
     <section className="bg-white shadow rounded-lg p-6 space-y-4">
       <h2 className="text-lg font-semibold text-gray-900">{t('auth:account.connections.title')}</h2>
       <p className="text-sm text-gray-700">{t('auth:account.connections.intro')}</p>
       <ul className="divide-y divide-gray-200">
-        {providers.map((p) => (
-          <li key={p} className="py-2 flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-gray-900">{NAMES[p] ?? p}</span>
-            {confirming === p ? (
+        {connections.map((c) => (
+          <li key={c.id} className="py-2 flex items-center justify-between gap-2">
+            <span>
+              <span className="text-sm font-medium text-gray-900">{NAMES[c.provider] ?? c.provider}</span>
+              {c.email && <span className="ml-2 text-sm text-gray-600">{c.email}</span>}
+            </span>
+            {confirming === c.id ? (
               <span className="flex gap-2">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void remove(p)}
+                  onClick={() => void remove(c.id)}
                   className="py-1 px-3 rounded-md border border-red-300 text-red-700 text-sm disabled:opacity-50"
                 >
-                  {t('auth:account.connections.confirm', { provider: NAMES[p] ?? p })}
+                  {t('auth:account.connections.confirm', { provider: NAMES[c.provider] ?? c.provider })}
                 </button>
                 <button type="button" onClick={() => setConfirming(null)} className="py-1 px-3 text-sm text-gray-600">
                   {t('common:cancel')}
                 </button>
               </span>
             ) : (
-              <button type="button" onClick={() => setConfirming(p)} className="py-1 px-3 rounded-md border border-gray-300 text-sm">
+              <button type="button" onClick={() => setConfirming(c.id)} className="py-1 px-3 rounded-md border border-gray-300 text-sm">
                 {t('auth:account.connections.remove')}
               </button>
             )}

@@ -485,7 +485,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1.Delete("/profile/me", jwtAuth, authHandler.DeleteMe)
 	v1.Post("/users/password", jwtAuth, loginRateLimit, authHandler.ChangePassword)
 	v1.Get("/users/connections", jwtAuth, authHandler.ListConnections)
-	v1.Delete("/users/connections/:provider", jwtAuth, authHandler.RemoveConnection)
+	v1.Delete("/users/connections/:connection", jwtAuth, authHandler.RemoveConnection)
 	// What the user let clients do for them while they are away, and taking
 	// it back.
 	v1.Get("/users/delegations", jwtAuth, delegationHandler.ListMine)

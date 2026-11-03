@@ -38,12 +38,19 @@ var ErrEmailNotVerified = errors.New("the sign-in provider has not verified this
 // that already signs in with a different account at the same provider.
 var ErrLinkedToAnother = errors.New("this email address already signs in with a different account at this provider")
 
+// ErrAccountNotVerified refuses to link a provider account to an existing
+// account whose address nobody has proved yet. Whoever holds a provider account
+// with that address would otherwise be signed in as the account's owner — or
+// take the account before the owner has used it. The account's owner proves the
+// address first (the email link), then signs in with the provider.
+var ErrAccountNotVerified = errors.New("the account with this email address has not verified it yet; verify it first, then sign in with this provider")
+
 // accounts is the part of the user service that resolving an identity needs.
 type accounts interface {
 	GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*user.User, error)
 	GetByEmailAndTenant(tenantID uuid.UUID, email string) (*user.User, error)
 	Create(tenantID uuid.UUID, req *user.CreateUserRequest) (*user.User, error)
-	LinkProvider(userID uuid.UUID, provider, subject string) error
+	LinkProvider(userID uuid.UUID, link user.ProviderLink) error
 	Update(id uuid.UUID, req *user.UpdateUserRequest) (*user.User, error)
 }
 
@@ -53,8 +60,10 @@ type accounts interface {
 //  1. An account already linked to (provider, subject) is that person's
 //     account, whatever address the provider reports now.
 //  2. Otherwise the address decides, once — and only an address the provider
-//     has verified. An existing account with that address is linked; it must
-//     not already be linked to a different account at the same provider.
+//     has verified. An existing account with that address is linked when its
+//     address is verified too; it must not already be linked to a different
+//     account at the same provider. (Another account at the same provider is
+//     added by the signed-in user from their own account, not by a sign-in.)
 //  3. With no such account, one is created if the tenant admits the address
 //     (invited, or open signup), and linked.
 //
@@ -85,7 +94,12 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 	account, err := users.GetByEmailAndTenant(tenantID, id.Email)
 	switch {
 	case err == nil:
-		if other := linkedSubject(account, id.Provider); other != "" && other != id.Subject {
+		if !account.EmailVerified {
+			logger.Warn("Social sign-in denied: the account with this address has not verified it",
+				zap.String("provider", id.Provider), zap.String("user_id", account.ID.String()))
+			return nil, ErrAccountNotVerified
+		}
+		if other := account.SubjectAt(id.Provider); other != "" && other != id.Subject {
 			logger.Warn("Social sign-in denied: the address is linked to another provider account",
 				zap.String("provider", id.Provider), zap.String("user_id", account.ID.String()))
 			return nil, ErrLinkedToAnother
@@ -107,7 +121,7 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 		return nil, fmt.Errorf("failed to look up the account: %w", err)
 	}
 
-	err = users.LinkProvider(account.ID, id.Provider, id.Subject)
+	err = users.LinkProvider(account.ID, user.ProviderLink{Provider: id.Provider, Subject: id.Subject, Email: id.Email, VerifiesAddress: true})
 	if errors.Is(err, user.ErrProviderSubjectTaken) {
 		// Another sign-in with the same provider account linked it between
 		// the lookup above and here. Rule 1 holds: the account it is linked
@@ -124,7 +138,7 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 		return nil, fmt.Errorf("failed to link the account: %w", err)
 	}
 	account.EmailVerified = true
-	setLinkedSubject(account, id.Provider, id.Subject)
+	account.NoteLinked(id.Provider, id.Subject)
 
 	if id.Picture != "" && account.AvatarURL == nil {
 		if _, err := users.Update(account.ID, &user.UpdateUserRequest{AvatarURL: &id.Picture}); err != nil {
@@ -132,36 +146,4 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 		}
 	}
 	return account, nil
-}
-
-// linkedSubject returns the provider account u already signs in with, or "".
-func linkedSubject(u *user.User, provider string) string {
-	var subject *string
-	switch provider {
-	case "google":
-		subject = u.GoogleID
-	case "github":
-		subject = u.GithubID
-	case "microsoft":
-		subject = u.MicrosoftID
-	case "apple":
-		subject = u.AppleID
-	}
-	if subject == nil {
-		return ""
-	}
-	return *subject
-}
-
-func setLinkedSubject(u *user.User, provider, subject string) {
-	switch provider {
-	case "google":
-		u.GoogleID = &subject
-	case "github":
-		u.GithubID = &subject
-	case "microsoft":
-		u.MicrosoftID = &subject
-	case "apple":
-		u.AppleID = &subject
-	}
 }

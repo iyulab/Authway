@@ -134,6 +134,8 @@ func (s *SocialHandler) finishInvitationSignIn(c *fiber.Ctx, code, state string,
 			reason = "address_mismatch"
 		case errors.Is(err, social.ErrLinkedToAnother):
 			reason = "linked_to_another"
+		case errors.Is(err, social.ErrAccountNotVerified):
+			reason = "account_not_verified"
 		case errors.Is(err, social.ErrInvitationAccountSuspended):
 			reason = "account_suspended"
 		}

@@ -29,6 +29,13 @@ type User struct {
 	AppleID     *string `json:"-"`
 	Picture     *string `json:"picture"`
 
+	// Identities are the provider accounts the account signs in with, filled
+	// in by the user service whenever it returns an account. The four columns
+	// above hold the oldest of each provider's identities and are no longer
+	// read; they keep what an API still running from before the rows were read
+	// sees, until they are dropped.
+	Identities []LinkedIdentity `json:"-" gorm:"-"`
+
 	// MFA/TOTP fields
 	TOTPSecret     *string    `json:"-" gorm:"column:totp_secret"`
 	TOTPEnabled    bool       `json:"totp_enabled" gorm:"default:false"`

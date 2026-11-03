@@ -29,7 +29,7 @@ func TestLinkProvider_StoresTheLinkAndFindsTheAccountByIt(t *testing.T) {
 	if _, err := svc.GetByProviderSubject(tnA.ID, "google", subject); !errors.Is(err, ErrUserNotFound) {
 		t.Fatalf("before linking: %v, want ErrUserNotFound", err)
 	}
-	if err := svc.LinkProvider(u.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(u.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Fatalf("LinkProvider: %v", err)
 	}
 
@@ -54,10 +54,10 @@ func TestLinkProvider_StoresTheLinkAndFindsTheAccountByIt(t *testing.T) {
 	if _, err := svc.GetByProviderSubject(tnA.ID, "myspace", subject); err == nil || errors.Is(err, ErrUserNotFound) {
 		t.Errorf("unknown provider: %v, want an error that is not \"not found\"", err)
 	}
-	if err := svc.LinkProvider(u.ID, "myspace", subject); err == nil {
+	if err := svc.LinkProvider(u.ID, ProviderLink{Provider: "myspace", Subject: subject, VerifiesAddress: true}); err == nil {
 		t.Error("linking an unknown provider must fail")
 	}
-	if err := svc.LinkProvider(uuid.New(), "google", subject); !errors.Is(err, ErrUserNotFound) {
+	if err := svc.LinkProvider(uuid.New(), ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("linking a missing account: %v, want ErrUserNotFound", err)
 	}
 }
@@ -83,13 +83,13 @@ func TestLinkProvider_OneAccountPerProviderAccountInATenant(t *testing.T) {
 	}
 	first, second, elsewhere := account(tnA.ID), account(tnA.ID), account(tnB.ID)
 
-	if err := svc.LinkProvider(first.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(first.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Fatalf("the first link: %v", err)
 	}
-	if err := svc.LinkProvider(first.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(first.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Errorf("linking the same account again: %v, want no error", err)
 	}
-	if err := svc.LinkProvider(second.ID, "google", subject); !errors.Is(err, ErrProviderSubjectTaken) {
+	if err := svc.LinkProvider(second.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); !errors.Is(err, ErrProviderSubjectTaken) {
 		t.Fatalf("a second account in the tenant: %v, want ErrProviderSubjectTaken", err)
 	}
 	if found, err := svc.GetByProviderSubject(tnA.ID, "google", subject); err != nil || found.ID != first.ID {
@@ -100,10 +100,10 @@ func TestLinkProvider_OneAccountPerProviderAccountInATenant(t *testing.T) {
 	}
 
 	// The rule is per tenant and per provider.
-	if err := svc.LinkProvider(elsewhere.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(elsewhere.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Errorf("the same provider account in another tenant: %v", err)
 	}
-	if err := svc.LinkProvider(second.ID, "github", subject); err != nil {
+	if err := svc.LinkProvider(second.ID, ProviderLink{Provider: "github", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Errorf("the same identifier at another provider: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestLinkProvider_OneAccountPerProviderAccountInATenant(t *testing.T) {
 	if err := svc.Delete(first.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if err := svc.LinkProvider(second.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(second.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Errorf("after the first account was deleted: %v", err)
 	}
 }
@@ -128,7 +128,7 @@ func TestUnlinkProvider_EndsTheLinkButNotTheLastWayIn(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
 	subject := "g-" + uuid.New().String()
-	if err := svc.LinkProvider(u.ID, "google", subject); err != nil {
+	if err := svc.LinkProvider(u.ID, ProviderLink{Provider: "google", Subject: subject, VerifiesAddress: true}); err != nil {
 		t.Fatalf("LinkProvider: %v", err)
 	}
 

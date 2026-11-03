@@ -65,6 +65,8 @@ func socialFailure(err error) (code, description, reason string) {
 		return "access_denied", social.ErrEmailNotVerified.Error(), "email_not_verified"
 	case errors.Is(err, social.ErrLinkedToAnother):
 		return "access_denied", social.ErrLinkedToAnother.Error(), "linked_to_another"
+	case errors.Is(err, social.ErrAccountNotVerified):
+		return "access_denied", social.ErrAccountNotVerified.Error(), "account_not_verified"
 	}
 	return "server_error", msgSignInFailed, "oauth_callback_failed"
 }

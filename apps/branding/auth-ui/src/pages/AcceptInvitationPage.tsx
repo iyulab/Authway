@@ -53,6 +53,7 @@ function nowhereToGo(invitation: InvitationDetails | undefined, t: TFunction): s
 const PROVIDER_ERRORS = [
   'address_mismatch',
   'linked_to_another',
+  'account_not_verified',
   'account_suspended',
   'provider_unavailable',
   'invitation_unavailable',

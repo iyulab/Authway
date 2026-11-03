@@ -3,7 +3,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"authway/apps/central/api/pkg/apierror"
@@ -36,13 +35,21 @@ type Service interface {
 	// ErrUserNotFound when no account in the tenant is linked to it.
 	GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*User, error)
 	// LinkProvider records that the account signs in with a provider's
-	// account, and that its email address is verified — a link is only made
-	// on an address the provider has verified.
-	LinkProvider(userID uuid.UUID, provider, subject string) error
-	// UnlinkProvider ends the account's link to a provider's account.
-	// ErrNotLinked when there is none; ErrLastSignInMethod when the account
-	// would be left with no way to sign in (no password, no other link).
+	// account. An account may sign in with several, at one provider or at
+	// several. ErrProviderSubjectTaken when another account in the tenant
+	// already signs in with it; linking it to the same account again changes
+	// nothing.
+	LinkProvider(userID uuid.UUID, link ProviderLink) error
+	// UnlinkProvider ends the account's link to the one provider account it
+	// has at provider. ErrNotLinked when there is none; ErrSeveralLinked when
+	// there are several (use UnlinkIdentity); ErrLastSignInMethod when the
+	// account would be left with no way to sign in (no password, no other
+	// link).
 	UnlinkProvider(userID uuid.UUID, provider string) error
+	// UnlinkIdentity ends the account's link to one provider account, named by
+	// its identity id. ErrNotLinked when the account has no such identity;
+	// ErrLastSignInMethod as for UnlinkProvider.
+	UnlinkIdentity(userID, identityID uuid.UUID) error
 	GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, int64, error)
 	Update(id uuid.UUID, req *UpdateUserRequest) (*User, error)
 	Delete(id uuid.UUID) error
@@ -159,7 +166,7 @@ func (s *service) GetByID(id uuid.UUID) (*User, error) {
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	return &user, nil
+	return s.loaded(&user)
 }
 
 func (s *service) GetSoleAccountByEmail(email string) (*User, error) {
@@ -170,7 +177,7 @@ func (s *service) GetSoleAccountByEmail(email string) (*User, error) {
 	if len(users) != 1 {
 		return nil, apierror.NewPublic("user not found")
 	}
-	return &users[0], nil
+	return s.loaded(&users[0])
 }
 
 func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
@@ -205,7 +212,7 @@ func (s *service) Update(id uuid.UUID, req *UpdateUserRequest) (*User, error) {
 	}
 
 	s.logger.Info("User updated successfully", zap.String("id", user.ID.String()))
-	return &user, nil
+	return s.loaded(&user)
 }
 
 // Delete removes the account and, through the schema's cascades, what hangs
@@ -240,6 +247,9 @@ func (s *service) List(limit, offset int) ([]*User, int64, error) {
 	// Get users with pagination
 	if err := s.db.Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	if err := s.withIdentities(users...); err != nil {
+		return nil, 0, err
 	}
 
 	return users, total, nil
@@ -338,7 +348,7 @@ func (s *service) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*User, 
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	return &user, nil
+	return s.loaded(&user)
 }
 
 func (s *service) FindByEmail(tenantID uuid.UUID, email string) ([]*User, error) {
@@ -347,34 +357,45 @@ func (s *service) FindByEmail(tenantID uuid.UUID, email string) ([]*User, error)
 		Order("created_at").Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("failed to find users: %w", err)
 	}
+	if err := s.withIdentities(users...); err != nil {
+		return nil, err
+	}
 	return users, nil
 }
 
 func (s *service) GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*User, error) {
-	column, ok := providerColumns[provider]
-	if !ok {
+	if !knownProvider(provider) {
 		return nil, fmt.Errorf("unknown sign-in provider %q", provider)
 	}
 	if subject == "" {
 		return nil, ErrUserNotFound
 	}
-	var user User
-	if err := s.db.Where("tenant_id = ? AND "+column+" = ?", tenantID, subject).First(&user).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	var identity LinkedIdentity
+	if err := s.db.Where("tenant_id = ? AND provider = ? AND subject = ?", tenantID, provider, subject).First(&identity).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	return &user, nil
+	var user User
+	if err := s.db.Where("id = ?", identity.UserID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	return s.loaded(&user)
 }
 
-func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error {
-	column, ok := providerColumns[provider]
-	if !ok || subject == "" {
-		return fmt.Errorf("cannot link sign-in provider %q", provider)
+func knownProvider(provider string) bool {
+	_, ok := providerColumns[provider]
+	return ok
+}
+
+func (s *service) LinkProvider(userID uuid.UUID, link ProviderLink) error {
+	if !knownProvider(link.Provider) || link.Subject == "" {
+		return fmt.Errorf("cannot link sign-in provider %q", link.Provider)
 	}
-	// The column is what is read; the identity row is written beside it so a
-	// later release can read the rows (see LinkedIdentity).
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var u User
 		if err := tx.Where("id = ?", userID).First(&u).Error; err != nil {
@@ -383,57 +404,98 @@ func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error
 			}
 			return err
 		}
-		if err := tx.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{column: subject, "email_verified": true}).Error; err != nil {
+		var existing LinkedIdentity
+		err := tx.Where("tenant_id = ? AND provider = ? AND subject = ?", u.TenantID, link.Provider, link.Subject).First(&existing).Error
+		switch {
+		case err == nil && existing.UserID != userID:
+			return ErrProviderSubjectTaken
+		case err == nil:
+			// Already linked to this account.
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			address := link.Email
+			if address == "" {
+				address = u.Email
+			}
+			if err := tx.Create(&LinkedIdentity{
+				ID: uuid.New(), TenantID: u.TenantID, UserID: userID,
+				Provider: link.Provider, Subject: link.Subject, EmailAtLink: address, LinkedAt: time.Now(),
+			}).Error; err != nil {
+				return err
+			}
+		default:
 			return err
 		}
-		if err := tx.Where("user_id = ? AND provider = ?", userID, provider).Delete(&LinkedIdentity{}).Error; err != nil {
-			return err
+		if link.VerifiesAddress {
+			if err := tx.Model(&User{}).Where("id = ?", userID).Update("email_verified", true).Error; err != nil {
+				return err
+			}
 		}
-		return tx.Create(&LinkedIdentity{
-			ID: uuid.New(), TenantID: u.TenantID, UserID: userID,
-			Provider: provider, Subject: subject, EmailAtLink: u.Email, LinkedAt: time.Now(),
-		}).Error
+		return syncProviderColumn(tx, userID, link.Provider)
 	})
 	var refused *pgconn.PgError
 	if errors.As(err, &refused) && refused.Code == uniqueViolation {
 		return ErrProviderSubjectTaken
 	}
-	if errors.Is(err, ErrUserNotFound) {
+	if errors.Is(err, ErrUserNotFound) || errors.Is(err, ErrProviderSubjectTaken) {
 		return err
 	}
 	if err != nil {
 		return fmt.Errorf("failed to link sign-in provider: %w", err)
 	}
-	s.logger.Info("Sign-in provider linked", zap.String("user_id", userID.String()), zap.String("provider", provider))
+	s.logger.Info("Sign-in provider linked", zap.String("user_id", userID.String()), zap.String("provider", link.Provider))
 	return nil
 }
 
 func (s *service) UnlinkProvider(userID uuid.UUID, provider string) error {
-	column, ok := providerColumns[provider]
-	if !ok {
-		return ErrNotLinked
-	}
 	u, err := s.GetByID(userID)
 	if err != nil {
 		return err
 	}
-	linked := u.LinkedProviders()
-	if !slices.Contains(linked, provider) {
-		return ErrNotLinked
+	var at []LinkedIdentity
+	for _, identity := range u.Identities {
+		if identity.Provider == provider {
+			at = append(at, identity)
+		}
 	}
-	if u.PasswordHash == "" && len(linked) == 1 {
+	switch len(at) {
+	case 0:
+		return ErrNotLinked
+	case 1:
+		return s.unlink(u, at[0])
+	default:
+		return ErrSeveralLinked
+	}
+}
+
+func (s *service) UnlinkIdentity(userID, identityID uuid.UUID) error {
+	u, err := s.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	for _, identity := range u.Identities {
+		if identity.ID == identityID {
+			return s.unlink(u, identity)
+		}
+	}
+	return ErrNotLinked
+}
+
+// unlink removes one identity of u, which has just been loaded with all of its
+// identities, unless it is the account's only way to sign in.
+func (s *service) unlink(u *User, identity LinkedIdentity) error {
+	if u.PasswordHash == "" && len(u.Identities) == 1 {
 		return ErrLastSignInMethod
 	}
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error; err != nil {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ? AND user_id = ?", identity.ID, u.ID).Delete(&LinkedIdentity{}).Error; err != nil {
 			return err
 		}
-		return tx.Where("user_id = ? AND provider = ?", userID, provider).Delete(&LinkedIdentity{}).Error
+		return syncProviderColumn(tx, u.ID, identity.Provider)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to unlink sign-in provider: %w", err)
 	}
-	s.logger.Info("Sign-in provider unlinked", zap.String("user_id", userID.String()), zap.String("provider", provider))
+	s.logger.Info("Sign-in provider unlinked", zap.String("user_id", u.ID.String()), zap.String("provider", identity.Provider))
 	return nil
 }
 
@@ -450,6 +512,9 @@ func (s *service) GetByTenant(tenantID uuid.UUID, limit, offset int) ([]*User, i
 	// Get users with pagination
 	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	if err := s.withIdentities(users...); err != nil {
+		return nil, 0, err
 	}
 
 	return users, total, nil

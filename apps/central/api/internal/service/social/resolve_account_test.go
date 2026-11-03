@@ -29,8 +29,36 @@ func TestMicrosoftSignIn_VerifiedAddressLinksTheAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != owner.ID || linkedSubject(owner, "microsoft") != "owner-object-id" || !owner.EmailVerified {
-		t.Errorf("got %s linked=%q verified=%v, want the owner linked and verified", got.ID, linkedSubject(owner, "microsoft"), owner.EmailVerified)
+	if got.ID != owner.ID || owner.SubjectAt("microsoft") != "owner-object-id" || !owner.EmailVerified {
+		t.Errorf("got %s linked=%q verified=%v, want the owner linked and verified", got.ID, owner.SubjectAt("microsoft"), owner.EmailVerified)
+	}
+}
+
+// An account whose owner has not proved the address yet is not reached by a
+// provider account that has: whoever holds one with that address would take the
+// account before its owner had used it. Once the address is verified, the same
+// sign-in links it.
+func TestGoogleSignIn_AnAccountWhoseAddressIsNotVerifiedIsNotLinked(t *testing.T) {
+	tenantID := uuid.New()
+	accounts := newFakeAccounts()
+	pending := accounts.addUnverified(tenantID, victimEmail)
+
+	svc := NewGoogleService(&config.GoogleOAuthConfig{ClientID: "g-app"}, accounts, &stubGate{invited: true}, oneTenantClients{tenantID: tenantID}, zap.NewNop())
+	svc.httpClient = providerResponses{
+		"oauth2.googleapis.com/token": `{"access_token":"at"}`,
+		"oauth2/v2/userinfo":          `{"id":"someone","email":"` + victimEmail + `","verified_email":true,"name":"Someone"}`,
+	}.client()
+
+	if got, err := svc.HandleCallbackForClient(context.Background(), "code", "state", "authway_client"); !errors.Is(err, ErrAccountNotVerified) {
+		t.Fatalf("got %v, %v; want ErrAccountNotVerified", got, err)
+	}
+	if pending.SubjectAt("google") != "" || accounts.linked != 0 {
+		t.Errorf("the unverified account was linked (%q, %d links)", pending.SubjectAt("google"), accounts.linked)
+	}
+
+	pending.EmailVerified = true
+	if got, err := svc.HandleCallbackForClient(context.Background(), "code", "state", "authway_client"); err != nil || got.ID != pending.ID {
+		t.Fatalf("after verifying: %v, %v; want the account", got, err)
 	}
 }
 
@@ -102,7 +130,7 @@ func TestResolveAccount(t *testing.T) {
 	t.Run("a linked account is found by the link, whatever address the provider reports", func(t *testing.T) {
 		accounts := newFakeAccounts()
 		owner := accounts.add(tenantID, victimEmail)
-		setLinkedSubject(owner, "google", "g-1")
+		owner.NoteLinked("google", "g-1")
 		other := accounts.add(tenantID, "moved@example.com")
 
 		got, err := resolveAccount(accounts, &stubGate{}, zap.NewNop(), tenantID,
@@ -122,15 +150,15 @@ func TestResolveAccount(t *testing.T) {
 		if err != nil || got.ID != racer.ID {
 			t.Fatalf("got %v, %v; want the account the provider account is linked to", got, err)
 		}
-		if linkedSubject(byAddress, "google") != "" || byAddress.EmailVerified {
-			t.Errorf("the account found by address was changed: linked=%q verified=%v", linkedSubject(byAddress, "google"), byAddress.EmailVerified)
+		if byAddress.SubjectAt("google") != "" {
+			t.Errorf("the account found by address was linked: %q", byAddress.SubjectAt("google"))
 		}
 	})
 
 	t.Run("a link in another tenant does not count", func(t *testing.T) {
 		accounts := newFakeAccounts()
 		elsewhere := accounts.add(uuid.New(), victimEmail)
-		setLinkedSubject(elsewhere, "google", "g-1")
+		elsewhere.NoteLinked("google", "g-1")
 
 		_, err := resolveAccount(accounts, &stubGate{invited: false}, zap.NewNop(), tenantID, verified)
 		if !errors.Is(err, ErrNotInvited) {
@@ -141,11 +169,11 @@ func TestResolveAccount(t *testing.T) {
 	t.Run("an address already linked to another provider account is refused", func(t *testing.T) {
 		accounts := newFakeAccounts()
 		owner := accounts.add(tenantID, victimEmail)
-		setLinkedSubject(owner, "google", "g-original")
+		owner.NoteLinked("google", "g-original")
 
 		_, err := resolveAccount(accounts, &stubGate{invited: true}, zap.NewNop(), tenantID, verified)
-		if !errors.Is(err, ErrLinkedToAnother) || linkedSubject(owner, "google") != "g-original" {
-			t.Errorf("error = %v, link = %q; want ErrLinkedToAnother and the link unchanged", err, linkedSubject(owner, "google"))
+		if !errors.Is(err, ErrLinkedToAnother) || owner.SubjectAt("google") != "g-original" {
+			t.Errorf("error = %v, link = %q; want ErrLinkedToAnother and the link unchanged", err, owner.SubjectAt("google"))
 		}
 	})
 
@@ -155,7 +183,7 @@ func TestResolveAccount(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if linkedSubject(got, "google") != "g-1" || !got.EmailVerified || got.Name == nil || *got.Name != "Vic" {
+		if got.SubjectAt("google") != "g-1" || !got.EmailVerified || got.Name == nil || *got.Name != "Vic" {
 			t.Errorf("created %+v, want it linked, verified and named", got)
 		}
 	})

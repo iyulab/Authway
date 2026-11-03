@@ -1,17 +1,18 @@
 package user
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // LinkedIdentity is one provider account an account signs in with, as a row of
-// user_identities. Within a tenant a provider account belongs to one account
-// (unique index uq_user_identities_tenant_provider_subject).
-//
-// The rows are written next to the provider columns on users, which are still
-// what is read; a later release reconciles the two and reads the rows.
+// user_identities. An account may have several, at one provider or at several;
+// within a tenant a provider account belongs to one account (unique index
+// uq_user_identities_tenant_provider_subject).
 type LinkedIdentity struct {
 	ID       uuid.UUID `gorm:"type:uuid;primaryKey"`
 	TenantID uuid.UUID `gorm:"type:uuid;not null"`
@@ -26,3 +27,111 @@ type LinkedIdentity struct {
 
 // TableName is the table the identities live in.
 func (LinkedIdentity) TableName() string { return "user_identities" }
+
+// providerOrder is the fixed order in which an account's providers are listed.
+var providerOrder = []string{"google", "github", "microsoft", "apple"}
+
+// LinkedProviders names the sign-in providers the account is linked to, in a
+// fixed order, each once. It reads Identities, which the user service fills in
+// with every account it returns.
+func (u *User) LinkedProviders() []string {
+	has := map[string]bool{}
+	for _, identity := range u.Identities {
+		has[identity.Provider] = true
+	}
+	var linked []string
+	for _, p := range providerOrder {
+		if has[p] {
+			linked = append(linked, p)
+		}
+	}
+	return linked
+}
+
+// SubjectAt returns the provider account the account signs in with at
+// provider — the oldest, when it has several — or "".
+func (u *User) SubjectAt(provider string) string {
+	for _, identity := range u.Identities {
+		if identity.Provider == provider {
+			return identity.Subject
+		}
+	}
+	return ""
+}
+
+// NoteLinked records on the in-memory account a link just stored, so the
+// account the caller holds matches what a fresh read would return.
+func (u *User) NoteLinked(provider, subject string) {
+	for _, identity := range u.Identities {
+		if identity.Provider == provider && identity.Subject == subject {
+			return
+		}
+	}
+	u.Identities = append(u.Identities, LinkedIdentity{TenantID: u.TenantID, UserID: u.ID, Provider: provider, Subject: subject, EmailAtLink: u.Email})
+}
+
+// withIdentities fills in Identities for each of the accounts, oldest first,
+// in one query.
+func (s *service) withIdentities(users ...*User) error {
+	if len(users) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	var rows []LinkedIdentity
+	if err := s.db.Where("user_id IN ?", ids).Order("linked_at, id").Find(&rows).Error; err != nil {
+		return fmt.Errorf("failed to load sign-in identities: %w", err)
+	}
+	byUser := make(map[uuid.UUID][]LinkedIdentity, len(users))
+	for _, row := range rows {
+		byUser[row.UserID] = append(byUser[row.UserID], row)
+	}
+	for _, u := range users {
+		u.Identities = byUser[u.ID]
+	}
+	return nil
+}
+
+// loaded fills in the identities of an account the service is about to return.
+func (s *service) loaded(u *User) (*User, error) {
+	if err := s.withIdentities(u); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// syncProviderColumn sets the provider's column on users to the subject of the
+// account's oldest identity there, or clears it. The columns are not read any
+// more; they are kept so an API still running from before the rows were read
+// sees a link that is there and no link that is gone.
+func syncProviderColumn(tx *gorm.DB, userID uuid.UUID, provider string) error {
+	column, ok := providerColumns[provider]
+	if !ok {
+		return nil
+	}
+	var oldest LinkedIdentity
+	err := tx.Where("user_id = ? AND provider = ?", userID, provider).Order("linked_at, id").First(&oldest).Error
+	switch {
+	case err == nil:
+		return tx.Model(&User{}).Where("id = ?", userID).Update(column, oldest.Subject).Error
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return tx.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error
+	default:
+		return err
+	}
+}
+
+// ProviderLink is a provider account to link to an account.
+type ProviderLink struct {
+	Provider string
+	// Subject is the provider's own identifier for the account.
+	Subject string
+	// Email is the address the provider reported; the account's own address is
+	// recorded when it is empty.
+	Email string
+	// VerifiesAddress marks the account's address verified: the link is made on
+	// an address the provider has verified and that is the account's own.
+	VerifiesAddress bool
+}

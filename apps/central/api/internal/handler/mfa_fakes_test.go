@@ -114,7 +114,7 @@ func (f *fakeUserService) GetSoleAccountByEmail(email string) (*user.User, error
 func (f *fakeUserService) GetByProviderSubject(uuid.UUID, string, string) (*user.User, error) {
 	return nil, user.ErrUserNotFound
 }
-func (f *fakeUserService) LinkProvider(uuid.UUID, string, string) error { return nil }
+func (f *fakeUserService) LinkProvider(uuid.UUID, user.ProviderLink) error { return nil }
 func (f *fakeUserService) GetByEmailAndTenant(tenantID uuid.UUID, email string) (*user.User, error) {
 	for _, u := range f.users {
 		if u.Email == email && u.TenantID == tenantID {
@@ -153,16 +153,38 @@ func (f *fakeUserService) UnlinkProvider(id uuid.UUID, provider string) error {
 	if err != nil {
 		return err
 	}
-	linked := u.LinkedProviders()
-	if !slices.Contains(linked, provider) {
+	at := 0
+	for _, i := range u.Identities {
+		if i.Provider == provider {
+			at++
+		}
+	}
+	if at == 0 {
 		return user.ErrNotLinked
 	}
-	if u.PasswordHash == "" && len(linked) == 1 {
+	if at > 1 {
+		return user.ErrSeveralLinked
+	}
+	if u.PasswordHash == "" && len(u.Identities) == 1 {
 		return user.ErrLastSignInMethod
 	}
-	if provider == "google" {
-		u.GoogleID = nil
+	u.Identities = slices.DeleteFunc(u.Identities, func(i user.LinkedIdentity) bool { return i.Provider == provider })
+	return nil
+}
+
+// UnlinkIdentity follows the same rule for one identity named by its id.
+func (f *fakeUserService) UnlinkIdentity(userID, identityID uuid.UUID) error {
+	u, err := f.GetByID(userID)
+	if err != nil {
+		return err
 	}
+	if !slices.ContainsFunc(u.Identities, func(i user.LinkedIdentity) bool { return i.ID == identityID }) {
+		return user.ErrNotLinked
+	}
+	if u.PasswordHash == "" && len(u.Identities) == 1 {
+		return user.ErrLastSignInMethod
+	}
+	u.Identities = slices.DeleteFunc(u.Identities, func(i user.LinkedIdentity) bool { return i.ID == identityID })
 	return nil
 }
 func (f *fakeUserService) UpdateLastLogin(uuid.UUID) error {

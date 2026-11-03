@@ -132,10 +132,10 @@ describe('sign-in through another identity provider', () => {
     if (offered.length === 0) skip()
     const call = async (method: string, path: string): Promise<Response> => {
       const res = await fetch(`${config.api}/api/v1/users/connections${path}`, { method, headers: { Authorization: `Bearer ${memberAccessToken}` } })
-      await conform(method, `/api/v1/users/connections${path ? '/{provider}' : ''}`, res.clone())
+      await conform(method, `/api/v1/users/connections${path ? '/{connection}' : ''}`, res.clone())
       return res
     }
-    const providers = async () => ((await (await call('GET', '')).json()) as { connections: { provider: string }[] }).connections.map((c) => c.provider)
+    const providers = async () => ((await (await call('GET', '')).json()) as { connections: { id: string; provider: string; email: string }[] }).connections.map((c) => c.provider)
     expect(await providers()).toContain(config.idpStandInAs)
 
     expect((await call('DELETE', '/not-a-provider')).status).toBe(404)

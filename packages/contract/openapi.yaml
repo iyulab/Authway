@@ -573,11 +573,14 @@ paths:
     get:
       tags: [account]
       operationId: listOwnConnections
-      summary: The sign-in providers the signed-in user's account is linked to
+      summary: The provider accounts the signed-in user's account signs in with
+      description: |
+        One entry for each provider account — an account signed in with two
+        Google accounts lists both — oldest first.
       security: [{ userToken: [] }]
       responses:
         '200':
-          description: The links, in a fixed order
+          description: The links, oldest first
           content:
             application/json:
               schema:
@@ -588,15 +591,22 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [provider]
+                      required: [id, provider, email, linked_at]
                       properties:
+                        id: { type: string, format: uuid, description: 'Names this link in DELETE /api/v1/users/connections/{connection}.' }
                         provider: { type: string, description: 'google, github, microsoft or apple' }
+                        email: { type: string, description: "The address the provider reported when the account was linked — it may differ from the account's own address." }
+                        linked_at: { type: string }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
-  /api/v1/users/connections/{provider}:
+  /api/v1/users/connections/{connection}:
     parameters:
-      - { name: provider, in: path, required: true, schema: { type: string } }
+      - name: connection
+        in: path
+        required: true
+        description: The `id` of a link from the list or, when the account signs in with one account at a provider, that provider's name.
+        schema: { type: string }
     delete:
       tags: [account]
       operationId: removeOwnConnection
@@ -607,8 +617,9 @@ paths:
         verified). Needs a recent sign-in (`401
         insufficient_user_authentication` with `max_age` otherwise). The
         account's only way to sign in — no password and no other link — is
-        `409 last_sign_in_method`; a provider it is not linked to is `404
-        not_connected`.
+        `409 last_sign_in_method`; a link or provider it has none of is `404
+        not_connected`; a provider's name when the account has several
+        accounts there is `409 several_connections` — name the one by its id.
       security: [{ userToken: [] }]
       responses:
         '200': { $ref: '#/components/responses/Message' }

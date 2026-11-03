@@ -110,22 +110,22 @@ func (f *fakeAccounts) GetByProviderSubject(tenantID uuid.UUID, provider, subjec
 		return nil, f.lookupErr
 	}
 	for _, u := range f.users {
-		if u.TenantID == tenantID && linkedSubject(u, provider) == subject {
+		if u.TenantID == tenantID && u.SubjectAt(provider) == subject {
 			return u, nil
 		}
 	}
 	return nil, user.ErrUserNotFound
 }
 
-func (f *fakeAccounts) LinkProvider(id uuid.UUID, provider, subject string) error {
+func (f *fakeAccounts) LinkProvider(id uuid.UUID, link user.ProviderLink) error {
 	if other := f.linkedMeanwhile; other != nil {
 		f.linkedMeanwhile = nil
-		setLinkedSubject(other, provider, subject)
+		other.NoteLinked(link.Provider, link.Subject)
 		return user.ErrProviderSubjectTaken
 	}
 	for _, u := range f.users {
 		if u.ID == id {
-			setLinkedSubject(u, provider, subject)
+			u.NoteLinked(link.Provider, link.Subject)
 			u.EmailVerified = true
 			f.linked++
 			return nil
@@ -136,7 +136,15 @@ func (f *fakeAccounts) LinkProvider(id uuid.UUID, provider, subject string) erro
 
 func newFakeAccounts() *fakeAccounts { return &fakeAccounts{} }
 
+// add puts an account in the tenant whose address is verified, as an account in
+// use is; addUnverified, one nobody has proved the address of yet.
 func (f *fakeAccounts) add(tenantID uuid.UUID, email string) *user.User {
+	u := f.addUnverified(tenantID, email)
+	u.EmailVerified = true
+	return u
+}
+
+func (f *fakeAccounts) addUnverified(tenantID uuid.UUID, email string) *user.User {
 	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: email}
 	f.users = append(f.users, u)
 	return u
