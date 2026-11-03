@@ -57,6 +57,13 @@
 
 ### Changed
 
+- **Sign-in provider links are also kept as rows** — an account's links to
+  Google, GitHub, Microsoft and Apple are written to a new `user_identities`
+  table beside the four columns on `users` (migration 054 copies the existing
+  links), the first step towards linking several provider accounts, and other
+  kinds of sign-in, to one account. Nothing changes for a caller yet: the
+  columns are still what is read, and a later release switches reading to the
+  rows before the columns are dropped.
 - **An address is one address whatever the case of its letters** — accounts
   and invitations are stored with the address trimmed and its ASCII capitals in
   lower case, and found by that form (sign-in, invitation, magic link, social

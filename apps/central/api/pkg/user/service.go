@@ -373,16 +373,36 @@ func (s *service) LinkProvider(userID uuid.UUID, provider, subject string) error
 	if !ok || subject == "" {
 		return fmt.Errorf("cannot link sign-in provider %q", provider)
 	}
-	res := s.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{column: subject, "email_verified": true})
+	// The column is what is read; the identity row is written beside it so a
+	// later release can read the rows (see LinkedIdentity).
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var u User
+		if err := tx.Where("id = ?", userID).First(&u).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrUserNotFound
+			}
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{column: subject, "email_verified": true}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ? AND provider = ?", userID, provider).Delete(&LinkedIdentity{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&LinkedIdentity{
+			ID: uuid.New(), TenantID: u.TenantID, UserID: userID,
+			Provider: provider, Subject: subject, EmailAtLink: u.Email, LinkedAt: time.Now(),
+		}).Error
+	})
 	var refused *pgconn.PgError
-	if errors.As(res.Error, &refused) && refused.Code == uniqueViolation {
+	if errors.As(err, &refused) && refused.Code == uniqueViolation {
 		return ErrProviderSubjectTaken
 	}
-	if res.Error != nil {
-		return fmt.Errorf("failed to link sign-in provider: %w", res.Error)
+	if errors.Is(err, ErrUserNotFound) {
+		return err
 	}
-	if res.RowsAffected == 0 {
-		return ErrUserNotFound
+	if err != nil {
+		return fmt.Errorf("failed to link sign-in provider: %w", err)
 	}
 	s.logger.Info("Sign-in provider linked", zap.String("user_id", userID.String()), zap.String("provider", provider))
 	return nil
@@ -404,7 +424,13 @@ func (s *service) UnlinkProvider(userID uuid.UUID, provider string) error {
 	if u.PasswordHash == "" && len(linked) == 1 {
 		return ErrLastSignInMethod
 	}
-	if err := s.db.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error; err != nil {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&User{}).Where("id = ?", userID).Update(column, nil).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ? AND provider = ?", userID, provider).Delete(&LinkedIdentity{}).Error
+	})
+	if err != nil {
 		return fmt.Errorf("failed to unlink sign-in provider: %w", err)
 	}
 	s.logger.Info("Sign-in provider unlinked", zap.String("user_id", userID.String()), zap.String("provider", provider))
