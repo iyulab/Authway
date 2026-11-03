@@ -244,38 +244,66 @@ func TestBreached_PutsOnlyAFewAnswersInTheCache(t *testing.T) {
 	}
 }
 
-// Calls beyond what may be in flight are not queued: a flood of password
-// attempts cannot hold the service, or this process, behind it.
-func TestBreached_RefusesToQueueBehindABusyService(t *testing.T) {
-	release := make(chan struct{})
-	entered := make(chan struct{}, 1)
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		entered <- struct{}{}
-		<-release
-		_, _ = w.Write([]byte(answer("0000000000000000000000000000000000A:4")))
-	}))
-	defer slow.Close()
-	c, err := New(slow.URL+"/range/", WithHTTPClient(&http.Client{Timeout: 5 * time.Second}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.slots = make(chan struct{}, 1)
-
+// A service held by calls that do not finish: the places for calls are taken,
+// and one more call waits for a place only as long as its caller's time allows.
+// It is not left waiting behind them, and it is not made to look like an answer.
+func TestBreached_WaitsForAPlaceOnlyAsLongAsTheCallerCanAfford(t *testing.T) {
+	c, release, entered := busyService(t)
 	done := make(chan error, 1)
 	go func() { _, err := c.Breached(context.Background(), "password"); done <- err }()
 	<-entered
 
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
 	started := time.Now()
-	if _, err := c.Breached(context.Background(), "another"); !errors.Is(err, ErrBusy) {
-		t.Errorf("err = %v, want ErrBusy while the one slot is taken", err)
+	if _, err := c.Breached(ctx, "another"); !errors.Is(err, ErrBusy) {
+		t.Errorf("err = %v, want ErrBusy when no place frees up in time", err)
 	}
-	if time.Since(started) > time.Second {
-		t.Errorf("the second call waited %v instead of being refused at once", time.Since(started))
+	if waited := time.Since(started); waited < 100*time.Millisecond || waited > time.Second {
+		t.Errorf("waited %v for a place, want about the caller's 150ms", waited)
 	}
 	close(release)
 	if err := <-done; err != nil {
 		t.Errorf("the first call: %v", err)
 	}
+}
+
+// A short burst is still checked: a call that finds every place taken gets one
+// when a call ahead of it finishes.
+func TestBreached_ABurstWaitsItsTurn(t *testing.T) {
+	c, release, entered := busyService(t)
+	done := make(chan error, 2)
+	go func() { _, err := c.Breached(context.Background(), "password"); done <- err }()
+	<-entered
+	go func() { _, err := c.Breached(context.Background(), "another"); done <- err }()
+
+	time.Sleep(100 * time.Millisecond) // the second is waiting for the one place
+	close(release)
+	for i := 0; i < 2; i++ {
+		if err := <-done; err != nil {
+			t.Errorf("a call in the burst: %v", err)
+		}
+	}
+}
+
+// busyService is a Checker with one place for calls, against a service that
+// answers only once release is closed; entered signals each call that reaches it.
+func busyService(t *testing.T) (c *Checker, release chan struct{}, entered chan struct{}) {
+	t.Helper()
+	release = make(chan struct{})
+	entered = make(chan struct{}, 4)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entered <- struct{}{}
+		<-release
+		_, _ = w.Write([]byte(answer("0000000000000000000000000000000000A:4")))
+	}))
+	t.Cleanup(slow.Close)
+	c, err := New(slow.URL+"/range/", WithHTTPClient(&http.Client{Timeout: 5 * time.Second}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.slots = make(chan struct{}, 1)
+	return c, release, entered
 }
 
 func TestNew_TakesOnlyAnHTTPAddressAndAddsTheSlash(t *testing.T) {

@@ -145,8 +145,8 @@ on, otherwise in the process). `AUTHWAY_BREACHED_PASSWORD_API_URL` is the
 address the five characters are appended to: the public Pwned Passwords range
 API, or **a mirror inside your network for a deployment that cannot reach the
 internet**. When the service cannot be reached (it times out after two seconds,
-answers an error, answers something that is not a list, or is already being asked
-eight times at once) the password is accepted and a warning is logged: the check must not stop anyone from signing up
+answers an error, answers something that is not a list, or eight calls to it are already
+pending and none finishes in time) the password is accepted and a warning is logged: the check must not stop anyone from signing up
 or recovering an account. `capabilities.breached_password_check` tells
 applications whether it is on.
 

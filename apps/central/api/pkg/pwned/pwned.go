@@ -38,8 +38,8 @@ const (
 	DefaultCacheTTL = time.Hour
 
 	// maxConcurrentCalls bounds the calls to the service that are in flight at
-	// once; a flood of password attempts waits for no one and is not let through
-	// unchecked-by-accident either (see ErrBusy).
+	// once. A call beyond that waits for a place until its caller's time is up
+	// (see ErrBusy), so a short burst is still checked.
 	maxConcurrentCalls = 8
 	// maxCachedPrefixes bounds how many answers are put in the cache within one
 	// cache lifetime. An answer is some 30 KiB and there are a million prefixes,
@@ -53,8 +53,9 @@ const (
 // ErrUnexpectedAnswer is an answer that is not a list of hash suffixes.
 var ErrUnexpectedAnswer = errors.New("the range service did not answer with a list of hash suffixes")
 
-// ErrBusy is a call not made because the calls already in flight use all there
-// is room for.
+// ErrBusy is a call not made because the calls already in flight used all there
+// is room for until the caller's time was up. Like any other failure it says
+// nothing about the password; the caller decides what to do without an answer.
 var ErrBusy = errors.New("too many calls to the range service are in flight")
 
 // noSuffixes is an answer that lists none.
@@ -204,7 +205,7 @@ func (c *Checker) fetch(ctx context.Context, prefix string) ([]byte, error) {
 	select {
 	case c.slots <- struct{}{}:
 		defer func() { <-c.slots }()
-	default:
+	case <-ctx.Done():
 		return nil, ErrBusy
 	}
 
