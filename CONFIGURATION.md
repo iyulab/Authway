@@ -133,8 +133,7 @@ AUTHWAY_BREACHED_PASSWORD_API_URL=https://api.pwnedpasswords.com/range/
 ```
 
 With the check on, a password that is being set — accepting an invitation,
-creating an account through the administration API, changing a password,
-resetting it — is refused with `400 password_breached` when it is in a known data
+changing a password, resetting it — is refused with `400 password_breached` when it is in a known data
 breach. A password that is already set is not looked at again, and signing in
 never calls the service. **Off by default: a deployment asks nobody outside
 itself anything until you turn this on.**
@@ -146,8 +145,8 @@ on, otherwise in the process). `AUTHWAY_BREACHED_PASSWORD_API_URL` is the
 address the five characters are appended to: the public Pwned Passwords range
 API, or **a mirror inside your network for a deployment that cannot reach the
 internet**. When the service cannot be reached (it times out after two seconds,
-answers an error, or answers something that is not a list) the password is
-accepted and a warning is logged: the check must not stop anyone from signing up
+answers an error, answers something that is not a list, or is already being asked
+eight times at once) the password is accepted and a warning is logged: the check must not stop anyone from signing up
 or recovering an account. `capabilities.breached_password_check` tells
 applications whether it is on.
 

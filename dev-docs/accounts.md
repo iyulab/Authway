@@ -73,8 +73,7 @@ was used.
    invitation; magic links, provider sign-in and passkeys are gated by the same
    policy and never become a side door.
 6. **Passwords are checked where they are stored.** Every way of setting one —
-   accepting an invitation, creating an account through the administration API,
-   changing it, resetting it — meets the same rule: the tenant's least length,
+   accepting an invitation, changing it, resetting it — meets the same rule: the tenant's least length,
    the greatest length the hash reads, and, where the deployment turns it on, a
    check against known data breaches that sends out only five characters of a hash.
 

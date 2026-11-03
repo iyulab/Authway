@@ -170,6 +170,114 @@ func TestBreached_AFailureIsAnErrorNotAnAnswer(t *testing.T) {
 	})
 }
 
+// A service that answers with a redirect is not followed: the address is the
+// deployment's own, and a redirect would send this process wherever the service
+// likes.
+func TestBreached_DoesNotFollowARedirect(t *testing.T) {
+	target := newService(t, http.StatusOK, answer(passwordSuffix+":1"))
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/range/"+passwordPrefix, http.StatusFound)
+	}))
+	defer redirecting.Close()
+	c, err := New(redirecting.URL + "/range/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.Breached(context.Background(), "password"); err == nil || got {
+		t.Errorf("Breached = %v, %v; want an error for a redirect", got, err)
+	}
+	if n := target.calls.Load(); n != 0 {
+		t.Errorf("the redirect was followed: the target was called %d times", n)
+	}
+}
+
+// An address that carries a query, a fragment or credentials would have the
+// prefix appended to it and would be written to the log on every failure.
+func TestNew_RefusesAnAddressThatIsNotAPlainPath(t *testing.T) {
+	for _, bad := range []string{
+		"https://pwned.example/range/?key=secret",
+		"https://pwned.example/range/#top",
+		"https://user:secret@pwned.example/range/",
+	} {
+		_, err := New(bad)
+		if err == nil {
+			t.Errorf("New(%q) did not refuse the address", bad)
+		} else if strings.Contains(err.Error(), "secret") {
+			t.Errorf("the refusal for %q repeats the address: %v", bad, err)
+		}
+	}
+}
+
+// A real service pads every answer; an empty one is something else answering
+// for it, and must not switch the check off for the prefix for an hour.
+func TestBreached_AnAnswerThatListsNothingIsNotRemembered(t *testing.T) {
+	s := newService(t, http.StatusOK, "")
+	c := checker(t, s, WithCache(ephemeral.NewMemory(context.Background()), time.Minute))
+	for i := 0; i < 2; i++ {
+		if got, err := c.Breached(context.Background(), "password"); err != nil || got {
+			t.Fatalf("Breached = %v, %v; want false, no error", got, err)
+		}
+	}
+	if n := s.calls.Load(); n != 2 {
+		t.Errorf("an empty answer was cached: %d calls, want 2", n)
+	}
+}
+
+// The cache takes a bounded number of answers in a lifetime, so that a stream of
+// random passwords cannot fill the memory of a deployment that keeps its state
+// in the process.
+func TestBreached_PutsOnlyAFewAnswersInTheCache(t *testing.T) {
+	s := newService(t, http.StatusOK, answer("0000000000000000000000000000000000A:4"))
+	c := checker(t, s, WithCache(ephemeral.NewMemory(context.Background()), time.Hour))
+	c.maxFills = 2
+	passwords := []string{"alpha-1", "bravo-2", "charlie-3"} // three different prefixes
+	for round := 0; round < 2; round++ {
+		for _, password := range passwords {
+			if _, err := c.Breached(context.Background(), password); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// First round: three calls, two answers kept. Second round: the third asks again.
+	if n := s.calls.Load(); n != 4 {
+		t.Errorf("%d calls, want 4 (3, then 1 for the answer that was not kept)", n)
+	}
+}
+
+// Calls beyond what may be in flight are not queued: a flood of password
+// attempts cannot hold the service, or this process, behind it.
+func TestBreached_RefusesToQueueBehindABusyService(t *testing.T) {
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entered <- struct{}{}
+		<-release
+		_, _ = w.Write([]byte(answer("0000000000000000000000000000000000A:4")))
+	}))
+	defer slow.Close()
+	c, err := New(slow.URL+"/range/", WithHTTPClient(&http.Client{Timeout: 5 * time.Second}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.slots = make(chan struct{}, 1)
+
+	done := make(chan error, 1)
+	go func() { _, err := c.Breached(context.Background(), "password"); done <- err }()
+	<-entered
+
+	started := time.Now()
+	if _, err := c.Breached(context.Background(), "another"); !errors.Is(err, ErrBusy) {
+		t.Errorf("err = %v, want ErrBusy while the one slot is taken", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Errorf("the second call waited %v instead of being refused at once", time.Since(started))
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Errorf("the first call: %v", err)
+	}
+}
+
 func TestNew_TakesOnlyAnHTTPAddressAndAddsTheSlash(t *testing.T) {
 	for _, bad := range []string{"", "pwned.example/range/", "ftp://pwned.example/range/", "https://"} {
 		if _, err := New(bad); err == nil {

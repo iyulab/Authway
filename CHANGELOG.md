@@ -3,8 +3,7 @@
 ### Added
 
 - **Breached password check** — a password that is being set (accepting an
-  invitation, creating an account through the administration API, changing a
-  password, resetting it) is refused with `400 password_breached` when it is in a
+  invitation, changing a password, resetting it) is refused with `400 password_breached` when it is in a
   known data breach. Only the first five characters of its SHA-1 hash are sent,
   to the Pwned Passwords range API or a mirror of it (k-anonymity); the password
   never leaves the deployment. **Off by default**:

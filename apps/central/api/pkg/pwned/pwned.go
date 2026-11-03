@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,11 +37,28 @@ const (
 	// DefaultCacheTTL is how long an answer for a prefix is kept.
 	DefaultCacheTTL = time.Hour
 
+	// maxConcurrentCalls bounds the calls to the service that are in flight at
+	// once; a flood of password attempts waits for no one and is not let through
+	// unchecked-by-accident either (see ErrBusy).
+	maxConcurrentCalls = 8
+	// maxCachedPrefixes bounds how many answers are put in the cache within one
+	// cache lifetime. An answer is some 30 KiB and there are a million prefixes,
+	// so without a bound a stream of random passwords fills the memory of a
+	// deployment that keeps its state in the process.
+	maxCachedPrefixes = 2000
+
 	cacheKeyPrefix = "pwned:range:"
 )
 
 // ErrUnexpectedAnswer is an answer that is not a list of hash suffixes.
 var ErrUnexpectedAnswer = errors.New("the range service did not answer with a list of hash suffixes")
+
+// ErrBusy is a call not made because the calls already in flight use all there
+// is room for.
+var ErrBusy = errors.New("too many calls to the range service are in flight")
+
+// noSuffixes is an answer that lists none.
+const noSuffixes = "\n"
 
 // Cache keeps what the service answered for a prefix, so a prefix asked about
 // again is not asked of the service again. ephemeral.Store is one.
@@ -55,6 +73,15 @@ type Checker struct {
 	client   *http.Client
 	cache    Cache
 	cacheTTL time.Duration
+
+	// slots has room for the calls that may be in flight at once.
+	slots chan struct{}
+
+	// fills counts the answers put in the cache since windowStart.
+	fillsMu     sync.Mutex
+	windowStart time.Time
+	fills       int
+	maxFills    int
 }
 
 // Option configures a Checker.
@@ -82,19 +109,31 @@ func WithHTTPClient(client *http.Client) Option {
 //
 // The address is the deployment's own setting, not something a caller gave:
 // a mirror inside a closed network is the reason to set it, so it may name a
-// private address.
+// private address. It is a plain path: a query, a fragment or credentials in
+// it would be appended to, and would be written to the log with every failure.
 func New(baseURL string, opts ...Option) (*Checker, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, fmt.Errorf("the range service address %q is not an http or https address", baseURL)
+		return nil, errors.New("the range service address is not an http or https address")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, errors.New("the range service address must be a plain path: no credentials, query or fragment")
 	}
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
 	c := &Checker{
-		baseURL:  baseURL,
-		client:   &http.Client{Timeout: requestTimeout},
+		baseURL: baseURL,
+		client: &http.Client{
+			Timeout: requestTimeout,
+			// An answer that is a redirect is not an answer: the address is the
+			// deployment's own, and following a service's redirect would let it
+			// send this process to any address it can reach.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 		cacheTTL: DefaultCacheTTL,
+		slots:    make(chan struct{}, maxConcurrentCalls),
+		maxFills: maxCachedPrefixes,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -136,14 +175,39 @@ func (c *Checker) suffixes(ctx context.Context, prefix string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if c.cache != nil {
+	// An answer that lists nothing is not kept: a real service pads every answer,
+	// so an empty one is a proxy or a portal answering for it, and remembering it
+	// would switch the check off for the prefix for as long as the cache lives.
+	if c.cache != nil && list != noSuffixes && c.mayCache() {
 		// A cache that cannot be written costs only another call next time.
 		_ = c.cache.SetValue(ctx, key, list, c.cacheTTL)
 	}
 	return list, nil
 }
 
+// mayCache reports whether one more answer may be put in the cache in this
+// cache lifetime, and counts it.
+func (c *Checker) mayCache() bool {
+	c.fillsMu.Lock()
+	defer c.fillsMu.Unlock()
+	if now := time.Now(); now.Sub(c.windowStart) >= c.cacheTTL {
+		c.windowStart, c.fills = now, 0
+	}
+	if c.fills >= c.maxFills {
+		return false
+	}
+	c.fills++
+	return true
+}
+
 func (c *Checker) fetch(ctx context.Context, prefix string) ([]byte, error) {
+	select {
+	case c.slots <- struct{}{}:
+		defer func() { <-c.slots }()
+	default:
+		return nil, ErrBusy
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+prefix, nil)
 	if err != nil {
 		return nil, err

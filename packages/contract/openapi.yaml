@@ -4737,9 +4737,8 @@ components:
           type: boolean
         breached_password_check:
           description: |
-            A password that is being set — accepting an invitation, creating an
-            account through the administration API, changing it, resetting it
-            — is refused with `400 password_breached` when it is in a known
+            A password that is being set — accepting an invitation, changing it,
+            resetting it — is refused with `400 password_breached` when it is in a known
             data breach. Only the first five characters of its SHA-1 hash leave
             the deployment, to a range service (the Pwned Passwords range API or
             a mirror of it). When the service cannot be reached the password is
