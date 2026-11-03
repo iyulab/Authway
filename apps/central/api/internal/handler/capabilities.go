@@ -18,6 +18,15 @@ type CapabilitiesHandler struct {
 	approvals bool
 	// passkeys is whether users can sign in with, and register, passkeys.
 	passkeys bool
+	// breachedPasswords is whether a password that is set is checked against
+	// known data breaches.
+	breachedPasswords bool
+}
+
+// ChecksBreachedPasswords reports breached_password_check as offered.
+func (h *CapabilitiesHandler) ChecksBreachedPasswords() *CapabilitiesHandler {
+	h.breachedPasswords = true
+	return h
 }
 
 // OffersPasskeys reports passkeys as offered.
@@ -76,24 +85,29 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //     for a token bound to the approval
 //   - passkeys: a user registers passkeys on the account screen and signs in
 //     with them (WebAuthn; /api/v1/users/passkeys, /login-flows/{flow}/passkey)
+//   - breached_password_check: a password that is being set is refused
+//     (400 password_breached) when it is in a known data breach; only the
+//     first five characters of its hash are sent out, and when the check
+//     cannot be made the password is accepted
 //   - ciba: decoupled approval in the shape of OpenID CIBA (with an ID token)
 //     — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
-		"multi_tenant":         true,
-		"providers":            h.social.ConfiguredProviders(),
-		"magic_link":           true,
-		"mfa":                  []string{"totp"},
-		"signup_modes":         []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
-		"account_deletion":     true,
-		"custom_claims":        true,
-		"backchannel_logout":   true,
-		"token_introspection":  true,
-		"device_authorization": true,
-		"terms_acceptance":     true,
-		"token_exchange":       h.exchanges,
-		"approval_requests":    h.approvals,
-		"passkeys":             h.passkeys,
-		"ciba":                 false,
+		"multi_tenant":            true,
+		"providers":               h.social.ConfiguredProviders(),
+		"magic_link":              true,
+		"mfa":                     []string{"totp"},
+		"signup_modes":            []string{tenant.SignupModeInviteOnly, tenant.SignupModeOpen},
+		"account_deletion":        true,
+		"custom_claims":           true,
+		"backchannel_logout":      true,
+		"token_introspection":     true,
+		"device_authorization":    true,
+		"terms_acceptance":        true,
+		"token_exchange":          h.exchanges,
+		"approval_requests":       h.approvals,
+		"passkeys":                h.passkeys,
+		"breached_password_check": h.breachedPasswords,
+		"ciba":                    false,
 	})
 }

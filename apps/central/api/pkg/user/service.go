@@ -91,6 +91,10 @@ type service struct {
 	// passwordMinLength answers a tenant's least password length; see
 	// PasswordMinLength.
 	passwordMinLength func(tenantID uuid.UUID) int
+
+	// breach checks a password that is being set against known data
+	// breaches; nil when the deployment does not; see PasswordBreachCheck.
+	breach BreachChecker
 }
 
 // Option configures a user service.

@@ -257,6 +257,7 @@ event is `user.password_changed`.
 |--------|--------|---------|
 | `400` | `invalid_current_password` | The current password is not correct. Repeated ones are limited like failed sign-ins (`429`) |
 | `400` | `password_too_short` / `password_too_long` | The new password breaks the tenant's rule; `min_length` says the least |
+| `400` | `password_breached` | The new password is in a known data breach — only where `capabilities.breached_password_check` is true; ask for a different one |
 | `400` | `invalid_request` | No `new_password` |
 | `401` | `insufficient_user_authentication` | Setting a first password needs a recent sign-in — sign in again with `max_age` and retry |
 | `403` | `account_application_required` | Setting a first password with a token that was not issued to the account screen |

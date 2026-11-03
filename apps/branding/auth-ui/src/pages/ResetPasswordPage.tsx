@@ -103,6 +103,8 @@ export default function ResetPasswordPage() {
         const inForce = Number(data.min_length) || passwordLength;
         setPasswordLength(inForce);
         setError(t('password:validation.minLength', { length: inForce }));
+      } else if (data.code === 'password_breached') {
+        setError(t('auth:validation.passwordBreached'));
       } else if (data.code === 'account_suspended') {
         setError(t('auth:errors.accountSuspended'));
       } else {

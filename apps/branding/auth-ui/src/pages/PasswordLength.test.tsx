@@ -69,6 +69,16 @@ describe('the password length a tenant asks for', () => {
       expect(await screen.findByText(/12자/)).toBeInTheDocument()
       expect(screen.queryByText(/must be at least/)).not.toBeInTheDocument()
     })
+
+    it('says a password found in known breaches in the screen\'s language', async () => {
+      server.use(http.post(`${API}/api/v1/invitations/accept`, () =>
+        HttpResponse.json({ detail: 'this password appears in known data breaches; choose a different one', code: 'password_breached', min_length: 8 }, { status: 400 })))
+      await open(8)
+      await fill('nine-char')
+
+      expect(await screen.findByText(/유출된 적이 있는/)).toBeInTheDocument()
+      expect(screen.queryByText(/known data breaches/)).not.toBeInTheDocument()
+    })
   })
 
   describe('resetting a password', () => {
@@ -106,6 +116,16 @@ describe('the password length a tenant asks for', () => {
 
       expect(await screen.findByText(/최소 12자 이상이어야/)).toBeInTheDocument()
       expect(screen.queryByText(/must be at least/)).not.toBeInTheDocument()
+    })
+
+    it('says a password found in known breaches in the screen\'s language', async () => {
+      server.use(http.post(`${API}/api/v1/email/reset-password`, () =>
+        HttpResponse.json({ detail: 'this password appears in known data breaches; choose a different one', code: 'password_breached', min_length: 8 }, { status: 400 })))
+      await open(8)
+      await fill('nine-char')
+
+      expect(await screen.findByText(/유출된 적이 있는/)).toBeInTheDocument()
+      expect(screen.queryByText(/known data breaches/)).not.toBeInTheDocument()
     })
   })
 })

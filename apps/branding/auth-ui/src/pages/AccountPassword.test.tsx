@@ -53,6 +53,19 @@ describe('AccountPassword', () => {
     ])
   })
 
+  it('says a new password found in known breaches, and keeps what was typed', async () => {
+    const call = callWith(true, () => json(400, { code: 'password_breached', detail: 'this password appears in known data breaches; choose a different one' }))
+    render(<AccountPassword call={call} signInAgain={signInAgain} />)
+    await user.click(await screen.findByRole('button', { name: 'Change password' }))
+    await user.type(screen.getByLabelText('Current password'), 'old-password')
+    await user.type(screen.getByLabelText('New password'), 'password1234')
+    await user.type(screen.getByLabelText('New password again'), 'password1234')
+    await user.click(screen.getByRole('button', { name: 'Change password' }))
+
+    expect(await screen.findByText('This password appears in known data breaches. Please choose a different one.')).toBeInTheDocument()
+    expect(screen.getByLabelText('New password')).toHaveValue('password1234')
+  })
+
   it('checks the two new passwords match before sending', async () => {
     const call = callWith(true, () => json(200, { sessions_ended: 'others' }))
     render(<AccountPassword call={call} signInAgain={signInAgain} />)

@@ -55,6 +55,7 @@ type Config struct {
 	Security            SecurityConfig            `mapstructure:"security"`
 	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`
 	WebAuthn            WebAuthnConfig            `mapstructure:"webauthn"`
+	BreachedPassword    BreachedPasswordConfig    `mapstructure:"breached_password"`
 }
 
 type AppConfig struct {
@@ -645,6 +646,10 @@ func setDefaults() {
 	// A key without a default is not read from the environment: empty means the
 	// login UI's host (see WebAuthnConfig).
 	viper.SetDefault("webauthn.rp_id", "")
+	// Off, and the public range API when on. Without a default a key is not
+	// read from the environment.
+	viper.SetDefault("breached_password.check", false)
+	viper.SetDefault("breached_password.api_url", DefaultBreachedPasswordAPIURL)
 	// No console sign-in until the console's address is configured — a key
 	// without a default is not read from the environment.
 	viper.SetDefault("app.console_url", "")

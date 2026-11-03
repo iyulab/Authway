@@ -629,7 +629,8 @@ paths:
         (`403 account_application_required` for another application's): a first
         password is a new way to sign in, which an application that holds a
         token for the user must not choose for them. The new password follows the tenant's rule (`400
-        password_too_short` with `min_length`, or `password_too_long`).
+        password_too_short` with `min_length`, `password_too_long`, or — where
+        `capabilities.breached_password_check` is true — `password_breached`).
 
         The user's other sessions end, with the tokens issued in them;
         `sessions_ended` says which, as turning on a second factor does.
@@ -4734,6 +4735,17 @@ components:
             (`/api/v1/users/passkeys`, `/api/v1/login-flows/{flow}/passkey/begin`
             and `finish`). Absent or false where they are not set up.
           type: boolean
+        breached_password_check:
+          description: |
+            A password that is being set — accepting an invitation, creating an
+            account through the administration API, changing it, resetting it
+            — is refused with `400 password_breached` when it is in a known
+            data breach. Only the first five characters of its SHA-1 hash leave
+            the deployment, to a range service (the Pwned Passwords range API or
+            a mirror of it). When the service cannot be reached the password is
+            accepted. A password already set is not looked at again. Absent or
+            false where the deployment has not turned it on.
+          type: boolean
         ciba: { type: boolean }
 
     Introspection:
@@ -4801,7 +4813,7 @@ components:
             tenant_has_clients, tenant_has_service_clients, tenant_required,
             user_already_member, invitation_already_pending,
             invitation_not_pending, email_domain_not_allowed,
-            password_too_short, password_too_long, system_client,
+            password_too_short, password_too_long, password_breached, system_client,
             unknown_client, account_unavailable, invalid_current_password,
             insufficient_user_authentication, not_connected,
             last_sign_in_method, invalid_scope, internal_error,

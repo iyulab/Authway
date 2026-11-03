@@ -2,6 +2,18 @@
 
 ### Added
 
+- **Breached password check** — a password that is being set (accepting an
+  invitation, creating an account through the administration API, changing a
+  password, resetting it) is refused with `400 password_breached` when it is in a
+  known data breach. Only the first five characters of its SHA-1 hash are sent,
+  to the Pwned Passwords range API or a mirror of it (k-anonymity); the password
+  never leaves the deployment. **Off by default**:
+  `AUTHWAY_BREACHED_PASSWORD_CHECK=true` turns it on, and
+  `AUTHWAY_BREACHED_PASSWORD_API_URL` points a deployment without internet access
+  at a mirror. When the service cannot be reached the password is accepted and a
+  warning is logged. `capabilities.breached_password_check` says whether it is
+  on. See [Configuration](CONFIGURATION.md#breached-password-check).
+
 - **Passkeys** — a user adds a passkey on the account screen and signs in with
   it: the fingerprint, face or screen lock of their device instead of a
   password. The sign-in screen offers it with a button and, in browsers that

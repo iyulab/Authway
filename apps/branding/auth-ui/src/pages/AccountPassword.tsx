@@ -64,6 +64,7 @@ const AccountPassword: React.FC<Props> = ({ call, signInAgain }) => {
       if (body.code === 'insufficient_user_authentication') setNeedsSignIn(true)
       else if (body.code === 'invalid_current_password') setError(t('auth:account.password.wrongCurrent'))
       else if (body.code === 'password_too_short') setError(t('auth:account.password.tooShort', { count: body.min_length }))
+      else if (body.code === 'password_breached') setError(t('auth:validation.passwordBreached'))
       else setError(body.detail ?? t('common:errorOccurred'))
     } catch {
       setError(t('common:errorOccurred'))

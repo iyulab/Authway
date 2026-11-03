@@ -1,11 +1,14 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // The password rule, held where passwords are stored so that every way of
@@ -25,21 +28,47 @@ type PasswordError struct {
 	// MinLength is the least length in force for the account's tenant.
 	MinLength int
 	tooLong   bool
+	breached  bool
 }
 
 func (e *PasswordError) Error() string {
-	if e.tooLong {
+	switch {
+	case e.tooLong:
 		return fmt.Sprintf("password must be at most %d bytes", MaxPasswordLength)
+	case e.breached:
+		return "this password appears in known data breaches; choose a different one"
 	}
 	return fmt.Sprintf("password must be at least %d characters", e.MinLength)
 }
 
 // Code names the refusal for an API answer.
 func (e *PasswordError) Code() string {
-	if e.tooLong {
+	switch {
+	case e.tooLong:
 		return "password_too_long"
+	case e.breached:
+		return "password_breached"
 	}
 	return "password_too_short"
+}
+
+// BreachChecker says whether a password is in a known data breach. An error
+// means it could not tell.
+type BreachChecker interface {
+	Breached(ctx context.Context, password string) (bool, error)
+}
+
+// breachCheckTimeout bounds the wait for a BreachChecker, whatever its own
+// limits are: a person is waiting to set a password.
+const breachCheckTimeout = 3 * time.Second
+
+// PasswordBreachCheck has every password that is set also checked against
+// known data breaches. When the check cannot be made the password is let
+// through, and the failure is logged: a service that is down must not stop
+// anyone from signing up or recovering an account, and the length rule has
+// already been applied.
+func PasswordBreachCheck(checker BreachChecker) Option {
+	return func(s *service) { s.breach = checker }
 }
 
 // PasswordMinLength has fn asked for the least password length a tenant
@@ -66,6 +95,19 @@ func (s *service) checkPassword(tenantID uuid.UUID, password string) error {
 	}
 	if len(password) > MaxPasswordLength {
 		return &PasswordError{MinLength: least, tooLong: true}
+	}
+	if s.breach != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), breachCheckTimeout)
+		defer cancel()
+		breached, err := s.breach.Breached(ctx, password)
+		if err != nil {
+			// Nothing here may carry the password.
+			s.logger.Warn("A password was not checked against known data breaches", zap.Error(err))
+			return nil
+		}
+		if breached {
+			return &PasswordError{MinLength: least, breached: true}
+		}
 	}
 	return nil
 }

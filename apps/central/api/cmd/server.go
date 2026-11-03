@@ -29,6 +29,7 @@ import (
 	ratelimitmw "authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/outbound"
 	"authway/apps/central/api/pkg/passkey"
+	"authway/apps/central/api/pkg/pwned"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tenantscope"
@@ -167,17 +168,30 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// The audit log records each account as it is created, whichever path
 	// created it.
 	auditService := audit.NewService(db, zapLogger)
-	userService := user.NewService(db, zapLogger, user.PasswordMinLength(tenantService.PasswordMinLength), user.OnCreated(func(u *user.User) {
-		auditService.LogAsync(&audit.AuditEntry{
-			TenantID:     u.TenantID,
-			Action:       audit.ActionUserCreated,
-			Severity:     audit.SeverityInfo,
-			ActorType:    "system",
-			ResourceType: "user",
-			ResourceID:   u.ID.String(),
-			Success:      true,
-		})
-	}))
+	userOptions := []user.Option{
+		user.PasswordMinLength(tenantService.PasswordMinLength),
+		user.OnCreated(func(u *user.User) {
+			auditService.LogAsync(&audit.AuditEntry{
+				TenantID:     u.TenantID,
+				Action:       audit.ActionUserCreated,
+				Severity:     audit.SeverityInfo,
+				ActorType:    "system",
+				ResourceType: "user",
+				ResourceID:   u.ID.String(),
+				Success:      true,
+			})
+		}),
+	}
+	// Off unless the deployment turns it on: then it asks nobody outside.
+	if cfg.BreachedPassword.Check {
+		breaches, err := pwned.New(cfg.BreachedPassword.APIURL, pwned.WithCache(signInState, pwned.DefaultCacheTTL))
+		if err != nil {
+			return nil, fmt.Errorf("AUTHWAY_BREACHED_PASSWORD_API_URL: %w", err)
+		}
+		userOptions = append(userOptions, user.PasswordBreachCheck(breaches))
+		zapLogger.Info("Passwords that are set are checked against known data breaches (AUTHWAY_BREACHED_PASSWORD_CHECK)")
+	}
+	userService := user.NewService(db, zapLogger, userOptions...)
 	// The credentials clients hold at other identity providers are sealed with
 	// the same at-rest key as the second-factor secrets.
 	client.SealSecretsWith(totpCipher)
@@ -439,6 +453,9 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	capabilities := handler.NewCapabilitiesHandler(socialHandler)
 	if passkeyCeremonies != nil {
 		capabilities.OffersPasskeys()
+	}
+	if cfg.BreachedPassword.Check {
+		capabilities.ChecksBreachedPasswords()
 	}
 	if exchanger != nil {
 		capabilities.ExchangesDelegations()
