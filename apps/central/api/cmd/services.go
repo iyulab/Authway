@@ -74,10 +74,10 @@ func InitNewFeatureServices(
 }
 
 // RegisterRoutes registers all new feature routes
-func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth, auditReadAuth fiber.Handler) {
+func (s *NewFeatureServices) RegisterRoutes(v1 fiber.Router, jwtAuth, adminAuth, auditReadAuth, redeemLimit fiber.Handler) {
 
 	// Invitation routes (mixed public/protected)
-	s.InvitationHandler.RegisterRoutes(v1, jwtAuth, adminAuth)
+	s.InvitationHandler.RegisterRoutes(v1, redeemLimit, adminAuth)
 
 	// Webhook management routes (admin only)
 	s.WebhookHandler.RegisterRoutes(v1, jwtAuth, adminAuth)

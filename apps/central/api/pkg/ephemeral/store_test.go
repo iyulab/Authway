@@ -127,6 +127,34 @@ func TestMarkOnceCountAndRemaining(t *testing.T) {
 	})
 }
 
+// TestHitKeepsAFixedWindow: the window of Hit starts with the first request and
+// is not moved by the ones that follow, so a ceiling per window opens again at
+// the end of it however steadily the requests arrive (Count would still be
+// counting).
+func TestHitKeepsAFixedWindow(t *testing.T) {
+	stores(t, func(t *testing.T, s Store, advance func(time.Duration)) {
+		ctx := context.Background()
+		if n, _ := s.Hit(ctx, "h", time.Minute); n != 1 {
+			t.Fatalf("first Hit = %d, want 1", n)
+		}
+		advance(40 * time.Second)
+		if n, _ := s.Hit(ctx, "h", time.Minute); n != 2 {
+			t.Fatalf("second Hit = %d, want 2", n)
+		}
+		if left, ok, _ := s.Remaining(ctx, "h"); !ok || left > 20*time.Second {
+			t.Fatalf("a second Hit moved the window: %v left (ok=%v), want at most 20s", left, ok)
+		}
+		advance(40 * time.Second)
+		if n, _ := s.Hit(ctx, "h", time.Minute); n != 1 {
+			t.Fatalf("Hit after the window = %d, want 1 (the window ends however steady the traffic)", n)
+		}
+		s.Remove(ctx, "h")
+		if n, _ := s.Hit(ctx, "h", time.Minute); n != 1 {
+			t.Fatalf("Hit after Remove = %d, want 1", n)
+		}
+	})
+}
+
 // TestMemoryCopiesWhatItIsGiven: a string that shares a buffer the caller
 // reuses — as one read from a request does — is kept as it was when stored.
 func TestMemoryCopiesWhatItIsGiven(t *testing.T) {

@@ -107,6 +107,17 @@
   refused; nothing is stored. An application's own `logo` (shown on the sign-in
   and consent screens) is unchanged. Nothing to migrate: remove the two fields
   from any code that reads or sets them.
+- **Starting a sign-in step and redeeming an emailed link are limited per
+  address** — one network address may start a provider sign-in or a passkey
+  attempt (`GET /api/v1/login-flows/{flow}/social/{provider}`,
+  `POST /api/v1/login-flows/{flow}/passkey/begin`, and the same provider
+  redirect from an invitation) up to 120 times a minute, and redeem an
+  invitation or a password-reset link (`POST /api/v1/invitations/accept`,
+  `POST /api/v1/email/reset-password`, `GET /api/v1/email/verify-reset-token`)
+  up to 60 times in 15 minutes, counting every request. Past that the answer is
+  `429 too_many_requests` with `retry_after`, for a minute and for 15 minutes
+  respectively. The ceilings are far above what a person, or an office signing
+  in together behind one address, makes.
 - **A first password is set on the account screen only** — an account that has no
   password (it signs in by link, by a provider or by a passkey) can set its first
   one with a token issued to the account screen and a recent sign-in; any other
@@ -194,6 +205,10 @@
 
 ### Fixed
 
+- **The sign-in link limit no longer outlives its window**: an address that asked
+  for a sign-in link now and then was blocked after its 20th request however
+  long the requests were spread out, because the counter lived as long as the
+  traffic did. The limit is 20 requests in 15 minutes, counted from the first.
 - **A client's own token is for the APIs the client is registered for** when
   its token request names none, as a user's token is — it was issued for none,
   so an API that checks its audience refused it.

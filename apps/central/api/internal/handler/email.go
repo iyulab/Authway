@@ -375,15 +375,16 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	})
 }
 
-// RegisterRoutes registers email routes
-func (h *EmailHandler) RegisterRoutes(router fiber.Router) {
+// RegisterRoutes registers email routes. redeemLimit bounds how often one
+// address may redeem a reset link.
+func (h *EmailHandler) RegisterRoutes(router fiber.Router, redeemLimit fiber.Handler) {
 	email := router.Group("/email")
 	{
 		email.Post("/send-verification", h.SendVerificationEmail)
 		email.Get("/verify", h.VerifyEmail)
 		email.Post("/forgot-password", h.ForgotPassword)
-		email.Get("/verify-reset-token", h.VerifyResetToken)
-		email.Post("/reset-password", h.ResetPassword)
+		email.Get("/verify-reset-token", redeemLimit, h.VerifyResetToken)
+		email.Post("/reset-password", redeemLimit, h.ResetPassword)
 	}
 }
 

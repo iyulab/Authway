@@ -20,6 +20,18 @@ type RateLimitConfig struct {
 	BlockDuration  time.Duration
 	KeyPrefix      string
 	SkipOnError    bool
+
+	// FixedWindow starts the counter's window at its first addition
+	// (Store.Hit) instead of moving it with every addition (Store.Count). A
+	// limit on failures wants the moving window, so that a guesser who paces
+	// his attempts is still counted. A ceiling on ordinary requests wants the
+	// fixed one: it has to open again at the end of the window however
+	// steadily the requests keep coming.
+	FixedWindow bool
+	// CountEveryRequest has the middleware count each request itself, whatever
+	// the handler makes of it — for an endpoint with no failure to count. It
+	// implies FixedWindow.
+	CountEveryRequest bool
 }
 
 // DefaultRateLimitConfig returns default rate limit settings
@@ -73,6 +85,21 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 		if blocked {
 			return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(ttl.Seconds())})
 		}
+		if cfg.CountEveryRequest {
+			n, err := cfg.Store.Hit(ctx, key, cfg.WindowDuration)
+			if err != nil {
+				if !cfg.SkipOnError {
+					return apierror.Refuse(c, fiber.StatusInternalServerError, apierror.CodeForStatus(fiber.StatusInternalServerError), "rate limit error")
+				}
+				return c.Next()
+			}
+			if int(n) > cfg.MaxAttempts {
+				cfg.Store.SetValue(ctx, blockKey, "1", cfg.BlockDuration)
+				cfg.Store.Remove(ctx, key)
+				return apierror.RefuseWith(c, fiber.StatusTooManyRequests, "too_many_requests", "Too many attempts. Try again later.", fiber.Map{"retry_after": int(cfg.BlockDuration.Seconds())})
+			}
+			return c.Next()
+		}
 		countStr, _, _ := cfg.Store.Value(ctx, key)
 		count, _ := strconv.ParseInt(countStr, 10, 64)
 		if int(count) >= cfg.MaxAttempts {
@@ -94,6 +121,10 @@ func IncrementRateLimitOnFailure(c *fiber.Ctx) {
 	}
 	cfg, ok := c.Locals("rate_limit_cfg").(RateLimitConfig)
 	if !ok || cfg.Store == nil {
+		return
+	}
+	if cfg.FixedWindow || cfg.CountEveryRequest {
+		cfg.Store.Hit(context.Background(), key, cfg.WindowDuration)
 		return
 	}
 	cfg.Store.Count(context.Background(), key, cfg.WindowDuration)
@@ -139,6 +170,7 @@ func MagicLinkRateLimit(store ephemeral.Store) fiber.Handler {
 		BlockDuration:  15 * time.Minute,
 		KeyPrefix:      "ratelimit:magiclink:",
 		SkipOnError:    true,
+		FixedWindow:    true,
 	})
 }
 
@@ -179,4 +211,41 @@ func APIRateLimit(store ephemeral.Store, maxRequests int, window time.Duration) 
 		SkipOnError:    true,
 	}
 	return RateLimit(cfg)
+}
+
+// FlowStartRateLimit bounds the requests one network address makes to the
+// endpoints that start a step of a sign-in — the provider redirect, the passkey
+// ceremony — each of which stores state for a few minutes and asks the
+// authorization server about the flow. There is no failure to count, so every
+// request counts, and the ceiling is high enough for an office that signs in
+// together behind one address; the cost to an attacker of a block is a minute.
+func FlowStartRateLimit(store ephemeral.Store) fiber.Handler {
+	return RateLimit(RateLimitConfig{
+		Store:             store,
+		MaxAttempts:       120,
+		WindowDuration:    time.Minute,
+		BlockDuration:     time.Minute,
+		KeyPrefix:         "ratelimit:flowstart:",
+		SkipOnError:       true,
+		CountEveryRequest: true,
+	})
+}
+
+// TokenRedemptionRateLimit bounds the requests one network address makes to the
+// endpoints that redeem a token sent by email — accepting an invitation,
+// resetting a password. A token is long and random, so guessing one is not the
+// worry; the worry is that each redemption costs a password hash and a
+// database round trip and nothing else limited how many an address could ask
+// for. Every request counts; an office that onboards a team behind one address
+// stays far below the ceiling.
+func TokenRedemptionRateLimit(store ephemeral.Store) fiber.Handler {
+	return RateLimit(RateLimitConfig{
+		Store:             store,
+		MaxAttempts:       60,
+		WindowDuration:    15 * time.Minute,
+		BlockDuration:     15 * time.Minute,
+		KeyPrefix:         "ratelimit:redeem:",
+		SkipOnError:       true,
+		CountEveryRequest: true,
+	})
 }

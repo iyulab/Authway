@@ -38,6 +38,11 @@ type Store interface {
 	// Count adds one to the counter at key, which expires window after the
 	// last addition, and returns the new count.
 	Count(ctx context.Context, key string, window time.Duration) (int64, error)
+	// Hit adds one to the counter at key, which expires window after its
+	// first addition, and returns the new count. Unlike Count the window does
+	// not move with traffic: a ceiling on requests per window must open again
+	// at the end of the window however steadily the requests keep coming.
+	Hit(ctx context.Context, key string, window time.Duration) (int64, error)
 	// Remaining returns how long key has left; ok is false when it holds
 	// nothing.
 	Remaining(ctx context.Context, key string) (left time.Duration, ok bool, err error)

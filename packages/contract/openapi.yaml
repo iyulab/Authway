@@ -333,6 +333,7 @@ paths:
                     description: PublicKeyCredentialRequestOptionsJSON of the WebAuthn specification.
                     additionalProperties: true
                 '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
@@ -434,6 +435,7 @@ paths:
         page reads what to show with GET /api/v1/login-flows/{flow}/terms.
       responses:
         '302': { description: "To the provider, or back to the application, the login UI's second factor step, or the error screen" }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /api/v1/login-flows/{flow}/terms:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
@@ -1306,6 +1308,7 @@ paths:
                   valid: { const: true }
                   message: { type: string }
                   password_min_length: { $ref: '#/components/schemas/PasswordMinLengthInForce' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         # The link was sent before an administrator suspended the account (code account_suspended).
         '403': { $ref: '#/components/responses/Error' }
@@ -1325,6 +1328,7 @@ paths:
                 new_password: { type: string, minLength: 8 }
       responses:
         '200': { $ref: '#/components/responses/Message' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
         # The account is suspended (code account_suspended); the password is unchanged.
         '403': { $ref: '#/components/responses/Error' }
@@ -1381,6 +1385,7 @@ paths:
         or `failed` — and `token=<token>` when the invitation can still be used.
       responses:
         '302': { description: To the provider, or back to the accept screen }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /api/v1/invitations/receipts/{id}:
     get:
@@ -1446,6 +1451,7 @@ paths:
                     properties:
                       id: { type: string }
                       email: { type: string }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/logout:

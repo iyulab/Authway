@@ -276,3 +276,150 @@ func TestRateLimit_BlockedAnswerHasCode(t *testing.T) {
 		t.Fatalf("status %d body %v", resp.StatusCode, body)
 	}
 }
+
+// newTestRedisClock is newTestRedis with the clock in the test's hands.
+func newTestRedisClock(t *testing.T) (ephemeral.Store, *miniredis.Miniredis) {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	database.UseKeyPrefix(client, "test:")
+	return ephemeral.NewRedis(client), mr
+}
+
+// statusFrom sends one request to path from the given address.
+func statusFrom(t *testing.T, app *fiber.App, method, path, ip string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	req.Header.Set("X-Forwarded-For", ip)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+// TestRateLimit_CountEveryRequestIsACeilingPerAddressAndRoute: an endpoint with
+// no failure to count still has a ceiling — the middleware counts each request
+// itself — and the ceiling belongs to one address on one route.
+func TestRateLimit_CountEveryRequestIsACeilingPerAddressAndRoute(t *testing.T) {
+	store, _ := newTestRedisClock(t)
+	limit := RateLimit(RateLimitConfig{
+		Store:             store,
+		MaxAttempts:       3,
+		WindowDuration:    time.Minute,
+		BlockDuration:     time.Minute,
+		KeyPrefix:         "ratelimit:test:",
+		SkipOnError:       true,
+		CountEveryRequest: true,
+	})
+	app := fiber.New()
+	ok := func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) }
+	app.Get("/start/:flow", limit, ok)
+	app.Get("/other", limit, ok)
+
+	for i := 1; i <= 3; i++ {
+		// A new flow id each time, as a client restarting the sign-in would.
+		if resp := statusFrom(t, app, "GET", "/start/f"+string(rune('a'+i)), "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("request %d: status %d, want 200", i, resp.StatusCode)
+		}
+	}
+	blocked := statusFrom(t, app, "GET", "/start/fz", "203.0.113.9")
+	var body map[string]any
+	if err := json.NewDecoder(blocked.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if blocked.StatusCode != fiber.StatusTooManyRequests || body["code"] != "too_many_requests" || body["retry_after"] == nil {
+		t.Fatalf("fourth request: status %d body %v, want 429 with a code and when to retry", blocked.StatusCode, body)
+	}
+	if resp := statusFrom(t, app, "GET", "/start/fa", "203.0.113.9"); resp.StatusCode != fiber.StatusTooManyRequests {
+		t.Errorf("while blocked: status %d, want 429", resp.StatusCode)
+	}
+	if resp := statusFrom(t, app, "GET", "/start/fa", "198.51.100.7"); resp.StatusCode != fiber.StatusOK {
+		t.Errorf("another address: status %d, want 200", resp.StatusCode)
+	}
+	if resp := statusFrom(t, app, "GET", "/other", "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+		t.Errorf("another route from the blocked address: status %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestRateLimit_CountEveryRequestOpensAgainWhateverTheTraffic: the window starts
+// at the first request. Requests that keep arriving inside it do not extend it,
+// so an address that stays under the ceiling is never blocked by how long it
+// has been using the service.
+func TestRateLimit_CountEveryRequestOpensAgainWhateverTheTraffic(t *testing.T) {
+	store, mr := newTestRedisClock(t)
+	limit := RateLimit(RateLimitConfig{
+		Store:             store,
+		MaxAttempts:       3,
+		WindowDuration:    time.Minute,
+		BlockDuration:     time.Minute,
+		KeyPrefix:         "ratelimit:test:",
+		SkipOnError:       true,
+		CountEveryRequest: true,
+	})
+	app := fiber.New()
+	app.Get("/start", limit, func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+
+	for _, wait := range []time.Duration{0, 30 * time.Second, 29 * time.Second} {
+		mr.FastForward(wait)
+		if resp := statusFrom(t, app, "GET", "/start", "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("inside the window: status %d, want 200", resp.StatusCode)
+		}
+	}
+	// 61 seconds after the first request: a new window, though a request came
+	// two seconds before. A window that moved with each request would be at
+	// four here.
+	mr.FastForward(2 * time.Second)
+	if resp := statusFrom(t, app, "GET", "/start", "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("after the window: status %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestMagicLinkRateLimit_IsACeilingNotAFuse: the handler counts each request, and
+// an address that asks for a sign-in link now and then — here every 14 minutes,
+// for hours — stays under a limit of 20 per 15 minutes. The counter used to
+// live as long as the traffic did, so that address was blocked after the 20th.
+func TestMagicLinkRateLimit_IsACeilingNotAFuse(t *testing.T) {
+	store, mr := newTestRedisClock(t)
+	app := fiber.New()
+	app.Post("/link", MagicLinkRateLimit(store), func(c *fiber.Ctx) error {
+		IncrementRateLimitOnFailure(c)
+		return c.SendStatus(fiber.StatusOK)
+	})
+	for i := 1; i <= 30; i++ {
+		if resp := statusFrom(t, app, "POST", "/link", "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("request %d: status %d, want 200", i, resp.StatusCode)
+		}
+		mr.FastForward(14 * time.Minute)
+	}
+}
+
+// The limiters built for the endpoints that start a step of a sign-in and for
+// those that redeem an emailed token have ceilings an office behind one
+// address stays far below.
+func TestFlowAndRedemptionLimitsAreGenerous(t *testing.T) {
+	store, _ := newTestRedisClock(t)
+	for name, tc := range map[string]struct {
+		limit fiber.Handler
+		sent  int
+	}{
+		"flow start": {FlowStartRateLimit(store), 120},
+		"redeem":     {TokenRedemptionRateLimit(store), 60},
+	} {
+		app := fiber.New()
+		app.Get("/x", tc.limit, func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+		for i := 1; i <= tc.sent; i++ {
+			if resp := statusFrom(t, app, "GET", "/x", "203.0.113.9"); resp.StatusCode != fiber.StatusOK {
+				t.Fatalf("%s: request %d: status %d, want 200", name, i, resp.StatusCode)
+			}
+		}
+		if resp := statusFrom(t, app, "GET", "/x", "203.0.113.9"); resp.StatusCode != fiber.StatusTooManyRequests {
+			t.Fatalf("%s: request %d: status %d, want 429", name, tc.sent+1, resp.StatusCode)
+		}
+	}
+}

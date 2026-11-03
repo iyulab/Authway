@@ -154,6 +154,20 @@ func (s *memoryStore) Count(_ context.Context, key string, window time.Duration)
 	return n, nil
 }
 
+func (s *memoryStore) Hit(_ context.Context, key string, window time.Duration) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.live(key)
+	if !ok {
+		e = entry{expires: s.now().Add(window)}
+	}
+	n, _ := strconv.ParseInt(e.value, 10, 64)
+	n++
+	e.value = strconv.FormatInt(n, 10)
+	s.entries[strings.Clone(key)] = e
+	return n, nil
+}
+
 func (s *memoryStore) Remaining(_ context.Context, key string) (time.Duration, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

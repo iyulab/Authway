@@ -317,12 +317,13 @@ func (h *Handler) refuseByID(c *fiber.Ctx, err error, fallback string) error {
 }
 
 // RegisterRoutes registers invitation routes
-// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id
-func (h *Handler) RegisterRoutes(app fiber.Router, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
+// Admin Console uses adminMiddleware which validates admin session and extracts tenant_id.
+// acceptLimit bounds how often one address may redeem an invitation.
+func (h *Handler) RegisterRoutes(app fiber.Router, acceptLimit fiber.Handler, adminMiddleware fiber.Handler) {
 	// Public endpoints (no auth required)
 	public := app.Group("/invitations")
 	public.Get("/token/:token", h.GetInvitationByToken)
-	public.Post("/accept", h.AcceptInvitation)
+	public.Post("/accept", acceptLimit, h.AcceptInvitation)
 
 	// Admin Console protected endpoints - use adminMiddleware only (validates admin session + tenant context)
 	protected := app.Group("/invitations", adminMiddleware)

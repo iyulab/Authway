@@ -388,6 +388,10 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// screens are /login, /consent, /logout and /device.
 	flowEntryHandler := handler.NewFlowEntryHandler(cfg.App.FrontendURL, authHandler)
 	loginRateLimit := ratelimitmw.LoginRateLimit(signInState)
+	// Neither has a failure to count: every request counts, against a ceiling an
+	// office signing in together behind one address stays far below.
+	flowStartLimit := ratelimitmw.FlowStartRateLimit(signInState)
+	redeemLimit := ratelimitmw.TokenRedemptionRateLimit(signInState)
 	app.Get("/flows/login", flowEntryHandler.Login)
 	app.Get("/flows/consent", flowEntryHandler.Consent)
 	app.Get("/flows/logout", flowEntryHandler.Logout)
@@ -447,7 +451,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1 := app.Group("/api/v1")
 
 	// Email verification and password reset routes
-	emailHandler.RegisterRoutes(v1)
+	emailHandler.RegisterRoutes(v1, redeemLimit)
 
 	// What this deployment offers, so screens show only what works.
 	capabilities := handler.NewCapabilitiesHandler(socialHandler)
@@ -476,7 +480,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// which sign-in methods the client allows) or redirect.
 	v1.Get("/login-flows/:flow", authHandler.GetLoginFlow)
 	v1.Post("/login-flows/:flow/password", loginRateLimit, authHandler.SubmitPassword)
-	v1.Post("/login-flows/:flow/passkey/begin", authHandler.BeginPasskeyLogin)
+	v1.Post("/login-flows/:flow/passkey/begin", flowStartLimit, authHandler.BeginPasskeyLogin)
 	v1.Post("/login-flows/:flow/passkey/finish", loginRateLimit, authHandler.FinishPasskeyLogin)
 	v1.Post("/login-flows/:flow/mfa", loginRateLimit, authHandler.VerifyMFALogin)
 	v1.Post("/login-flows/:flow/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin)
@@ -486,14 +490,14 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1.Post("/login-flows/:flow/terms", authHandler.AcceptTerms)
 	v1.Post("/login-flows/:flow/terms/decline", authHandler.DeclineTerms)
 	// A page navigation (not fetch): the browser goes on to the provider.
-	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
+	v1.Get("/login-flows/:flow/social/:provider", flowStartLimit, socialHandler.StartSocialLogin)
 
 	// Accepting an invitation with a provider: the accept screen offers it
 	// (the lookup's sign_in_with), the start is a page navigation, and the
 	// receipt is what the screen shows once it is accepted.
 	socialHandler.SetInvitations(newFeatureServices.InvitationService)
 	newFeatureServices.InvitationHandler.SetSignInOffer(socialHandler.OfferForInvitation)
-	v1.Get("/invitations/token/:token/social/:provider", socialHandler.StartInvitationSocial)
+	v1.Get("/invitations/token/:token/social/:provider", flowStartLimit, socialHandler.StartInvitationSocial)
 	v1.Get("/invitations/receipts/:id", socialHandler.InvitationReceipt)
 
 	// Emailed sign-in links: sent from the login screen, redeemed from the
@@ -649,7 +653,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// ======================================
 	// adminAuth (declared above) already accepts session tokens and the API key.
 	newFeatureServices.RegisterRoutes(v1, jwtAuth, adminAuth,
-		adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.audit:read"))
+		adminHandler.GetClientAuth(hydraClient, serviceClientService, "admin.audit:read"), redeemLimit)
 
 	startBackground := func() {
 		// Support access lasts an hour; its end goes into the tenant's audit log

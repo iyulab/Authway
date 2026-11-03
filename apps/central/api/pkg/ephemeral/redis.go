@@ -95,6 +95,19 @@ func (s *redisStore) Count(ctx context.Context, key string, window time.Duration
 	return incr.Val(), nil
 }
 
+func (s *redisStore) Hit(ctx context.Context, key string, window time.Duration) (int64, error) {
+	// SET … NX EX creates the counter with its window only when there is none,
+	// so the INCR that follows never moves the expiry (EXPIRE … NX would do
+	// the same but needs Redis 7).
+	pipe := s.client.TxPipeline()
+	pipe.SetNX(ctx, key, 0, window)
+	incr := pipe.Incr(ctx, key)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, err
+	}
+	return incr.Val(), nil
+}
+
 func (s *redisStore) Remaining(ctx context.Context, key string) (time.Duration, bool, error) {
 	ttl, err := s.client.TTL(ctx, key).Result()
 	if err != nil {
