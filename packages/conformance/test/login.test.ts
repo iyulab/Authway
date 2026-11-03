@@ -41,6 +41,22 @@ describe('password login through the authorization-code flow', () => {
     expect(outcome.sub).toBeTruthy()
   })
 
+  it('signs a user in who is asked to sign in again (prompt=login) — in a fresh browser and in one that already holds their session', async () => {
+    // An application that always asks to sign in anew (some hosted-auth
+    // layers do) must still end at its redirect with a code, not be sent
+    // round the sign-in again after the password was accepted.
+    const fresh = await provider.startLogin(client, undefined, undefined, { prompt: 'login' })
+    const first = await provider.continueLogin(fresh, user)
+    expect(first.kind, JSON.stringify(first)).toBe('code')
+    if (first.kind !== 'code') return
+    subjects.add(first.sub)
+
+    const again = await provider.startLogin(client, undefined, first.browser, { prompt: 'login' })
+    const second = await provider.continueLogin(again, user)
+    expect(second.kind, JSON.stringify(second)).toBe('code')
+    if (second.kind === 'code') expect(second.sub).toBe(first.sub)
+  })
+
   it('tells the login screen what the application asked of it: where to start, whom to expect, which language', async () => {
     const ask = async (extra: Record<string, string>) => {
       const attempt = await provider.startLogin(client, undefined, undefined, extra)
