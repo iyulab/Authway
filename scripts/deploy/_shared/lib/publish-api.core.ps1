@@ -363,10 +363,23 @@ try {
         Write-Host "  ⚠️  ADMIN_URL 미설정 — preflight 검사 생략" -ForegroundColor Yellow
     } else {
         $AdminOrigin = $AdminOrigin.TrimEnd('/')
-        $preflight = Invoke-WebRequest -Uri "$ApiUrl/api/v1/webhooks" -Method Options -TimeoutSec 10 -SkipHttpErrorCheck -Headers @{
-            Origin = $AdminOrigin
-            'Access-Control-Request-Method' = 'GET'
-            'Access-Control-Request-Headers' = 'authorization,x-tenant-id'
+        # 콜드 스타트 직후의 첫 요청은 10 초 안에 못 끝날 수 있다(2026-11-03 prod 에서 한 번 —
+        # 서비스는 정상이었고 재실행이 통과). 응답이 없었던 경우에만 한 번 더 — 응답이 왔는데
+        # 허용이 아니면 아래가 그대로 실패한다(재시도로 가리지 않는다).
+        $preflight = $null
+        foreach ($attempt in 1..2) {
+            try {
+                $preflight = Invoke-WebRequest -Uri "$ApiUrl/api/v1/webhooks" -Method Options -TimeoutSec 10 -SkipHttpErrorCheck -Headers @{
+                    Origin = $AdminOrigin
+                    'Access-Control-Request-Method' = 'GET'
+                    'Access-Control-Request-Headers' = 'authorization,x-tenant-id'
+                }
+                break
+            } catch {
+                if ($attempt -eq 2) { throw }
+                Write-Host "  ⚠️  preflight 응답 없음($($_.Exception.Message)) — 5초 뒤 한 번 더(콜드 스타트 직후일 수 있음)" -ForegroundColor Yellow
+                Start-Sleep -Seconds 5
+            }
         }
         $allowOrigin = "$($preflight.Headers['Access-Control-Allow-Origin'])"
         $allowHeaders = "$($preflight.Headers['Access-Control-Allow-Headers'])".ToLower() -split '\s*,\s*'
