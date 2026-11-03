@@ -256,12 +256,23 @@ try {
 
     $tmpBody = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $tmpBody -Value $createClientBody -NoNewline -Encoding UTF8
-    $createResp = & curl.exe -s -X POST "$apiUrl/api/v1/clients" `
-        -H "Content-Type: application/json" -H "Authorization: Bearer $adminKey" `
-        --data "@$tmpBody"
+    # The first call after a deploy can reach an authorization server that has
+    # scaled to zero (staging) and is still starting; it answers 500 once. One
+    # retry says so out loud rather than hiding it.
+    $createParsed = $null
+    foreach ($createAttempt in 1..2) {
+        $createResp = & curl.exe -s -X POST "$apiUrl/api/v1/clients" `
+            -H "Content-Type: application/json" -H "Authorization: Bearer $adminKey" `
+            --data "@$tmpBody"
+        $createParsed = $createResp | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($createParsed.client -and $createParsed.client.client_id) { break }
+        if ($createAttempt -eq 1) {
+            Write-Host "   ⚠️ 첫 client 생성이 실패($createResp) — 15 초 뒤 한 번 더(스케일 0 에서 깨어나는 중일 수 있음)" -ForegroundColor Yellow
+            Start-Sleep -Seconds 15
+        }
+    }
     Remove-Item $tmpBody -ErrorAction SilentlyContinue
 
-    $createParsed = $createResp | ConvertFrom-Json
     if (-not $createParsed.client -or -not $createParsed.client.client_id) {
         Write-Host "❌ client 생성 실패: $createResp" -ForegroundColor Red
         exit 1
