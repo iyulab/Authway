@@ -248,7 +248,31 @@ the login UI sends them to `initiate_login_uri` with `iss` (the issuer) and
 `login_hint` (their address); the application starts an authorization request
 there, and the session the acceptance opened usually signs them in without a
 form. Without `initiate_login_uri` they go to `client_uri`; without either,
-they are told to sign in from the application. Both are absolute `https`
+they are told to sign in from the application.
+
+An invitation that names no application goes to the tenant's **only** live,
+enabled client that has an `https` `initiate_login_uri` or `client_uri` (the
+Account and Console clients Authway keeps itself do not count) — the lookup
+`GET /api/v1/invitations/token/{token}` returns it as `invitation.client`.
+With none, or more than one, Authway does not guess which application is meant:
+registering a second one takes the destination away again, so an invitation
+that must always lead somewhere should name its `client_id`. The sender's
+`message` is shown on the screen after accepting, as plain text.
+
+### Accepting an invitation with Google
+
+When the invitation's application (the one it names, else the tenant's only
+client) allows Google sign-in and has credentials for it, the accept screen
+offers **Continue with Google** next to the password form;
+`invitation.sign_in_with` of the lookup lists it. The invitation is accepted
+only for a Google account that has verified exactly the address it was sent to.
+Any other account changes nothing: no account is created or linked and the
+invitation stays pending, and the screen says why (`address_mismatch`,
+`linked_to_another`, `account_suspended`, …). A suspended account for the
+invited address is refused before anything is linked to it.
+What the screen shows afterwards is read with
+`GET /api/v1/invitations/receipts/{id}` — it lasts ten minutes, since the
+accepted invitation can no longer be read by its token. Both are absolute `https`
 URLs; an empty string clears one. `client_uri` is also where the
 [account screen](account.md#the-account-screen) links back to. In the admin
 console they are the application's **Home Page** and **Sign-In Start URL**,
