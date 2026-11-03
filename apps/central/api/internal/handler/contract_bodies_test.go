@@ -45,6 +45,8 @@ func TestRequestBodies_AreTheContractsOwn(t *testing.T) {
 		{"POST /api/v1/device-flows/{flow}", DeviceCodeSubmission{}},
 		{"POST /api/v1/users/password", user.ChangePasswordRequest{}},
 		{"POST /api/v1/users/connections/link/complete", CompleteConnectionLinkRequest{}},
+		{"POST /api/v1/users/passkeys/register/finish", finishRegistrationRequest{}},
+		{"POST /api/v1/login-flows/{flow}/passkey/finish", PasskeyLoginRequest{}},
 		{"POST /api/v1/users/search", SearchUsersRequest{}},
 		{"POST /api/v1/users/mfa/verify", VerifyMFARequest{}},
 		{"POST /api/v1/email/send-verification", email.SendVerificationRequest{}},

@@ -30,6 +30,12 @@ comment says what it asserts.
   out everywhere.
 - **Login UI routes** — every backend path the bundled login screens call is
   routed.
+- **Passkeys** — a user's device (a software authenticator the suite plays) is
+  registered on the account screen's token only, lists without its credential,
+  signs a login flow in with nobody naming themselves (`amr` `hwk` `mfa`, a
+  second factor still owed), is refused when its answer is for another origin,
+  flow or tenant, and stops once removed. Skipped where
+  `capabilities.passkeys` is not true.
 
 Each scenario provisions its own client and user and deletes them afterwards.
 

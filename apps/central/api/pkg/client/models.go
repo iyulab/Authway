@@ -218,6 +218,23 @@ func (c *Client) AllowsSignInMethod(method string) bool {
 	return listed
 }
 
+// AllowsPasskey reports whether users of this client may sign in with a
+// passkey: wherever the password form is offered ("email" - a passkey is a
+// stronger answer to the same question, so it needs no setting of its own), and
+// where "passkey" is named, for a client that offers passkeys without
+// passwords.
+func (c *Client) AllowsPasskey() bool {
+	return c.AllowsSignInMethod("email") || c.AllowsSignInMethod("passkey")
+}
+
+// IsAccountScreen reports whether c is the account screen's client - the one
+// Authway registers in every tenant for users to manage their own sign-in. It is
+// not every system client: the console's is one too, and a token issued to the
+// console must not be able to add a way to sign in to an operator's account.
+func (c *Client) IsAccountScreen() bool {
+	return c.System && c.SystemKind == SystemKindAccount
+}
+
 func (c *Client) ToPublic() PublicClient {
 	return PublicClient{
 		System:       c.System,

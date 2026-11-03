@@ -20,6 +20,8 @@ const (
 	ActionUserPasswordChanged   AuditAction = "user.password_changed"
 	ActionUserConnectionAdded   AuditAction = "user.connection_added"
 	ActionUserConnectionRemoved AuditAction = "user.connection_removed"
+	ActionUserPasskeyAdded      AuditAction = "user.passkey_added"
+	ActionUserPasskeyRemoved    AuditAction = "user.passkey_removed"
 	ActionUserMFAEnabled        AuditAction = "user.mfa_enabled"
 	ActionUserMFADisabled       AuditAction = "user.mfa_disabled"
 	ActionUserMFAFailed         AuditAction = "user.mfa_failed"
@@ -86,6 +88,8 @@ var Actions = []struct {
 	{ActionUserPasswordChanged, "Password changed by its owner"},
 	{ActionUserConnectionAdded, "Sign-in provider account added by its owner"},
 	{ActionUserConnectionRemoved, "Sign-in provider unlinked by its owner"},
+	{ActionUserPasskeyAdded, "Passkey registered by its owner"},
+	{ActionUserPasskeyRemoved, "Passkey removed by its owner"},
 	{ActionUserMFAEnabled, "MFA enabled"},
 	{ActionUserMFADisabled, "MFA disabled"},
 	{ActionUserMFAFailed, "MFA code refused"},

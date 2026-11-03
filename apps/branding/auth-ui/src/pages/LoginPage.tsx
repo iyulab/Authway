@@ -10,6 +10,8 @@ import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, loginFlowUrl, nextScreen, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
 import i18n from '../i18n'
 import ClientLogo from '../components/ClientLogo'
+import { passkeysSupported } from '../utils/passkey'
+import { usePasskeySignIn, type PasskeyProblem } from '../utils/usePasskeySignIn'
 
 // Validation schema - will use i18n messages dynamically
 const createLoginSchema = (t: (key: string) => string) => z.object({
@@ -30,6 +32,8 @@ const LOGIN_ERROR_KEYS: Record<string, string> = {
   sign_in_method_not_allowed: 'auth:errors.signInMethodNotAllowed',
   too_many_requests: 'auth:errors.tooManyRequests',
   flow_expired: 'auth:errors.flowExpired',
+  passkey_rejected: 'auth:errors.passkeyRejected',
+  ceremony_expired: 'auth:errors.passkeyExpired',
 }
 
 interface ClientAuthConfig {
@@ -85,6 +89,7 @@ const LoginPage: React.FC = () => {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -175,6 +180,36 @@ const LoginPage: React.FC = () => {
     }
   }, [loginInfo, flow, searchParams, setValue])
 
+  // Where a step of the flow leads: the next screen, the application, or what
+  // the server refused. A password and a passkey end the same way.
+  const continueWith = (data: FlowStep) => {
+    const next = nextScreen(data, flow)
+    if (next) {
+      navigate(next)
+    } else if (data.next === 'redirect' && data.redirect_to) {
+      followRedirect(data.redirect_to)
+    } else if (data.detail) {
+      const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
+      setError(key ? t(key) : data.detail)
+    }
+  }
+
+  // Passkeys: offered where the server lists them and the browser can make one.
+  // Where the password form is too, they are also offered in the address
+  // field's autofill.
+  const signInMethodList = loginInfo?.client?.sign_in_methods ?? []
+  const passkeyOffered = signInMethodList.includes('passkey') && passkeysSupported()
+  const passkey = usePasskeySignIn({
+    flow,
+    enabled: passkeyOffered,
+    autofill: signInMethodList.includes('email'),
+    remember: () => !!getValues('remember'),
+    onStep: continueWith,
+    onProblem: (problem: PasskeyProblem) => {
+      setError(t(problem === 'cancelled' ? 'auth:errors.passkeyCancelled' : problem === 'expired' ? 'auth:errors.passkeyExpired' : 'auth:errors.passkeyFailed'))
+    },
+  })
+
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: (data: LoginFormData): Promise<FlowStep> =>
@@ -183,17 +218,7 @@ const LoginPage: React.FC = () => {
         password: data.password,
         remember: data.remember,
       }),
-    onSuccess: (data) => {
-      const next = nextScreen(data, flow)
-      if (next) {
-        navigate(next)
-      } else if (data.next === 'redirect' && data.redirect_to) {
-        followRedirect(data.redirect_to)
-      } else if (data.detail) {
-        const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
-        setError(key ? t(key) : data.detail)
-      }
-    },
+    onSuccess: continueWith,
     onError: (error) => {
       console.error('Login error:', error)
       setError(t('auth:errors.loginFailed'))
@@ -318,7 +343,7 @@ const LoginPage: React.FC = () => {
                     id="email"
                     {...register('email')}
                     type="email"
-                    autoComplete="username"
+                    autoComplete={passkeyOffered ? 'username webauthn' : 'username'}
                     className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                     placeholder={t('auth:login.emailPlaceholder')}
                   />
@@ -385,7 +410,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Other sign-in methods: an emailed link, social providers */}
-          {(hasSocialProviders() || isProviderEnabled('magic_link')) && (
+          {(hasSocialProviders() || isProviderEnabled('magic_link') || passkeyOffered) && (
             <div className="mt-6">
               {/* Divider - only show if email login is also enabled */}
               {isEmailLoginEnabled() && (
@@ -400,6 +425,16 @@ const LoginPage: React.FC = () => {
               )}
 
               <div className="space-y-3">
+                {passkeyOffered && (
+                  <button
+                    type="button"
+                    onClick={passkey.signIn}
+                    disabled={passkey.busy || isSubmitting || loginMutation.isPending}
+                    className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {passkey.busy ? t('auth:login.passkeyWaiting') : t('auth:login.passkey')}
+                  </button>
+                )}
                 {isProviderEnabled('magic_link') && (
                   <Link
                     to={`/magic-link?flow=${encodeURIComponent(flow)}`}

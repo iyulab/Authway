@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
 import AccountConnections, { PROVIDER_NAMES } from './AccountConnections'
+import AccountPasskeys from './AccountPasskeys'
 import AccountDelegations from './AccountDelegations'
 import { useLoad } from '../utils/useLoad'
 import { httpsUrl, readStored, refusal, returnPath, signIn, useAccountSession } from './accountSession'
@@ -342,6 +343,7 @@ const AccountPage: React.FC = () => {
       call={call}
       signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})}
     />
+    <AccountPasskeys call={call} signInAgain={(fresh) => void client!.loginWithRedirect(fresh ? { prompt: 'login' } : {})} />
     <AccountDelegations call={call} />
     </>,
   )

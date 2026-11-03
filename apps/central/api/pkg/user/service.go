@@ -483,15 +483,24 @@ func (s *service) UnlinkIdentity(userID, identityID uuid.UUID) error {
 // unlink removes one identity of u, which has just been loaded with all of its
 // identities, unless it is the account's only way to sign in.
 func (s *service) unlink(u *User, identity LinkedIdentity) error {
-	if u.PasswordHash == "" && len(u.Identities) == 1 {
-		return ErrLastSignInMethod
-	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Held until the end, so two removals racing for an account's last two
+		// ways to sign in cannot both be told another one remains. A password,
+		// each identity and each passkey is one way.
+		if err := lockAccount(tx, u.ID); err != nil {
+			return err
+		}
+		if err := requireAnotherWayToSignIn(tx, u.ID, 1, 0); err != nil {
+			return err
+		}
 		if err := tx.Where("id = ? AND user_id = ?", identity.ID, u.ID).Delete(&LinkedIdentity{}).Error; err != nil {
 			return err
 		}
 		return syncProviderColumn(tx, u.ID, identity.Provider)
 	})
+	if errors.Is(err, ErrLastSignInMethod) {
+		return err
+	}
 	if err != nil {
 		return fmt.Errorf("failed to unlink sign-in provider: %w", err)
 	}

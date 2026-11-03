@@ -1,5 +1,7 @@
 package handler
 
+import "slices"
+
 // signInMethod is a way a user proves who they are: the name the audit log
 // records it under, and the Authentication Method Reference values (the amr
 // claim of the ID token) that tell a relying party the same thing.
@@ -17,6 +19,10 @@ type signInMethod struct {
 var (
 	byPassword    = signInMethod{audit: "password", amr: []string{"pwd"}}
 	byEmailedLink = signInMethod{audit: "magic_link", amr: []string{"email"}}
+	// byPasskey: the device's key proved possession (hwk) and the device
+	// verified the user - a PIN, a fingerprint - before it signed (mfa): the
+	// ceremony requires both, so the sign-in is multi-factor in itself.
+	byPasskey = signInMethod{audit: "passkey", amr: []string{"hwk", "mfa"}}
 )
 
 // byProvider is a sign-in through another identity provider.
@@ -35,9 +41,17 @@ func (m signInMethod) withRecoveryCode() signInMethod {
 }
 
 func (m signInMethod) followedBy(second string, amr ...string) signInMethod {
+	// A value is listed once: a second factor after a passkey adds otp, and
+	// mfa is already there.
+	joined := append([]string{}, m.amr...)
+	for _, v := range amr {
+		if !slices.Contains(joined, v) {
+			joined = append(joined, v)
+		}
+	}
 	return signInMethod{
 		audit:    m.audit + "+" + second,
-		amr:      append(append([]string{}, m.amr...), amr...),
+		amr:      joined,
 		provider: m.provider,
 	}
 }
@@ -63,6 +77,8 @@ func firstFactor(audit, provider string) signInMethod {
 	switch audit {
 	case byEmailedLink.audit:
 		return byEmailedLink
+	case byPasskey.audit:
+		return byPasskey
 	case "social":
 		return byProvider(provider)
 	default:

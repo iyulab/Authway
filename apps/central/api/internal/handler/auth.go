@@ -14,6 +14,7 @@ import (
 	"authway/apps/central/api/pkg/delegation"
 	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/mfa"
+	"authway/apps/central/api/pkg/passkey"
 	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
@@ -35,6 +36,8 @@ type AuthHandler struct {
 	signInMethods   SignInMethodSource
 	flows           *signIn
 	delegations     delegation.Service
+	// passkeys signs a login flow in with a passkey; nil where they are not set up.
+	passkeys *passkey.Ceremonies
 }
 
 // GrantsDelegations lets a consent to a client's delegation scope grant a

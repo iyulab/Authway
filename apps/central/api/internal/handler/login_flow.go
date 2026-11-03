@@ -52,6 +52,9 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	}
 
 	methods := h.signInMethods.SignInMethodsFor(requestedClient)
+	if h.offersPasskey(requestedClient) {
+		methods = append(methods, "passkey")
+	}
 	return c.JSON(fiber.Map{
 		"next":            nextForm,
 		"flow":            flow,

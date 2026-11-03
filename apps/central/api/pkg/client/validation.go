@@ -328,7 +328,7 @@ func validateApplicationURI(field, uri string) *apierror.Refusal {
 }
 
 // signInMethods are the ways of signing in a client can offer.
-var signInMethods = map[string]bool{"email": true, "magic_link": true, "google": true, "github": true, "microsoft": true, "apple": true}
+var signInMethods = map[string]bool{"email": true, "magic_link": true, "passkey": true, "google": true, "github": true, "microsoft": true, "apple": true}
 
 // validateSignInMethods checks a client's enabled_auth_providers when the
 // request names them (nil: not named). An empty list is refused: a client
@@ -339,11 +339,11 @@ func validateSignInMethods(methods []string) *apierror.Refusal {
 		return nil
 	}
 	if len(methods) == 0 {
-		return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: "name at least one way to sign in", Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+		return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: "name at least one way to sign in", Hint: "One or more of email, magic_link, passkey, google, github, microsoft, apple."}
 	}
 	for _, m := range methods {
 		if !signInMethods[m] {
-			return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: fmt.Sprintf("%q is not a way to sign in", m), Hint: "One or more of email, magic_link, google, github, microsoft, apple."}
+			return &apierror.Refusal{Code: "invalid_enabled_auth_providers", Field: "enabled_auth_providers", Message: fmt.Sprintf("%q is not a way to sign in", m), Hint: "One or more of email, magic_link, passkey, google, github, microsoft, apple."}
 		}
 	}
 	return nil

@@ -325,7 +325,64 @@ the account's own address and its verification stay as they are.
 
 ---
 
-## 6. Signing out everywhere
+## 6. Passkeys
+
+```http
+GET    /api/v1/users/passkeys
+POST   /api/v1/users/passkeys/register/begin
+POST   /api/v1/users/passkeys/register/finish
+DELETE /api/v1/users/passkeys/{id}
+Authorization: Bearer <the user's access token>
+```
+
+A passkey lets the user sign in with the fingerprint, face or screen lock of a
+device instead of a password ([sign-in](login-flows.md#post-apiv1login-flowsflowpasskeybegin-and-finish)).
+It is a key pair the device keeps; Authway keeps the public half. An account
+may have several, and a user of several tenants registers one in each: a
+passkey signs in to the tenant it was registered in and no other.
+
+**These calls take a token issued to the [account screen](#the-account-screen)
+only** (`403 account_application_required` for any other application's): a
+passkey is a way to sign in, and an application that holds a token for the user
+must not be able to add one — a program can write the browser's answer itself,
+which the browser is what prevents on the account screen.
+
+`GET` answers `{ "passkeys": [ { "id", "name", "created_at", "last_used_at",
+"synced" } , … ] }`, oldest first. `synced` is whether the device backs the
+passkey up to the user's other devices. The credential itself is not shown.
+
+Registering takes two calls and the browser between them:
+
+1. `POST …/register/begin` (a recent sign-in is needed) answers
+   `{ "ceremony_id", "options" }`. `options` is the
+   [`PublicKeyCredentialCreationOptions`](https://www.w3.org/TR/webauthn-3/#dictdef-publickeycredentialcreationoptionsjson)
+   in its JSON form: pass it to `PublicKeyCredential.parseCreationOptionsFromJSON()`
+   and then to `navigator.credentials.create()`. It asks for a discoverable
+   credential with user verification, and names the account's passkeys so a
+   device that holds one is not offered a second.
+2. `POST …/register/finish` with `{ "ceremony_id", "name", "credential" }`,
+   `credential` being the result's `toJSON()`. `name` is what the user calls it
+   (at most 100 characters; "Passkey" when empty). A ceremony lasts five
+   minutes, works once, and only for the user it began for.
+
+`DELETE` removes a passkey (a recent sign-in is needed).
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `403` | `account_application_required` | The token was not issued to the account screen |
+| `404` | `passkeys_unavailable` | This deployment has no passkeys — the login screen's address is an IP address, or the relying party id does not cover it ([configuration](../../CONFIGURATION.md#passkeys)) |
+| `401` | `insufficient_user_authentication` | Needs a recent sign-in — sign in again with `max_age` and retry |
+| `400` | `ceremony_expired` | The ceremony is unknown, used, expired or another user's — start again |
+| `400` | `passkey_rejected` | The answer was not accepted (wrong origin, challenge or relying party, or the device did not verify the user) |
+| `409` | `passkey_already_registered` | That credential is already registered in the tenant |
+| `409` | `last_sign_in_method` | It is the account's only way to sign in (no password, no linked provider account, no other passkey) — set a password first |
+| `404` | `not_found` | The account has no such passkey |
+
+The [account screen](#the-account-screen) offers this.
+
+---
+
+## 7. Signing out everywhere
 
 ```http
 POST /api/v1/logout
@@ -361,8 +418,8 @@ against the client's registered `post_logout_redirect_uris`.
 
 Authway hosts a page where a signed-in user manages their own sign-in —
 turning two-step verification on and off, renewing recovery codes,
-changing (or setting a first) password, and removing the link to a sign-in
-provider. Link to it from your application:
+changing (or setting a first) password, adding and removing passkeys, and
+removing the link to a sign-in provider. Link to it from your application:
 
 ```
 {login screens}/account?client_id=<your application's client_id>

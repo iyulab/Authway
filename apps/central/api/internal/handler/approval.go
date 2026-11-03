@@ -59,7 +59,7 @@ func (h *ApprovalHandler) decide(c *fiber.Ctx, approve bool) error {
 	}
 	clientID, _ := c.Locals("client_id").(string)
 	cl, err := h.clients.GetByClientID(clientID)
-	if err != nil || !cl.System {
+	if err != nil || !cl.IsAccountScreen() {
 		return apierror.Refuse(c, fiber.StatusForbidden, "account_application_required",
 			"Answer the request on the approval screen: a token another application holds for you cannot answer it.")
 	}

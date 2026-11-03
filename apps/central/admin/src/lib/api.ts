@@ -252,6 +252,8 @@ export interface Capabilities {
   /** Social providers this deployment has credentials for. */
   providers: string[]
   magic_link: boolean
+  /** Users can register passkeys and sign in with them. */
+  passkeys?: boolean
   mfa: string[]
   signup_modes: string[]
   account_deletion?: boolean

@@ -168,6 +168,7 @@ export const ACCESS_TOKEN_STRATEGIES = [
 export const AVAILABLE_AUTH_PROVIDERS = [
   { value: 'email', label: 'Email/Password' },
   { value: 'magic_link', label: 'Email link (passwordless)' },
+  { value: 'passkey', label: 'Passkey (also offered wherever Email/Password is)' },
   { value: 'google', label: 'Google' },
   { value: 'github', label: 'GitHub' },
   { value: 'microsoft', label: 'Microsoft' },
@@ -277,7 +278,9 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       capabilities !== undefined &&
       (option.value === 'magic_link'
         ? !capabilities.magic_link
-        : option.value !== 'email' &&
+        : option.value === 'passkey'
+          ? capabilities.passkeys !== true
+          : option.value !== 'email' &&
           !capabilities.providers.includes(option.value) &&
           !clientHasOwnCredentials[option.value])
     return unusable

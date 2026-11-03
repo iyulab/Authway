@@ -2,6 +2,26 @@
 
 ### Added
 
+- **Passkeys** — a user adds a passkey on the account screen and signs in with
+  it: the fingerprint, face or screen lock of their device instead of a
+  password. The sign-in screen offers it with a button and, in browsers that
+  support it, in the address field's autofill, so a user can sign in without
+  typing anything. A passkey is a discoverable, user-verified WebAuthn
+  credential; an account may have several, they can be named and removed, and
+  the account's last way to sign in (a password, a linked provider account or a
+  passkey) cannot be removed. A passkey opens only the tenant it was registered
+  in. It is a first factor like a password: a second factor and the tenant's
+  terms are still asked, and the sign-in reports `amr` `hwk` and `mfa`.
+  Passkeys are managed with a token issued to the account screen only
+  (`/api/v1/users/passkeys`); signing in uses
+  `POST /api/v1/login-flows/{flow}/passkey/begin` and `/finish`. A client offers
+  passkeys wherever it offers the password form, and where `enabled_auth_providers`
+  names `passkey`; `capabilities.passkeys` says whether the deployment has them.
+  Passkeys are bound to the login screen's host (`AUTHWAY_WEBAUTHN_RP_ID`,
+  default: that host) — **decide it before users register passkeys: changing it
+  makes them stop working**. See [Account](docs/api/account.md#6-passkeys),
+  [Login flows](docs/api/login-flows.md) and
+  [Configuration](CONFIGURATION.md#passkeys). Needs migration 056.
 - **Adding another provider account from the signed-in account** — the account
   screen offers "Add a Google account" (and GitHub, Microsoft, Apple, for the
   providers the application offers): `POST /api/v1/users/connections/{provider}/link`

@@ -300,6 +300,94 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
 
+  /api/v1/login-flows/{flow}/passkey/begin:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: beginPasskeySignIn
+      summary: Start signing in with a passkey
+      description: |
+        Returns what the browser needs to ask the user's device for a passkey.
+        Nobody has said who is signing in, so `options` names no credential
+        (`allowCredentials` is empty): the device offers the passkeys it holds
+        for this login screen, and the answer says whose they are. `options` is
+        the `PublicKeyCredentialRequestOptions` in the JSON form
+        `PublicKeyCredential.parseRequestOptionsFromJSON()` takes - pass it on
+        unchanged, with `mediation: conditional` to offer it in the browser's
+        autofill. It asks for user verification. `ceremony_id` names this attempt
+        in `finish`; it is valid for five minutes, works once, and only for this
+        flow. `403 sign_in_method_not_allowed` where the flow's client offers no
+        passkey sign-in (see `client.sign_in_methods`), `404 passkeys_unavailable`
+        where passkeys are not set up.
+      responses:
+        '200':
+          description: The browser's input
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ceremony_id, options]
+                properties:
+                  ceremony_id: { type: string }
+                  options:
+                    type: object
+                    description: PublicKeyCredentialRequestOptionsJSON of the WebAuthn specification.
+                    additionalProperties: true
+                '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /api/v1/login-flows/{flow}/passkey/finish:
+    parameters: [{ $ref: '#/components/parameters/Flow' }]
+    post:
+      operationId: submitPasskey
+      summary: Finish signing in with a passkey
+      description: |
+        `credential` is the device's answer as `PublicKeyCredential.toJSON()`
+        writes it. The passkey must have been registered in the tenant of the
+        flow's client: a passkey opens no other tenant's flow, though the login
+        screen is the same. When it holds, the flow continues as a password would
+        - a second factor and the tenant's terms are still owed - and the ID
+        token's `amr` is `hwk` and `mfa` (the key proved possession and the device
+        verified the user, as the device reports it), followed by `otp` after an
+        authenticator code. An
+        unknown, used, expired or other flow's `ceremony_id` is `400
+        ceremony_expired`; an answer the server does not accept is `401
+        passkey_rejected` whatever the reason (it is in the server's log, not in
+        the answer), and counts toward the rate limit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ceremony_id, credential]
+              properties:
+                ceremony_id: { type: string }
+                credential:
+                  type: object
+                  description: AuthenticationResponseJSON of the WebAuthn specification.
+                  additionalProperties: true
+                remember:
+                  description: The user asks to stay signed in on this browser.
+                  type: boolean
+      responses:
+        '200':
+          description: Signed in, or a second factor or the tenant's terms are owed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Redirect'
+                  - $ref: '#/components/schemas/MFARequired'
+                  - $ref: '#/components/schemas/TermsRequired'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
   /api/v1/login-flows/{flow}/mfa:
     parameters: [{ $ref: '#/components/parameters/Flow' }]
     post:
@@ -737,6 +825,140 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Message' }
         '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/passkeys:
+    get:
+      tags: [account]
+      operationId: listOwnPasskeys
+      summary: The passkeys the signed-in user's account signs in with
+      description: |
+        Oldest first. A passkey is a key pair the user's device keeps; the
+        server keeps the public half. Passkeys are managed on the account screen
+        only: a token issued to any other application is `403
+        account_application_required`. Where passkeys are not set up (the login
+        UI is at an IP address, or the relying party id does not cover its host)
+        every passkey endpoint is `404 passkeys_unavailable`.
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The passkeys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passkeys]
+                properties:
+                  passkeys:
+                    type: array
+                    items: { $ref: '#/components/schemas/Passkey' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/passkeys/register/begin:
+    post:
+      tags: [account]
+      operationId: beginPasskeyRegistration
+      summary: Start registering a passkey
+      description: |
+        Returns what the browser needs to create one. Needs a recent sign-in
+        (`401 insufficient_user_authentication` with `max_age` otherwise).
+
+        `options` is the `PublicKeyCredentialCreationOptions` in the JSON form
+        `PublicKeyCredential.parseCreationOptionsFromJSON()` takes - pass it on
+        unchanged. It asks for a discoverable credential (`residentKey:
+        required`) and for user verification (`userVerification: required`), so
+        the passkey proves who the user is and not only that they hold the
+        device, and it names the passkeys the account already has so a device
+        that holds one is not offered a second. `ceremony_id` names this
+        attempt in `finish`; it is valid for five minutes and works once.
+      security: [{ userToken: [] }]
+      responses:
+        '200':
+          description: The browser's input
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ceremony_id, options]
+                properties:
+                  ceremony_id: { type: string }
+                  options:
+                    type: object
+                    description: PublicKeyCredentialCreationOptionsJSON of the WebAuthn specification.
+                    additionalProperties: true
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        
+  /api/v1/users/passkeys/register/finish:
+    post:
+      tags: [account]
+      operationId: finishPasskeyRegistration
+      summary: Save the passkey the browser created
+      description: |
+        `credential` is the browser's answer as `PublicKeyCredential.toJSON()`
+        writes it. Needs a recent sign-in. The ceremony works once and only for
+        the user it was started for; an unknown, used, expired or foreign
+        `ceremony_id` is `400 ceremony_expired`. An answer the server does not
+        accept - a wrong origin or challenge, a device that did not verify the
+        user - is `400 passkey_rejected`; the reason is in the server's log and
+        not in the answer. A credential id already registered in the tenant is
+        `409 passkey_already_registered`.
+      security: [{ userToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ceremony_id, credential]
+              properties:
+                ceremony_id: { type: string }
+                name: { type: string, description: 'What the user calls the passkey; at most 100 characters, "Passkey" when empty.' }
+                credential:
+                  type: object
+                  description: RegistrationResponseJSON of the WebAuthn specification.
+                  additionalProperties: true
+      responses:
+        '201':
+          description: The passkey that was saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passkey]
+                properties:
+                  passkey: { $ref: '#/components/schemas/Passkey' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/passkeys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The `id` of a passkey from the list.
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [account]
+      operationId: removeOwnPasskey
+      summary: Remove one of the account's passkeys
+      description: |
+        Needs a recent sign-in. The account's only way to sign in - no password,
+        no linked provider account and no other passkey - is `409
+        last_sign_in_method`; a passkey the account does not have is `404`.
+      security: [{ userToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
 
@@ -1805,7 +2027,7 @@ paths:
                   description: Sign-in methods to offer — at least one. Left out, email and google. An empty list or an unknown name is 400 invalid_enabled_auth_providers.
                   type: array
                   minItems: 1
-                  items: { type: string, enum: [email, magic_link, google, github, microsoft, apple] }
+                  items: { type: string, enum: [email, magic_link, passkey, google, github, microsoft, apple] }
                 access_token_strategy:
                   description: jwt gives the client access tokens that follow the resource server profile (JwtAccessToken).
                   type: string
@@ -1980,7 +2202,7 @@ paths:
                   description: Left out, unchanged. At least one; an empty list or an unknown name is 400 invalid_enabled_auth_providers.
                   type: array
                   minItems: 1
-                  items: { type: string, enum: [email, magic_link, google, github, microsoft, apple] }
+                  items: { type: string, enum: [email, magic_link, passkey, google, github, microsoft, apple] }
                 skip_consent:
                   description: |
                     The client is the tenant's own application: its users are
@@ -3534,6 +3756,16 @@ components:
                   sync_status: { $ref: '#/components/schemas/SyncStatus' }
 
   schemas:
+    Passkey:
+      type: object
+      required: [id, name, created_at, last_used_at, synced]
+      properties:
+        id: { type: string, format: uuid, description: 'Names this passkey in DELETE /api/v1/users/passkeys/{id}. The credential id and the key are not shown.' }
+        name: { type: string }
+        created_at: { type: string }
+        last_used_at: { type: string, nullable: true, description: 'Null until the passkey has signed in.' }
+        synced: { type: boolean, description: "Whether the device backs the passkey up to the user's other devices, as it reported at its last use." }
+
     SecondFactorSetup:
       type: object
       required: [secret, otpauth_uri, qr_image, issuer, account_name]
@@ -3670,7 +3902,7 @@ components:
           properties:
             client_id: { type: string }
             sign_in_methods:
-              description: What to offer, in order — "email" for the password form, "magic_link", then social providers.
+              description: What to offer, in order — "email" for the password form, "magic_link", then social providers, then "passkey" (a passkey is offered wherever the password form is, and where the client names "passkey"; not where passkeys are not set up).
               type: array
               items: { type: string }
         hints:
@@ -4498,6 +4730,12 @@ components:
           type: boolean
         approval_requests:
           description: A client acting for a user may ask them to approve one action while they are away (see ApprovalRequest).
+          type: boolean
+        passkeys:
+          description: |
+            Users register passkeys on the account screen and sign in with them
+            (`/api/v1/users/passkeys`, `/api/v1/login-flows/{flow}/passkey/begin`
+            and `finish`). Absent or false where they are not set up.
           type: boolean
         ciba: { type: boolean }
 

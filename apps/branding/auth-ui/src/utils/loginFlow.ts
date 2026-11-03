@@ -65,6 +65,22 @@ export function submitLoginStep(flow: string, path: string, body: unknown): Prom
   return submitFlowStep('login-flows', flow, path, body)
 }
 
+/** What starting a passkey sign-in answers: the browser's input, or why not. */
+export interface PasskeyBegin extends FlowStep {
+  ceremony_id?: string
+  /** PublicKeyCredentialRequestOptionsJSON, passed to the browser as it is. */
+  options?: unknown
+}
+
+export function beginPasskeySignIn(flow: string): Promise<PasskeyBegin> {
+  return submitLoginStep(flow, '/passkey/begin', {}) as Promise<PasskeyBegin>
+}
+
+/** Sends the device's answer (PublicKeyCredential.toJSON()) and returns the flow's next step. */
+export function finishPasskeySignIn(flow: string, ceremonyId: string, credential: Record<string, unknown>, remember: boolean): Promise<FlowStep> {
+  return submitLoginStep(flow, '/passkey/finish', { ceremony_id: ceremonyId, credential, remember })
+}
+
 /**
  * Follows a flow's redirect_to. A popup navigates in place as well — the
  * client's callback page in the popup reports back to the opener — except

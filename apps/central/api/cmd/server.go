@@ -28,6 +28,7 @@ import (
 	"authway/apps/central/api/pkg/mfa"
 	ratelimitmw "authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/outbound"
+	"authway/apps/central/api/pkg/passkey"
 	"authway/apps/central/api/pkg/serviceclient"
 	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/tenantscope"
@@ -347,6 +348,20 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	delegationHandler := delegation.NewHandler(delegationService, hydraClient, newFeatureServices.AuditService, zapLogger)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, signInState, socialHandler, signInPolicy)
 	authHandler.GrantsDelegations(delegationService)
+	// Passkeys are scoped to the login UI's host. Where that cannot be a
+	// relying party id (an IP address, an id the host is not within) they are
+	// off, and the endpoints say so; nothing else depends on them.
+	passkeyService := user.NewPasskeyService(db, zapLogger)
+	var passkeyCeremonies *passkey.Ceremonies
+	if rpID, rpOrigins, rpErr := cfg.PasskeyRelyingParty(); rpErr != nil {
+		zapLogger.Warn("Passkeys are not available", zap.Error(rpErr))
+	} else if ceremonies, newErr := passkey.New(passkey.Config{RPID: rpID, RPName: cfg.App.Name, Origins: rpOrigins}, signInState, passkeyService, userService); newErr != nil {
+		zapLogger.Warn("Passkeys are not available", zap.Error(newErr))
+	} else {
+		passkeyCeremonies = ceremonies
+	}
+	authHandler.GrantsPasskeys(passkeyCeremonies)
+	passkeyHandler := handler.NewPasskeyHandler(userService, passkeyService, clientService, passkeyCeremonies, tenantService.Name, newFeatureServices.AuditService, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
 	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
@@ -422,6 +437,9 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 
 	// What this deployment offers, so screens show only what works.
 	capabilities := handler.NewCapabilitiesHandler(socialHandler)
+	if passkeyCeremonies != nil {
+		capabilities.OffersPasskeys()
+	}
 	if exchanger != nil {
 		capabilities.ExchangesDelegations()
 	}
@@ -441,6 +459,8 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// which sign-in methods the client allows) or redirect.
 	v1.Get("/login-flows/:flow", authHandler.GetLoginFlow)
 	v1.Post("/login-flows/:flow/password", loginRateLimit, authHandler.SubmitPassword)
+	v1.Post("/login-flows/:flow/passkey/begin", authHandler.BeginPasskeyLogin)
+	v1.Post("/login-flows/:flow/passkey/finish", loginRateLimit, authHandler.FinishPasskeyLogin)
 	v1.Post("/login-flows/:flow/mfa", loginRateLimit, authHandler.VerifyMFALogin)
 	v1.Post("/login-flows/:flow/mfa/recovery", loginRateLimit, authHandler.VerifyMFARecoveryLogin)
 	// The documents the user's tenant asks them to accept, once every factor
@@ -492,6 +512,11 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1.Post("/users/connections/:provider/link", jwtAuth, loginRateLimit, socialHandler.StartConnectionLink)
 	v1.Get("/users/connections/link/:ticket", socialHandler.RunConnectionLink)
 	v1.Post("/users/connections/link/complete", jwtAuth, loginRateLimit, socialHandler.CompleteConnectionLink)
+	// The user's passkeys: the account application's token only.
+	v1.Get("/users/passkeys", jwtAuth, passkeyHandler.List)
+	v1.Post("/users/passkeys/register/begin", jwtAuth, passkeyHandler.BeginRegistration)
+	v1.Post("/users/passkeys/register/finish", jwtAuth, loginRateLimit, passkeyHandler.FinishRegistration)
+	v1.Delete("/users/passkeys/:id", jwtAuth, passkeyHandler.Remove)
 	// What the user let clients do for them while they are away, and taking
 	// it back.
 	v1.Get("/users/delegations", jwtAuth, delegationHandler.ListMine)

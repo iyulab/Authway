@@ -3,6 +3,7 @@ import type { ConformanceConfig } from './config.js'
 import { Browser } from './browser.js'
 import { conform } from './contract.js'
 import { waitForLink } from './mail.js'
+import { type Ceremony, type PasskeyDevice } from './passkey.js'
 import { createPkce, randomToken, type Pkce } from './pkce.js'
 import { type StandInIdentity, type StandInProvider } from './standin.js'
 
@@ -617,6 +618,45 @@ export class Provider {
       body: JSON.stringify({ code }),
     })
     await conform('POST', '/api/v1/login-flows/{flow}/magic-link/code', res.clone())
+    return this.afterFirstFactor(attempt, res.status, await res.text())
+  }
+
+  /**
+   * Starts a passkey sign-in on an open login screen: the server's answer is
+   * the browser's input (`options`) and the id of the ceremony to finish.
+   */
+  async beginPasskeySignIn(attempt: LoginAttempt): Promise<Response> {
+    const res = await attempt.browser.fetch(this.loginFlowUrl(attempt.flow, '/passkey/begin'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/passkey/begin', res.clone())
+    return res
+  }
+
+  /** Sends the device's answer to a passkey ceremony and returns the provider's answer. */
+  async finishPasskeySignIn(attempt: LoginAttempt, ceremonyId: string, credential: object): Promise<Response> {
+    const res = await attempt.browser.fetch(this.loginFlowUrl(attempt.flow, '/passkey/finish'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ceremony_id: ceremonyId, credential, remember: attempt.remember ?? false }),
+    })
+    await conform('POST', '/api/v1/login-flows/{flow}/passkey/finish', res.clone())
+    return res
+  }
+
+  /**
+   * Signs in with a passkey on an open login screen, as the user's device
+   * would: begin, answer the options, finish; then on to the tokens (or a second
+   * factor, or the terms). `bend` changes what the device answers.
+   */
+  async continueWithPasskey(attempt: LoginAttempt, device: PasskeyDevice, bend: Partial<Ceremony> = {}): Promise<LoginOutcome> {
+    const begun = await this.beginPasskeySignIn(attempt)
+    const text = await begun.text()
+    if (!begun.ok) return { kind: 'rejected', status: begun.status, body: text }
+    const { ceremony_id, options } = JSON.parse(text) as { ceremony_id: string; options: { challenge: string; rpId: string } }
+    const res = await this.finishPasskeySignIn(attempt, ceremony_id, device.signIn(options, bend))
     return this.afterFirstFactor(attempt, res.status, await res.text())
   }
 

@@ -16,6 +16,14 @@ type CapabilitiesHandler struct {
 	exchanges bool
 	// approvals is whether a client can ask a user to approve an action.
 	approvals bool
+	// passkeys is whether users can sign in with, and register, passkeys.
+	passkeys bool
+}
+
+// OffersPasskeys reports passkeys as offered.
+func (h *CapabilitiesHandler) OffersPasskeys() *CapabilitiesHandler {
+	h.passkeys = true
+	return h
 }
 
 // TakesApprovalRequests reports approval_requests as offered.
@@ -66,6 +74,8 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //     action while they are away (POST /oauth2/approval-requests); the user
 //     answers on the approval screen, and the client polls the token endpoint
 //     for a token bound to the approval
+//   - passkeys: a user registers passkeys on the account screen and signs in
+//     with them (WebAuthn; /api/v1/users/passkeys, /login-flows/{flow}/passkey)
 //   - ciba: decoupled approval in the shape of OpenID CIBA (with an ID token)
 //     — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
@@ -83,6 +93,7 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"terms_acceptance":     true,
 		"token_exchange":       h.exchanges,
 		"approval_requests":    h.approvals,
+		"passkeys":             h.passkeys,
 		"ciba":                 false,
 	})
 }

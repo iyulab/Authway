@@ -255,7 +255,7 @@ func mappedModels() []any {
 		&email.EmailVerification{}, &email.PasswordReset{},
 		&invitation.Invitation{},
 		&passwordless.MagicLink{}, &serviceclient.ServiceClient{},
-		&tenant.Tenant{}, &user.User{}, &user.LinkedIdentity{}, &claims.UserClaim{},
+		&tenant.Tenant{}, &user.User{}, &user.LinkedIdentity{}, &user.Passkey{}, &claims.UserClaim{},
 		&webhook.Webhook{}, &webhook.WebhookDelivery{},
 		&terms.Document{}, &terms.Acceptance{},
 		&delegation.Grant{}, &delegation.SigningKey{}, &delegation.Approval{},

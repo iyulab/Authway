@@ -77,7 +77,7 @@ All are optional and decide nothing; a screen applies them once and lets the
 user change the language or the address.
 
 `sign_in_methods` lists what to offer, in order: `email` (the password form),
-`magic_link`, then social providers. It already takes into account what the
+`magic_link`, then social providers, then `passkey`. It already takes into account what the
 client enables and what this deployment can run — show exactly this list.
 
 When the browser already has a session in the client's tenant, the answer is
@@ -96,6 +96,43 @@ or `next: terms` for a user who owes the tenant's documents ([Terms](#terms)).
 one, nothing else ([Sessions](#sessions)). A wrong
 email or password is `401 invalid_credentials`; a client that does not allow
 password sign-in is `403 sign_in_method_not_allowed`.
+
+### `POST /api/v1/login-flows/{flow}/passkey/begin` and `/finish`
+
+Signing in with a passkey the user registered on the
+[account screen](account.md#6-passkeys). `passkey` is in `sign_in_methods` where
+the deployment has passkeys and the client offers them: **wherever it offers the
+password form (`email`)**, since a passkey is a stronger answer to the same
+question, and where it names `passkey` in `enabled_auth_providers`
+(for an application that offers passkeys without passwords). A client that
+enables only other providers offers none (`403 sign_in_method_not_allowed`);
+a deployment without passkeys answers `404 passkeys_unavailable`.
+
+`begin` takes no body and answers `{ "ceremony_id", "options" }`. Nobody has said
+who is signing in, so `options` — the
+[`PublicKeyCredentialRequestOptions`](https://www.w3.org/TR/webauthn-3/#dictdef-publickeycredentialrequestoptionsjson)
+in its JSON form, for `PublicKeyCredential.parseRequestOptionsFromJSON()` and
+`navigator.credentials.get()` — names no credential: the device offers the
+passkeys it holds for the login screen. To show them in the address field's
+autofill, mark the field `autocomplete="username webauthn"` and pass
+`mediation: "conditional"` to `get()`. It asks for user verification. A
+ceremony lasts five minutes, works once, and only for this flow.
+
+`finish` takes `{ "ceremony_id", "credential", "remember" }`, `credential` being
+the result's `toJSON()`, and continues the flow as a password would: `next:
+redirect`, or `next: mfa` for a user with a second factor (a passkey is a first
+factor — the code is still asked), or `next: terms`. The ID token's `amr` is
+`["hwk", "mfa"]` (`["hwk", "mfa", "otp"]` after an authenticator code): the key
+proved possession and the device verified the user — as the device reports it,
+since no attestation is asked for.
+
+The login screen is one relying party for every tenant, so a device offers a
+person all of their passkeys; **a passkey opens only the flow of the tenant it
+was registered in.** Any answer the server does not accept — wrong origin or
+challenge, a device that did not verify the user, a passkey of another tenant, a
+signature counter that went back (a possible copy) — is `401 passkey_rejected`
+whatever the reason, and counts toward the rate limit. An unknown, used,
+expired or another flow's `ceremony_id` is `400 ceremony_expired`.
 
 ### `POST /api/v1/login-flows/{flow}/mfa` and `/mfa/recovery`
 
@@ -306,6 +343,7 @@ authorization request.
   "multi_tenant": true,
   "providers": ["google"],
   "magic_link": true,
+  "passkeys": true,
   "mfa": ["totp"],
   "signup_modes": ["invite_only", "open"],
   "account_deletion": true,
@@ -320,4 +358,6 @@ authorization request.
 ```
 
 `providers` are the social providers this deployment has credentials for (a
-client may add its own credentials for any of them).
+client may add its own credentials for any of them). `passkeys` is whether users
+register passkeys and sign in with them; absent or `false` where they are not set
+up.

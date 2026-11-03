@@ -107,8 +107,12 @@ describe('login UI backend routes', () => {
 
     const res = await fetch(provider.loginFlowUrl(flow))
     const methods: string[] = (await res.json()).client.sign_in_methods
+    // Each way is offered only where the deployment can run it: a social
+    // provider it has credentials for, or the way its capability names.
     for (const m of methods.filter((m) => m !== 'email')) {
-      expect(caps.providers, `sign-in offers ${m}, which the deployment cannot run`).toContain(m)
+      if (m === 'magic_link') expect(caps.magic_link, `sign-in offers ${m}, which the deployment cannot run`).toBe(true)
+      else if (m === 'passkey') expect(caps.passkeys, `sign-in offers ${m}, which the deployment cannot run`).toBe(true)
+      else expect(caps.providers, `sign-in offers ${m}, which the deployment cannot run`).toContain(m)
     }
   })
 

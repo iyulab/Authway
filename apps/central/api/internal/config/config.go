@@ -54,6 +54,7 @@ type Config struct {
 	Admin               AdminConfig               `mapstructure:"admin"`
 	Security            SecurityConfig            `mapstructure:"security"`
 	ApplicationInsights ApplicationInsightsConfig `mapstructure:"applicationinsights"`
+	WebAuthn            WebAuthnConfig            `mapstructure:"webauthn"`
 }
 
 type AppConfig struct {
@@ -641,6 +642,9 @@ func setDefaults() {
 	viper.SetDefault("app.base_url", "http://localhost:8080")
 	// The auth UI's vite dev server, not the API port — see AppConfig.FrontendURL.
 	viper.SetDefault("app.frontend_url", "http://localhost:3001")
+	// A key without a default is not read from the environment: empty means the
+	// login UI's host (see WebAuthnConfig).
+	viper.SetDefault("webauthn.rp_id", "")
 	// No console sign-in until the console's address is configured — a key
 	// without a default is not read from the environment.
 	viper.SetDefault("app.console_url", "")

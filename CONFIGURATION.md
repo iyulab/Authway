@@ -111,6 +111,20 @@ serves both the API and the login UI (the on-premises bundle).
 (see [Console accounts](docs/api/console-accounts.md)). Left empty, the console
 signs in with the admin password only.
 
+### Passkeys
+
+```bash
+AUTHWAY_WEBAUTHN_RP_ID=      # Optional. Default: the host of AUTHWAY_APP_FRONTEND_URL
+```
+
+A passkey is bound to a relying party id: a domain, here the host of the login
+UI (`auth.example.com`) unless this is set to a domain above it
+(`example.com`). **Changing it, or moving the login UI to a host outside it,
+makes every registered passkey stop working** — decide it before users register
+passkeys. Passkeys are off (and their endpoints answer `404
+passkeys_unavailable`) when the login UI is at an IP address, which cannot be a
+relying party id, or when the id does not cover the login UI's host.
+
 ### Database Configuration
 
 ```bash
