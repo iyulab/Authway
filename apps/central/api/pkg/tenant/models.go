@@ -17,14 +17,12 @@ import (
 // Each tenant has independent users and applications
 // SSO is automatic within a tenant, isolated between tenants
 type Tenant struct {
-	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
-	Name         string         `json:"name" gorm:"not null"`
-	Slug         string         `json:"slug" gorm:"uniqueIndex;not null"`
-	Description  string         `json:"description"`
-	Settings     TenantSettings `json:"settings" gorm:"type:jsonb"`
-	Logo         string         `json:"logo"`
-	PrimaryColor string         `json:"primary_color" gorm:"default:#4F46E5"`
-	Active       bool           `json:"active"`
+	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
+	Name        string         `json:"name" gorm:"not null"`
+	Slug        string         `json:"slug" gorm:"uniqueIndex;not null"`
+	Description string         `json:"description"`
+	Settings    TenantSettings `json:"settings" gorm:"type:jsonb"`
+	Active      bool           `json:"active"`
 	// IsSystem marks the tenant whose accounts sign in to the administration
 	// console (at most one). It cannot be turned off or deleted.
 	IsSystem  bool           `json:"is_system" gorm:"not null;default:false"`
@@ -145,44 +143,38 @@ func (t *Tenant) BeforeCreate(tx *gorm.DB) error {
 // domain/signup policy only), so it is included in full rather than
 // re-filtered field by field.
 type PublicTenant struct {
-	ID           uuid.UUID      `json:"id"`
-	Name         string         `json:"name"`
-	Slug         string         `json:"slug"`
-	Description  string         `json:"description"`
-	Settings     TenantSettings `json:"settings"`
-	Logo         string         `json:"logo"`
-	PrimaryColor string         `json:"primary_color"`
-	Active       bool           `json:"active"`
-	IsSystem     bool           `json:"is_system"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID          uuid.UUID      `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description string         `json:"description"`
+	Settings    TenantSettings `json:"settings"`
+	Active      bool           `json:"active"`
+	IsSystem    bool           `json:"is_system"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // ToPublic converts Tenant to PublicTenant
 func (t *Tenant) ToPublic() PublicTenant {
 	return PublicTenant{
-		ID:           t.ID,
-		Name:         t.Name,
-		Slug:         t.Slug,
-		Description:  t.Description,
-		Settings:     t.Settings,
-		Logo:         t.Logo,
-		PrimaryColor: t.PrimaryColor,
-		Active:       t.Active,
-		IsSystem:     t.IsSystem,
-		CreatedAt:    t.CreatedAt,
-		UpdatedAt:    t.UpdatedAt,
+		ID:          t.ID,
+		Name:        t.Name,
+		Slug:        t.Slug,
+		Description: t.Description,
+		Settings:    t.Settings,
+		Active:      t.Active,
+		IsSystem:    t.IsSystem,
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
 	}
 }
 
 // CreateTenantRequest represents the request to create a new tenant
 type CreateTenantRequest struct {
-	Name         string         `json:"name" validate:"required,min=2,max=255"`
-	Slug         string         `json:"slug" validate:"required,min=2,max=100"`
-	Description  string         `json:"description" validate:"max=1000"`
-	Settings     TenantSettings `json:"settings"`
-	Logo         string         `json:"logo" validate:"omitempty,url"`
-	PrimaryColor string         `json:"primary_color" validate:"omitempty,hexcolor"`
+	Name        string         `json:"name" validate:"required,min=2,max=255"`
+	Slug        string         `json:"slug" validate:"required,min=2,max=100"`
+	Description string         `json:"description" validate:"max=1000"`
+	Settings    TenantSettings `json:"settings"`
 }
 
 // UpdateTenantRequest represents the request to update a tenant
@@ -191,12 +183,7 @@ type UpdateTenantRequest struct {
 	// Description changes only when named; an empty string clears it.
 	Description *string         `json:"description" validate:"omitempty,max=1000"`
 	Settings    *TenantSettings `json:"settings"`
-	// Logo and PrimaryColor change only when named; an empty string clears.
-	// A value is checked in the handler (a struct tag would refuse the empty
-	// string a pointer carries).
-	Logo         *string `json:"logo"`
-	PrimaryColor *string `json:"primary_color"`
-	Active       *bool   `json:"active"` // Pointer to allow explicit false
+	Active      *bool           `json:"active"` // Pointer to allow explicit false
 }
 
 // DefaultTenantID is the UUID of the default tenant

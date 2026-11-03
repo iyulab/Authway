@@ -1543,8 +1543,6 @@ paths:
                 slug: { type: string, minLength: 2, maxLength: 100 }
                 description: { type: string }
                 settings: { $ref: '#/components/schemas/TenantSettings' }
-                logo: { type: string, description: 'An address of the tenant''s logo. Kept and returned as given: the provider''s own screens do not show it.' }
-                primary_color: { type: string, description: 'A hex color, e.g. ''#4F46E5''. Kept and returned as given: the provider''s own screens are not styled by it.' }
       responses:
         '201':
           description: Created
@@ -1608,8 +1606,6 @@ paths:
                 name: { type: string, minLength: 2, maxLength: 255 }
                 description: { type: string, maxLength: 1000, description: An empty string clears it. }
                 settings: { $ref: '#/components/schemas/TenantSettings' }
-                logo: { type: string, description: An absolute URL. Kept and returned as given; left as it is when not named, cleared by an empty string. }
-                primary_color: { type: string, description: 'A hex color. Kept and returned as given; left as it is when not named, cleared by an empty string.' }
                 active:
                   type: boolean
                   description: |
@@ -4433,8 +4429,6 @@ components:
         slug: { type: string }
         description: { type: string }
         settings: { $ref: '#/components/schemas/TenantSettings' }
-        logo: { type: string }
-        primary_color: { type: string }
         active: { type: boolean }
         is_system:
           description: |

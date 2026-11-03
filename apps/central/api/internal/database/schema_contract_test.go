@@ -352,6 +352,10 @@ var awaitingDropColumns = map[string]bool{
 	"users.github_id":    true,
 	"users.microsoft_id": true,
 	"users.apple_id":     true,
+	// A tenant's logo and primary color were kept and returned, and no screen
+	// showed them; the fields are gone from the API.
+	"tenants.logo":          true,
+	"tenants.primary_color": true,
 }
 
 // TestModelsCanStoreZeroValues guards the GORM rule that cost this codebase a

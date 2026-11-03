@@ -33,8 +33,6 @@ func (s *Service) CreateTenant(req CreateTenantRequest) (*Tenant, error) {
 			existing.Name = req.Name
 			existing.Description = req.Description
 			existing.Settings = req.Settings
-			existing.Logo = req.Logo
-			existing.PrimaryColor = req.PrimaryColor
 			existing.Active = true
 			existing.DeletedAt = gorm.DeletedAt{} // Clear deleted_at
 
@@ -54,13 +52,11 @@ func (s *Service) CreateTenant(req CreateTenantRequest) (*Tenant, error) {
 
 	// Create new tenant
 	tenant := &Tenant{
-		Name:         req.Name,
-		Slug:         req.Slug,
-		Description:  req.Description,
-		Settings:     req.Settings,
-		Logo:         req.Logo,
-		PrimaryColor: req.PrimaryColor,
-		Active:       true,
+		Name:        req.Name,
+		Slug:        req.Slug,
+		Description: req.Description,
+		Settings:    req.Settings,
+		Active:      true,
 	}
 
 	if err := s.db.Create(tenant).Error; err != nil {
@@ -160,12 +156,6 @@ func (s *Service) UpdateTenant(id uuid.UUID, req UpdateTenantRequest) (*Tenant, 
 	}
 	if req.Settings != nil {
 		tenant.Settings = *req.Settings
-	}
-	if req.Logo != nil {
-		tenant.Logo = *req.Logo
-	}
-	if req.PrimaryColor != nil {
-		tenant.PrimaryColor = *req.PrimaryColor
 	}
 	if req.Active != nil {
 		tenant.Active = *req.Active

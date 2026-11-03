@@ -89,6 +89,13 @@
 
 ### Changed
 
+- **A tenant has no `logo` or `primary_color`** — **breaking, before 1.0**. Both
+  were kept and returned as given and no screen ever showed them, so they are
+  gone from the tenant on `POST /api/v1/tenants`, `PUT /api/v1/tenants/{id}` and
+  every tenant a response returns. A request that still names them is not
+  refused; nothing is stored. An application's own `logo` (shown on the sign-in
+  and consent screens) is unchanged. Nothing to migrate: remove the two fields
+  from any code that reads or sets them.
 - **A first password is set on the account screen only** — an account that has no
   password (it signs in by link, by a provider or by a passkey) can set its first
   one with a token issued to the account screen and a recent sign-in; any other
