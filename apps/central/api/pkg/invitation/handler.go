@@ -18,7 +18,14 @@ type Handler struct {
 	service  Service
 	logger   *zap.Logger
 	validate *validator.Validate
+	// signInWith names the providers an invitation can be accepted with, when
+	// the deployment offers any (see SetSignInOffer).
+	signInWith func(*Invitation) []string
 }
+
+// SetSignInOffer says which providers an invitation can be accepted with
+// instead of a password; the lookup reports them so the screen can offer them.
+func (h *Handler) SetSignInOffer(offer func(*Invitation) []string) { h.signInWith = offer }
 
 // NewHandler creates a new invitation handler
 func NewHandler(service Service, logger *zap.Logger) *Handler {
@@ -195,6 +202,10 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 		return apierror.RefuseWith(c, fiber.StatusBadRequest, "invitation_not_acceptable", "invitation cannot be accepted", fiber.Map{"invitation_status": status})
 	}
 
+	var signInWith []string
+	if h.signInWith != nil {
+		signInWith = h.signInWith(invitation)
+	}
 	return c.JSON(fiber.Map{
 		"invitation": InvitationResponse{
 			ID:          invitation.ID.String(),
@@ -204,6 +215,7 @@ func (h *Handler) GetInvitationByToken(c *fiber.Ctx) error {
 			Message:     invitation.Message,
 			ExpiresAt:   invitation.ExpiresAt,
 			Client:      invitation.App,
+			SignInWith:  signInWith,
 		},
 		"password_min_length": h.service.PasswordMinLength(invitation.TenantID),
 	})

@@ -16,6 +16,11 @@ import (
 type oauthState struct {
 	LoginChallenge string
 	ClientID       string
+	// InvitationID, set instead of LoginChallenge, says the sign-in accepts
+	// that invitation rather than continuing an application's flow. It is the
+	// invitation's id, not its token: the token is a bearer secret the
+	// database keeps only as a hash.
+	InvitationID string
 }
 
 // oauthStateTTL bounds how long a user may spend at the provider before the
@@ -48,8 +53,9 @@ func (s *OAuthStateStore) Save(ctx context.Context, data oauthState) (string, er
 	state := base64.RawURLEncoding.EncodeToString(b)
 
 	if err := s.store.Put(ctx, s.key(state), map[string]string{
-		"login_challenge": data.LoginChallenge,
-		"client_id":       data.ClientID,
+		"login_challenge":  data.LoginChallenge,
+		"client_id":        data.ClientID,
+		"invitation_id":    data.InvitationID,
 	}, oauthStateTTL); err != nil {
 		return "", fmt.Errorf("store state: %w", err)
 	}
@@ -66,5 +72,5 @@ func (s *OAuthStateStore) Consume(ctx context.Context, state string) (oauthState
 	if len(vals) == 0 {
 		return oauthState{}, false, nil
 	}
-	return oauthState{LoginChallenge: vals["login_challenge"], ClientID: vals["client_id"]}, true, nil
+	return oauthState{LoginChallenge: vals["login_challenge"], ClientID: vals["client_id"], InvitationID: vals["invitation_id"]}, true, nil
 }

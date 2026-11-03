@@ -104,4 +104,7 @@ type InvitationResponse struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	// Client is the application the invitation is for, when it names one.
 	Client *InvitationApp `json:"client,omitempty"`
+	// SignInWith lists the providers the person can accept the invitation
+	// with instead of choosing a password.
+	SignInWith []string `json:"sign_in_with,omitempty"`
 }

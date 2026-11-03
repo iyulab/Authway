@@ -10,6 +10,7 @@ import (
 	"authway/apps/central/api/internal/service/social"
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
+	"authway/apps/central/api/pkg/invitation"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -29,7 +30,12 @@ type SocialHandler struct {
 	stateStore       *OAuthStateStore
 	flows            *signIn
 	frontendURL      string // login UI: the error screen and the second factor step
+	invitations      invitation.Service
 }
+
+// SetInvitations lets a sign-in with a provider accept an invitation: the
+// accept screen offers it, and the callback finishes it.
+func (s *SocialHandler) SetInvitations(svc invitation.Service) { s.invitations = svc }
 
 // NewSocialHandlerWithAllProviders creates a SocialHandler with all OAuth providers
 func NewSocialHandlerWithAllProviders(
@@ -200,6 +206,10 @@ func (s *SocialHandler) GoogleCallback(c *fiber.Ctx) error {
 		MaxAge:   -1,
 		HTTPOnly: true,
 	})
+
+	if stored.InvitationID != "" {
+		return s.finishInvitationSignIn(c, code, state, stored)
+	}
 
 	// Process Google OAuth callback (client-specific or central)
 	authUser, err := s.googleService.HandleCallbackForClient(c.Context(), code, state, retrievedClientID)

@@ -2,6 +2,16 @@
 
 ### Added
 
+- **Accepting an invitation with Google** — when the invitation's application
+  lets users in with Google and has credentials for it, the accept screen
+  offers "Continue with Google" next to the password form
+  (`invitation.sign_in_with` on `GET /api/v1/invitations/token/{token}`; the
+  screen navigates to `GET /api/v1/invitations/token/{token}/social/{provider}`).
+  The invitation is accepted only for a Google account that has verified
+  exactly the address it was sent to; any other account changes nothing (no
+  account created or linked, the invitation stays pending) and the screen says
+  why. What the screen after accepting shows is read with
+  `GET /api/v1/invitations/receipts/{id}` (ten minutes, unguessable id).
 - **An invitation that names no application still leads somewhere** — when the
   tenant has exactly one live, enabled client with an https `initiate_login_uri`
   or `client_uri`, the person who accepted is sent there

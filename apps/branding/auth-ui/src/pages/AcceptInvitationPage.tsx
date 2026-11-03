@@ -49,6 +49,21 @@ function nowhereToGo(invitation: InvitationDetails | undefined, t: TFunction): s
   return t('auth:invitation.success.signInFromApp', { tenant })
 }
 
+/** Why accepting with a provider did not work, as the API names it. */
+const PROVIDER_ERRORS = [
+  'address_mismatch',
+  'linked_to_another',
+  'account_suspended',
+  'provider_unavailable',
+  'invitation_unavailable',
+  'invalid_request',
+] as const
+
+function providerError(t: TFunction, reason: string): string {
+  const known = (PROVIDER_ERRORS as readonly string[]).includes(reason) ? reason : 'failed'
+  return t(`auth:invitation.providerErrors.${known}`)
+}
+
 interface InvitationDetails {
   email: string
   tenant_name: string
@@ -56,6 +71,8 @@ interface InvitationDetails {
   role: string
   /** What the sender wrote to the invitee; free text, shown as written. */
   message?: string
+  /** The providers the invitation can be accepted with instead of a password. */
+  sign_in_with?: string[]
   client?: InvitationApp
 }
 
@@ -101,6 +118,9 @@ const AcceptInvitationPage: React.FC = () => {
 
   const token = searchParams.get('token') ?? ''
   const flow = searchParams.get('flow')
+  // Back from accepting with a provider: either a receipt to show, or why it did not work.
+  const receiptId = searchParams.get('receipt') ?? ''
+  const returnedError = searchParams.get('error')
   const apiUrl = getConfig().apiUrl
 
   // Validate the invitation token up front. The subject email is fixed by the
@@ -125,7 +145,19 @@ const AcceptInvitationPage: React.FC = () => {
       }
     },
   })
-  const invitation = shown?.invitation
+  // What the accept screen shows after an invitation was accepted with a
+  // provider: the accepted invitation can no longer be read by its token.
+  const { data: receipt, isError: receiptFailed } = useQuery<InvitationDetails>({
+    queryKey: ['invitation-receipt', receiptId],
+    enabled: receiptId !== '',
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/v1/invitations/receipts/${encodeURIComponent(receiptId)}`)
+      if (!res.ok) throw new Error('receipt unavailable')
+      return ((await res.json()) as { invitation: InvitationDetails }).invitation
+    },
+  })
+  const invitation = receipt ?? shown?.invitation
 
   // The issuer, for sending the person on to the application the invitation
   // is for (OpenID Connect Core 1.0 section 4).
@@ -204,11 +236,12 @@ const AcceptInvitationPage: React.FC = () => {
 
   // Missing/invalid/expired invitation, or no token at all: invitation-only, so
   // there is no public self-registration fallback.
-  if (token === '' || isError) {
+  if ((receiptId === '' && (token === '' || isError)) || receiptFailed) {
     return shell(
       <div className="text-center">
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:invitation.invalidTitle')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:invitation.invalidMessage')}</p>
+        {returnedError && <p className="mt-2 text-sm text-red-700">{providerError(t, returnedError)}</p>}
         {flow && (
           <button
             type="button"
@@ -222,7 +255,7 @@ const AcceptInvitationPage: React.FC = () => {
     )
   }
 
-  if (isLoading || !invitation) {
+  if ((isLoading && receiptId === '') || !invitation) {
     return shell(
       <div className="text-center">
         <div className="mx-auto animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
@@ -231,7 +264,7 @@ const AcceptInvitationPage: React.FC = () => {
     )
   }
 
-  if (success) {
+  if (success || receipt) {
     return shell(
       <div className="text-center">
         <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-green-100">
@@ -278,7 +311,29 @@ const AcceptInvitationPage: React.FC = () => {
         </p>
       </div>
 
+      {invitation.sign_in_with?.includes('google') && (
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => window.location.assign(`${apiUrl}/api/v1/invitations/token/${encodeURIComponent(token)}/social/google`)}
+            className="w-full flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            {t('auth:invitation.continueWithGoogle')}
+          </button>
+          <p className="mt-2 text-center text-xs text-gray-500">{t('auth:invitation.continueWithGoogleHint', { email: invitation.email })}</p>
+          <div className="mt-4 relative">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div>
+            <div className="relative flex justify-center text-sm"><span className="px-2 bg-gray-50 text-gray-500">{t('auth:invitation.orSetPassword')}</span></div>
+          </div>
+        </div>
+      )}
+
       <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        {returnedError && (
+          <div className="rounded-md bg-red-50 p-4">
+            <div className="text-sm text-red-700">{providerError(t, returnedError)}</div>
+          </div>
+        )}
         {error && (
           <div className="rounded-md bg-red-50 p-4">
             <div className="text-sm text-red-700">{error}</div>

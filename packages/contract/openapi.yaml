@@ -995,6 +995,71 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /api/v1/invitations/token/{token}/social/{provider}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+      - name: provider
+        in: path
+        required: true
+        description: One of the invitation's `sign_in_with`.
+        schema: { type: string }
+    get:
+      operationId: startInvitationSocialSignIn
+      summary: A page navigation that accepts an invitation with a provider
+      description: |
+        Not an API call: the browser navigates here from the accept screen.
+        It continues to the provider with the invited address as the
+        `login_hint`. Back from the provider, the invitation is accepted only
+        for an account the provider has verified as that address; any other
+        account changes nothing (no account is created or linked, the
+        invitation stays pending).
+
+        The browser then returns to `{auth_ui}/invitation/accept`: with
+        `receipt=<id>` once it is accepted (read it with
+        GET /api/v1/invitations/receipts/{id}), or with `error=<reason>` —
+        `address_mismatch`, `linked_to_another`, `account_suspended`,
+        `provider_unavailable`, `invitation_unavailable`, `invalid_request`
+        or `failed` — and `token=<token>` when the invitation can still be used.
+      responses:
+        '302': { description: To the provider, or back to the accept screen }
+
+  /api/v1/invitations/receipts/{id}:
+    get:
+      operationId: getInvitationReceipt
+      summary: What the accept screen shows after an invitation was accepted with a provider
+      description: |
+        The accepted invitation can no longer be read by its token, so the
+        screen that follows reads this: the organization, the sender's message
+        and the application to continue to, under an unguessable id that
+        lasts ten minutes (a reload keeps it).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation]
+                properties:
+                  invitation:
+                    type: object
+                    required: [tenant_name]
+                    properties:
+                      tenant_name: { type: string }
+                      inviter_name: { type: string }
+                      email: { type: string, description: The address the invitation was sent to — what the application is told to expect (login_hint). }
+                      message: { type: string }
+                      client: { $ref: '#/components/schemas/InvitationApp' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /api/v1/invitations/accept:
     post:
       operationId: acceptInvitation
@@ -3591,6 +3656,15 @@ components:
         inviter_name: { type: string }
         message: { type: string, description: What the sender wrote to the invitee, free text; shown as written, never as a link. }
         expires_at: { type: string }
+        sign_in_with:
+          description: |
+            The providers the invitation can be accepted with instead of a
+            password (`google`), when the invitation's client allows them and
+            has credentials for them. Absent when there are none. The screen
+            offers each one as a page navigation to
+            GET /api/v1/invitations/token/{token}/social/{provider}.
+          type: array
+          items: { type: string }
         client:
           description: |
             The application to send the person to once they have accepted.

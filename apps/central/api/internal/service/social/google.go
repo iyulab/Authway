@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -253,49 +254,86 @@ func (g *GoogleService) HandleCallback(ctx context.Context, code, state string) 
 
 // HandleCallbackForClient processes the Google OAuth callback for a specific client
 func (g *GoogleService) HandleCallbackForClient(ctx context.Context, code, state string, clientID string) (*user.User, error) {
+	tenantID, identity, err := g.identityFromCallback(ctx, code, state, clientID)
+	if err != nil {
+		return nil, err
+	}
+	return resolveAccount(g.userService, g.invitations, g.logger, tenantID, identity)
+}
+
+// ErrInvitationAddressMismatch refuses a sign-in that was started to accept an
+// invitation but came back with a different address (or one Google has not
+// verified): nothing is created or linked and the invitation stays as it was.
+var ErrInvitationAddressMismatch = errors.New("the Google account is not the address the invitation was sent to")
+
+// ErrInvitationAccountSuspended refuses accepting an invitation into an
+// account an administrator has suspended; the account is left untouched.
+var ErrInvitationAccountSuspended = errors.New("the account for the invited address is suspended")
+
+// HandleCallbackForInvitation is HandleCallbackForClient for a sign-in that
+// accepts the invitation sent to invitedEmail. Only a Google account that has
+// verified that very address gets through — and it is checked before anything
+// is created or linked, so any other account changes nothing.
+func (g *GoogleService) HandleCallbackForInvitation(ctx context.Context, code, state, clientID, invitedEmail string) (*user.User, error) {
+	tenantID, identity, err := g.identityFromCallback(ctx, code, state, clientID)
+	if err != nil {
+		return nil, err
+	}
+	if !identity.EmailVerified || !strings.EqualFold(strings.TrimSpace(identity.Email), strings.TrimSpace(invitedEmail)) {
+		g.logger.Warn("Invitation sign-in refused: the Google address is not the invited one",
+			zap.Bool("verified", identity.EmailVerified), zap.String("client_id", clientID))
+		return nil, ErrInvitationAddressMismatch
+	}
+	// The account is found or made under the address as the invitation wrote
+	// it, not as Google spells it: the lookups are exact, and a differently
+	// cased spelling would miss the account and the invitation both.
+	identity.Email = strings.TrimSpace(invitedEmail)
+	// A suspended account is refused before anything is linked to it.
+	if account, err := g.userService.GetByEmailAndTenant(tenantID, identity.Email); err == nil && !account.Active {
+		return nil, ErrInvitationAccountSuspended
+	}
+	return resolveAccount(g.userService, g.invitations, g.logger, tenantID, identity)
+}
+
+// identityFromCallback exchanges the code and reads who Google says signed in,
+// with the tenant of the client the sign-in was started for.
+func (g *GoogleService) identityFromCallback(ctx context.Context, code, state, clientID string) (uuid.UUID, Identity, error) {
 	g.logger.Info("Processing Google OAuth callback",
 		zap.String("state", state),
 		zap.String("code_length", fmt.Sprintf("%d", len(code))),
 		zap.String("client_id", clientID))
 
-	// Get client to determine tenant
-	var clientTenantID uuid.UUID
-	if clientID != "" {
-		client, err := g.clientService.GetByClientID(clientID)
-		if err != nil {
-			g.logger.Error("Failed to get client for tenant determination", zap.Error(err))
-			return nil, fmt.Errorf("failed to get client: %w", err)
-		}
-		clientTenantID = client.TenantID
-	} else {
-		// If no clientID, use default tenant
-		// This shouldn't happen in production but handle gracefully
-		g.logger.Warn("No client ID provided, using default tenant")
-		// You might want to get default tenant ID here
-		// For now, return error
-		return nil, fmt.Errorf("client_id required for tenant determination")
+	// The client decides the tenant.
+	if clientID == "" {
+		g.logger.Warn("No client ID provided for a Google sign-in")
+		return uuid.Nil, Identity{}, fmt.Errorf("client_id required for tenant determination")
+	}
+	client, err := g.clientService.GetByClientID(clientID)
+	if err != nil {
+		g.logger.Error("Failed to get client for tenant determination", zap.Error(err))
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to get client: %w", err)
 	}
 
 	// Exchange authorization code for access token using client-specific or central config
 	tokenResp, err := g.ExchangeCodeForClient(ctx, code, clientID)
 	if err != nil {
 		g.logger.Error("Failed to exchange authorization code", zap.Error(err))
-		return nil, fmt.Errorf("failed to exchange code: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to exchange code: %w", err)
 	}
 
 	// Get user information from Google
 	googleUser, err := g.GetUserInfo(ctx, tokenResp.AccessToken)
 	if err != nil {
 		g.logger.Error("Failed to get user info from Google", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user info: %w", err)
+		return uuid.Nil, Identity{}, fmt.Errorf("failed to get user info: %w", err)
 	}
 
-	return resolveAccount(g.userService, g.invitations, g.logger, clientTenantID, Identity{
+	return client.TenantID, Identity{
 		Provider:      "google",
 		Subject:       googleUser.ID,
 		Email:         googleUser.Email,
 		EmailVerified: googleUser.VerifiedEmail,
 		Name:          strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName),
 		Picture:       googleUser.Picture,
-	})
+	}, nil
 }

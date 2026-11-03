@@ -1,6 +1,7 @@
 package invitation
 
 import (
+	"strings"
 	"errors"
 	"fmt"
 	"time"
@@ -61,6 +62,17 @@ type Service interface {
 	// otherwise exist only in comments.
 	MayProvision(tenantID uuid.UUID, email string) (bool, error)
 	GetByToken(token string) (*Invitation, error)
+	// AcceptInvitedUser accepts the pending invitation id for a user who has
+	// shown, by a provider that verified it, that they hold the address it was
+	// sent to. The user must belong to the invitation's tenant and have that
+	// address; the invitation is closed in one conditional step, so two
+	// acceptances never both succeed.
+	AcceptInvitedUser(id, userID uuid.UUID) error
+	// SignInClientID is the OAuth client_id whose sign-in settings an
+	// invitation is accepted under: the application it names or, when it
+	// names none, the tenant's only live, enabled, non-system client. "" when
+	// there is no such client or more than one.
+	SignInClientID(inv *Invitation) string
 	// PasswordMinLength is the least length of the password accepting an
 	// invitation into the tenant may set.
 	PasswordMinLength(tenantID uuid.UUID) int
@@ -290,6 +302,26 @@ func (s *service) GetByToken(token string) (*Invitation, error) {
 	return &inv, nil
 }
 
+func (s *service) SignInClientID(inv *Invitation) string {
+	if inv.ClientID != nil {
+		var row struct{ ClientID string }
+		err := s.db.Table("clients").Where("id = ? AND deleted_at IS NULL AND active", *inv.ClientID).
+			Select("client_id").Take(&row).Error
+		if err != nil {
+			return ""
+		}
+		return row.ClientID
+	}
+	var rows []struct{ ClientID string }
+	err := s.db.Table("clients").
+		Where("tenant_id = ? AND deleted_at IS NULL AND active AND (system_kind IS NULL OR system_kind = '')", inv.TenantID).
+		Select("client_id").Limit(2).Find(&rows).Error
+	if err != nil || len(rows) != 1 {
+		return ""
+	}
+	return rows[0].ClientID
+}
+
 // soleTenantApp is the tenant's one application a person can be sent to: the
 // only live, enabled, non-system client with an https address to start a
 // sign-in at (initiate_login_uri) or a home page (client_uri). nil when there
@@ -410,15 +442,51 @@ func (s *service) Accept(token string, userID *uuid.UUID, name, password string)
 		u.EmailVerified = true
 		s.logger.Info("User created via invitation", zap.String("user_id", u.ID.String()), zap.String("email", u.Email))
 	}
-	now := time.Now()
-	inv.Status = StatusAccepted
-	inv.AcceptedAt = &now
-	inv.AcceptedBy = &u.ID
-	if err := s.db.Save(inv).Error; err != nil {
-		return nil, fmt.Errorf("failed to update invitation: %w", err)
+	if err := s.closeAccepted(inv, u.ID); err != nil {
+		return nil, err
 	}
 	s.logger.Info("Invitation accepted", zap.String("invitation_id", inv.ID.String()), zap.String("user_id", u.ID.String()))
 	return u, nil
+}
+
+// closeAccepted marks a pending invitation accepted by userID in one
+// conditional step: an invitation revoked, expired or accepted since it was
+// read is not closed, so it is accepted at most once.
+func (s *service) closeAccepted(inv *Invitation, userID uuid.UUID) error {
+	now := time.Now()
+	res := s.db.Model(&Invitation{}).
+		Where("id = ? AND status = ? AND expires_at > ?", inv.ID, StatusPending, now).
+		Updates(map[string]any{"status": StatusAccepted, "accepted_at": now, "accepted_user_id": userID})
+	if res.Error != nil {
+		return fmt.Errorf("failed to update invitation: %w", res.Error)
+	}
+	if res.RowsAffected != 1 {
+		return apierror.NewPublic("invitation cannot be accepted")
+	}
+	inv.Status, inv.AcceptedAt, inv.AcceptedBy = StatusAccepted, &now, &userID
+	return nil
+}
+
+func (s *service) AcceptInvitedUser(id, userID uuid.UUID) error {
+	inv, err := s.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if !inv.CanBeAccepted() {
+		return apierror.NewPublic("invitation cannot be accepted")
+	}
+	u, err := s.userService.GetByID(userID)
+	if err != nil {
+		return apierror.NewPublic("user not found")
+	}
+	if u.TenantID != inv.TenantID || !strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(inv.Email)) {
+		return apierror.NewPublic("user is not the invited one")
+	}
+	if err := s.closeAccepted(inv, u.ID); err != nil {
+		return err
+	}
+	s.logger.Info("Invitation accepted", zap.String("invitation_id", inv.ID.String()), zap.String("user_id", u.ID.String()))
+	return nil
 }
 
 func (s *service) Revoke(id uuid.UUID) error {

@@ -451,6 +451,14 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// A page navigation (not fetch): the browser goes on to the provider.
 	v1.Get("/login-flows/:flow/social/:provider", socialHandler.StartSocialLogin)
 
+	// Accepting an invitation with a provider: the accept screen offers it
+	// (the lookup's sign_in_with), the start is a page navigation, and the
+	// receipt is what the screen shows once it is accepted.
+	socialHandler.SetInvitations(newFeatureServices.InvitationService)
+	newFeatureServices.InvitationHandler.SetSignInOffer(socialHandler.OfferForInvitation)
+	v1.Get("/invitations/token/:token/social/:provider", socialHandler.StartInvitationSocial)
+	v1.Get("/invitations/receipts/:id", socialHandler.InvitationReceipt)
+
 	// Emailed sign-in links: sent from the login screen, redeemed from the
 	// link's landing page in the same browser.
 	magicLinkHandler := handler.NewMagicLinkFlowHandler(authHandler, newFeatureServices.PasswordlessService)

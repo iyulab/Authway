@@ -95,6 +95,75 @@ describe('accepting an invitation', () => {
     expect(i18n.t('auth:invitation.success.signInFromApp', { tenant: 'Acme' })).toMatch(/관리자|administrator/)
   })
 
+  describe('with a provider', () => {
+    const show = (shown: Record<string, unknown>) =>
+      server.use(
+        http.get(`${API}/.well-known/authway-config`, () =>
+          HttpResponse.json({ issuer: 'https://issuer.example', api_url: API, auth_ui: 'http://localhost:3001', version: 'x' }),
+        ),
+        http.get(`${API}/api/v1/invitations/token/:token`, () => HttpResponse.json({ invitation: shown, password_min_length: 8 })),
+      )
+
+    it('offers "continue with Google" above the password form only when the invitation can be accepted with it', async () => {
+      show({ ...invitation, sign_in_with: ['google'] })
+      renderAt('/invitation/accept?token=tok')
+      expect(await screen.findByRole('button', { name: i18n.t('auth:invitation.continueWithGoogle') })).toBeInTheDocument()
+      expect(document.querySelector('input[name="password"]')).not.toBeNull()
+    })
+
+    it('shows the password form alone when the invitation names no provider', async () => {
+      show(invitation)
+      renderAt('/invitation/accept?token=tok')
+      await waitFor(() => expect(document.querySelector('input[name="password"]')).not.toBeNull())
+      expect(screen.queryByRole('button', { name: i18n.t('auth:invitation.continueWithGoogle') })).toBeNull()
+    })
+
+    it('says why it did not work when the browser comes back from the provider with a reason, and keeps the form', async () => {
+      show({ ...invitation, sign_in_with: ['google'] })
+      renderAt('/invitation/accept?token=tok&error=address_mismatch')
+      expect(await screen.findByText(i18n.t('auth:invitation.providerErrors.address_mismatch'))).toBeInTheDocument()
+      expect(document.querySelector('input[name="password"]')).not.toBeNull()
+    })
+
+    it('names a reason it does not know as a plain failure, never as the raw code', async () => {
+      show(invitation)
+      renderAt('/invitation/accept?token=tok&error=%3Cb%3Eodd%3C%2Fb%3E')
+      expect(await screen.findByText(i18n.t('auth:invitation.providerErrors.failed'))).toBeInTheDocument()
+    })
+
+    it('after it was accepted with the provider, shows the account-created screen from the receipt and goes on to the application', async () => {
+      server.use(
+        http.get(`${API}/.well-known/authway-config`, () =>
+          HttpResponse.json({ issuer: 'https://issuer.example', api_url: API, auth_ui: 'http://localhost:3001', version: 'x' }),
+        ),
+        http.get(`${API}/api/v1/invitations/receipts/:id`, () =>
+          HttpResponse.json({
+            invitation: {
+              tenant_name: 'Acme',
+              inviter_name: 'Admin',
+              email: 'user@example.com',
+              message: 'Welcome aboard',
+              client: { client_id: 'app-1', name: 'Filer', initiate_login_uri: 'https://filer.example/login' },
+            },
+          }),
+        ),
+      )
+      renderAt('/invitation/accept?receipt=r-1')
+      await screen.findByText(i18n.t('auth:invitation.success.title'))
+      expect(document.querySelector('blockquote')!.textContent).toBe('Welcome aboard')
+      const link = await screen.findByRole('link', { name: i18n.t('auth:invitation.success.continueTo', { name: 'Filer' }) })
+      const to = new URL(link.getAttribute('href')!)
+      expect(to.origin + to.pathname).toBe('https://filer.example/login')
+      expect(to.searchParams.get('login_hint')).toBe('user@example.com')
+    })
+
+    it('treats a receipt that is gone as an invitation that cannot be used', async () => {
+      server.use(http.get(`${API}/api/v1/invitations/receipts/:id`, () => HttpResponse.json({ detail: 'gone' }, { status: 404 })))
+      renderAt('/invitation/accept?receipt=old')
+      expect(await screen.findByText(i18n.t('auth:invitation.invalidTitle'))).toBeInTheDocument()
+    })
+  })
+
   it('inside a sign-in an app started, goes on to that sign-in', async () => {
     await accept('/invitation/accept?token=tok&flow=f-1')
 
