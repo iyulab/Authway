@@ -239,8 +239,11 @@ Content-Type: application/json
 An account with a password proves it with `current_password` — a token alone
 does not change it. An account without one (`has_password: false`) leaves
 `current_password` out and sets its first password; for that the user must
-have signed in recently, as for [deleting the account](#the-user-must-have-signed-in-recently).
-The new password follows the tenant's rule.
+have signed in recently, as for [deleting the account](#the-user-must-have-signed-in-recently),
+and the token must have been issued to the [account screen](#the-account-screen)
+(`403 account_application_required` for any other application's): a first
+password is a new way to sign in, and an application that holds a token for the
+user must not choose one for them. The new password follows the tenant's rule.
 
 On `200` the answer is `{ "message", "sessions_ended" }`: the user's other
 sessions — every device, every application — have ended, with the tokens
@@ -256,6 +259,7 @@ event is `user.password_changed`.
 | `400` | `password_too_short` / `password_too_long` | The new password breaks the tenant's rule; `min_length` says the least |
 | `400` | `invalid_request` | No `new_password` |
 | `401` | `insufficient_user_authentication` | Setting a first password needs a recent sign-in — sign in again with `max_age` and retry |
+| `403` | `account_application_required` | Setting a first password with a token that was not issued to the account screen |
 | `401` | `unauthorized` | No token, or one that is no longer valid |
 
 The [account screen](#the-account-screen) offers this.

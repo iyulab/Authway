@@ -89,6 +89,15 @@
 
 ### Changed
 
+- **A first password is set on the account screen only** — an account that has no
+  password (it signs in by link, by a provider or by a passkey) can set its first
+  one with a token issued to the account screen and a recent sign-in; any other
+  application's token is refused (`403 account_application_required`). Before,
+  an application could make a sign-in recent by asking the user to sign in again
+  and then choose a password for them, which signed it in to the account from
+  then on. Changing an existing password is unchanged: the current password is
+  the proof, whoever holds the token.
+
 - **An account can sign in with several provider accounts** — links to Google,
   GitHub, Microsoft and Apple are rows of a new `user_identities` table
   (migrations 054 and 055 copy and reconcile the old provider columns), so an

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/user"
 )
 
@@ -43,6 +44,7 @@ func changePasswordApp(t *testing.T, h *AuthHandler, userID uuid.UUID, authTime 
 	app := fiber.New()
 	app.Post("/users/password", func(c *fiber.Ctx) error {
 		c.Locals("user_id", userID)
+		c.Locals("client_id", "account-app")
 		if !authTime.IsZero() {
 			c.Locals("auth_time", authTime)
 		}
@@ -104,7 +106,8 @@ func TestChangePassword_FirstPasswordNeedsARecentSignIn(t *testing.T) {
 	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "linked@example.com"}
 	log := &eventLog{}
 	users := &passwordUsers{fakeUserService: newFakeUserService(u)}
-	h := &AuthHandler{userService: users, hydraClient: revokingHydra(t, log, http.StatusNoContent), logger: zap.NewNop()}
+	accountScreen := &client.Client{ClientID: "account-app", TenantID: u.TenantID, System: true, SystemKind: client.SystemKindAccount, Active: true}
+	h := &AuthHandler{userService: users, clientService: newFakeClientService(accountScreen), hydraClient: revokingHydra(t, log, http.StatusNoContent), logger: zap.NewNop()}
 
 	stale := changePasswordApp(t, h, u.ID, time.Now().Add(-time.Hour), "")
 	if status, body := postPassword(t, stale, `{"new_password":"first-password"}`); status != 401 || body["code"] != "insufficient_user_authentication" {
@@ -117,5 +120,40 @@ func TestChangePassword_FirstPasswordNeedsARecentSignIn(t *testing.T) {
 	recent := changePasswordApp(t, h, u.ID, time.Now().Add(-time.Minute), "")
 	if status, body := postPassword(t, recent, `{"new_password":"first-password"}`); status != 200 {
 		t.Fatalf("recent sign-in: %d %v, want 200", status, body)
+	}
+}
+
+// A first password is a new way to sign in: an application holding a token for
+// the user - made recent by asking them to sign in again - cannot choose one.
+// An account that has a password is unaffected: the current one is the proof.
+func TestChangePassword_AnotherApplicationsTokenCannotSetAFirstPassword(t *testing.T) {
+	linked := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "linked@example.com"}
+	withPassword := &user.User{ID: uuid.New(), TenantID: linked.TenantID, Email: "member@example.com", PasswordHash: "set"}
+	users := &passwordUsers{fakeUserService: newFakeUserService(linked, withPassword)}
+	third := &client.Client{ClientID: "third-party", TenantID: linked.TenantID, Active: true}
+	console := &client.Client{ClientID: "console-app", TenantID: linked.TenantID, System: true, SystemKind: client.SystemKindConsole, Active: true}
+	h := &AuthHandler{userService: users, clientService: newFakeClientService(third, console), hydraClient: revokingHydra(t, &eventLog{}, http.StatusNoContent), logger: zap.NewNop()}
+
+	app := func(userID uuid.UUID, clientID string) *fiber.App {
+		a := fiber.New()
+		a.Post("/users/password", func(c *fiber.Ctx) error {
+			c.Locals("user_id", userID)
+			c.Locals("client_id", clientID)
+			c.Locals("auth_time", time.Now().Add(-time.Minute))
+			return c.Next()
+		}, h.ChangePassword)
+		return a
+	}
+	for _, clientID := range []string{"third-party", "console-app"} {
+		if status, body := postPassword(t, app(linked.ID, clientID), `{"new_password":"first-password"}`); status != 403 || body["code"] != "account_application_required" {
+			t.Fatalf("a first password with %s's token: %d %v, want 403 account_application_required", clientID, status, body)
+		}
+	}
+	if len(users.changed) != 0 {
+		t.Fatal("another application set a first password")
+	}
+	// With a password the current one is the proof, whoever holds the token.
+	if status, body := postPassword(t, app(withPassword.ID, "third-party"), `{"current_password":"right","new_password":"changed-password"}`); status != 200 {
+		t.Fatalf("a change proved by the current password: %d %v, want 200", status, body)
 	}
 }

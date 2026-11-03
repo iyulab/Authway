@@ -625,7 +625,10 @@ paths:
         by link or by another provider; `has_password: false` on the profile)
         sets its first with a recent sign-in instead — otherwise `401
         insufficient_user_authentication` with `max_age`, as deleting the
-        account answers. The new password follows the tenant's rule (`400
+        account answers — and only with a token issued to the account screen
+        (`403 account_application_required` for another application's): a first
+        password is a new way to sign in, which an application that holds a
+        token for the user must not choose for them. The new password follows the tenant's rule (`400
         password_too_short` with `min_length`, or `password_too_long`).
 
         The user's other sessions end, with the tokens issued in them;
