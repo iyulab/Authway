@@ -3623,8 +3623,10 @@ components:
         does not exist (404 not_found); an operation only an operator may do,
         or only an owner, is refused with 403 insufficient_scope; and a caller
         that administers several tenants names the one a call is about
-        (otherwise 400 tenant_required). A console account with no membership
-        is refused with 403 no_console_access.
+        (otherwise 400 tenant_required); on an installation with one tenant
+        (capabilities.multi_tenant false) a call that names none is about that
+        tenant. A console account with no membership is refused with 403
+        no_console_access.
     clientSecret:
       type: http
       scheme: basic

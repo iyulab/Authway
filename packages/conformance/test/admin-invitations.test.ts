@@ -47,7 +47,11 @@ describe('admin API: managing invitations', () => {
     }
   })
 
-  it('refuses an invitation that names no tenant', async () => {
+  // Only where there is a tenant to choose between: an installation with one
+  // takes a call that names none to be about it.
+  it('refuses an invitation that names no tenant', async (context) => {
+    const { multi_tenant } = (await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()) as { multi_tenant: boolean }
+    if (!multi_tenant) context.skip()
     const res = await fetch(`${provider.config.api}/api/v1/invitations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${provider.config.adminKey}`, 'Content-Type': 'application/json' },
