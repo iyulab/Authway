@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import { consolePath, getConfig } from '../config'
+import i18n from '@/i18n'
 
 const API_BASE_URL = getConfig().apiUrl
 
@@ -19,8 +20,12 @@ export const api = axios.create({
 // the tenant named by X-Tenant-ID. Sending it on every request means no single
 // call can forget it; a list call's tenant_id query parameter still decides its
 // filter.
+//
+// The language of the console goes with every request: a request that sends
+// mail (an invitation) is worded in the language the administrator reads.
 api.interceptors.request.use(
   (config) => {
+    config.headers['Accept-Language'] = i18n.resolvedLanguage ?? i18n.language
     const token = useAuthStore.getState().token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
@@ -60,34 +65,9 @@ api.interceptors.response.use(
   }
 )
 
-/**
- * The API's refusal (RFC 9457 problem details). `field` names the request
- * member at fault — a member inside an object by its path
- * (`settings.allowed_domains`).
- */
-export interface ServerRefusal {
-  code?: string
-  field?: string
-  detail?: string
-  hint?: string
-}
-
-/** The refusal behind a failed request, or null when the API gave none. */
-export function serverRefusal(error: unknown): ServerRefusal | null {
-  const data = (error as { response?: { data?: unknown } } | null | undefined)?.response?.data
-  return data && typeof data === 'object' ? (data as ServerRefusal) : null
-}
-
-/** A refusal as a form shows it at its field: what is wrong, then what to do. */
-export function refusalMessage(refusal: ServerRefusal): string {
-  return [refusal.detail, refusal.hint].filter(Boolean).join(' ') || 'Refused by the server'
-}
-
-/** What the refusal behind `error` says about the request member `field`, if it names it. */
-export function refusalAt(error: unknown, field: string): string | undefined {
-  const refusal = serverRefusal(error)
-  return refusal?.field === field ? refusalMessage(refusal) : undefined
-}
+// The API's refusals, and their words in the console's language.
+export { serverRefusal, refusalMessage, refusalAt, apiErrorMessage } from '@/i18n/problem'
+export type { ServerRefusal } from '@/i18n/problem'
 
 // API types
 export interface User {

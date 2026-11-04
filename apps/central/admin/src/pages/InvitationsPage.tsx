@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   EnvelopeIcon,
   PlusIcon,
@@ -9,7 +10,8 @@ import {
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline'
 import { invitationsApi, Invitation } from '@/lib/features-api'
-import { clientsApi, refusalAt } from '@/lib/api'
+import { apiErrorMessage, clientsApi, refusalAt } from '@/lib/api'
+import { formatDateTime, formatDay } from '@/lib/utils'
 import {
   Button,
   Card,
@@ -35,6 +37,7 @@ const emptyForm: InvitationFormData = {
 }
 
 const InvitationsPage: React.FC = () => {
+  const { t } = useTranslation('invitations')
   const queryClient = useQueryClient()
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
@@ -86,14 +89,14 @@ const InvitationsPage: React.FC = () => {
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof invitationsApi.create>[0]) =>
       invitationsApi.create(data),
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setShowCreateModal(false)
       resetForm()
-      toast.success(response.data.message || 'Invitation created successfully')
+      toast.success(t('toast.created'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to create invitation')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'invitations:toast.createFailed'))
     },
   })
 
@@ -104,21 +107,21 @@ const InvitationsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] })
       setShowRevokeConfirm(false)
       setSelectedInvitation(null)
-      toast.success('Invitation revoked successfully')
+      toast.success(t('toast.revoked'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to revoke invitation')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'invitations:toast.revokeFailed'))
     },
   })
 
   // Resend mutation
   const resendMutation = useMutation({
     mutationFn: (id: string) => invitationsApi.resend(id),
-    onSuccess: (response) => {
-      toast.success(response.data.message || 'Invitation resent successfully')
+    onSuccess: () => {
+      toast.success(t('toast.resent'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to resend invitation')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'invitations:toast.resendFailed'))
     },
   })
 
@@ -144,13 +147,13 @@ const InvitationsPage: React.FC = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge variant="warning">Pending</Badge>
+        return <Badge variant="warning">{t('status.pending')}</Badge>
       case 'accepted':
-        return <Badge variant="success">Accepted</Badge>
+        return <Badge variant="success">{t('status.accepted')}</Badge>
       case 'expired':
-        return <Badge variant="default">Expired</Badge>
+        return <Badge variant="default">{t('status.expired')}</Badge>
       case 'revoked':
-        return <Badge variant="danger">Revoked</Badge>
+        return <Badge variant="danger">{t('status.revoked')}</Badge>
       default:
         return <Badge variant="default">{status}</Badge>
     }
@@ -161,14 +164,14 @@ const InvitationsPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Invitations</h1>
-          <p className="mt-2 text-sm text-gray-700">Invite users to join your organization.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-sm text-gray-700">{t('subtitle')}</p>
         </div>
         <Card className="p-8">
           <EmptyState
             icon={<BuildingOfficeIcon className="h-12 w-12" />}
-            title="No tenant selected"
-            description="Please select a tenant from the header to manage invitations."
+            title={t('noTenant')}
+            description={t('noTenantHelp')}
           />
         </Card>
       </div>
@@ -176,14 +179,14 @@ const InvitationsPage: React.FC = () => {
   }
 
   if (isLoading) {
-    return <Loading message="Loading invitations..." />
+    return <Loading message={t('loading')} />
   }
 
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">Failed to load invitations.</p>
-        <Button className="mt-4" onClick={() => refetch()}>Retry</Button>
+        <p className="text-red-600">{t('loadFailed')}</p>
+        <Button className="mt-4" onClick={() => refetch()}>{t('retry')}</Button>
       </div>
     )
   }
@@ -193,14 +196,19 @@ const InvitationsPage: React.FC = () => {
       {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Invitations</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-sm text-gray-700">
-            {totalInvitations} invitation(s) for <span className="font-medium">{selectedTenant?.name}</span>.
+            <Trans
+              t={t}
+              i18nKey="count"
+              values={{ count: totalInvitations, name: selectedTenant?.name }}
+              components={{ tenant: <span className="font-medium" /> }}
+            />
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <PlusIcon className="h-5 w-5 mr-2" />
-          Invite User
+          {t('invite')}
         </Button>
       </div>
 
@@ -212,28 +220,28 @@ const InvitationsPage: React.FC = () => {
             size="sm"
             onClick={() => { setStatusFilter(''); setCurrentPage(1) }}
           >
-            All
+            {t('filter.all')}
           </Button>
           <Button
             variant={statusFilter === 'pending' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => { setStatusFilter('pending'); setCurrentPage(1) }}
           >
-            Pending
+            {t('filter.pending')}
           </Button>
           <Button
             variant={statusFilter === 'accepted' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => { setStatusFilter('accepted'); setCurrentPage(1) }}
           >
-            Accepted
+            {t('filter.accepted')}
           </Button>
           <Button
             variant={statusFilter === 'expired' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => { setStatusFilter('expired'); setCurrentPage(1) }}
           >
-            Expired
+            {t('filter.expired')}
           </Button>
         </div>
       </Card>
@@ -244,13 +252,13 @@ const InvitationsPage: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Application</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invited By</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.email')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.application')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.status')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.invitedBy')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.expires')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.created')}</th>
+                <th className="relative px-6 py-3"><span className="sr-only">{t('columns.actions')}</span></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -259,8 +267,8 @@ const InvitationsPage: React.FC = () => {
                   <td colSpan={7} className="px-6 py-12">
                     <EmptyState
                       icon={<EnvelopeIcon className="h-12 w-12" />}
-                      title="No invitations"
-                      description="Invite users to join your organization"
+                      title={t('empty.title')}
+                      description={t('empty.description')}
                     />
                   </td>
                 </tr>
@@ -280,10 +288,10 @@ const InvitationsPage: React.FC = () => {
                       {invitation.inviter_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(invitation.expires_at).toLocaleString()}
+                      {formatDateTime(invitation.expires_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(invitation.created_at).toLocaleDateString()}
+                      {formatDay(invitation.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {invitation.status === 'pending' && (
@@ -291,7 +299,7 @@ const InvitationsPage: React.FC = () => {
                           <button
                             onClick={() => resendMutation.mutate(invitation.id)}
                             className="text-indigo-600 hover:text-indigo-900"
-                            title="Resend"
+                            title={t('action.resend')}
                             disabled={resendMutation.isPending}
                           >
                             <ArrowPathIcon className="h-5 w-5" />
@@ -302,7 +310,7 @@ const InvitationsPage: React.FC = () => {
                               setShowRevokeConfirm(true)
                             }}
                             className="text-red-600 hover:text-red-900"
-                            title="Revoke"
+                            title={t('action.revoke')}
                           >
                             <XMarkIcon className="h-5 w-5" />
                           </button>
@@ -335,24 +343,24 @@ const InvitationsPage: React.FC = () => {
           setShowCreateModal(false)
           resetForm()
         }}
-        title="Invite User"
+        title={t('form.title')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <label className="block text-sm font-medium text-gray-700">{t('form.email')}</label>
             <Input
               type="email"
               value={formData.email}
               onChange={(e) => edit({ email: e.target.value })}
               error={refused('email')}
-              placeholder="user@example.com"
+              placeholder={t('form.emailPlaceholder')}
               required
             />
           </div>
 
           <Select
             id="invitation-application"
-            label="Application (optional)"
+            label={t('form.application')}
             value={applicationId}
             onChange={(e) => {
               if (createMutation.error) createMutation.reset()
@@ -360,30 +368,30 @@ const InvitationsPage: React.FC = () => {
             }}
             error={refused('client_id')}
             options={[
-              { value: '', label: 'No particular application' },
+              { value: '', label: t('form.noApplication') },
               ...applications.map((c) => ({ value: c.client_id, label: c.name })),
             ]}
             helperText={
               !chosenApplication
-                ? 'Without an application the user finishes on Authway after accepting, and has to be told where to sign in.'
+                ? t('form.helpNone')
                 : !chosenApplication.initiate_login_uri && !chosenApplication.client_uri
-                  ? 'This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.'
-                  : 'After accepting, the user is sent on to this application to sign in.'
+                  ? t('form.helpNoAddress')
+                  : t('form.helpChosen')
             }
           />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Message (optional)</label>
+            <label className="block text-sm font-medium text-gray-700">{t('form.message')}</label>
             <textarea
               value={formData.message}
               onChange={(e) => edit({ message: e.target.value })}
-              placeholder="Personal message to include in the invitation..."
+              placeholder={t('form.messagePlaceholder')}
               rows={3}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             />
           </div>
 
-          <p className="text-xs text-gray-500">The invitation is valid for 7 days. It gives no role or permission — the application decides those.</p>
+          <p className="text-xs text-gray-500">{t('form.note')}</p>
 
           <div className="flex justify-end space-x-3 pt-4">
             <Button
@@ -394,10 +402,10 @@ const InvitationsPage: React.FC = () => {
                 resetForm()
               }}
             >
-              Cancel
+              {t('form.cancel')}
             </Button>
             <Button type="submit" isLoading={createMutation.isPending}>
-              Send Invitation
+              {t('form.send')}
             </Button>
           </div>
         </form>
@@ -411,9 +419,9 @@ const InvitationsPage: React.FC = () => {
           setSelectedInvitation(null)
         }}
         onConfirm={() => selectedInvitation && revokeMutation.mutate(selectedInvitation.id)}
-        title="Revoke Invitation"
-        message={`Are you sure you want to revoke the invitation for "${selectedInvitation?.email}"?`}
-        confirmText="Revoke"
+        title={t('revokeConfirm.title')}
+        message={t('revokeConfirm.message', { email: selectedInvitation?.email })}
+        confirmText={t('revokeConfirm.confirm')}
         variant="danger"
         isLoading={revokeMutation.isPending}
       />

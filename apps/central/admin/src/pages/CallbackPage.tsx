@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { useTenantStore } from '../stores/tenant'
 import { completeSignIn } from '../lib/consoleSignIn'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
 /**
  * Where Authway's sign-in comes back to: takes the console account's token
  * and goes on to the tenant picker.
  */
 const CallbackPage: React.FC = () => {
+  const { t } = useTranslation('login')
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
   const [error, setError] = useState<string | null>(null)
@@ -29,20 +32,21 @@ const CallbackPage: React.FC = () => {
   }, [login, navigate])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <LanguageSwitcher className="absolute right-4 top-4" />
       {error ? (
         <div className="max-w-md w-full space-y-4 text-center">
           <div className="rounded-md bg-red-50 p-4 text-sm text-red-700" role="alert">
-            로그인을 마치지 못했습니다: {error}
+            {t('callback.failed', { error })}
           </div>
           <Link to="/login" className="text-sm text-indigo-600 hover:text-indigo-500">
-            로그인 화면으로
+            {t('callback.back')}
           </Link>
         </div>
       ) : (
         <div className="flex items-center text-sm text-gray-600">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
-          로그인 중...
+          {t('callback.signingIn')}
         </div>
       )}
     </div>

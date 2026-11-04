@@ -1,0 +1,49 @@
+{
+  "title": "Audit Logs",
+  "subtitle": "Monitor and review activity logs.",
+  "activity": "Activity logs for <tenant>{{name}}</tenant>.",
+  "noTenant": "No tenant selected",
+  "noTenantHelp": "Please select a tenant from the header to view audit logs.",
+  "loading": "Loading audit logs...",
+  "loadFailed": "Failed to load audit logs.",
+  "retry": "Retry",
+  "filters": "Filters",
+  "summary": {
+    "last24h": "Last 24h",
+    "last7d": "Last 7 days",
+    "last30d": "Last 30 days",
+    "security": "Security Events (last 24 hours)",
+    "failed": "Failed Operations"
+  },
+  "filter": {
+    "action": "Action",
+    "severity": "Severity",
+    "status": "Status",
+    "all": "All",
+    "success": "Success",
+    "failed": "Failed",
+    "clear": "Clear Filters"
+  },
+  "severity": {
+    "info": "Info",
+    "warning": "Warning",
+    "error": "Error",
+    "critical": "Critical"
+  },
+  "columns": {
+    "time": "Time",
+    "action": "Action",
+    "actor": "Actor",
+    "resource": "Resource",
+    "severity": "Severity",
+    "status": "Status",
+    "ip": "IP Address"
+  },
+  "system": "System",
+  "success": "Success",
+  "failed": "Failed",
+  "empty": {
+    "title": "No audit logs",
+    "description": "Activity will appear here as events occur"
+  }
+}

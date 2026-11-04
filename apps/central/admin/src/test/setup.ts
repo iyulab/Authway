@@ -1,7 +1,14 @@
 import '@testing-library/jest-dom'
-import { beforeAll, afterAll, afterEach } from 'vitest'
+import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { server } from './mocks/server'
+import i18n from '../i18n'
+
+// Every test starts in English; a test about another language sets it itself
+// (see `inLanguage` in ./language).
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
+})
 
 // Mock server setup
 beforeAll(() => server.listen())

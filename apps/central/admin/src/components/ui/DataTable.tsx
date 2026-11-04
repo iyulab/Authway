@@ -1,4 +1,5 @@
 import React from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Loading } from './Loading'
 import { EmptyState } from './EmptyState'
@@ -37,13 +38,14 @@ export function DataTable<T>({
   rowClassName,
   className,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('common')
   // Ensure data is always an array to prevent runtime errors
   const safeData = Array.isArray(data) ? data : []
 
   if (isLoading) {
     return (
       <div className="py-12">
-        <Loading message="Loading data..." />
+        <Loading message={t('loadingData')} />
       </div>
     )
   }
@@ -124,6 +126,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   itemsPerPage,
   onPageChange,
 }) => {
+  const { t } = useTranslation('common')
   const startItem = (currentPage - 1) * itemsPerPage + 1
   const endItem = Math.min(currentPage * itemsPerPage, totalItems)
 
@@ -135,35 +138,42 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={currentPage === 1}
           className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Previous
+          {t('pagination.previous')}
         </button>
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          {t('pagination.next')}
         </button>
       </div>
       <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-gray-700">
-            Showing <span className="font-medium">{startItem}</span> to{' '}
-            <span className="font-medium">{endItem}</span> of{' '}
-            <span className="font-medium">{totalItems}</span> results
+            <Trans
+              t={t}
+              i18nKey="pagination.showing"
+              values={{ start: startItem, end: endItem, total: totalItems }}
+              components={{
+                start: <span className="font-medium" />,
+                end: <span className="font-medium" />,
+                total: <span className="font-medium" />,
+              }}
+            />
           </p>
         </div>
         <div>
           <nav
             className="isolate inline-flex -space-x-px rounded-md shadow-xs"
-            aria-label="Pagination"
+            aria-label={t('pagination.label')}
           >
             <button
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1}
               className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="sr-only">Previous</span>
+              <span className="sr-only">{t('pagination.previous')}</span>
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"
@@ -191,7 +201,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               disabled={currentPage === totalPages}
               className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="sr-only">Next</span>
+              <span className="sr-only">{t('pagination.next')}</span>
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"

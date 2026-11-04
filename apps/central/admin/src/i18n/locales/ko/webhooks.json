@@ -1,0 +1,94 @@
+{
+  "title": "웹훅 관리",
+  "subtitle": "이벤트 알림을 받을 웹훅을 설정합니다.",
+  "count": "<tenant>{{name}}</tenant> 에 웹훅이 {{count}}개 설정되어 있습니다.",
+  "noTenant": "선택한 테넌트가 없습니다",
+  "noTenantHelp": "웹훅을 관리하려면 상단에서 테넌트를 선택하세요.",
+  "loading": "웹훅을 불러오는 중...",
+  "loadFailed": "웹훅을 불러오지 못했습니다.",
+  "retry": "다시 시도",
+  "add": "웹훅 추가",
+  "columns": {
+    "name": "이름",
+    "url": "URL",
+    "events": "이벤트",
+    "status": "상태",
+    "created": "만든 날",
+    "actions": "작업"
+  },
+  "status": {
+    "active": "활성",
+    "disabled": "비활성"
+  },
+  "empty": {
+    "title": "웹훅이 없습니다",
+    "description": "이벤트 알림을 받으려면 웹훅을 만드세요"
+  },
+  "action": {
+    "test": "테스트",
+    "rotate": "서명 시크릿 교체",
+    "edit": "수정",
+    "delete": "삭제"
+  },
+  "events": {
+    "all": "모든 이벤트 (이후 추가되는 것 포함)",
+    "userCreated": "사용자 생성",
+    "userUpdated": "사용자 수정",
+    "userDeleted": "사용자 삭제",
+    "userLogin": "사용자 로그인",
+    "userLogout": "사용자 로그아웃",
+    "userPasswordChanged": "비밀번호 변경",
+    "userMfaEnabled": "MFA 켜짐",
+    "userMfaDisabled": "MFA 꺼짐",
+    "clientCreated": "클라이언트 생성",
+    "clientUpdated": "클라이언트 수정",
+    "clientDeleted": "클라이언트 삭제"
+  },
+  "form": {
+    "createTitle": "웹훅 만들기",
+    "editTitle": "웹훅 수정",
+    "name": "이름",
+    "namePlaceholder": "내 웹훅",
+    "url": "URL",
+    "urlPlaceholder": "https://example.com/webhook",
+    "events": "이벤트",
+    "retryCount": "재시도 횟수",
+    "timeout": "제한 시간 (초)",
+    "enabled": "사용",
+    "cancel": "취소",
+    "create": "만들기",
+    "update": "수정",
+    "retryInvalid": "재시도 횟수는 0에서 10 사이의 숫자여야 합니다",
+    "timeoutInvalid": "제한 시간은 1초에서 60초 사이의 숫자여야 합니다"
+  },
+  "secret": {
+    "title": "서명 시크릿",
+    "body": "<name>{{name}}</name> 로 가는 전송은 이 시크릿으로 서명됩니다. 지금 복사해 두세요 — 다시 표시되지 않습니다. 새 시크릿이 필요하면 교체하세요.",
+    "copy": "복사",
+    "copied": "복사했습니다",
+    "copyFailed": "복사하지 못했습니다 — 직접 선택해서 복사하세요",
+    "done": "완료"
+  },
+  "rotateConfirm": {
+    "title": "서명 시크릿 교체",
+    "message": "\"{{name}}\" 로 가는 전송이 새 시크릿으로 서명되며, 받는 쪽이 새 시크릿을 갖기 전까지는 거부합니다. 계속할까요?",
+    "confirm": "교체"
+  },
+  "deleteConfirm": {
+    "title": "웹훅 삭제",
+    "message": "\"{{name}}\" 을(를) 삭제할까요? 되돌릴 수 없습니다.",
+    "confirm": "삭제"
+  },
+  "toast": {
+    "createFailed": "웹훅을 만들지 못했습니다",
+    "updated": "웹훅을 수정했습니다",
+    "updateFailed": "웹훅을 수정하지 못했습니다",
+    "deleted": "웹훅을 삭제했습니다",
+    "deleteFailed": "웹훅을 삭제하지 못했습니다",
+    "rotateFailed": "시크릿을 교체하지 못했습니다",
+    "testDelivered": "테스트를 전달했습니다 (HTTP {{status}})",
+    "testNotDelivered": "테스트를 전달하지 못했습니다: {{reason}}",
+    "testFailed": "웹훅을 테스트하지 못했습니다",
+    "httpStatus": "HTTP {{status}}"
+  }
+}

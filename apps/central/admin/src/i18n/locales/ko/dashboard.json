@@ -1,0 +1,36 @@
+{
+  "title": "대시보드",
+  "overview": "테넌트 관리 개요",
+  "noTenant": {
+    "title": "선택한 테넌트가 없습니다",
+    "description": "대시보드를 보려면 테넌트를 선택하세요."
+  },
+  "loading": "대시보드를 불러오는 중...",
+  "welcome": "<tenant>{{name}}</tenant> 관리 콘솔에 오신 것을 환영합니다.",
+  "stats": {
+    "clients": "앱(클라이언트)",
+    "users": "사용자"
+  },
+  "recent": {
+    "clients": {
+      "title": "최근 앱(클라이언트)",
+      "description": "최근 만든 OAuth2 애플리케이션",
+      "empty": "아직 만든 앱이 없습니다"
+    },
+    "users": {
+      "title": "최근 사용자",
+      "description": "최근 가입한 사용자",
+      "empty": "아직 가입한 사용자가 없습니다"
+    }
+  },
+  "system": {
+    "title": "시스템 정보",
+    "description": "API 가 /health 에서 답하는 내용",
+    "api": "API",
+    "notAnswering": "응답 없음",
+    "checking": "확인 중…",
+    "version": "배포된 버전",
+    "database": "데이터베이스",
+    "migration": "마이그레이션 {{id}}"
+  }
+}

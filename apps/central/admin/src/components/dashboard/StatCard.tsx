@@ -1,5 +1,5 @@
 import React from 'react'
-import { cn } from '@/lib/utils'
+import { cn, formatNumber } from '@/lib/utils'
 
 export interface StatCardProps {
   name: string
@@ -48,7 +48,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   change,
 }) => {
   const styles = variantStyles[variant]
-  const displayValue = typeof value === 'number' ? value.toLocaleString() : value
+  const displayValue = typeof value === 'number' ? formatNumber(value) : value
 
   return (
     <div

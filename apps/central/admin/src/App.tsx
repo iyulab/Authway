@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router'
 import { Toaster } from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore, selectIsAuthenticated } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import Layout from '@/components/Layout'
@@ -18,6 +19,7 @@ import AuditLogsPage from '@/pages/AuditLogsPage'
 import InvitationsPage from '@/pages/InvitationsPage'
 
 function App() {
+  const { t } = useTranslation('common')
   const isAuthenticated = useAuthStore(selectIsAuthenticated)
   const selectedTenant = useTenantStore((state) => state.selectedTenant)
   const signingOut = useAuthStore((state) => state.signingOut)
@@ -36,7 +38,7 @@ function App() {
   if (signingOut) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50" role="status">
-        <p className="text-gray-600">로그아웃 중…</p>
+        <p className="text-gray-600">{t('signingOut')}</p>
       </div>
     )
   }

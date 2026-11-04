@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   PlusIcon,
   KeyIcon,
@@ -12,6 +13,7 @@ import { Button, Loading, EmptyState, Card, Badge, Pagination } from '@/componen
 import { useTenantStore } from '@/stores/tenant'
 
 const ClientsPage: React.FC = () => {
+  const { t } = useTranslation('clients')
   const navigate = useNavigate()
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
@@ -36,16 +38,16 @@ const ClientsPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">OAuth Client Management</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('list.title')}</h1>
           <p className="mt-2 text-sm text-gray-700">
-            Manage OAuth 2.0 clients for your applications.
+            {t('list.subtitle')}
           </p>
         </div>
         <Card className="p-8">
           <EmptyState
             icon={<BuildingOfficeIcon className="h-12 w-12" />}
-            title="No tenant selected"
-            description="Please select a tenant to view and manage OAuth clients."
+            title={t('list.noTenant')}
+            description={t('list.noTenantHelp')}
           />
         </Card>
       </div>
@@ -53,15 +55,15 @@ const ClientsPage: React.FC = () => {
   }
 
   if (isLoading) {
-    return <Loading message="Loading clients..." fullScreen={false} />
+    return <Loading message={t('list.loading')} fullScreen={false} />
   }
 
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">Failed to load clients.</p>
+        <p className="text-red-600">{t('list.loadFailed')}</p>
         <Button className="mt-4" onClick={() => refetch()}>
-          Retry
+          {t('list.retry')}
         </Button>
       </div>
     )
@@ -72,9 +74,14 @@ const ClientsPage: React.FC = () => {
       {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">OAuth Client Management</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('list.title')}</h1>
           <p className="mt-2 text-sm text-gray-700">
-            {total} OAuth client(s) registered for <span className="font-medium">{selectedTenant?.name}</span>.
+            <Trans
+              t={t}
+              i18nKey="list.registered"
+              values={{ count: total, name: selectedTenant?.name }}
+              components={{ tenant: <span className="font-medium" /> }}
+            />
           </p>
         </div>
         <div className="mt-4 sm:mt-0">
@@ -82,7 +89,7 @@ const ClientsPage: React.FC = () => {
             leftIcon={<PlusIcon className="h-5 w-5" />}
             onClick={() => navigate('/clients/new')}
           >
-            Create New Client
+            {t('list.create')}
           </Button>
         </div>
       </div>
@@ -92,14 +99,14 @@ const ClientsPage: React.FC = () => {
         {clients.length === 0 ? (
           <EmptyState
             icon={<KeyIcon className="h-12 w-12" />}
-            title="No clients"
-            description="Create a new OAuth client to get started."
+            title={t('list.emptyTitle')}
+            description={t('list.emptyHelp')}
             action={
               <Button
                 leftIcon={<PlusIcon className="h-5 w-5" />}
                 onClick={() => navigate('/clients/new')}
               >
-                Create New Client
+                {t('list.create')}
               </Button>
             }
           />
@@ -119,14 +126,14 @@ const ClientsPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-medium text-gray-900">{client.name}</h3>
                       <Badge variant={client.active ? 'success' : 'default'} size="sm">
-                        {client.active ? 'Active' : 'Inactive'}
+                        {client.active ? t('badge.active') : t('badge.inactive')}
                       </Badge>
                       <Badge variant={client.public ? 'info' : 'purple'} size="sm">
-                        {client.public ? 'Public' : 'Confidential'}
+                        {client.public ? t('badge.public') : t('badge.confidential')}
                       </Badge>
                       {client.system && (
                         <Badge variant="default" size="sm">
-                          System
+                          {t('badge.system')}
                         </Badge>
                       )}
                     </div>

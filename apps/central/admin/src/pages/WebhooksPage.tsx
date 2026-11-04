@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   BellAlertIcon,
   PlusIcon,
@@ -11,7 +12,8 @@ import {
   KeyIcon,
 } from '@heroicons/react/24/outline'
 import { webhooksApi, Webhook } from '@/lib/features-api'
-import { refusalAt } from '@/lib/api'
+import { apiErrorMessage, refusalAt } from '@/lib/api'
+import { formatDay } from '@/lib/utils'
 import {
   Button,
   Card,
@@ -25,19 +27,20 @@ import {
 import { useTenantStore } from '@/stores/tenant'
 
 // Available webhook event types
+// `key` names the event's words in the `webhooks` namespace (`events.<key>`).
 const WEBHOOK_EVENTS = [
-  { value: '*', label: 'All events (now and later)' },
-  { value: 'user.created', label: 'User Created' },
-  { value: 'user.updated', label: 'User Updated' },
-  { value: 'user.deleted', label: 'User Deleted' },
-  { value: 'user.login', label: 'User Login' },
-  { value: 'user.logout', label: 'User Logout' },
-  { value: 'user.password_changed', label: 'Password Changed' },
-  { value: 'user.mfa_enabled', label: 'MFA Enabled' },
-  { value: 'user.mfa_disabled', label: 'MFA Disabled' },
-  { value: 'client.created', label: 'Client Created' },
-  { value: 'client.updated', label: 'Client Updated' },
-  { value: 'client.deleted', label: 'Client Deleted' },
+  { value: '*', key: 'all' },
+  { value: 'user.created', key: 'userCreated' },
+  { value: 'user.updated', key: 'userUpdated' },
+  { value: 'user.deleted', key: 'userDeleted' },
+  { value: 'user.login', key: 'userLogin' },
+  { value: 'user.logout', key: 'userLogout' },
+  { value: 'user.password_changed', key: 'userPasswordChanged' },
+  { value: 'user.mfa_enabled', key: 'userMfaEnabled' },
+  { value: 'user.mfa_disabled', key: 'userMfaDisabled' },
+  { value: 'client.created', key: 'clientCreated' },
+  { value: 'client.updated', key: 'clientUpdated' },
+  { value: 'client.deleted', key: 'clientDeleted' },
 ]
 
 interface WebhookFormData {
@@ -50,6 +53,7 @@ interface WebhookFormData {
 }
 
 const WebhooksPage: React.FC = () => {
+  const { t } = useTranslation('webhooks')
   const queryClient = useQueryClient()
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
@@ -89,8 +93,8 @@ const WebhooksPage: React.FC = () => {
       resetForm()
       setRevealed({ name: data.webhook.name, secret: data.secret })
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to create webhook')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'webhooks:toast.createFailed'))
     },
   })
 
@@ -103,10 +107,10 @@ const WebhooksPage: React.FC = () => {
       setShowEditModal(false)
       setSelectedWebhook(null)
       resetForm()
-      toast.success('Webhook updated successfully')
+      toast.success(t('toast.updated'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to update webhook')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'webhooks:toast.updateFailed'))
     },
   })
 
@@ -117,10 +121,10 @@ const WebhooksPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
       setShowDeleteConfirm(false)
       setSelectedWebhook(null)
-      toast.success('Webhook deleted successfully')
+      toast.success(t('toast.deleted'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to delete webhook')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'webhooks:toast.deleteFailed'))
     },
   })
 
@@ -130,8 +134,8 @@ const WebhooksPage: React.FC = () => {
       setRotateTarget(null)
       setRevealed({ name: webhook.name, secret: data.secret })
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to rotate secret')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'webhooks:toast.rotateFailed'))
     },
   })
 
@@ -140,13 +144,17 @@ const WebhooksPage: React.FC = () => {
     mutationFn: (id: string) => webhooksApi.test(id),
     onSuccess: ({ data: { delivery } }) => {
       if (delivery.success) {
-        toast.success(`Test delivered (HTTP ${delivery.status_code})`)
+        toast.success(t('toast.testDelivered', { status: delivery.status_code }))
       } else {
-        toast.error(`Test not delivered: ${delivery.error_message || `HTTP ${delivery.status_code}`}`)
+        toast.error(
+          t('toast.testNotDelivered', {
+            reason: delivery.error_message || t('toast.httpStatus', { status: delivery.status_code }),
+          }),
+        )
       }
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to test webhook')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'webhooks:toast.testFailed'))
     },
   })
 
@@ -203,11 +211,11 @@ const WebhooksPage: React.FC = () => {
     e.preventDefault()
     // A blank number field would be sent as nothing and quietly mean "the default".
     if (!Number.isFinite(formData.retry_count) || formData.retry_count < 0 || formData.retry_count > 10) {
-      toast.error('Retry count must be a number from 0 to 10')
+      toast.error(t('form.retryInvalid'))
       return
     }
     if (!Number.isFinite(formData.timeout_secs) || formData.timeout_secs < 1 || formData.timeout_secs > 60) {
-      toast.error('Timeout must be a number of seconds from 1 to 60')
+      toast.error(t('form.timeoutInvalid'))
       return
     }
     if (selectedWebhook) {
@@ -222,14 +230,14 @@ const WebhooksPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Webhook Management</h1>
-          <p className="mt-2 text-sm text-gray-700">Configure webhooks to receive event notifications.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-sm text-gray-700">{t('subtitle')}</p>
         </div>
         <Card className="p-8">
           <EmptyState
             icon={<BuildingOfficeIcon className="h-12 w-12" />}
-            title="No tenant selected"
-            description="Please select a tenant from the header to manage webhooks."
+            title={t('noTenant')}
+            description={t('noTenantHelp')}
           />
         </Card>
       </div>
@@ -237,14 +245,14 @@ const WebhooksPage: React.FC = () => {
   }
 
   if (isLoading) {
-    return <Loading message="Loading webhooks..." />
+    return <Loading message={t('loading')} />
   }
 
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">Failed to load webhooks.</p>
-        <Button className="mt-4" onClick={() => refetch()}>Retry</Button>
+        <p className="text-red-600">{t('loadFailed')}</p>
+        <Button className="mt-4" onClick={() => refetch()}>{t('retry')}</Button>
       </div>
     )
   }
@@ -254,14 +262,19 @@ const WebhooksPage: React.FC = () => {
       {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Webhook Management</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-sm text-gray-700">
-            {webhooks.length} webhook(s) configured for <span className="font-medium">{selectedTenant?.name}</span>.
+            <Trans
+              t={t}
+              i18nKey="count"
+              values={{ count: webhooks.length, name: selectedTenant?.name }}
+              components={{ tenant: <span className="font-medium" /> }}
+            />
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <PlusIcon className="h-5 w-5 mr-2" />
-          Add Webhook
+          {t('add')}
         </Button>
       </div>
 
@@ -271,12 +284,12 @@ const WebhooksPage: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Events</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.name')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.url')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.events')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.status')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('columns.created')}</th>
+                <th className="relative px-6 py-3"><span className="sr-only">{t('columns.actions')}</span></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -285,8 +298,8 @@ const WebhooksPage: React.FC = () => {
                   <td colSpan={6} className="px-6 py-12">
                     <EmptyState
                       icon={<BellAlertIcon className="h-12 w-12" />}
-                      title="No webhooks"
-                      description="Create a webhook to receive event notifications"
+                      title={t('empty.title')}
+                      description={t('empty.description')}
                     />
                   </td>
                 </tr>
@@ -311,18 +324,18 @@ const WebhooksPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={webhook.enabled ? 'success' : 'default'}>
-                        {webhook.enabled ? 'Active' : 'Disabled'}
+                        {webhook.enabled ? t('status.active') : t('status.disabled')}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(webhook.created_at).toLocaleDateString()}
+                      {formatDay(webhook.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => testMutation.mutate(webhook.id)}
                           className="text-green-600 hover:text-green-900"
-                          title="Test"
+                          title={t('action.test')}
                           disabled={testMutation.isPending}
                         >
                           <PlayIcon className="h-5 w-5" />
@@ -330,21 +343,21 @@ const WebhooksPage: React.FC = () => {
                         <button
                           onClick={() => setRotateTarget(webhook)}
                           className="text-amber-600 hover:text-amber-900"
-                          title="Rotate signing secret"
+                          title={t('action.rotate')}
                         >
                           <KeyIcon className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => handleEdit(webhook)}
                           className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit"
+                          title={t('action.edit')}
                         >
                           <PencilIcon className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => handleDelete(webhook)}
                           className="text-red-600 hover:text-red-900"
-                          title="Delete"
+                          title={t('action.delete')}
                         >
                           <TrashIcon className="h-5 w-5" />
                         </button>
@@ -367,34 +380,34 @@ const WebhooksPage: React.FC = () => {
           setSelectedWebhook(null)
           resetForm()
         }}
-        title={selectedWebhook ? 'Edit Webhook' : 'Create Webhook'}
+        title={selectedWebhook ? t('form.editTitle') : t('form.createTitle')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Name</label>
+            <label className="block text-sm font-medium text-gray-700">{t('form.name')}</label>
             <Input
               value={formData.name}
               onChange={(e) => edit({ name: e.target.value })}
               error={refused('name')}
-              placeholder="My Webhook"
+              placeholder={t('form.namePlaceholder')}
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">URL</label>
+            <label className="block text-sm font-medium text-gray-700">{t('form.url')}</label>
             <Input
               type="url"
               value={formData.url}
               onChange={(e) => edit({ url: e.target.value })}
               error={refused('url')}
-              placeholder="https://example.com/webhook"
+              placeholder={t('form.urlPlaceholder')}
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Events</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('form.events')}</label>
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
               {WEBHOOK_EVENTS.map((event) => (
                 <label key={event.value} className="flex items-center space-x-2">
@@ -404,7 +417,7 @@ const WebhooksPage: React.FC = () => {
                     onChange={() => handleEventToggle(event.value)}
                     className="rounded border-gray-300"
                   />
-                  <span className="text-sm text-gray-700">{event.label}</span>
+                  <span className="text-sm text-gray-700">{t(`events.${event.key}`)}</span>
                 </label>
               ))}
             </div>
@@ -413,7 +426,7 @@ const WebhooksPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Retry Count</label>
+              <label className="block text-sm font-medium text-gray-700">{t('form.retryCount')}</label>
               <Input
                 type="number"
                 min={0}
@@ -424,7 +437,7 @@ const WebhooksPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Timeout (seconds)</label>
+              <label className="block text-sm font-medium text-gray-700">{t('form.timeout')}</label>
               <Input
                 type="number"
                 min={1}
@@ -443,7 +456,7 @@ const WebhooksPage: React.FC = () => {
               onChange={(e) => edit({ enabled: e.target.checked })}
               className="rounded border-gray-300"
             />
-            <label className="ml-2 text-sm text-gray-700">Enabled</label>
+            <label className="ml-2 text-sm text-gray-700">{t('form.enabled')}</label>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">
@@ -457,24 +470,23 @@ const WebhooksPage: React.FC = () => {
                 resetForm()
               }}
             >
-              Cancel
+              {t('form.cancel')}
             </Button>
             <Button
               type="submit"
               isLoading={createMutation.isPending || updateMutation.isPending}
             >
-              {selectedWebhook ? 'Update' : 'Create'}
+              {selectedWebhook ? t('form.update') : t('form.create')}
             </Button>
           </div>
         </form>
       </Modal>
 
       {/* Signing secret, shown once */}
-      <Modal isOpen={revealed !== null} onClose={() => setRevealed(null)} title="Signing secret">
+      <Modal isOpen={revealed !== null} onClose={() => setRevealed(null)} title={t('secret.title')}>
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Deliveries to <strong>{revealed?.name}</strong> are signed with this secret. Copy it now —
-            it is not shown again. Rotate it to get a new one.
+            <Trans t={t} i18nKey="secret.body" values={{ name: revealed?.name }} components={{ name: <strong /> }} />
           </p>
           <code className="block break-all rounded bg-gray-100 p-3 font-mono text-sm" data-testid="webhook-secret">
             {revealed?.secret}
@@ -485,15 +497,15 @@ const WebhooksPage: React.FC = () => {
               onClick={() => {
                 if (revealed) {
                   navigator.clipboard?.writeText(revealed.secret).then(
-                    () => toast.success('Copied'),
-                    () => toast.error('Copy failed — select and copy it by hand'),
+                    () => toast.success(t('secret.copied')),
+                    () => toast.error(t('secret.copyFailed')),
                   )
                 }
               }}
             >
-              Copy
+              {t('secret.copy')}
             </Button>
-            <Button onClick={() => setRevealed(null)}>Done</Button>
+            <Button onClick={() => setRevealed(null)}>{t('secret.done')}</Button>
           </div>
         </div>
       </Modal>
@@ -502,9 +514,9 @@ const WebhooksPage: React.FC = () => {
         isOpen={rotateTarget !== null}
         onClose={() => setRotateTarget(null)}
         onConfirm={() => rotateTarget && rotateMutation.mutate(rotateTarget)}
-        title="Rotate signing secret"
-        message={`Deliveries to "${rotateTarget?.name}" will be signed with a new secret, and the receiver will reject them until it has it. Continue?`}
-        confirmText="Rotate"
+        title={t('rotateConfirm.title')}
+        message={t('rotateConfirm.message', { name: rotateTarget?.name })}
+        confirmText={t('rotateConfirm.confirm')}
         variant="danger"
         isLoading={rotateMutation.isPending}
       />
@@ -517,9 +529,9 @@ const WebhooksPage: React.FC = () => {
           setSelectedWebhook(null)
         }}
         onConfirm={() => selectedWebhook && deleteMutation.mutate(selectedWebhook.id)}
-        title="Delete Webhook"
-        message={`Are you sure you want to delete "${selectedWebhook?.name}"? This action cannot be undone.`}
-        confirmText="Delete"
+        title={t('deleteConfirm.title')}
+        message={t('deleteConfirm.message', { name: selectedWebhook?.name })}
+        confirmText={t('deleteConfirm.confirm')}
         variant="danger"
         isLoading={deleteMutation.isPending}
       />

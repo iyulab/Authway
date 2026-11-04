@@ -1,0 +1,132 @@
+{
+  "title": "Settings",
+  "subtitle": "View and manage the settings of the Authway system.",
+  "tenant": {
+    "title": "Current tenant",
+    "help": "The tenant you are working in.",
+    "switch": "Switch tenant"
+  },
+  "tenantSettings": {
+    "title": "Tenant settings",
+    "help": "Rules that apply to the users of this tenant."
+  },
+  "session": {
+    "title": "Administrator session",
+    "help": "When you sign in with a console account, its memberships decide which tenants you can manage. The shared administrator password manages every tenant.",
+    "signedInAs": "Signed in with",
+    "scope": "Scope",
+    "checking": "Checking",
+    "consoleAccount": "Console account",
+    "adminPassword": "Administrator password",
+    "adminKey": "Admin key",
+    "scopeOperatorSupport": "All tenants (operator — inside a tenant through support access)",
+    "scopeOperator": "All tenants (operator)",
+    "scopeCount": "{{count}} tenant(s)"
+  },
+  "sections": {
+    "addresses": {
+      "title": "Addresses",
+      "description": "The addresses this console uses.",
+      "api": "Authway API — manages tenants, clients and users",
+      "issuer": "Issuer",
+      "issuerHelp": "The address applications put in their OIDC configuration"
+    },
+    "server": {
+      "title": "Server",
+      "description": "What the API answered at /health.",
+      "status": "Status",
+      "notAnswering": "Not answering",
+      "notAnsweringHelp": "The API’s /health could not be read",
+      "checking": "Checking",
+      "healthHelp": "The API’s /health",
+      "version": "Deployed version",
+      "versionHelp": "The API image that is running",
+      "database": "Database",
+      "migration": "migration {{id}}",
+      "databaseHelp": "The last migration this version has"
+    },
+    "capabilities": {
+      "title": "What this deployment offers",
+      "description": "What the API answered at GET /api/v1/capabilities.",
+      "social": "Social sign-in",
+      "socialHelp": "Providers whose credentials are present",
+      "magicLink": "Email link sign-in",
+      "magicLinkHelp": "Turned on per client",
+      "mfa": "Two-step verification",
+      "mfaHelp": "Users turn it on in the account screen",
+      "signupModes": "Sign-up modes",
+      "signupModesHelp": "Set per tenant",
+      "device": "Device sign-in",
+      "deviceHelp": "RFC 8628",
+      "exchange": "Token exchange · CIBA",
+      "exchangeHelp": "Not offered yet"
+    },
+    "none": "None",
+    "on": "On",
+    "off": "Off",
+    "healthy": "Healthy",
+    "needsAttention": "Needs attention"
+  },
+  "help": {
+    "title": "Need help?",
+    "body": "Authway is a three-tier authentication platform built on Ory Hydra. For details, see <docs>the official documentation</docs>."
+  },
+  "danger": {
+    "title": "Danger Zone",
+    "help": "Turning a tenant off stops every sign-in to it. Deleting cannot be undone.",
+    "turnOffTitle": "Turn tenant off",
+    "turnOnTitle": "Turn tenant on",
+    "turnOffHelp": "No client of this tenant can sign anyone in or get tokens, and the tokens it holds end. The default tenant cannot be turned off.",
+    "turnOnHelp": "Each client works as its own setting says again. Sessions that ended while it was off do not come back.",
+    "turnOff": "Turn off tenant",
+    "turnOn": "Turn on tenant",
+    "deleteTitle": "Delete tenant",
+    "deleteHelp": "A tenant that still has users, clients or service credentials cannot be deleted — delete those first. The default tenant cannot be deleted.",
+    "delete": "Delete tenant"
+  },
+  "deleteModal": {
+    "title": "Delete tenant",
+    "warning": "Warning: this cannot be undone",
+    "body": "This deletes the tenant <name>{{name}}</name>. Only an empty tenant is deleted:",
+    "rule1": "It is refused while users, clients or service credentials remain",
+    "rule2": "The account screen client Authway created goes with it",
+    "rule3": "Its terms documents and settings are no longer used",
+    "confirm": "To confirm, type the tenant slug <slug>{{slug}}</slug>:",
+    "cancel": "Cancel",
+    "delete": "Delete tenant"
+  },
+  "toast": {
+    "deleted": "Tenant deleted successfully",
+    "deleteFailed": "The tenant could not be deleted"
+  },
+  "deleteRefusals": {
+    "tenant_has_users": "The tenant still has users, so it cannot be deleted. Delete the users first.",
+    "tenant_has_clients": "The tenant still has clients, so it cannot be deleted. Delete the clients first.",
+    "tenant_has_service_clients": "The tenant still has service credentials, so it cannot be deleted. Revoke them first.",
+    "default_tenant_protected": "The default tenant cannot be deleted."
+  },
+  "form": {
+    "name": "Name",
+    "nameShort": "The name needs at least two characters",
+    "signupMode": "Sign-up mode",
+    "inviteOnly": "Invitation only — a first sign-in needs an invitation",
+    "open": "Open — anyone gets an account by signing in for the first time",
+    "passwordMin": "Minimum password length",
+    "passwordMinHelp": "Every tenant has a floor of 8 characters. It can only be raised.",
+    "passwordMinInvalid": "A number from {{min}} to {{max}}, or leave empty ({{min}})",
+    "session": "Sign-in session (minutes)",
+    "sessionPlaceholder": "Default",
+    "sessionHelp": "How long a user’s sign-in session lasts. At most 43200 minutes (30 days).",
+    "sessionInvalid": "0 to {{max}} minutes (30 days), or leave empty (default)",
+    "audit": "Audit log retention (days)",
+    "auditHelp": "Audit entries older than this are deleted daily. At least 30 days.",
+    "auditInvalid": "{{min}} to {{max}} days, or leave empty (365)",
+    "domains": "Allowed email domains",
+    "domainsPlaceholder": "example.com",
+    "domainsHelp": "When named, accounts are created only for addresses in these domains (invitations and first sign-ins). Empty: no limit. Existing accounts are unchanged.",
+    "description": "Description",
+    "save": "Save",
+    "saved": "Tenant settings saved",
+    "saveFailed": "Tenant settings could not be saved"
+  }
+}

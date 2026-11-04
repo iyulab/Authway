@@ -1,0 +1,66 @@
+{
+  "header": {
+    "title": "Authway Admin",
+    "tagline": "Multi-tenant Identity Platform",
+    "logout": "Logout"
+  },
+  "select": {
+    "title": "Select a Tenant",
+    "subtitle": "Choose a tenant to manage or create a new one to get started.",
+    "operatorNote": "As an operator you enter a tenant through support access: give a reason, and the tenant’s audit log records that you entered, why, and what you changed."
+  },
+  "empty": {
+    "title": "No tenants yet",
+    "description": "Create your first tenant to start managing users and applications.",
+    "create": "Create First Tenant"
+  },
+  "card": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "turnOffLabel": "Turn off {{name}}",
+    "turnOnLabel": "Turn on {{name}}",
+    "create": "Create New Tenant"
+  },
+  "turnOff": {
+    "title": "Turn off tenant",
+    "message": "Users of “{{name}}” cannot sign in to any client, and the tokens its clients hold end. Turning it on again does not bring ended sessions back. Continue?",
+    "confirm": "Turn off"
+  },
+  "active": {
+    "turnedOn": "The tenant is on",
+    "turnedOff": "The tenant is off",
+    "failed": "The tenant could not be changed",
+    "refusals": {
+      "default_tenant_protected": "The default tenant cannot be turned off.",
+      "upstream_sync_failed": "Some clients could not be applied to the authorization server. Doing the same again applies the rest."
+    }
+  },
+  "support": {
+    "title": "Open support access to {{name}}",
+    "reason": "Reason",
+    "placeholder": "Ticket 1234 — a user cannot sign in",
+    "help": "The tenant’s administrators see it in their audit log. Access lasts an hour.",
+    "cancel": "Cancel",
+    "open": "Open support access",
+    "opened": "Support access to {{name}} opened for an hour",
+    "failed": "Failed to open support access"
+  },
+  "create": {
+    "title": "Create New Tenant",
+    "name": "Tenant Name",
+    "namePlaceholder": "My Organization",
+    "slug": "Tenant Slug",
+    "slugPlaceholder": "my-organization",
+    "slugHelp": "URL-friendly identifier (auto-generated from name)",
+    "openSignup": "Allow public sign-up",
+    "openSignupHelp": "Anyone signing in with Google/GitHub/Microsoft/Apple or a magic link is provisioned automatically. Off (default) requires an administrator to invite each address first.",
+    "cancel": "Cancel",
+    "submit": "Create Tenant",
+    "created": "Tenant created successfully",
+    "failed": "Failed to create tenant",
+    "fillAll": "Please fill in all fields"
+  },
+  "selected": "Selected tenant: {{name}}"
+}

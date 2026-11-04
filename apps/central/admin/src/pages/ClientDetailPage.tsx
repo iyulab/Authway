@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowLeftIcon,
   TrashIcon,
@@ -10,11 +11,12 @@ import {
   CheckIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { clientsApi, serverRefusal } from '@/lib/api'
+import { apiErrorMessage, clientsApi, serverRefusal } from '@/lib/api'
 import { Button, Card, Loading, Badge, ConfirmDialog, Modal } from '@/components/ui'
 import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
 const ClientDetailPage: React.FC = () => {
+  const { t } = useTranslation('clients')
   const { clientId } = useParams<{ clientId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -70,13 +72,10 @@ const ClientDetailPage: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client', clientId] })
       queryClient.invalidateQueries({ queryKey: ['clients'] })
-      toast.success('Client updated successfully')
+      toast.success(t('detail.toast.updated'))
     },
-    onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to update client'
-      toast.error(errorMessage)
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'clients:detail.toast.updateFailed'))
     },
   })
 
@@ -87,10 +86,10 @@ const ClientDetailPage: React.FC = () => {
       setShowTurnOffConfirm(false)
       queryClient.invalidateQueries({ queryKey: ['client', clientId] })
       queryClient.invalidateQueries({ queryKey: ['clients'] })
-      toast.success(active ? 'Client turned on' : 'Client turned off')
+      toast.success(active ? t('detail.toast.turnedOn') : t('detail.toast.turnedOff'))
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to change the client')
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'clients:detail.toast.changeFailed'))
     },
   })
 
@@ -99,14 +98,11 @@ const ClientDetailPage: React.FC = () => {
     mutationFn: () => clientsApi.delete(clientId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] })
-      toast.success('Client deleted successfully')
+      toast.success(t('detail.toast.deleted'))
       navigate('/clients')
     },
-    onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to delete client'
-      toast.error(errorMessage)
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'clients:detail.toast.deleteFailed'))
     },
   })
 
@@ -117,13 +113,10 @@ const ClientDetailPage: React.FC = () => {
       setCredentials(response.data.credentials)
       setShowRegenerateConfirm(false)
       setShowCredentialsModal(true)
-      toast.success('Client secret regenerated successfully')
+      toast.success(t('detail.toast.regenerated'))
     },
-    onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to regenerate secret'
-      toast.error(errorMessage)
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'clients:detail.toast.regenerateFailed'))
     },
   })
 
@@ -134,7 +127,7 @@ const ClientDetailPage: React.FC = () => {
   }
 
   if (isLoading) {
-    return <Loading message="Loading client..." />
+    return <Loading message={t('detail.loading')} />
   }
 
   if (error || !client) {
@@ -145,10 +138,10 @@ const ClientDetailPage: React.FC = () => {
           leftIcon={<ArrowLeftIcon className="h-4 w-4" />}
           onClick={() => navigate('/clients')}
         >
-          Back to Clients
+          {t('detail.backToList')}
         </Button>
         <Card className="p-8 text-center">
-          <p className="text-red-600">Client not found or failed to load.</p>
+          <p className="text-red-600">{t('detail.notFound')}</p>
         </Card>
       </div>
     )
@@ -165,18 +158,18 @@ const ClientDetailPage: React.FC = () => {
             leftIcon={<ArrowLeftIcon className="h-4 w-4" />}
             onClick={() => navigate('/clients')}
           >
-            Back
+            {t('detail.back')}
           </Button>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
               <Badge variant={client.active ? 'success' : 'default'}>
-                {client.active ? 'Active' : 'Inactive'}
+                {client.active ? t('badge.active') : t('badge.inactive')}
               </Badge>
               <Badge variant={client.public ? 'info' : 'purple'}>
-                {client.public ? 'Public' : 'Confidential'}
+                {client.public ? t('badge.public') : t('badge.confidential')}
               </Badge>
-              {client.system && <Badge variant="default">System</Badge>}
+              {client.system && <Badge variant="default">{t('badge.system')}</Badge>}
             </div>
             <p className="text-sm text-gray-500 font-mono mt-1">{client.client_id}</p>
           </div>
@@ -187,7 +180,7 @@ const ClientDetailPage: React.FC = () => {
       <Card className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-gray-700">Client ID</h3>
+            <h3 className="text-sm font-medium text-gray-700">{t('credentials.clientId')}</h3>
             <p className="text-sm font-mono text-gray-900 mt-1">{client.client_id}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -197,7 +190,7 @@ const ClientDetailPage: React.FC = () => {
               leftIcon={copiedField === 'client_id' ? <CheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
               onClick={() => handleCopy(client.client_id, 'client_id')}
             >
-              {copiedField === 'client_id' ? 'Copied!' : 'Copy'}
+              {copiedField === 'client_id' ? t('detail.copiedBang') : t('detail.copy')}
             </Button>
             {!client.public && (
               <Button
@@ -206,7 +199,7 @@ const ClientDetailPage: React.FC = () => {
                 leftIcon={<KeyIcon className="h-4 w-4" />}
                 onClick={() => setShowRegenerateConfirm(true)}
               >
-                Regenerate Secret
+                {t('detail.regenerate')}
               </Button>
             )}
           </div>
@@ -216,11 +209,9 @@ const ClientDetailPage: React.FC = () => {
       {client.system ? (
         <Card>
           <div className="p-6">
-            <h2 className="text-lg font-medium text-gray-900">Managed by Authway</h2>
+            <h2 className="text-lg font-medium text-gray-900">{t('detail.managed.title')}</h2>
             <p className="text-sm text-gray-500 mt-1">
-              This is the tenant's account screen client, where users manage their own sign-in. Authway registered
-              it the first time a user of this tenant opened that screen. It cannot be changed or deleted here; it is
-              removed with the tenant.
+              {t('detail.managed.body')}
             </p>
           </div>
         </Card>
@@ -229,9 +220,9 @@ const ClientDetailPage: React.FC = () => {
       {/* Edit Form */}
       <Card>
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Client Settings</h2>
+          <h2 className="text-lg font-medium text-gray-900">{t('detail.settings.title')}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Update the OAuth2 client configuration.
+            {t('detail.settings.help')}
           </p>
         </div>
         <div className="p-6">
@@ -241,7 +232,7 @@ const ClientDetailPage: React.FC = () => {
             onSubmit={(data) => updateMutation.mutate(data)}
             onCancel={() => navigate('/clients')}
             isSubmitting={updateMutation.isPending}
-            submitLabel="Save Changes"
+            submitLabel={t('detail.settings.save')}
           />
         </div>
       </Card>
@@ -251,36 +242,34 @@ const ClientDetailPage: React.FC = () => {
         <div className="px-6 py-4 border-b border-red-200 bg-red-50">
           <div className="flex items-center gap-2">
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
-            <h2 className="text-lg font-medium text-red-900">Danger Zone</h2>
+            <h2 className="text-lg font-medium text-red-900">{t('detail.danger.title')}</h2>
           </div>
         </div>
         <div className="p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-gray-900">
-                {client.active ? 'Turn this client off' : 'Turn this client on'}
+                {client.active ? t('detail.danger.turnOffTitle') : t('detail.danger.turnOnTitle')}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                {client.active
-                  ? 'No one can sign in to it and it gets no tokens until it is turned on again. The tokens it holds end.'
-                  : 'Users can sign in to it again. The sessions it had before it was turned off stay ended.'}
+                {client.active ? t('detail.danger.turnOffHelp') : t('detail.danger.turnOnHelp')}
               </p>
             </div>
             {client.active ? (
               <Button variant="danger" onClick={() => setShowTurnOffConfirm(true)}>
-                Turn Off
+                {t('detail.danger.turnOff')}
               </Button>
             ) : (
               <Button variant="secondary" onClick={() => activeMutation.mutate(true)} isLoading={activeMutation.isPending}>
-                Turn On
+                {t('detail.danger.turnOn')}
               </Button>
             )}
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-gray-900">Delete this client</h3>
+              <h3 className="text-sm font-medium text-gray-900">{t('detail.danger.deleteTitle')}</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Once deleted, this client cannot be recovered. All associated tokens will be invalidated.
+                {t('detail.danger.deleteHelp')}
               </p>
             </div>
             <Button
@@ -288,7 +277,7 @@ const ClientDetailPage: React.FC = () => {
               leftIcon={<TrashIcon className="h-4 w-4" />}
               onClick={() => setShowDeleteConfirm(true)}
             >
-              Delete Client
+              {t('detail.danger.delete')}
             </Button>
           </div>
         </div>
@@ -301,9 +290,9 @@ const ClientDetailPage: React.FC = () => {
         isOpen={showTurnOffConfirm}
         onClose={() => setShowTurnOffConfirm(false)}
         onConfirm={() => activeMutation.mutate(false)}
-        title="Turn Client Off"
-        message={`No one will be able to sign in to "${client.name}", and it will get no tokens. The tokens it holds end, and its users' sessions stay ended when it is turned on again. Continue?`}
-        confirmText="Turn Off"
+        title={t('detail.turnOffConfirm.title')}
+        message={t('detail.turnOffConfirm.message', { name: client.name })}
+        confirmText={t('detail.turnOffConfirm.confirm')}
         variant="danger"
         isLoading={activeMutation.isPending}
       />
@@ -313,9 +302,9 @@ const ClientDetailPage: React.FC = () => {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => deleteMutation.mutate()}
-        title="Delete Client"
-        message={`Are you sure you want to delete "${client.name}"? This action cannot be undone.`}
-        confirmText="Delete"
+        title={t('detail.deleteConfirm.title')}
+        message={t('detail.deleteConfirm.message', { name: client.name })}
+        confirmText={t('detail.deleteConfirm.confirm')}
         variant="danger"
         isLoading={deleteMutation.isPending}
       />
@@ -325,9 +314,9 @@ const ClientDetailPage: React.FC = () => {
         isOpen={showRegenerateConfirm}
         onClose={() => setShowRegenerateConfirm(false)}
         onConfirm={() => regenerateMutation.mutate()}
-        title="Regenerate Client Secret"
-        message={`Are you sure you want to regenerate the secret for "${client.name}"? The old secret will immediately stop working.`}
-        confirmText="Regenerate"
+        title={t('detail.regenerateConfirm.title')}
+        message={t('detail.regenerateConfirm.message', { name: client.name })}
+        confirmText={t('detail.regenerateConfirm.confirm')}
         variant="warning"
         isLoading={regenerateMutation.isPending}
       />
@@ -339,7 +328,7 @@ const ClientDetailPage: React.FC = () => {
           setShowCredentialsModal(false)
           setCredentials(null)
         }}
-        title="New Client Secret"
+        title={t('detail.secretModal.title')}
         size="md"
       >
         <div className="space-y-4">
@@ -348,7 +337,7 @@ const ClientDetailPage: React.FC = () => {
               <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  Make sure to copy your new client secret now. You won't be able to see it again!
+                  {t('detail.secretModal.warning')}
                 </p>
               </div>
             </div>
@@ -357,7 +346,7 @@ const ClientDetailPage: React.FC = () => {
           {credentials && (
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('credentials.clientId')}</label>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
                     {credentials.client_id}
@@ -372,7 +361,7 @@ const ClientDetailPage: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('credentials.clientSecret')}</label>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
                     {credentials.client_secret}
@@ -394,7 +383,7 @@ const ClientDetailPage: React.FC = () => {
               setShowCredentialsModal(false)
               setCredentials(null)
             }}>
-              Done
+              {t('credentials.done')}
             </Button>
           </div>
         </div>

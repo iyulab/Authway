@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import {
   BuildingOfficeIcon,
   PlusIcon,
   CheckIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
-import { tenantsApi, consoleApi, supportAccessApi, needsSupportAccess, refusalAt, Tenant, TenantSettings } from '@/lib/api'
+import { tenantsApi, consoleApi, supportAccessApi, needsSupportAccess, refusalAt, apiErrorMessage, Tenant, TenantSettings } from '@/lib/api'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useTenantStore } from '@/stores/tenant'
 import { signOut } from '@/lib/signOut'
 import { Button, Modal, Input, Checkbox, ConfirmDialog } from '@/components/ui'
@@ -15,6 +17,7 @@ import { useTenantActive } from '@/lib/tenantActive'
 import { consolePath } from '../config'
 
 const TenantSelectionPage: React.FC = () => {
+  const { t } = useTranslation('tenants')
   const queryClient = useQueryClient()
   const { setSelectedTenant } = useTenantStore()
 
@@ -55,10 +58,10 @@ const TenantSelectionPage: React.FC = () => {
       setEntering(null)
       setReason('')
       setSelectedTenant(tenant, access)
-      toast.success(`Support access to ${tenant.name} opened for an hour`)
+      toast.success(t('support.opened', { name: tenant.name }))
     },
-    onError: (error: any) => {
-      if (!refusalAt(error, 'reason')) toast.error(error.response?.data?.detail || 'Failed to open support access')
+    onError: (error: unknown) => {
+      if (!refusalAt(error, 'reason')) toast.error(apiErrorMessage(error, 'tenants:support.failed'))
     },
   })
 
@@ -83,13 +86,10 @@ const TenantSelectionPage: React.FC = () => {
       setOpenSignup(false)
       // Auto-select the newly created tenant
       setSelectedTenant(response.data)
-      toast.success('Tenant created successfully')
+      toast.success(t('create.created'))
     },
-    onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to create tenant'
-      toast.error(errorMessage)
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'tenants:create.failed'))
     },
   })
 
@@ -104,12 +104,12 @@ const TenantSelectionPage: React.FC = () => {
     } else {
       setSelectedTenant(tenant)
     }
-    toast.success(`Selected tenant: ${tenant.name}`)
+    toast.success(t('selected', { name: tenant.name }))
   }
 
   const handleCreateTenant = () => {
     if (!newTenantName.trim() || !newTenantSlug.trim()) {
-      toast.error('Please fill in all fields')
+      toast.error(t('create.fillAll'))
       return
     }
     createMutation.mutate({
@@ -144,17 +144,20 @@ const TenantSelectionPage: React.FC = () => {
                 <BuildingOfficeIcon className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Authway Admin</h1>
-                <p className="text-xs text-gray-500">Multi-tenant Identity Platform</p>
+                <h1 className="text-xl font-bold text-gray-900">{t('header.title')}</h1>
+                <p className="text-xs text-gray-500">{t('header.tagline')}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowRightOnRectangleIcon className="h-5 w-5" />
-              Logout
-            </button>
+            <div className="flex items-center gap-3">
+              <LanguageSwitcher />
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                {t('header.logout')}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -163,15 +166,14 @@ const TenantSelectionPage: React.FC = () => {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-10">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">
-            Select a Tenant
+            {t('select.title')}
           </h2>
           <p className="text-gray-600 max-w-md mx-auto">
-            Choose a tenant to manage or create a new one to get started.
+            {t('select.subtitle')}
           </p>
           {operatorAccount && (
             <p className="text-sm text-amber-700 max-w-md mx-auto mt-3">
-              As an operator you enter a tenant through support access: give a reason, and
-              the tenant's audit log records that you entered, why, and what you changed.
+              {t('select.operatorNote')}
             </p>
           )}
         </div>
@@ -187,17 +189,17 @@ const TenantSelectionPage: React.FC = () => {
               <BuildingOfficeIcon className="h-8 w-8 text-indigo-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No tenants yet
+              {t('empty.title')}
             </h3>
             <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-              Create your first tenant to start managing users and applications.
+              {t('empty.description')}
             </p>
             <Button
               onClick={() => setShowCreateModal(true)}
               leftIcon={<PlusIcon className="h-5 w-5" />}
               size="lg"
             >
-              Create First Tenant
+              {t('empty.create')}
             </Button>
           </div>
         ) : (
@@ -241,7 +243,7 @@ const TenantSelectionPage: React.FC = () => {
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {tenant.active ? 'Active' : 'Inactive'}
+                        {tenant.active ? t('card.active') : t('card.inactive')}
                       </span>
                     </div>
                   </button>
@@ -252,10 +254,10 @@ const TenantSelectionPage: React.FC = () => {
                         tenant.active ? setTurningOff(tenant) : activeMutation.mutate({ tenant, active: true })
                       }
                       disabled={activeMutation.isPending}
-                      aria-label={`${tenant.name} ${tenant.active ? '끄기' : '켜기'}`}
+                      aria-label={t(tenant.active ? 'card.turnOffLabel' : 'card.turnOnLabel', { name: tenant.name })}
                       className="absolute bottom-5 right-4 text-xs font-medium text-gray-500 hover:text-gray-900 hover:underline disabled:opacity-50"
                     >
-                      {tenant.active ? '끄기' : '켜기'}
+                      {tenant.active ? t('card.turnOff') : t('card.turnOn')}
                     </button>
                   )}
                 </div>
@@ -270,7 +272,7 @@ const TenantSelectionPage: React.FC = () => {
                   <PlusIcon className="h-6 w-6 text-gray-400 group-hover:text-indigo-600 transition-colors" />
                 </div>
                 <h3 className="text-sm font-medium text-gray-600 group-hover:text-indigo-600 transition-colors">
-                  Create New Tenant
+                  {t('card.create')}
                 </h3>
               </button>
             </div>
@@ -282,9 +284,9 @@ const TenantSelectionPage: React.FC = () => {
         isOpen={turningOff !== null}
         onClose={() => setTurningOff(null)}
         onConfirm={() => turningOff && activeMutation.mutate({ tenant: turningOff, active: false })}
-        title="테넌트 끄기"
-        message={`"${turningOff?.name}" 의 사용자는 어떤 클라이언트로도 로그인할 수 없고, 클라이언트가 가진 토큰은 끝납니다. 다시 켜도 끝난 세션은 돌아오지 않습니다. 계속할까요?`}
-        confirmText="끄기"
+        title={t('turnOff.title')}
+        message={t('turnOff.message', { name: turningOff?.name })}
+        confirmText={t('turnOff.confirm')}
         variant="danger"
         isLoading={activeMutation.isPending}
       />
@@ -293,7 +295,7 @@ const TenantSelectionPage: React.FC = () => {
       <Modal
         isOpen={entering !== null}
         onClose={() => setEntering(null)}
-        title={entering ? `Open support access to ${entering.name}` : ''}
+        title={entering ? t('support.title', { name: entering.name }) : ''}
         size="md"
       >
         <form
@@ -304,20 +306,20 @@ const TenantSelectionPage: React.FC = () => {
           }}
         >
           <Input
-            label="Reason"
-            placeholder="Ticket 1234 — a user cannot sign in"
+            label={t('support.reason')}
+            placeholder={t('support.placeholder')}
             value={reason}
             maxLength={500}
             onChange={(e) => setReason(e.target.value)}
             error={refusalAt(startMutation.error, 'reason')}
-            helperText="The tenant's administrators see it in their audit log. Access lasts an hour."
+            helperText={t('support.help')}
           />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setEntering(null)}>
-              Cancel
+              {t('support.cancel')}
             </Button>
             <Button type="submit" isLoading={startMutation.isPending} disabled={!reason.trim()}>
-              Open support access
+              {t('support.open')}
             </Button>
           </div>
         </form>
@@ -327,28 +329,26 @@ const TenantSelectionPage: React.FC = () => {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Create New Tenant"
+        title={t('create.title')}
         size="md"
       >
         <div className="space-y-4">
           <Input
-            label="Tenant Name"
-            placeholder="My Organization"
+            label={t('create.name')}
+            placeholder={t('create.namePlaceholder')}
             value={newTenantName}
             onChange={(e) => handleNameChange(e.target.value)}
           />
           <Input
-            label="Tenant Slug"
-            placeholder="my-organization"
+            label={t('create.slug')}
+            placeholder={t('create.slugPlaceholder')}
             value={newTenantSlug}
             onChange={(e) => setNewTenantSlug(e.target.value)}
-            helperText="URL-friendly identifier (auto-generated from name)"
+            helperText={t('create.slugHelp')}
           />
           <Checkbox
-            label="Allow public sign-up"
-            description="Anyone signing in with Google/GitHub/Microsoft/Apple or a magic
-              link is provisioned automatically. Off (default) requires an administrator
-              to invite each address first."
+            label={t('create.openSignup')}
+            description={t('create.openSignupHelp')}
             checked={openSignup}
             onChange={(e) => setOpenSignup(e.target.checked)}
           />
@@ -357,13 +357,13 @@ const TenantSelectionPage: React.FC = () => {
               variant="secondary"
               onClick={() => setShowCreateModal(false)}
             >
-              Cancel
+              {t('create.cancel')}
             </Button>
             <Button
               onClick={handleCreateTenant}
               isLoading={createMutation.isPending}
             >
-              Create Tenant
+              {t('create.submit')}
             </Button>
           </div>
         </div>

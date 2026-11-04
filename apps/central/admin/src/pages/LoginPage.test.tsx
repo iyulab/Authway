@@ -5,6 +5,9 @@ import { MemoryRouter } from 'react-router'
 import { http, HttpResponse } from 'msw/http'
 import { server } from '@/test/mocks/server'
 import LoginPage from './LoginPage'
+import { inLanguage } from '@/test/language'
+
+inLanguage('ko')
 
 const { signInWithAccount } = vi.hoisted(() => ({ signInWithAccount: vi.fn() }))
 vi.mock('../lib/consoleSignIn', async (actual) => ({

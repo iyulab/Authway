@@ -1,21 +1,24 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../stores/auth'
-import { authApi, LoginRequest } from '../lib/api'
+import { apiErrorMessage, authApi, LoginRequest } from '../lib/api'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import { fetchConsoleEntry, signInWithAccount, type ConsoleEntry } from '../lib/consoleSignIn'
 
-// Validation schema
-const loginSchema = z.object({
-  password: z.string().min(1, '비밀번호를 입력해주세요'),
-})
-
-type LoginFormData = z.infer<typeof loginSchema>
+type LoginFormData = { password: string }
 
 const LoginPage: React.FC = () => {
+  const { t } = useTranslation('login')
   const navigate = useNavigate()
+  // Validation schema — built per language, so its messages follow the switcher.
+  const loginSchema = useMemo(
+    () => z.object({ password: z.string().min(1, t('password.required')) }),
+    [t],
+  )
   const login = useAuthStore((state) => state.login)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -41,7 +44,7 @@ const LoginPage: React.FC = () => {
       await signInWithAccount(entry)
     } catch (err: any) {
       setLeaving(false)
-      setError(err?.message || '로그인 화면을 열지 못했습니다.')
+      setError(err?.message || t('account.openFailed'))
     }
   }
 
@@ -68,14 +71,15 @@ const LoginPage: React.FC = () => {
       navigate('/dashboard')
     } catch (err: any) {
       console.error('Login error:', err)
-      setError(err.response?.data?.detail || '로그인에 실패했습니다.')
+      setError(apiErrorMessage(err, 'login:failed'))
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <LanguageSwitcher className="absolute right-4 top-4" />
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
@@ -94,10 +98,10 @@ const LoginPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Authway 관리자 로그인
+            {t('title')}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            {entry ? '콘솔 계정이나 관리자 비밀번호로 로그인하세요' : '관리자 비밀번호로 로그인하세요'}
+            {entry ? t('subtitle.withAccount') : t('subtitle.passwordOnly')}
           </p>
         </div>
 
@@ -109,14 +113,14 @@ const LoginPage: React.FC = () => {
               disabled={leaving}
               className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {leaving ? '로그인 화면으로 이동 중...' : '콘솔 계정으로 로그인'}
+              {leaving ? t('account.leaving') : t('account.button')}
             </button>
             <div className="relative">
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="bg-gray-50 px-2 text-gray-500">또는 관리자 비밀번호</span>
+                <span className="bg-gray-50 px-2 text-gray-500">{t('account.or')}</span>
               </div>
             </div>
           </div>
@@ -132,7 +136,7 @@ const LoginPage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                관리자 비밀번호
+                {t('password.label')}
               </label>
               <input
                 {...register('password')}
@@ -140,7 +144,7 @@ const LoginPage: React.FC = () => {
                 type="password"
                 autoComplete="current-password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="비밀번호를 입력하세요"
+                placeholder={t('password.placeholder')}
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -157,10 +161,10 @@ const LoginPage: React.FC = () => {
               {isLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  로그인 중...
+                  {t('submitting')}
                 </div>
               ) : (
-                '로그인'
+                t('submit')
               )}
             </button>
           </div>

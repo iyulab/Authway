@@ -1,0 +1,56 @@
+{
+  "brand": "Authway",
+  "documentTitle": "Authway Admin Dashboard",
+  "language": {
+    "label": "Language"
+  },
+  "actions": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "copy": "Copy",
+    "copied": "Copied",
+    "retry": "Retry",
+    "back": "Back"
+  },
+  "loading": "Loading...",
+  "loadingData": "Loading data...",
+  "signingOut": "Signing out…",
+  "noItems": "No items to display",
+  "document": {
+    "loadFailed": "The document could not be loaded: {{reason}}",
+    "loadError": "An error occurred while loading the document."
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "pagination": {
+    "label": "Pagination",
+    "previous": "Previous",
+    "next": "Next",
+    "showing": "Showing <start>{{start}}</start> to <end>{{end}}</end> of <total>{{total}}</total> results"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "clients": "Applications (clients)",
+    "users": "Users",
+    "invitations": "Invitations",
+    "webhooks": "Webhooks",
+    "auditLogs": "Audit logs",
+    "settings": "Settings"
+  },
+  "layout": {
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "switchTenant": "Switch tenant",
+    "signOut": "Sign out",
+    "github": "GitHub"
+  }
+}

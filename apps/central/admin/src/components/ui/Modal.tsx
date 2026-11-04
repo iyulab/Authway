@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/utils'
 
@@ -33,6 +34,7 @@ export const Modal: React.FC<ModalProps> = ({
   closeOnOverlayClick = true,
   footer,
 }) => {
+  const { t } = useTranslation('common')
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -90,6 +92,7 @@ export const Modal: React.FC<ModalProps> = ({
               {showCloseButton && (
                 <button
                   onClick={onClose}
+                  aria-label={t('actions.close')}
                   className="rounded-md text-gray-400 hover:text-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   <XMarkIcon className="h-6 w-6" />

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui'
 import { UserForm, UserFormData } from './UserForm'
 import { User } from '@/lib/api'
@@ -18,14 +19,15 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   user,
   isSubmitting = false,
 }) => {
+  const { t } = useTranslation('users')
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit User" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('form.modalTitle')} size="md">
       <UserForm
         initialData={user}
         onSubmit={onSubmit}
         onCancel={onClose}
         isSubmitting={isSubmitting}
-        submitLabel="Update"
+        submitLabel={t('form.update')}
       />
     </Modal>
   )

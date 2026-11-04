@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { CheckCircleIcon } from '@heroicons/react/24/outline'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui'
 
@@ -23,9 +24,10 @@ export const RecentActivityList: React.FC<RecentActivityListProps> = ({
   title,
   description,
   items,
-  emptyMessage = 'No items to display',
+  emptyMessage,
   maxItems = 5,
 }) => {
+  const { t } = useTranslation('common')
   const displayItems = items.slice(0, maxItems)
 
   return (
@@ -70,7 +72,7 @@ export const RecentActivityList: React.FC<RecentActivityListProps> = ({
             })
           ) : (
             <div className="px-4 py-8 text-center text-gray-500">
-              {emptyMessage}
+              {emptyMessage ?? t('noItems')}
             </div>
           )}
         </div>

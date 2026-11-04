@@ -1,0 +1,36 @@
+{
+  "title": "Dashboard",
+  "overview": "Tenant management overview.",
+  "noTenant": {
+    "title": "No tenant selected",
+    "description": "Please select a tenant to view the dashboard."
+  },
+  "loading": "Loading dashboard...",
+  "welcome": "Welcome to <tenant>{{name}}</tenant> management console.",
+  "stats": {
+    "clients": "Apps (Clients)",
+    "users": "Users"
+  },
+  "recent": {
+    "clients": {
+      "title": "Recent Apps (Clients)",
+      "description": "Recently created OAuth2 applications",
+      "empty": "No apps created yet"
+    },
+    "users": {
+      "title": "Recent Users",
+      "description": "Recently registered users",
+      "empty": "No users registered yet"
+    }
+  },
+  "system": {
+    "title": "System Information",
+    "description": "What the API answers at /health",
+    "api": "API",
+    "notAnswering": "Not answering",
+    "checking": "Checking…",
+    "version": "Deployed version",
+    "database": "Database",
+    "migration": "migration {{id}}"
+  }
+}

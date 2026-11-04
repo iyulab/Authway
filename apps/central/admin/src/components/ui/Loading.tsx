@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 export interface SpinnerProps {
@@ -45,15 +46,17 @@ export interface LoadingProps {
 }
 
 export const Loading: React.FC<LoadingProps> = ({
-  message = 'Loading...',
+  message,
   size = 'md',
   fullScreen = false,
   className,
 }) => {
+  const { t } = useTranslation('common')
+  const text = message ?? t('loading')
   const content = (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
       <Spinner size={size} />
-      {message && <p className="text-sm text-gray-500">{message}</p>}
+      {text && <p className="text-sm text-gray-500">{text}</p>}
     </div>
   )
 

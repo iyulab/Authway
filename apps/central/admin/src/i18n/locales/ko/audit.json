@@ -1,0 +1,49 @@
+{
+  "title": "감사 로그",
+  "subtitle": "활동 로그를 모니터링하고 검토합니다.",
+  "activity": "<tenant>{{name}}</tenant> 의 활동 로그입니다.",
+  "noTenant": "선택한 테넌트가 없습니다",
+  "noTenantHelp": "감사 로그를 보려면 상단에서 테넌트를 선택하세요.",
+  "loading": "감사 로그를 불러오는 중...",
+  "loadFailed": "감사 로그를 불러오지 못했습니다.",
+  "retry": "다시 시도",
+  "filters": "필터",
+  "summary": {
+    "last24h": "최근 24시간",
+    "last7d": "최근 7일",
+    "last30d": "최근 30일",
+    "security": "보안 이벤트 (최근 24시간)",
+    "failed": "실패한 작업"
+  },
+  "filter": {
+    "action": "작업",
+    "severity": "심각도",
+    "status": "상태",
+    "all": "전체",
+    "success": "성공",
+    "failed": "실패",
+    "clear": "필터 지우기"
+  },
+  "severity": {
+    "info": "정보",
+    "warning": "경고",
+    "error": "오류",
+    "critical": "심각"
+  },
+  "columns": {
+    "time": "시간",
+    "action": "작업",
+    "actor": "행위자",
+    "resource": "대상",
+    "severity": "심각도",
+    "status": "상태",
+    "ip": "IP 주소"
+  },
+  "system": "시스템",
+  "success": "성공",
+  "failed": "실패",
+  "empty": {
+    "title": "감사 로그가 없습니다",
+    "description": "이벤트가 발생하면 여기에 표시됩니다"
+  }
+}

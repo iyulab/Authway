@@ -4,6 +4,9 @@ import { render, screen, waitFor } from '@/test/utils'
 import SupportAccessBand from './SupportAccessBand'
 import { supportAccessApi, type SupportAccess } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
+import { inLanguage } from '@/test/language'
+
+inLanguage('ko')
 
 const access = (expiresInMs: number): SupportAccess => ({
   id: 'sa1',

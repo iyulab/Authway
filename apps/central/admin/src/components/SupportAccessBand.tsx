@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import { ShieldExclamationIcon } from '@heroicons/react/24/outline'
 import { supportAccessApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
@@ -14,6 +15,7 @@ const minutesLeft = (expiresAt: string, now: number) => Math.max(0, Math.ceil((D
  * from then on.
  */
 const SupportAccessBand: React.FC = () => {
+  const { t } = useTranslation('support')
   const queryClient = useQueryClient()
   const { selectedTenant, supportAccess, clearSelectedTenant } = useTenantStore()
   const [now, setNow] = useState(() => Date.now())
@@ -28,9 +30,9 @@ const SupportAccessBand: React.FC = () => {
   useEffect(() => {
     if (expired) {
       clearSelectedTenant()
-      toast('지원 접근 시간이 끝났습니다. 다시 들어가려면 사유를 적어 새로 여세요.')
+      toast(t('ended'))
     }
-  }, [expired, clearSelectedTenant])
+  }, [expired, clearSelectedTenant, t])
 
   const end = useMutation({
     mutationFn: (id: string) => supportAccessApi.end(id),
@@ -45,8 +47,16 @@ const SupportAccessBand: React.FC = () => {
     <div role="status" className="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-3 text-sm text-amber-900">
       <ShieldExclamationIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
       <span className="flex-1 min-w-0 truncate">
-        <strong>{selectedTenant.name}</strong> 지원 접근 중 — {supportAccess.reason} · {minutesLeft(supportAccess.expires_at, now)}분 남음 ·
-        이 테넌트의 감사 로그에 남습니다
+        <Trans
+          t={t}
+          i18nKey="band"
+          values={{
+            tenant: selectedTenant.name,
+            reason: supportAccess.reason,
+            minutes: minutesLeft(supportAccess.expires_at, now),
+          }}
+          components={{ tenant: <strong /> }}
+        />
       </span>
       <button
         type="button"
@@ -54,7 +64,7 @@ const SupportAccessBand: React.FC = () => {
         disabled={end.isPending}
         className="px-3 py-1 rounded-md bg-white border border-amber-300 hover:bg-amber-100 disabled:opacity-50"
       >
-        지원 접근 끝내기
+        {t('end')}
       </button>
     </div>
   )

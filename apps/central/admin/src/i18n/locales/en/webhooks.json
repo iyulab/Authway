@@ -1,0 +1,94 @@
+{
+  "title": "Webhook Management",
+  "subtitle": "Configure webhooks to receive event notifications.",
+  "count": "{{count}} webhook(s) configured for <tenant>{{name}}</tenant>.",
+  "noTenant": "No tenant selected",
+  "noTenantHelp": "Please select a tenant from the header to manage webhooks.",
+  "loading": "Loading webhooks...",
+  "loadFailed": "Failed to load webhooks.",
+  "retry": "Retry",
+  "add": "Add Webhook",
+  "columns": {
+    "name": "Name",
+    "url": "URL",
+    "events": "Events",
+    "status": "Status",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "status": {
+    "active": "Active",
+    "disabled": "Disabled"
+  },
+  "empty": {
+    "title": "No webhooks",
+    "description": "Create a webhook to receive event notifications"
+  },
+  "action": {
+    "test": "Test",
+    "rotate": "Rotate signing secret",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "events": {
+    "all": "All events (now and later)",
+    "userCreated": "User Created",
+    "userUpdated": "User Updated",
+    "userDeleted": "User Deleted",
+    "userLogin": "User Login",
+    "userLogout": "User Logout",
+    "userPasswordChanged": "Password Changed",
+    "userMfaEnabled": "MFA Enabled",
+    "userMfaDisabled": "MFA Disabled",
+    "clientCreated": "Client Created",
+    "clientUpdated": "Client Updated",
+    "clientDeleted": "Client Deleted"
+  },
+  "form": {
+    "createTitle": "Create Webhook",
+    "editTitle": "Edit Webhook",
+    "name": "Name",
+    "namePlaceholder": "My Webhook",
+    "url": "URL",
+    "urlPlaceholder": "https://example.com/webhook",
+    "events": "Events",
+    "retryCount": "Retry Count",
+    "timeout": "Timeout (seconds)",
+    "enabled": "Enabled",
+    "cancel": "Cancel",
+    "create": "Create",
+    "update": "Update",
+    "retryInvalid": "Retry count must be a number from 0 to 10",
+    "timeoutInvalid": "Timeout must be a number of seconds from 1 to 60"
+  },
+  "secret": {
+    "title": "Signing secret",
+    "body": "Deliveries to <name>{{name}}</name> are signed with this secret. Copy it now — it is not shown again. Rotate it to get a new one.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed — select and copy it by hand",
+    "done": "Done"
+  },
+  "rotateConfirm": {
+    "title": "Rotate signing secret",
+    "message": "Deliveries to “{{name}}” will be signed with a new secret, and the receiver will reject them until it has it. Continue?",
+    "confirm": "Rotate"
+  },
+  "deleteConfirm": {
+    "title": "Delete Webhook",
+    "message": "Are you sure you want to delete “{{name}}”? This action cannot be undone.",
+    "confirm": "Delete"
+  },
+  "toast": {
+    "createFailed": "Failed to create webhook",
+    "updated": "Webhook updated successfully",
+    "updateFailed": "Failed to update webhook",
+    "deleted": "Webhook deleted successfully",
+    "deleteFailed": "Failed to delete webhook",
+    "rotateFailed": "Failed to rotate secret",
+    "testDelivered": "Test delivered (HTTP {{status}})",
+    "testNotDelivered": "Test not delivered: {{reason}}",
+    "testFailed": "Failed to test webhook",
+    "httpStatus": "HTTP {{status}}"
+  }
+}

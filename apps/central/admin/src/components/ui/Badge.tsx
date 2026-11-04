@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
@@ -51,12 +52,13 @@ export interface StatusBadgeProps {
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
   active,
-  activeText = 'Active',
-  inactiveText = 'Inactive',
+  activeText,
+  inactiveText,
 }) => {
+  const { t } = useTranslation('common')
   return (
     <Badge variant={active ? 'success' : 'danger'}>
-      {active ? activeText : inactiveText}
+      {active ? (activeText ?? t('status.active')) : (inactiveText ?? t('status.inactive'))}
     </Badge>
   )
 }

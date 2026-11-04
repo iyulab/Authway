@@ -1,0 +1,68 @@
+{
+  "title": "Invitations",
+  "subtitle": "Invite users to join your organization.",
+  "count": "{{count}} invitation(s) for <tenant>{{name}}</tenant>.",
+  "noTenant": "No tenant selected",
+  "noTenantHelp": "Please select a tenant from the header to manage invitations.",
+  "loading": "Loading invitations...",
+  "loadFailed": "Failed to load invitations.",
+  "retry": "Retry",
+  "invite": "Invite User",
+  "filter": {
+    "all": "All",
+    "pending": "Pending",
+    "accepted": "Accepted",
+    "expired": "Expired"
+  },
+  "status": {
+    "pending": "Pending",
+    "accepted": "Accepted",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "columns": {
+    "email": "Email",
+    "application": "Application",
+    "status": "Status",
+    "invitedBy": "Invited By",
+    "expires": "Expires",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "empty": {
+    "title": "No invitations",
+    "description": "Invite users to join your organization"
+  },
+  "action": {
+    "resend": "Resend",
+    "revoke": "Revoke"
+  },
+  "form": {
+    "title": "Invite User",
+    "email": "Email",
+    "emailPlaceholder": "user@example.com",
+    "application": "Application (optional)",
+    "noApplication": "No particular application",
+    "helpNone": "Without an application the user finishes on Authway after accepting, and has to be told where to sign in.",
+    "helpNoAddress": "This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.",
+    "helpChosen": "After accepting, the user is sent on to this application to sign in.",
+    "message": "Message (optional)",
+    "messagePlaceholder": "Personal message to include in the invitation...",
+    "note": "The invitation is valid for 7 days. It gives no role or permission — the application decides those.",
+    "cancel": "Cancel",
+    "send": "Send Invitation"
+  },
+  "revokeConfirm": {
+    "title": "Revoke Invitation",
+    "message": "Are you sure you want to revoke the invitation for “{{email}}”?",
+    "confirm": "Revoke"
+  },
+  "toast": {
+    "created": "Invitation created successfully",
+    "createFailed": "Failed to create invitation",
+    "revoked": "Invitation revoked successfully",
+    "revokeFailed": "Failed to revoke invitation",
+    "resent": "Invitation resent successfully",
+    "resendFailed": "Failed to resend invitation"
+  }
+}

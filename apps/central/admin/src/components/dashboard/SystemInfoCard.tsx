@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui'
 
@@ -15,10 +16,11 @@ export interface SystemInfoCardProps {
 }
 
 export const SystemInfoCard: React.FC<SystemInfoCardProps> = ({
-  title = 'System Information',
+  title,
   description,
   items,
 }) => {
+  const { t } = useTranslation('dashboard')
   const renderStatus = (status?: string) => {
     if (!status) return null
 
@@ -35,7 +37,7 @@ export const SystemInfoCard: React.FC<SystemInfoCardProps> = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>{title ?? t('system.title')}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>

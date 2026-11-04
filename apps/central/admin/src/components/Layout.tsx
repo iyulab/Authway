@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { useTenantStore } from '@/stores/tenant'
 import { signOut } from '@/lib/signOut'
 import SupportAccessBand from '@/components/SupportAccessBand'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import {
   HomeIcon,
   CogIcon,
@@ -21,19 +23,21 @@ interface LayoutProps {
   children: React.ReactNode
 }
 
+// `label` is a key of the `common` namespace's `nav` group.
 const navigation = [
-  { name: '대시보드', href: '/dashboard', icon: HomeIcon },
-  { name: '앱(클라이언트) 관리', href: '/clients', icon: KeyIcon },
-  { name: '사용자 관리', href: '/users', icon: UsersIcon },
-  { name: '초대 관리', href: '/invitations', icon: EnvelopeIcon },
-  { name: '웹훅', href: '/webhooks', icon: BellAlertIcon },
-  { name: '감사 로그', href: '/audit-logs', icon: ClipboardDocumentListIcon },
-  { name: '설정', href: '/settings', icon: CogIcon },
-]
+  { label: 'dashboard', href: '/dashboard', icon: HomeIcon },
+  { label: 'clients', href: '/clients', icon: KeyIcon },
+  { label: 'users', href: '/users', icon: UsersIcon },
+  { label: 'invitations', href: '/invitations', icon: EnvelopeIcon },
+  { label: 'webhooks', href: '/webhooks', icon: BellAlertIcon },
+  { label: 'auditLogs', href: '/audit-logs', icon: ClipboardDocumentListIcon },
+  { label: 'settings', href: '/settings', icon: CogIcon },
+] as const
 
 const GITHUB_URL = 'https://github.com/iyulab/Authway'
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const { t } = useTranslation('common')
   const location = useLocation()
   const navigate = useNavigate()
   const { selectedTenant, clearSelectedTenant } = useTenantStore()
@@ -72,7 +76,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <button
                 onClick={toggleSidebar}
                 className="w-full flex items-center justify-center text-white hover:bg-indigo-700 rounded-md transition-colors p-2"
-                title="사이드바 펼치기"
+                title={t('layout.expandSidebar')}
               >
                 <ChevronRightIcon className="w-6 h-6" />
               </button>
@@ -84,7 +88,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <button
                   onClick={toggleSidebar}
                   className="text-white hover:bg-indigo-700 rounded-md transition-colors p-1"
-                  title="사이드바 접기"
+                  title={t('layout.collapseSidebar')}
                 >
                   <ChevronLeftIcon className="w-5 h-5" />
                 </button>
@@ -112,7 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <button
                     onClick={clearSelectedTenant}
                     className="p-1.5 text-indigo-200 hover:text-white hover:bg-indigo-400/50 rounded-md transition-colors"
-                    title="테넌트 전환"
+                    title={t('layout.switchTenant')}
                   >
                     <ArrowPathIcon className="w-4 h-4" />
                   </button>
@@ -128,7 +132,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             const isActive = location.pathname === item.href
             return (
               <Link
-                key={item.name}
+                key={item.label}
                 to={item.href}
                 className={`
                   flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
@@ -138,13 +142,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }
                 `}
-                title={isCollapsed ? item.name : undefined}
+                title={isCollapsed ? t(`nav.${item.label}`) : undefined}
               >
                 <item.icon className={`w-5 h-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
                 <span className={`transition-opacity duration-200 whitespace-nowrap ${
                   isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
                 }`}>
-                  {item.name}
+                  {t(`nav.${item.label}`)}
                 </span>
               </Link>
             )
@@ -156,13 +160,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors"
-            title={isCollapsed ? '로그아웃' : undefined}
+            title={isCollapsed ? t('layout.signOut') : undefined}
           >
             <ArrowRightOnRectangleIcon className={`w-5 h-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} />
             <span className={`transition-opacity duration-200 whitespace-nowrap ${
               isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
             }`}>
-              로그아웃
+              {t('layout.signOut')}
             </span>
           </button>
         </div>
@@ -175,10 +179,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h2 className="text-2xl font-semibold text-gray-900">
-                {navigation.find(item => item.href === location.pathname)?.name || '대시보드'}
+                {t(`nav.${navigation.find(item => item.href === location.pathname)?.label ?? 'dashboard'}`)}
               </h2>
             </div>
             <div className="flex items-center gap-3">
+              <LanguageSwitcher />
               {/* GitHub Link */}
               <a
                 href={GITHUB_URL}

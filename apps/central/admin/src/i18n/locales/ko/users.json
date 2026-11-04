@@ -1,0 +1,89 @@
+{
+  "title": "사용자 관리",
+  "subtitle": "사용자와 접근 권한을 관리합니다.",
+  "count": "<tenant>{{name}}</tenant> 에 사용자가 {{count}}명 있습니다.",
+  "noTenant": "선택한 테넌트가 없습니다",
+  "noTenantHelp": "사용자를 보고 관리하려면 상단에서 테넌트를 선택하세요.",
+  "loading": "사용자를 불러오는 중...",
+  "loadFailed": "사용자를 불러오지 못했습니다.",
+  "retry": "다시 시도",
+  "search": "이메일이나 이름으로 검색...",
+  "columns": {
+    "user": "사용자",
+    "provider": "로그인 수단",
+    "status": "상태",
+    "emailVerified": "이메일 인증",
+    "lastLogin": "마지막 로그인",
+    "created": "가입일",
+    "actions": "작업"
+  },
+  "provider": {
+    "passwordOrLink": "비밀번호 / 링크",
+    "google": "Google",
+    "github": "GitHub",
+    "microsoft": "Microsoft",
+    "apple": "Apple"
+  },
+  "status": {
+    "active": "활성",
+    "suspended": "정지됨"
+  },
+  "verified": "인증됨",
+  "notVerified": "인증 안 됨",
+  "never": "없음",
+  "unnamed": "이름 없는 사용자",
+  "empty": {
+    "noResults": "검색 결과가 없습니다",
+    "noUsers": "사용자가 없습니다",
+    "tryDifferent": "다른 검색어를 입력해 보세요",
+    "willAppear": "사용자가 가입하면 여기에 표시됩니다"
+  },
+  "action": {
+    "edit": "수정",
+    "suspend": "정지",
+    "suspendLabel": "{{email}} 정지",
+    "lift": "정지 해제",
+    "liftLabel": "{{email}} 의 정지 해제",
+    "delete": "삭제"
+  },
+  "suspendConfirm": {
+    "title": "사용자 정지",
+    "message": "\"{{email}}\" 을(를) 정지할까요? 세션이 지금 끝나고 정지를 해제하기 전까지 로그인할 수 없습니다. 계정은 그대로 남습니다.",
+    "confirm": "정지"
+  },
+  "deleteConfirm": {
+    "title": "사용자 삭제",
+    "message": "\"{{email}}\" 을(를) 삭제할까요? 되돌릴 수 없습니다.",
+    "confirm": "삭제"
+  },
+  "toast": {
+    "updated": "사용자를 수정했습니다",
+    "updateFailed": "수정하지 못했습니다: {{reason}}",
+    "updateFallback": "사용자를 수정하지 못했습니다",
+    "liftedSuspension": "정지를 해제했습니다",
+    "suspended": "사용자를 정지했습니다 — 세션이 끝났습니다",
+    "suspensionFailed": "정지 상태를 바꾸지 못했습니다",
+    "deleted": "사용자를 삭제했습니다",
+    "deleteFailed": "삭제하지 못했습니다: {{reason}}",
+    "deleteFallback": "사용자를 삭제하지 못했습니다"
+  },
+  "form": {
+    "modalTitle": "사용자 수정",
+    "email": "이메일",
+    "connected": "연결된 계정",
+    "none": "없음",
+    "status": "상태",
+    "active": "활성",
+    "inactive": "비활성",
+    "emailVerified": "인증됨",
+    "emailNotVerified": "인증 안 됨",
+    "name": "이름 *",
+    "namePlaceholder": "홍길동",
+    "avatar": "프로필 사진 URL",
+    "avatarHelp": "사용자 프로필 사진의 URL (선택)",
+    "nameRequired": "이름을 입력하세요",
+    "invalidUrl": "올바른 URL 을 입력하세요",
+    "cancel": "취소",
+    "update": "수정"
+  }
+}

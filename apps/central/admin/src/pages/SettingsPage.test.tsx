@@ -5,6 +5,9 @@ import toast from 'react-hot-toast'
 import SettingsPage from './SettingsPage'
 import { capabilitiesApi, consoleApi, healthApi, tenantsApi } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
+import { inLanguage } from '@/test/language'
+
+inLanguage('ko')
 
 // The settings page shows only what it reads from the deployment, and says
 // why a tenant could not be deleted.
@@ -25,7 +28,7 @@ describe('settings', () => {
   it('shows the deployed version, the last migration and what the deployment offers', async () => {
     render(<SettingsPage />)
     expect((await screen.findAllByText('v20261015212924')).length).toBeGreaterThan(0)
-    expect(screen.getByText('migration 041')).toBeInTheDocument()
+    expect(screen.getByText('마이그레이션 041')).toBeInTheDocument()
     expect(await screen.findByText('google')).toBeInTheDocument()
     expect(screen.getByText('invite_only, open')).toBeInTheDocument()
     // Who is signed in comes from /console/me, which answers a console account too.

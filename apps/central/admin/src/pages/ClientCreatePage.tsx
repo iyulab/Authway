@@ -2,18 +2,20 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   ArrowLeftIcon,
   ExclamationTriangleIcon,
   ClipboardDocumentIcon,
   CheckIcon,
 } from '@heroicons/react/24/outline'
-import { clientsApi, serverRefusal } from '@/lib/api'
+import { apiErrorMessage, clientsApi, serverRefusal } from '@/lib/api'
 import { useTenantStore } from '@/stores/tenant'
 import { Button, Card, Modal } from '@/components/ui'
 import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
 const ClientCreatePage: React.FC = () => {
+  const { t } = useTranslation('clients')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { selectedTenant } = useTenantStore()
@@ -62,13 +64,10 @@ const ClientCreatePage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] })
       setCredentials(response.data.credentials)
       setShowCredentialsModal(true)
-      toast.success('Client created successfully')
+      toast.success(t('create.created'))
     },
-    onError: (error: any) => {
-      const errorMessage =
-        error.response?.data?.detail ||
-        'Failed to create client'
-      toast.error(errorMessage)
+    onError: (error: unknown) => {
+      toast.error(apiErrorMessage(error, 'clients:create.failed'))
     },
   })
 
@@ -94,12 +93,12 @@ const ClientCreatePage: React.FC = () => {
           leftIcon={<ArrowLeftIcon className="h-4 w-4" />}
           onClick={() => navigate('/clients')}
         >
-          Back
+          {t('detail.back')}
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Create New Client</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('create.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Register a new OAuth2 application for {selectedTenant?.name}
+            {t('create.subtitle', { tenant: selectedTenant?.name })}
           </p>
         </div>
       </div>
@@ -107,9 +106,9 @@ const ClientCreatePage: React.FC = () => {
       {/* Form */}
       <Card>
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Client Configuration</h2>
+          <h2 className="text-lg font-medium text-gray-900">{t('create.configTitle')}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Configure the OAuth2 client settings for your application.
+            {t('create.configHelp')}
           </p>
         </div>
         <div className="p-6">
@@ -118,7 +117,7 @@ const ClientCreatePage: React.FC = () => {
             onSubmit={(data) => createMutation.mutate(data)}
             onCancel={() => navigate('/clients')}
             isSubmitting={createMutation.isPending}
-            submitLabel="Create Client"
+            submitLabel={t('create.submit')}
           />
         </div>
       </Card>
@@ -127,7 +126,7 @@ const ClientCreatePage: React.FC = () => {
       <Modal
         isOpen={showCredentialsModal}
         onClose={handleCredentialsClosed}
-        title="Client Created Successfully"
+        title={t('create.modalTitle')}
         size="md"
       >
         <div className="space-y-4">
@@ -136,8 +135,7 @@ const ClientCreatePage: React.FC = () => {
               <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  <strong>Important:</strong> Make sure to copy your client credentials now.
-                  The client secret will not be shown again!
+                  <Trans t={t} i18nKey="create.important" components={{ strong: <strong /> }} />
                 </p>
               </div>
             </div>
@@ -146,7 +144,7 @@ const ClientCreatePage: React.FC = () => {
           {credentials && (
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('credentials.clientId')}</label>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
                     {credentials.client_id}
@@ -161,7 +159,7 @@ const ClientCreatePage: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('credentials.clientSecret')}</label>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
                     {credentials.client_secret}
@@ -180,7 +178,7 @@ const ClientCreatePage: React.FC = () => {
 
           <div className="flex justify-end pt-4">
             <Button onClick={handleCredentialsClosed}>
-              Done
+              {t('credentials.done')}
             </Button>
           </div>
         </div>

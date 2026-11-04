@@ -19,7 +19,7 @@ const access: SupportAccess = {
   expires_at: new Date(Date.now() + 3_600_000).toISOString(),
 }
 // The tenant's card — not the button that turns it off or on.
-const card = () => screen.findByRole('button', { name: (name) => /acme/i.test(name) && !/끄기|켜기/.test(name) })
+const card = () => screen.findByRole('button', { name: (name) => /acme/i.test(name) && !/^turn (off|on) /i.test(name) })
 const me = (over: Partial<ConsoleMe>): ConsoleMe => ({ actor_type: 'console_user', operator: true, memberships: [], ...over })
 
 beforeEach(() => {
@@ -87,9 +87,9 @@ describe('turning a tenant off or on from the list', () => {
     const user = userEvent.setup()
     render(<TenantSelectionPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Acme 끄기' }))
+    await user.click(await screen.findByRole('button', { name: 'Turn off Acme' }))
     expect(update).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: '끄기' }))
+    await user.click(screen.getByRole('button', { name: 'Turn off' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledWith('t1', { active: false }))
     expect(start).not.toHaveBeenCalled()
@@ -103,7 +103,7 @@ describe('turning a tenant off or on from the list', () => {
     const user = userEvent.setup()
     render(<TenantSelectionPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Acme 켜기' }))
+    await user.click(await screen.findByRole('button', { name: 'Turn on Acme' }))
     await waitFor(() => expect(update).toHaveBeenCalledWith('t1', { active: true }))
   })
 
@@ -113,6 +113,6 @@ describe('turning a tenant off or on from the list', () => {
 
     await screen.findByText('Acme')
     await waitFor(() => expect(consoleApi.me).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Acme 끄기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Turn off Acme' })).toBeNull()
   })
 })

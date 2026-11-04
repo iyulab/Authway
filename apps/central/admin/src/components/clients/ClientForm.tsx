@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Input, Textarea, Select, Checkbox, CheckboxGroup, Button } from '@/components/ui'
@@ -42,7 +44,7 @@ export function isApplicationAddress(value: string): boolean {
 
 // Client form validation schema
 export const clientFormSchema = z.object({
-  name: z.string().min(1, 'Client name is required'),
+  name: z.string().min(1, { error: () => i18n.t('clients:form.validation.nameRequired') }),
   description: z.string().optional(),
   // Addresses the application publishes for users — see the superRefine below.
   client_uri: z.string().optional(),
@@ -61,12 +63,12 @@ export const clientFormSchema = z.object({
   audience: z.string().optional(),
   // A single address; the server decides whether it may be called.
   backchannel_logout_uri: z.string().optional(),
-  grant_types: z.array(z.string()).min(1, 'At least one Grant Type is required'),
-  scopes: z.array(z.string()).min(1, 'At least one Scope is required'),
+  grant_types: z.array(z.string()).min(1, { error: () => i18n.t('clients:form.validation.grantRequired') }),
+  scopes: z.array(z.string()).min(1, { error: () => i18n.t('clients:form.validation.scopeRequired') }),
   public: z.boolean(),
   // Authentication Provider Settings
   // A client nobody can sign in to is refused by the API (invalid_enabled_auth_providers).
-  enabled_auth_providers: z.array(z.string()).min(1, 'Choose at least one way to sign in').optional(),
+  enabled_auth_providers: z.array(z.string()).min(1, { error: () => i18n.t('clients:form.validation.providerRequired') }).optional(),
   // Consent Flow Configuration
   skip_consent: z.boolean().optional(),
   skip_logout_consent: z.boolean().optional(),
@@ -80,7 +82,7 @@ export const clientFormSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['redirect_uris'],
-      message: 'At least one Redirect URI is required for Authorization Code',
+      message: i18n.t('clients:form.validation.redirectRequired'),
     })
   }
 
@@ -94,7 +96,7 @@ export const clientFormSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['allowed_origins'],
-      message: 'Public clients with Authorization Code need at least one Allowed Origin for browser CORS',
+      message: i18n.t('clients:form.validation.originsRequired'),
     })
   }
 
@@ -105,7 +107,7 @@ export const clientFormSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['audience'],
-      message: 'Each audience must be a distinct identifier without spaces, at most 255 characters',
+      message: i18n.t('clients:form.validation.audience'),
     })
   }
 
@@ -118,7 +120,7 @@ export const clientFormSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [field],
-        message: 'Enter one absolute https URL without a fragment (#…)',
+        message: i18n.t('clients:form.validation.httpsUrl'),
       })
     }
   }
@@ -138,7 +140,7 @@ export const clientFormSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['backchannel_logout_uri'],
-        message: 'Enter one absolute https URL without a fragment (#…)',
+        message: i18n.t('clients:form.validation.httpsUrl'),
       })
     }
   }
@@ -146,33 +148,34 @@ export const clientFormSchema = z.object({
 
 export type ClientFormData = z.infer<typeof clientFormSchema>
 
+// The options a form offers; each one's words are `clients:form.<group>.<value>`.
 export const AVAILABLE_GRANT_TYPES = [
-  { value: 'authorization_code', label: 'Authorization Code' },
-  { value: 'client_credentials', label: 'Client Credentials' },
-  { value: 'refresh_token', label: 'Refresh Token' },
+  { value: 'authorization_code' },
+  { value: 'client_credentials' },
+  { value: 'refresh_token' },
 ]
 
 export const AVAILABLE_SCOPES = [
-  { value: 'openid', label: 'OpenID Connect' },
-  { value: 'profile', label: 'Profile' },
-  { value: 'email', label: 'Email' },
-  { value: 'offline_access', label: 'Offline Access' },
+  { value: 'openid' },
+  { value: 'profile' },
+  { value: 'email' },
+  { value: 'offline_access' },
 ]
 
 export const ACCESS_TOKEN_STRATEGIES = [
-  { value: '', label: 'Default (inherit server setting)' },
-  { value: 'opaque', label: 'Opaque - reference token, revocable' },
-  { value: 'jwt', label: 'JWT - self-contained, offline validation' },
+  { value: '', key: 'default' },
+  { value: 'opaque', key: 'opaque' },
+  { value: 'jwt', key: 'jwt' },
 ]
 
 export const AVAILABLE_AUTH_PROVIDERS = [
-  { value: 'email', label: 'Email/Password' },
-  { value: 'magic_link', label: 'Email link (passwordless)' },
-  { value: 'passkey', label: 'Passkey (also offered wherever Email/Password is)' },
-  { value: 'google', label: 'Google' },
-  { value: 'github', label: 'GitHub' },
-  { value: 'microsoft', label: 'Microsoft' },
-  { value: 'apple', label: 'Apple' },
+  { value: 'email' },
+  { value: 'magic_link' },
+  { value: 'passkey' },
+  { value: 'google' },
+  { value: 'github' },
+  { value: 'microsoft' },
+  { value: 'apple' },
 ]
 
 export interface ClientFormProps {
@@ -191,8 +194,9 @@ export const ClientForm: React.FC<ClientFormProps> = ({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  submitLabel = 'Submit',
+  submitLabel,
 }) => {
+  const { t } = useTranslation('clients')
   const {
     register,
     handleSubmit,
@@ -273,7 +277,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
     microsoft: !!initialData?.microsoft_oauth_enabled,
     apple: !!initialData?.apple_oauth_enabled,
   }
-  const authProviderOptions = AVAILABLE_AUTH_PROVIDERS.map((option) => {
+  const authProviderOptions = AVAILABLE_AUTH_PROVIDERS.map((provider) => {
+    const option = { value: provider.value, label: t(`form.providers.${provider.value}`) }
     const unusable =
       capabilities !== undefined &&
       (option.value === 'magic_link'
@@ -286,7 +291,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({
     return unusable
       ? {
           ...option,
-          description: 'Not configured on this server',
+          description: t('form.providers.notConfigured'),
           // Leave a selected one clickable so it can be turned off.
           disabled: !enabledAuthProviders.includes(option.value),
         }
@@ -303,124 +308,116 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input
           {...register('name')}
-          label="Client Name *"
-          placeholder="My Application"
+          label={t('form.name')}
+          placeholder={t('form.namePlaceholder')}
           error={errors.name?.message}
         />
         <Input
           {...register('client_uri')}
-          label="Home Page"
-          placeholder="https://app.example.com"
-          helperText="Where users go back to from Authway's screens (the account screen, an accepted invitation when there is no sign-in start URL). https only."
+          label={t('form.homePage')}
+          placeholder={t('form.homePagePlaceholder')}
+          helperText={t('form.homePageHelp')}
           error={errors.client_uri?.message}
         />
       </div>
 
       <Input
         {...register('logo')}
-        label="Logo URL (Optional)"
-        placeholder="https://app.example.com/logo.png"
-        helperText="Shown with the application's name on the sign-in and consent screens. https only."
+        label={t('form.logo')}
+        placeholder={t('form.logoPlaceholder')}
+        helperText={t('form.logoHelp')}
         error={errors.logo?.message}
       />
 
       <Textarea
         {...register('description')}
-        label="Description"
-        placeholder="Enter a description for the client"
+        label={t('form.description')}
+        placeholder={t('form.descriptionPlaceholder')}
         rows={2}
       />
 
       <Input
         {...register('initiate_login_uri')}
-        label="Sign-In Start URL (Optional)"
-        placeholder="https://app.example.com/login"
-        helperText="Where the application starts a sign-in. A user who accepts an invitation to this application is sent here with iss and login_hint, and the application sends them on to Authway. https only. Empty: they go to the home page."
+        label={t('form.initiateLogin')}
+        placeholder={t('form.initiateLoginPlaceholder')}
+        helperText={t('form.initiateLoginHelp')}
         error={errors.initiate_login_uri?.message}
       />
 
       {/* Redirect URIs */}
       <Textarea
         {...register('redirect_uris')}
-        label={redirectsUserAgent ? 'Redirect URIs *' : 'Redirect URIs'}
-        placeholder={`http://localhost:3000/callback\nhttps://example.com/callback`}
+        label={redirectsUserAgent ? t('form.redirectUrisRequired') : t('form.redirectUris')}
+        placeholder={t('form.redirectUrisPlaceholder')}
         rows={3}
-        helperText={
-          redirectsUserAgent
-            ? 'Enter each URI on a new line.'
-            : 'Not used by machine-to-machine clients — leave empty unless you add a redirect-based grant.'
-        }
+        helperText={redirectsUserAgent ? t('form.redirectUrisHelp') : t('form.redirectUrisHelpM2m')}
         error={errors.redirect_uris?.message}
       />
 
       {/* Post-Logout Redirect URIs */}
       <Textarea
         {...register('post_logout_redirect_uris')}
-        label="Post-Logout Redirect URIs (Optional)"
-        placeholder={`http://localhost:3000\nhttps://example.com`}
+        label={t('form.postLogout')}
+        placeholder={t('form.postLogoutPlaceholder')}
         rows={3}
-        helperText="Enter each URI on a new line. Sign-out may only return to one of these addresses (exact match). If empty, Redirect URIs will be used."
+        helperText={t('form.postLogoutHelp')}
         error={errors.post_logout_redirect_uris?.message}
       />
 
       {/* Allowed Origins (CORS) */}
       <Textarea
         {...register('allowed_origins')}
-        label={needsAllowedOrigins ? 'Allowed Origins (CORS) *' : 'Allowed Origins (CORS)'}
-        placeholder={`http://localhost:3000\nhttps://example.com`}
+        label={needsAllowedOrigins ? t('form.originsRequired') : t('form.origins')}
+        placeholder={t('form.originsPlaceholder')}
         rows={2}
-        helperText={
-          needsAllowedOrigins
-            ? 'Enter each browser origin on a new line (scheme + host + port, no path). Required for a public client using Authorization Code, so the reverse proxy can validate cross-origin token requests.'
-            : 'Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code — a native app called back on http://127.0.0.1/… or its own URI scheme needs none.'
-        }
+        helperText={needsAllowedOrigins ? t('form.originsHelpRequired') : t('form.originsHelp')}
         error={errors.allowed_origins?.message}
       />
 
       {/* API audiences */}
       <Textarea
         {...register('audience')}
-        label="API Audiences (Optional)"
-        placeholder={`https://api.example.com`}
+        label={t('form.audience')}
+        placeholder={t('form.audiencePlaceholder')}
         rows={2}
-        helperText="Enter the identifier of each API this client's access tokens are for, one per line (usually the API's URL). They become the token's aud claim, which the API checks for its own identifier. Empty: the tokens name no API."
+        helperText={t('form.audienceHelp')}
         error={errors.audience?.message}
       />
 
       {/* Back-channel logout */}
       <Input
         {...register('backchannel_logout_uri')}
-        label="Back-Channel Logout URL (Optional)"
-        placeholder="https://app.example.com/backchannel-logout"
-        helperText="For an application that keeps its own server-side session: a logout token is POSTed here whenever a session of one of its users ends. Must be a public https address — the call is made from the server, not from a browser. Empty: the application is not told."
+        label={t('form.backchannel')}
+        placeholder={t('form.backchannelPlaceholder')}
+        helperText={t('form.backchannelHelp')}
         error={errors.backchannel_logout_uri?.message}
       />
 
       {/* Consent Flow */}
       <Checkbox
         {...register('skip_consent')}
-        label="Skip Consent Screen"
-        description="Bypass the OAuth consent screen on login. Enable only for first-party / trusted clients you control — never for third-party apps."
+        label={t('form.skipConsent')}
+        description={t('form.skipConsentHelp')}
       />
       <Checkbox
         {...register('skip_logout_consent')}
-        label="Skip Logout Confirmation"
-        description="Bypass the logout confirmation screen. Recommended together with Skip Consent Screen for first-party clients."
+        label={t('form.skipLogoutConsent')}
+        description={t('form.skipLogoutConsentHelp')}
       />
 
       {/* Access Token Format */}
       <Select
         {...register('access_token_strategy')}
-        label="Access Token Format"
-        options={ACCESS_TOKEN_STRATEGIES}
-        helperText="JWT lets a resource server validate this client's tokens offline via OIDC discovery (JWKS) — but a resource server that validates it offline keeps accepting it until it expires, even after the user signs out or is suspended. Leave on Default unless an API needs offline validation."
+        label={t('form.tokenFormat')}
+        options={ACCESS_TOKEN_STRATEGIES.map((s) => ({ value: s.value, label: t(`form.tokenStrategies.${s.key}`) }))}
+        helperText={t('form.tokenFormatHelp')}
         error={errors.access_token_strategy?.message}
       />
 
       {/* Grant Types */}
       <CheckboxGroup
-        label="Grant Types *"
-        options={AVAILABLE_GRANT_TYPES}
+        label={t('form.grantTypesLabel')}
+        options={AVAILABLE_GRANT_TYPES.map((g) => ({ value: g.value, label: t(`form.grantTypes.${g.value}`) }))}
         value={grantTypes}
         onChange={handleGrantTypeChange}
         error={errors.grant_types?.message}
@@ -429,8 +426,8 @@ export const ClientForm: React.FC<ClientFormProps> = ({
 
       {/* Scopes */}
       <CheckboxGroup
-        label="Scopes *"
-        options={AVAILABLE_SCOPES}
+        label={t('form.scopesLabel')}
+        options={AVAILABLE_SCOPES.map((s) => ({ value: s.value, label: t(`form.scopes.${s.value}`) }))}
         value={scopes}
         onChange={handleScopeChange}
         error={errors.scopes?.message}
@@ -440,16 +437,16 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       {/* Public Client */}
       <Checkbox
         {...register('public')}
-        label="Public Client (No Client Secret)"
-        description="Select for SPAs or mobile apps that cannot securely store a Client Secret."
+        label={t('form.public')}
+        description={t('form.publicHelp')}
       />
 
       {/* Authentication Provider Settings */}
       <div className="border-t border-gray-200 pt-4 mt-4">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Authentication Provider Settings</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">{t('form.providersTitle')}</h3>
 
         <CheckboxGroup
-          label="Enabled Authentication Providers"
+          label={t('form.providersLabel')}
           options={authProviderOptions}
           value={enabledAuthProviders}
           onChange={handleAuthProviderChange}
@@ -461,10 +458,10 @@ export const ClientForm: React.FC<ClientFormProps> = ({
       {/* Buttons */}
       <div className="flex justify-end space-x-3 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
+          {t('form.cancel')}
         </Button>
         <Button type="submit" isLoading={isSubmitting}>
-          {submitLabel}
+          {submitLabel ?? t('form.submit')}
         </Button>
       </div>
     </form>

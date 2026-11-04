@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useTranslation } from 'react-i18next';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 
@@ -9,6 +10,7 @@ interface MarkdownRendererProps {
 }
 
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ filePath, className = '' }) => {
+  const { t } = useTranslation('common');
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,19 +23,19 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ filePath, className
       try {
         const response = await fetch(filePath);
         if (!response.ok) {
-          throw new Error(`문서를 불러올 수 없습니다: ${response.statusText}`);
+          throw new Error(t('document.loadFailed', { reason: response.statusText }));
         }
         const text = await response.text();
         setContent(text);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '문서 로딩 중 오류가 발생했습니다.');
+        setError(err instanceof Error ? err.message : t('document.loadError'));
       } finally {
         setLoading(false);
       }
     };
 
     loadMarkdown();
-  }, [filePath]);
+  }, [filePath, t]);
 
   if (loading) {
     return (

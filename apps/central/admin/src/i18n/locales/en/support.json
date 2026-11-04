@@ -1,0 +1,5 @@
+{
+  "ended": "Support access has ended. To go back in, open it again with a reason.",
+  "band": "<tenant>{{tenant}}</tenant> support access — {{reason}} · {{minutes}} min left · recorded in this tenant’s audit log",
+  "end": "End support access"
+}

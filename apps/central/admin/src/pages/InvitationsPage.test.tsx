@@ -109,9 +109,9 @@ describe('inviting a user to an application', () => {
     await openDialog(user)
     await user.click(screen.getByRole('button', { name: 'Send Invitation' }))
 
-    expect(await screen.findByText('this address is not in a domain the organization allows')).toBeInTheDocument()
+    expect(await screen.findByText('This tenant only accepts email addresses from its allowed domains.')).toBeInTheDocument()
     await user.type(screen.getByPlaceholderText('user@example.com'), 'x')
-    expect(screen.queryByText('this address is not in a domain the organization allows')).not.toBeInTheDocument()
+    expect(screen.queryByText('This tenant only accepts email addresses from its allowed domains.')).not.toBeInTheDocument()
   })
 })
 

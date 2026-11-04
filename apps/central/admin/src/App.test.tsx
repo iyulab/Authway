@@ -3,6 +3,10 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { useAuthStore } from '@/stores/auth'
 import App from './App'
+import { inLanguage } from '@/test/language'
+
+// The signing-out screen is checked in Korean; the console speaks both (see i18n/i18n.test.tsx).
+inLanguage('ko')
 
 beforeEach(() => {
   useAuthStore.setState({ token: null, expiresAt: null, method: null, signingOut: false })

@@ -1,0 +1,184 @@
+{
+  "badge": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "public": "Public",
+    "confidential": "Confidential",
+    "system": "System"
+  },
+  "list": {
+    "title": "OAuth Client Management",
+    "subtitle": "Manage OAuth 2.0 clients for your applications.",
+    "noTenant": "No tenant selected",
+    "noTenantHelp": "Please select a tenant to view and manage OAuth clients.",
+    "loading": "Loading clients...",
+    "loadFailed": "Failed to load clients.",
+    "retry": "Retry",
+    "registered": "{{count}} OAuth client(s) registered for <tenant>{{name}}</tenant>.",
+    "create": "Create New Client",
+    "emptyTitle": "No clients",
+    "emptyHelp": "Create a new OAuth client to get started."
+  },
+  "create": {
+    "title": "Create New Client",
+    "subtitle": "Register a new OAuth2 application for {{tenant}}",
+    "configTitle": "Client Configuration",
+    "configHelp": "Configure the OAuth2 client settings for your application.",
+    "submit": "Create Client",
+    "created": "Client created successfully",
+    "failed": "Failed to create client",
+    "modalTitle": "Client Created Successfully",
+    "important": "<strong>Important:</strong> Make sure to copy your client credentials now. The client secret will not be shown again!"
+  },
+  "credentials": {
+    "clientId": "Client ID",
+    "clientSecret": "Client Secret",
+    "done": "Done",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "detail": {
+    "back": "Back",
+    "backToList": "Back to Clients",
+    "loading": "Loading client...",
+    "notFound": "Client not found or failed to load.",
+    "copy": "Copy",
+    "copiedBang": "Copied!",
+    "regenerate": "Regenerate Secret",
+    "managed": {
+      "title": "Managed by Authway",
+      "body": "This is the tenant’s account screen client, where users manage their own sign-in. Authway registered it the first time a user of this tenant opened that screen. It cannot be changed or deleted here; it is removed with the tenant."
+    },
+    "settings": {
+      "title": "Client Settings",
+      "help": "Update the OAuth2 client configuration.",
+      "save": "Save Changes"
+    },
+    "danger": {
+      "title": "Danger Zone",
+      "turnOffTitle": "Turn this client off",
+      "turnOnTitle": "Turn this client on",
+      "turnOffHelp": "No one can sign in to it and it gets no tokens until it is turned on again. The tokens it holds end.",
+      "turnOnHelp": "Users can sign in to it again. The sessions it had before it was turned off stay ended.",
+      "turnOff": "Turn Off",
+      "turnOn": "Turn On",
+      "deleteTitle": "Delete this client",
+      "deleteHelp": "Once deleted, this client cannot be recovered. All associated tokens will be invalidated.",
+      "delete": "Delete Client"
+    },
+    "turnOffConfirm": {
+      "title": "Turn Client Off",
+      "message": "No one will be able to sign in to “{{name}}”, and it will get no tokens. The tokens it holds end, and its users’ sessions stay ended when it is turned on again. Continue?",
+      "confirm": "Turn Off"
+    },
+    "deleteConfirm": {
+      "title": "Delete Client",
+      "message": "Are you sure you want to delete “{{name}}”? This action cannot be undone.",
+      "confirm": "Delete"
+    },
+    "regenerateConfirm": {
+      "title": "Regenerate Client Secret",
+      "message": "Are you sure you want to regenerate the secret for “{{name}}”? The old secret will immediately stop working.",
+      "confirm": "Regenerate"
+    },
+    "secretModal": {
+      "title": "New Client Secret",
+      "warning": "Make sure to copy your new client secret now. You won’t be able to see it again!"
+    },
+    "toast": {
+      "updated": "Client updated successfully",
+      "updateFailed": "Failed to update client",
+      "turnedOn": "Client turned on",
+      "turnedOff": "Client turned off",
+      "changeFailed": "Failed to change the client",
+      "deleted": "Client deleted successfully",
+      "deleteFailed": "Failed to delete client",
+      "regenerated": "Client secret regenerated successfully",
+      "regenerateFailed": "Failed to regenerate secret"
+    }
+  },
+  "form": {
+    "validation": {
+      "nameRequired": "Client name is required",
+      "grantRequired": "At least one Grant Type is required",
+      "scopeRequired": "At least one Scope is required",
+      "providerRequired": "Choose at least one way to sign in",
+      "redirectRequired": "At least one Redirect URI is required for Authorization Code",
+      "originsRequired": "Public clients with Authorization Code need at least one Allowed Origin for browser CORS",
+      "audience": "Each audience must be a distinct identifier without spaces, at most 255 characters",
+      "httpsUrl": "Enter one absolute https URL without a fragment (#…)"
+    },
+    "grantTypes": {
+      "authorization_code": "Authorization Code",
+      "client_credentials": "Client Credentials",
+      "refresh_token": "Refresh Token"
+    },
+    "scopes": {
+      "openid": "OpenID Connect",
+      "profile": "Profile",
+      "email": "Email",
+      "offline_access": "Offline Access"
+    },
+    "tokenStrategies": {
+      "default": "Default (inherit server setting)",
+      "opaque": "Opaque - reference token, revocable",
+      "jwt": "JWT - self-contained, offline validation"
+    },
+    "providers": {
+      "email": "Email/Password",
+      "magic_link": "Email link (passwordless)",
+      "passkey": "Passkey (also offered wherever Email/Password is)",
+      "google": "Google",
+      "github": "GitHub",
+      "microsoft": "Microsoft",
+      "apple": "Apple",
+      "notConfigured": "Not configured on this server"
+    },
+    "name": "Client Name *",
+    "namePlaceholder": "My Application",
+    "homePage": "Home Page",
+    "homePagePlaceholder": "https://app.example.com",
+    "homePageHelp": "Where users go back to from Authway’s screens (the account screen, an accepted invitation when there is no sign-in start URL). https only.",
+    "logo": "Logo URL (Optional)",
+    "logoPlaceholder": "https://app.example.com/logo.png",
+    "logoHelp": "Shown with the application’s name on the sign-in and consent screens. https only.",
+    "description": "Description",
+    "descriptionPlaceholder": "Enter a description for the client",
+    "initiateLogin": "Sign-In Start URL (Optional)",
+    "initiateLoginPlaceholder": "https://app.example.com/login",
+    "initiateLoginHelp": "Where the application starts a sign-in. A user who accepts an invitation to this application is sent here with iss and login_hint, and the application sends them on to Authway. https only. Empty: they go to the home page.",
+    "redirectUris": "Redirect URIs",
+    "redirectUrisRequired": "Redirect URIs *",
+    "redirectUrisPlaceholder": "http://localhost:3000/callback\nhttps://example.com/callback",
+    "redirectUrisHelp": "Enter each URI on a new line.",
+    "redirectUrisHelpM2m": "Not used by machine-to-machine clients — leave empty unless you add a redirect-based grant.",
+    "postLogout": "Post-Logout Redirect URIs (Optional)",
+    "postLogoutPlaceholder": "http://localhost:3000\nhttps://example.com",
+    "postLogoutHelp": "Enter each URI on a new line. Sign-out may only return to one of these addresses (exact match). If empty, Redirect URIs will be used.",
+    "origins": "Allowed Origins (CORS)",
+    "originsRequired": "Allowed Origins (CORS) *",
+    "originsPlaceholder": "http://localhost:3000\nhttps://example.com",
+    "originsHelpRequired": "Enter each browser origin on a new line (scheme + host + port, no path). Required for a public client using Authorization Code, so the reverse proxy can validate cross-origin token requests.",
+    "originsHelp": "Enter each browser origin on a new line. Only needed for a public client (SPA) using Authorization Code — a native app called back on http://127.0.0.1/… or its own URI scheme needs none.",
+    "audience": "API Audiences (Optional)",
+    "audiencePlaceholder": "https://api.example.com",
+    "audienceHelp": "Enter the identifier of each API this client’s access tokens are for, one per line (usually the API’s URL). They become the token’s aud claim, which the API checks for its own identifier. Empty: the tokens name no API.",
+    "backchannel": "Back-Channel Logout URL (Optional)",
+    "backchannelPlaceholder": "https://app.example.com/backchannel-logout",
+    "backchannelHelp": "For an application that keeps its own server-side session: a logout token is POSTed here whenever a session of one of its users ends. Must be a public https address — the call is made from the server, not from a browser. Empty: the application is not told.",
+    "skipConsent": "Skip Consent Screen",
+    "skipConsentHelp": "Bypass the OAuth consent screen on login. Enable only for first-party / trusted clients you control — never for third-party apps.",
+    "skipLogoutConsent": "Skip Logout Confirmation",
+    "skipLogoutConsentHelp": "Bypass the logout confirmation screen. Recommended together with Skip Consent Screen for first-party clients.",
+    "tokenFormat": "Access Token Format",
+    "tokenFormatHelp": "JWT lets a resource server validate this client’s tokens offline via OIDC discovery (JWKS) — but a resource server that validates it offline keeps accepting it until it expires, even after the user signs out or is suspended. Leave on Default unless an API needs offline validation.",
+    "grantTypesLabel": "Grant Types *",
+    "scopesLabel": "Scopes *",
+    "public": "Public Client (No Client Secret)",
+    "publicHelp": "Select for SPAs or mobile apps that cannot securely store a Client Secret.",
+    "providersTitle": "Authentication Provider Settings",
+    "providersLabel": "Enabled Authentication Providers",
+    "cancel": "Cancel",
+    "submit": "Submit"
+  }
+}

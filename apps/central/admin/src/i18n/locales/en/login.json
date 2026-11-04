@@ -1,0 +1,27 @@
+{
+  "title": "Authway administrator sign-in",
+  "subtitle": {
+    "withAccount": "Sign in with a console account or the administrator password",
+    "passwordOnly": "Sign in with the administrator password"
+  },
+  "account": {
+    "button": "Sign in with a console account",
+    "leaving": "Going to the sign-in screen...",
+    "openFailed": "The sign-in screen could not be opened.",
+    "or": "Or the administrator password"
+  },
+  "password": {
+    "label": "Administrator password",
+    "placeholder": "Enter the password",
+    "required": "Enter the password"
+  },
+  "submit": "Sign in",
+  "submitting": "Signing in...",
+  "failed": "Sign-in failed.",
+  "callback": {
+    "signingIn": "Signing in...",
+    "failed": "Sign-in could not be completed: {{error}}",
+    "back": "Back to sign-in",
+    "noSignIn": "No sign-in was started from this console."
+  }
+}

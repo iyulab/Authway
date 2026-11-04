@@ -1,4 +1,5 @@
 import { AuthwayClient } from '@authway/client'
+import i18n from '@/i18n'
 import { consolePath, getConfig } from '../config'
 
 /** What GET /api/v1/console/entry answers: the client console accounts sign in with. */
@@ -62,7 +63,7 @@ export interface SignedIn {
 /** Completes the sign-in on /callback. Throws when this page started none, or it failed. */
 export async function completeSignIn(url = window.location.href): Promise<SignedIn> {
   const entry = readEntry()
-  if (!entry) throw new Error('No sign-in was started from this console.')
+  if (!entry) throw new Error(i18n.t('login:callback.noSignIn'))
   const result = await clientFor(entry).handleRedirectCallback(url)
   return {
     token: result.accessToken,

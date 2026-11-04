@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { Modal } from './Modal'
 import { Button } from './Button'
@@ -39,11 +40,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'danger',
   isLoading = false,
 }) => {
+  const { t } = useTranslation('common')
   const styles = variantStyles[variant]
 
   return (
@@ -72,10 +74,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           onClick={onConfirm}
           isLoading={isLoading}
         >
-          {confirmText}
+          {confirmText ?? t('actions.confirm')}
         </Button>
         <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-          {cancelText}
+          {cancelText ?? t('actions.cancel')}
         </Button>
       </div>
     </Modal>

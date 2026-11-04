@@ -1,0 +1,89 @@
+{
+  "title": "User Management",
+  "subtitle": "Manage users and their access.",
+  "count": "{{count}} user(s) in <tenant>{{name}}</tenant>.",
+  "noTenant": "No tenant selected",
+  "noTenantHelp": "Please select a tenant from the header to view and manage users.",
+  "loading": "Loading users...",
+  "loadFailed": "Failed to load users.",
+  "retry": "Retry",
+  "search": "Search by email or name...",
+  "columns": {
+    "user": "User",
+    "provider": "Provider",
+    "status": "Status",
+    "emailVerified": "Email Verified",
+    "lastLogin": "Last Login",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "provider": {
+    "passwordOrLink": "Password / link",
+    "google": "Google",
+    "github": "GitHub",
+    "microsoft": "Microsoft",
+    "apple": "Apple"
+  },
+  "status": {
+    "active": "Active",
+    "suspended": "Suspended"
+  },
+  "verified": "Verified",
+  "notVerified": "Not verified",
+  "never": "Never",
+  "unnamed": "Unnamed User",
+  "empty": {
+    "noResults": "No results found",
+    "noUsers": "No users",
+    "tryDifferent": "Try a different search term",
+    "willAppear": "Users will appear here when they register"
+  },
+  "action": {
+    "edit": "Edit",
+    "suspend": "Suspend",
+    "suspendLabel": "Suspend {{email}}",
+    "lift": "Lift suspension",
+    "liftLabel": "Lift the suspension of {{email}}",
+    "delete": "Delete"
+  },
+  "suspendConfirm": {
+    "title": "Suspend User",
+    "message": "Suspend “{{email}}”? Their sessions end now and they cannot sign in until the suspension is lifted. The account is kept.",
+    "confirm": "Suspend"
+  },
+  "deleteConfirm": {
+    "title": "Delete User",
+    "message": "Are you sure you want to delete “{{email}}”? This action cannot be undone.",
+    "confirm": "Delete"
+  },
+  "toast": {
+    "updated": "User updated successfully",
+    "updateFailed": "Update failed: {{reason}}",
+    "updateFallback": "Failed to update user",
+    "liftedSuspension": "Suspension lifted",
+    "suspended": "User suspended — their sessions have ended",
+    "suspensionFailed": "Failed to change the suspension",
+    "deleted": "User deleted successfully",
+    "deleteFailed": "Delete failed: {{reason}}",
+    "deleteFallback": "Failed to delete user"
+  },
+  "form": {
+    "modalTitle": "Edit User",
+    "email": "Email",
+    "connected": "Connected accounts",
+    "none": "None",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "emailVerified": "Verified",
+    "emailNotVerified": "Not Verified",
+    "name": "Name *",
+    "namePlaceholder": "John Doe",
+    "avatar": "Avatar URL",
+    "avatarHelp": "Optional URL for user’s profile picture",
+    "nameRequired": "Name is required",
+    "invalidUrl": "Please enter a valid URL",
+    "cancel": "Cancel",
+    "update": "Update"
+  }
+}

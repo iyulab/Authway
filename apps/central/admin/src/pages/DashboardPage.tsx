@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   KeyIcon,
   UsersIcon,
@@ -18,6 +19,7 @@ import {
 } from '@/components/dashboard'
 
 const DashboardPage: React.FC = () => {
+  const { t } = useTranslation('dashboard')
   const { selectedTenant } = useTenantStore()
   const selectedTenantId = selectedTenant?.id || ''
 
@@ -77,13 +79,13 @@ const DashboardPage: React.FC = () => {
 
   // What the API says about itself (GET /health) — nothing else is known here.
   const systemInfoItems: SystemInfoItem[] = healthFailed
-    ? [{ label: 'API', value: 'Not answering', status: 'unhealthy' }]
+    ? [{ label: t('system.api'), value: t('system.notAnswering'), status: 'unhealthy' }]
     : [
-        { label: 'API', value: health?.status ?? 'Checking…', status: health?.status === 'ok' ? 'healthy' : 'unknown' },
-        { label: 'Deployed version', value: health?.version ?? '-' },
+        { label: t('system.api'), value: health?.status ?? t('system.checking'), status: health?.status === 'ok' ? 'healthy' : 'unknown' },
+        { label: t('system.version'), value: health?.version ?? '-' },
         {
-          label: 'Database',
-          value: health?.migrations?.length ? `migration ${health.migrations[health.migrations.length - 1]}` : '-',
+          label: t('system.database'),
+          value: health?.migrations?.length ? t('system.migration', { id: health.migrations[health.migrations.length - 1] }) : '-',
         },
       ]
 
@@ -92,16 +94,16 @@ const DashboardPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+          <h2 className="text-2xl font-bold text-gray-900">{t('title')}</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Tenant management overview.
+            {t('overview')}
           </p>
         </div>
         <Card className="p-8">
           <EmptyState
             icon={<BuildingOfficeIcon className="h-12 w-12" />}
-            title="No tenant selected"
-            description="Please select a tenant to view the dashboard."
+            title={t('noTenant.title')}
+            description={t('noTenant.description')}
           />
         </Card>
       </div>
@@ -111,29 +113,34 @@ const DashboardPage: React.FC = () => {
   const isLoading = clientsLoading || usersLoading
 
   if (isLoading) {
-    return <Loading message="Loading dashboard..." />
+    return <Loading message={t('loading')} />
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+        <h2 className="text-2xl font-bold text-gray-900">{t('title')}</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Welcome to <span className="font-medium">{selectedTenant?.name}</span> management console.
+          <Trans
+            t={t}
+            i18nKey="welcome"
+            values={{ name: selectedTenant?.name }}
+            components={{ tenant: <span className="font-medium" /> }}
+          />
         </p>
       </div>
 
       {/* Stats for current tenant */}
       <StatCardGrid columns={2}>
         <StatCard
-          name="Apps (Clients)"
+          name={t('stats.clients')}
           value={stats.totalClients}
           icon={KeyIcon}
           variant="purple"
         />
         <StatCard
-          name="Users"
+          name={t('stats.users')}
           value={stats.totalUsers}
           icon={UsersIcon}
           variant="blue"
@@ -143,23 +150,23 @@ const DashboardPage: React.FC = () => {
       {/* Recent Activity */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <RecentActivityList
-          title="Recent Apps (Clients)"
-          description="Recently created OAuth2 applications"
+          title={t('recent.clients.title')}
+          description={t('recent.clients.description')}
           items={clientActivityItems}
-          emptyMessage="No apps created yet"
+          emptyMessage={t('recent.clients.empty')}
         />
         <RecentActivityList
-          title="Recent Users"
-          description="Recently registered users"
+          title={t('recent.users.title')}
+          description={t('recent.users.description')}
           items={userActivityItems}
-          emptyMessage="No users registered yet"
+          emptyMessage={t('recent.users.empty')}
         />
       </div>
 
       {/* System Info */}
       <SystemInfoCard
-        title="System Information"
-        description="What the API answers at /health"
+        title={t('system.title')}
+        description={t('system.description')}
         items={systemInfoItems}
       />
     </div>
