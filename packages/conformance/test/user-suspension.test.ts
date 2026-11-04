@@ -157,14 +157,16 @@ describe.skipIf(!(await provider.offers('token_introspection')))("a suspended us
 
 // A suspended account is sent no password reset and no sign-in link: it could
 // not use either. The answers are the ones any address gets, so they say
-// nothing about the account.
+// nothing about the account. An installation that does not sign people in by
+// link has no link to withhold, and the scenario leaves that half out.
+const magicLinks = await provider.offers('magic_link')
 describe('mail for a suspended user', () => {
   let client: TestClient
   let user: TestUser
   let sub: string | undefined
 
   beforeAll(async () => {
-    client = await provider.createPublicClient({ signInMethods: ['email', 'magic_link'] })
+    client = await provider.createPublicClient({ signInMethods: magicLinks ? ['email', 'magic_link'] : ['email'] })
     user = await provider.inviteAndAccept()
   })
 
@@ -199,14 +201,16 @@ describe('mail for a suspended user', () => {
     expect(reset.status).toBe(200)
     expect(await reset.text()).toBe(await resetForNobody.text())
 
-    const attempt = await provider.startLogin(client)
-    const link = await attempt.browser.fetch(provider.loginFlowUrl(attempt.flow, '/magic-link'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email }),
-    })
-    expect(link.status).toBe(200)
-    expect(((await link.json()) as { next: string }).next).toBe('email_sent')
+    if (magicLinks) {
+      const attempt = await provider.startLogin(client)
+      const link = await attempt.browser.fetch(provider.loginFlowUrl(attempt.flow, '/magic-link'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      })
+      expect(link.status).toBe(200)
+      expect(((await link.json()) as { next: string }).next).toBe('email_sent')
+    }
 
     // Mail is handed over asynchronously; give it the time a sent one takes.
     await new Promise((r) => setTimeout(r, 3000))
