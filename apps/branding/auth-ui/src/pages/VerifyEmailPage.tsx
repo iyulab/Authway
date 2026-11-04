@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getConfig } from '../config'
+import { contract } from '../utils/contract'
 
 export default function VerifyEmailPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -21,11 +21,9 @@ export default function VerifyEmailPage() {
       }
 
       try {
-        const response = await fetch(
-          `${getConfig().apiUrl}/api/v1/email/verify?token=${token}`
-        );
-
-        const data = await response.json();
+        const { response, error: data } = await contract().GET('/api/v1/email/verify', {
+          params: { query: { token } },
+        });
 
         if (response.ok) {
           setStatus('success');

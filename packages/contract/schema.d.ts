@@ -3256,6 +3256,8 @@ export interface components {
             field?: string;
             /** @description What to do about it */
             hint?: string;
+            /** @description With password_too_short: the least length in force, which a form states. */
+            min_length?: number;
         };
     };
     responses: {

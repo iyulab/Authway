@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getConfig } from '../config'
+import { contract } from '../utils/contract'
 import { useLoad } from '../utils/useLoad';
 
 /** What every tenant asks of a password; a tenant may ask for more. */
@@ -35,19 +35,18 @@ export default function ResetPasswordPage() {
           setError(t('password:reset.errors.invalidLink'));
           return;
         }
-        const response = await fetch(
-          `${getConfig().apiUrl}/api/v1/email/verify-reset-token?token=${encodeURIComponent(token)}`,
-          { signal }
-        );
-        const data = await response.json();
+        const { response, data, error: refusal } = await contract().GET('/api/v1/email/verify-reset-token', {
+          params: { query: { token } },
+          signal,
+        });
         if (signal.aborted) return;
-        if (response.ok && data.valid) {
+        if (response.ok && data?.valid) {
           setIsTokenValid(true);
           setPasswordLength(Number(data.password_min_length) || LEAST_PASSWORD_LENGTH);
-        } else if (data.code === 'account_suspended') {
+        } else if (refusal?.code === 'account_suspended') {
           setError(t('auth:errors.accountSuspended'));
         } else {
-          setError(problemMessage(data, t('password:reset.errors.tokenExpired')));
+          setError(problemMessage(refusal, t('password:reset.errors.tokenExpired')));
         }
         setIsValidating(false);
       },
@@ -74,39 +73,32 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    if (!token) {
+      setError(t('password:reset.errors.invalidLink'));
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `${getConfig().apiUrl}/api/v1/email/reset-password`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            token,
-            new_password: newPassword,
-          }),
-        }
-      );
-
-      const data = await response.json();
+      const { response, error: data } = await contract().POST('/api/v1/email/reset-password', {
+        body: { token, new_password: newPassword },
+      });
 
       if (response.ok) {
         setIsSuccess(true);
         setTimeout(() => {
           navigate('/login');
         }, 3000);
-      } else if (data.code === 'password_too_short') {
+      } else if (data?.code === 'password_too_short') {
         // The length can have been raised since the link was checked; the
         // refusal carries the one in force.
         const inForce = Number(data.min_length) || passwordLength;
         setPasswordLength(inForce);
         setError(t('password:validation.minLength', { length: inForce }));
-      } else if (data.code === 'password_breached') {
+      } else if (data?.code === 'password_breached') {
         setError(t('auth:validation.passwordBreached'));
-      } else if (data.code === 'account_suspended') {
+      } else if (data?.code === 'account_suspended') {
         setError(t('auth:errors.accountSuspended'));
       } else {
         setError(problemMessage(data, t('password:reset.errors.resetFailed')));

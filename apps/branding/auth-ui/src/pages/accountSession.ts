@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AuthwayClient } from '@authway/client'
+import type { paths } from '@authway/contract/schema'
 import { getConfig } from '../config'
+import { contract } from '../utils/contract'
 
 /** What GET /api/v1/account-entry answers: the client this screen signs in with, and the application to go back to. */
-export interface AccountEntry {
-  client_id: string
-  redirect_uri: string
-  scope: string
-  app: { name: string; client_uri?: string }
-}
+export type AccountEntry = paths['/api/v1/account-entry']['get']['responses'][200]['content']['application/json']
 
 /** Where the entry is kept between leaving for sign-in and coming back to /account/callback. */
 const ENTRY_KEY = 'authway.account.entry'
@@ -98,12 +95,11 @@ export function useAccountSession(appClientId: string | null, returnTo: string) 
     if (!appClientId) return
     let cancelled = false
     ;(async () => {
-      const res = await fetch(`${apiBase()}/api/v1/account-entry?client_id=${encodeURIComponent(appClientId)}`)
-      if (!res.ok) {
+      const { data: answer, response: res } = await contract().GET('/api/v1/account-entry', { params: { query: { client_id: appClientId } } })
+      if (!res.ok || !answer) {
         if (!cancelled) setFatal(res.status === 404 ? t('auth:account.unknownApp') : t('common:errorOccurred'))
         return
       }
-      const answer = (await res.json()) as AccountEntry
       sessionStorage.setItem(ENTRY_KEY, JSON.stringify({ appClientId, entry: answer, returnTo } satisfies Stored))
       const sdk = signIn(answer)
       if (!(await sdk.isAuthenticated()) && !(await sdk.checkSession().catch(() => false))) {

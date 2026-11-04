@@ -4890,3 +4890,4 @@ components:
             own name — not an element's index. An admin API refusal that judges
             one member of the body carries it, so a form can show it at that input.
         hint: { type: string, description: What to do about it, when there is something. }
+        min_length: { type: integer, description: 'With password_too_short: the least length in force, which a form states.' }

@@ -1,10 +1,9 @@
-import { languageHeader } from '../utils/language'
+import { contract } from '../utils/contract'
 import { problemMessage } from '../utils/problem'
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getConfig } from '../config'
 
 export default function ResendVerificationPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -21,19 +20,9 @@ export default function ResendVerificationPage() {
     setStatus('idle');
 
     try {
-      const response = await fetch(
-        `${getConfig().apiUrl}/api/v1/email/send-verification`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...languageHeader(),
-          },
-          body: JSON.stringify(clientId ? { email, client_id: clientId } : { email }),
-        }
-      );
-
-      const data = await response.json();
+      const { response, error: data } = await contract().POST('/api/v1/email/send-verification', {
+        body: clientId ? { email, client_id: clientId } : { email },
+      });
 
       if (response.ok) {
         setStatus('success');

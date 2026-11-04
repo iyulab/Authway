@@ -8,6 +8,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { getConfig } from '../config'
+import { contract, type Schemas } from '../utils/contract'
 
 /** What every tenant asks of a password; a tenant may ask for more. */
 const LEAST_PASSWORD_LENGTH = 8
@@ -26,12 +27,7 @@ const createAcceptSchema = (t: (key: string, options?: Record<string, unknown>) 
 type AcceptFormData = z.infer<ReturnType<typeof createAcceptSchema>>
 
 /** The application an invitation is for, when it names one. */
-interface InvitationApp {
-  client_id: string
-  name: string
-  initiate_login_uri?: string
-  client_uri?: string
-}
+type InvitationApp = Schemas['InvitationApp']
 
 /** The inviter name the API gives an invitation no person sent (the admin key, the console password). */
 const SYSTEM_INVITER = 'system'
@@ -65,17 +61,13 @@ function providerError(t: TFunction, reason: string): string {
   return t(`auth:invitation.providerErrors.${known}`)
 }
 
-interface InvitationDetails {
-  email: string
-  tenant_name: string
-  inviter_name: string
-  role: string
-  /** What the sender wrote to the invitee; free text, shown as written. */
-  message?: string
-  /** The providers the invitation can be accepted with instead of a password. */
-  sign_in_with?: string[]
-  client?: InvitationApp
-}
+/**
+ * The invitation as the screen that accepts it is told of it. What the lookup by the link's token answers is
+ * all of the contract's `Invitation`; the receipt a provider sign-in leaves answers the organization and,
+ * when they are known, the rest — so only the organization is certain.
+ */
+type InvitationDetails = Pick<Schemas['Invitation'], 'tenant_name'> &
+  Partial<Pick<Schemas['Invitation'], 'email' | 'inviter_name' | 'message' | 'sign_in_with' | 'client'>>
 
 /**
  * Where a person who accepted an invitation for an application goes next:
@@ -83,7 +75,7 @@ interface InvitationDetails {
  * whom to expect (OpenID Connect Core 1.0 section 4) — or, without one, the
  * application's home page. Only an https address is followed.
  */
-export function continueTo(app: InvitationApp, issuer: string | undefined, email: string): string | undefined {
+export function continueTo(app: InvitationApp, issuer: string | undefined, email: string | undefined): string | undefined {
   const https = (raw?: string) => {
     try {
       const u = raw ? new URL(raw) : undefined
@@ -95,7 +87,8 @@ export function continueTo(app: InvitationApp, issuer: string | undefined, email
   const start = https(app.initiate_login_uri)
   if (start && issuer) {
     start.searchParams.set('iss', issuer)
-    start.searchParams.set('login_hint', email)
+    // Whom to expect, when the screen knows (a receipt may not say).
+    if (email) start.searchParams.set('login_hint', email)
     return start.toString()
   }
   return https(app.client_uri)?.toString()
@@ -135,14 +128,13 @@ const AcceptInvitationPage: React.FC = () => {
     enabled: token !== '',
     retry: false,
     queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/v1/invitations/token/${encodeURIComponent(token)}`)
-      if (!res.ok) {
+      const { data, response } = await contract().GET('/api/v1/invitations/token/{token}', { params: { path: { token } } })
+      if (!response.ok || !data) {
         throw new Error('invitation not acceptable')
       }
-      const body = await res.json()
       return {
-        invitation: body.invitation as InvitationDetails,
-        passwordLength: Number(body.password_min_length) || LEAST_PASSWORD_LENGTH,
+        invitation: data.invitation,
+        passwordLength: Number(data.password_min_length) || LEAST_PASSWORD_LENGTH,
       }
     },
   })
@@ -153,9 +145,9 @@ const AcceptInvitationPage: React.FC = () => {
     enabled: receiptId !== '',
     retry: false,
     queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/v1/invitations/receipts/${encodeURIComponent(receiptId)}`)
-      if (!res.ok) throw new Error('receipt unavailable')
-      return ((await res.json()) as { invitation: InvitationDetails }).invitation
+      const { data, response } = await contract().GET('/api/v1/invitations/receipts/{id}', { params: { path: { id: receiptId } } })
+      if (!response.ok || !data) throw new Error('receipt unavailable')
+      return data.invitation
     },
   })
   const invitation = receipt ?? shown?.invitation
@@ -167,9 +159,9 @@ const AcceptInvitationPage: React.FC = () => {
     enabled: Boolean(invitation?.client?.initiate_login_uri),
     retry: false,
     queryFn: async () => {
-      const res = await fetch(`${apiUrl}/.well-known/authway-config`)
-      if (!res.ok) throw new Error('bootstrap document unavailable')
-      return ((await res.json()) as { issuer: string }).issuer
+      const { data, response } = await contract().GET('/.well-known/authway-config')
+      if (!response.ok || !data) throw new Error('bootstrap document unavailable')
+      return data.issuer
     },
   })
   const next = invitation?.client ? continueTo(invitation.client, issuer, invitation.email) : undefined
@@ -183,26 +175,23 @@ const AcceptInvitationPage: React.FC = () => {
 
   const acceptMutation = useMutation({
     mutationFn: async (data: AcceptFormData) => {
-      const res = await fetch(`${apiUrl}/api/v1/invitations/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data: accepted, error: refusal, response } = await contract().POST('/api/v1/invitations/accept', {
+        body: {
           token,
           name: `${data.firstName} ${data.lastName}`.trim(),
           password: data.password,
-        }),
+        },
       })
-      const body = await res.json()
-      if (!res.ok) {
+      if (!response.ok) {
         // The lookup's length can be behind the tenant's by the time the
         // form is sent; the refusal carries the one in force.
-        if (body.code === 'password_too_short') {
-          throw new Error(t('auth:validation.passwordMin', { length: body.min_length ?? LEAST_PASSWORD_LENGTH }))
+        if (refusal?.code === 'password_too_short') {
+          throw new Error(t('auth:validation.passwordMin', { length: refusal.min_length ?? LEAST_PASSWORD_LENGTH }))
         }
-        if (body.code === 'password_breached') throw new Error(t('auth:validation.passwordBreached'))
-        throw new Error(problemMessage(body, t('common:errorOccurred')))
+        if (refusal?.code === 'password_breached') throw new Error(t('auth:validation.passwordBreached'))
+        throw new Error(problemMessage(refusal, t('common:errorOccurred')))
       }
-      return body
+      return accepted
     },
     onSuccess: () => {
       setSuccess(true)
