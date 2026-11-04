@@ -13,6 +13,7 @@ export default function ResendVerificationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [inviteOnly, setInviteOnly] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,11 +21,12 @@ export default function ResendVerificationPage() {
     setStatus('idle');
 
     try {
-      const { response, error: data } = await contract().POST('/api/v1/email/send-verification', {
+      const { response, data: answered, error: data } = await contract().POST('/api/v1/email/send-verification', {
         body: clientId ? { email, client_id: clientId } : { email },
       });
 
       if (response.ok) {
+        setInviteOnly(answered?.signup_mode === 'invite_only');
         setStatus('success');
         // The API answers alike whether or not the address has an account; show
         // the localized wording rather than its English message.
@@ -73,6 +75,11 @@ export default function ResendVerificationPage() {
               <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">
                 {t('auth:resendVerification.success.instructions')}
               </p>
+              {inviteOnly && (
+                <p data-testid="invite-only-note" className="text-sm text-gray-600 mb-6">
+                  {t('auth:login.inviteOnly')}
+                </p>
+              )}
               <Link
                 to="/login"
                 className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"

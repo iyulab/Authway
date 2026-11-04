@@ -62,6 +62,8 @@ interface LoginPageInfo {
   client_logo_uri?: string
   requested_scope: string[]
   client?: ClientAuthConfig
+  /** How people come to have an account here — the tenant's, the same for every address. */
+  signup_mode?: 'invite_only' | 'open'
   hints?: RequestHints
 }
 
@@ -446,7 +448,14 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {/* Onboarding is invitation-only: no public self-registration CTA. */}
+          {/* Onboarding is invitation-only: no public self-registration CTA. Where the tenant is invite-only,
+              say so — the sentence is the tenant's, the same whatever address was typed and whether or not
+              it failed, so it tells nothing about any account. */}
+          {loginInfo?.signup_mode === 'invite_only' && (
+            <p data-testid="invite-only-note" className="text-center text-sm text-gray-500">
+              {t('auth:login.inviteOnly')}
+            </p>
+          )}
         </form>
       </div>
     </div>

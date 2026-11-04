@@ -2392,6 +2392,38 @@ export interface components {
         EmailSent: {
             /** @constant */
             next: "email_sent";
+            /**
+             * @description How the tenant of the flow's application takes people in. The
+             *     answer is the same whether or not the address may sign in, so it
+             *     tells nothing about the address.
+             */
+            signup_mode?: components["schemas"]["SignupMode"];
+        };
+        /**
+         * @description How a person comes to have an account in the tenant a screen is for,
+         *     which is a property of the tenant and says nothing about any address.
+         *     `invite_only`: only by an invitation (a first sign-in, by password or
+         *     by another provider, does not create an account) - a screen can say
+         *     so to someone who finds they cannot sign in. `open`: a first sign-in
+         *     by another provider or by an emailed link may create one. Every tenant
+         *     that has not chosen is `invite_only`. The values are those of
+         *     `capabilities.signup_modes`.
+         * @enum {string}
+         */
+        SignupMode: "invite_only" | "open";
+        /**
+         * @description The answer to a request for an emailed link (a password reset, a new
+         *     verification link): the same whether or not the address has an account.
+         */
+        MailRequested: {
+            message: string;
+            /**
+             * @description Where the request named an application (`client_id`): the signup
+             *     mode of that application's tenant. The answer is the same whether
+             *     or not the address has an account, so it tells nothing about the
+             *     address. Left out where no application was named.
+             */
+            signup_mode?: components["schemas"]["SignupMode"];
         };
         LoginForm: {
             /** @constant */
@@ -2406,6 +2438,7 @@ export interface components {
                 /** @description What to offer, in order — "email" for the password form, "magic_link", then social providers, then "passkey" (a passkey is offered wherever the password form is, and where the client names "passkey"; not where passkeys are not set up). */
                 sign_in_methods: string[];
             };
+            signup_mode: components["schemas"]["SignupMode"];
             /**
              * @description What the application's authorization request asked of the sign-in
              *     screen, which only has the flow id. Every field is optional, and
@@ -2971,14 +3004,14 @@ export interface components {
             email: string;
             name?: string;
             avatar_url?: string;
-            email_verified?: boolean;
+            email_verified: boolean;
             /** @description false while an administrator has suspended the account. */
-            active?: boolean;
+            active: boolean;
             /** @description The sign-in providers the account is linked to (google, github, microsoft, apple) — empty for one that signs in only by password or emailed link. */
             connections?: string[];
             totp_enabled?: boolean;
             last_login_at?: null | string;
-            created_at?: string;
+            created_at: string;
             updated_at?: string;
         };
         /**
@@ -4722,7 +4755,15 @@ export interface operations {
         };
         requestBody: components["requestBodies"]["EmailAddress"];
         responses: {
-            200: components["responses"]["Message"];
+            /** @description Requested */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRequested"];
+                };
+            };
             400: components["responses"]["Error"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4752,7 +4793,15 @@ export interface operations {
         };
         requestBody: components["requestBodies"]["EmailAddress"];
         responses: {
-            200: components["responses"]["Message"];
+            /** @description Requested */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailRequested"];
+                };
+            };
             400: components["responses"]["Error"];
             429: components["responses"]["TooManyRequests"];
         };

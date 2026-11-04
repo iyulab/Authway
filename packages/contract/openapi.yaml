@@ -1271,7 +1271,11 @@ paths:
       description: Same answer whether or not the address has an account.
       requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
       responses:
-        '200': { $ref: '#/components/responses/Message' }
+        '200':
+          description: Requested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MailRequested' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
@@ -1290,7 +1294,11 @@ paths:
       description: Same answer whether or not the address has an account.
       requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
       responses:
-        '200': { $ref: '#/components/responses/Message' }
+        '200':
+          description: Requested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MailRequested' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
@@ -3930,10 +3938,45 @@ components:
       required: [next]
       properties:
         next: { const: email_sent }
+        signup_mode:
+          description: |
+            How the tenant of the flow's application takes people in. The
+            answer is the same whether or not the address may sign in, so it
+            tells nothing about the address.
+          $ref: '#/components/schemas/SignupMode'
+
+    SignupMode:
+      description: |
+        How a person comes to have an account in the tenant a screen is for,
+        which is a property of the tenant and says nothing about any address.
+        `invite_only`: only by an invitation (a first sign-in, by password or
+        by another provider, does not create an account) - a screen can say
+        so to someone who finds they cannot sign in. `open`: a first sign-in
+        by another provider or by an emailed link may create one. Every tenant
+        that has not chosen is `invite_only`. The values are those of
+        `capabilities.signup_modes`.
+      type: string
+      enum: [invite_only, open]
+
+    MailRequested:
+      description: |
+        The answer to a request for an emailed link (a password reset, a new
+        verification link): the same whether or not the address has an account.
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        signup_mode:
+          description: |
+            Where the request named an application (`client_id`): the signup
+            mode of that application's tenant. The answer is the same whether
+            or not the address has an account, so it tells nothing about the
+            address. Left out where no application was named.
+          $ref: '#/components/schemas/SignupMode'
 
     LoginForm:
       type: object
-      required: [next, flow, client_name, requested_scope, client]
+      required: [next, flow, client_name, requested_scope, client, signup_mode]
       properties:
         next: { const: form }
         flow: { type: string }
@@ -3951,6 +3994,8 @@ components:
               description: What to offer, in order — "email" for the password form, "magic_link", then social providers, then "passkey" (a passkey is offered wherever the password form is, and where the client names "passkey"; not where passkeys are not set up).
               type: array
               items: { type: string }
+        signup_mode:
+          $ref: '#/components/schemas/SignupMode'
         hints:
           description: |
             What the application's authorization request asked of the sign-in
@@ -4574,7 +4619,7 @@ components:
 
     User:
       type: object
-      required: [id, tenant_id, email]
+      required: [id, tenant_id, email, email_verified, active, created_at]
       properties:
         id: { type: string }
         tenant_id: { type: string }

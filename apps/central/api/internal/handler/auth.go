@@ -16,6 +16,7 @@ import (
 	"authway/apps/central/api/pkg/mfa"
 	"authway/apps/central/api/pkg/passkey"
 	"authway/apps/central/api/pkg/middleware"
+	"authway/apps/central/api/pkg/tenant"
 	"authway/apps/central/api/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -38,6 +39,23 @@ type AuthHandler struct {
 	delegations     delegation.Service
 	// passkeys signs a login flow in with a passkey; nil where they are not set up.
 	passkeys *passkey.Ceremonies
+	// signupMode is how a tenant's people come to have an account (see
+	// AnnouncesSignupMode); nil answers invite-only, the default of every tenant.
+	signupMode func(tenantID uuid.UUID) string
+}
+
+// AnnouncesSignupMode tells the sign-in screen how a tenant's people come to
+// have an account, so that it can say who can sign in when someone cannot.
+func (h *AuthHandler) AnnouncesSignupMode(of func(tenantID uuid.UUID) string) {
+	h.signupMode = of
+}
+
+// signupModeOf is the tenant's signup mode as the contract names it.
+func (h *AuthHandler) signupModeOf(tenantID uuid.UUID) string {
+	if h.signupMode == nil {
+		return tenant.SignupModeInviteOnly
+	}
+	return h.signupMode(tenantID)
 }
 
 // GrantsDelegations lets a consent to a client's delegation scope grant a

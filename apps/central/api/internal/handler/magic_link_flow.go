@@ -64,7 +64,7 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 		h.auth.logger.Error("Failed to issue magic link", zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "The sign-in link could not be issued. Try again shortly.")
 	}
-	return c.JSON(fiber.Map{"next": nextEmailSent})
+	return c.JSON(fiber.Map{"next": nextEmailSent, "signup_mode": h.auth.signupModeOf(cl.TenantID)})
 }
 
 type magicLinkTokenRequest struct {

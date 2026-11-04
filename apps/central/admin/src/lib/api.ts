@@ -3,11 +3,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import { consolePath, getConfig } from '../config'
 import i18n from '@/i18n'
-import type { Client, SupportAccess, Tenant, TenantSettings } from './contract'
+import type { Capabilities, Client, ConsoleMe, SupportAccess, Tenant, TenantSettings, User } from './contract'
 import { route } from './route'
 
 // The shapes of the API are the contract's (contract.ts); the screens import them from here.
-export type { Client, SupportAccess, Tenant, TenantSettings }
+export type { Capabilities, Client, ConsoleMe, SupportAccess, Tenant, TenantSettings, User }
 
 const API_BASE_URL = getConfig().apiUrl
 
@@ -74,21 +74,7 @@ api.interceptors.response.use(
 export { serverRefusal, refusalMessage, refusalAt, apiErrorMessage } from '@/i18n/problem'
 export type { ServerRefusal } from '@/i18n/problem'
 
-// API types
-export interface User {
-  id: string
-  tenant_id: string
-  email: string
-  name: string
-  avatar_url?: string
-  email_verified: boolean
-  active: boolean
-  /** The sign-in providers the account is linked to. */
-  connections?: string[]
-  last_login_at?: string
-  created_at: string
-  updated_at: string
-}
+// API types: User, from the contract.
 
 export interface LoginRequest {
   password: string
@@ -108,14 +94,7 @@ export const authApi = {
     api.post<{ message: string }>('/admin/logout'),
 }
 
-/** Who the caller is (GET /api/v1/console/me), whichever way it came in. */
-export interface ConsoleMe {
-  // console_user (a console account), admin_session (the admin password) or api_key
-  actor_type: string
-  operator: boolean
-  user_id?: string
-  memberships: { tenant_id: string | null; role: string }[]
-}
+// Who the caller is (GET /api/v1/console/me), whichever way it came in: ConsoleMe, from the contract.
 
 export const consoleApi = {
   me: () => api.get<ConsoleMe>(route('get', '/api/v1/console/me')),
@@ -152,24 +131,7 @@ export const usersApi = {
     api.delete<{ message: string }>(route('delete', '/api/v1/users/{id}', { id })),
 }
 
-/** What this deployment offers (GET /api/v1/capabilities). */
-export interface Capabilities {
-  multi_tenant: boolean
-  /** Social providers this deployment has credentials for. */
-  providers: string[]
-  magic_link: boolean
-  /** Users can register passkeys and sign in with them. */
-  passkeys?: boolean
-  mfa: string[]
-  signup_modes: string[]
-  account_deletion?: boolean
-  backchannel_logout?: boolean
-  token_introspection?: boolean
-  device_authorization?: boolean
-  terms_acceptance?: boolean
-  token_exchange: boolean
-  ciba: boolean
-}
+// What this deployment offers (GET /api/v1/capabilities): Capabilities, from the contract.
 
 export const capabilitiesApi = {
   get: () => api.get<Capabilities>(route('get', '/api/v1/capabilities')),

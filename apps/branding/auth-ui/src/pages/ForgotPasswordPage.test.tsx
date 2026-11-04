@@ -71,4 +71,34 @@ describe('ForgotPasswordPage', () => {
       expect(requestBody).toEqual({ email: 'test@example.com' })
     })
   })
+
+  it('says the service is for invited people when the answer names an invite-only tenant', async () => {
+    server.use(
+      http.post('http://localhost:8080/api/v1/email/forgot-password', () =>
+        HttpResponse.json({ message: 'ok', signup_mode: 'invite_only' })
+      )
+    )
+
+    renderAt('/forgot-password?client_id=test-client-id', <ForgotPasswordPage />)
+
+    await user.type(screen.getByLabelText('이메일 주소'), 'nobody@example.com')
+    await user.click(screen.getByRole('button', { name: '재설정 링크 보내기' }))
+
+    const note = await screen.findByTestId('invite-only-note')
+    expect(note).toHaveTextContent('초대를 받은 분만 쓸 수 있습니다')
+  })
+
+  it('says nothing of invitations when the answer does not name one', async () => {
+    server.use(
+      http.post('http://localhost:8080/api/v1/email/forgot-password', () => HttpResponse.json({ message: 'ok' }))
+    )
+
+    renderAt('/forgot-password', <ForgotPasswordPage />)
+
+    await user.type(screen.getByLabelText('이메일 주소'), 'test@example.com')
+    await user.click(screen.getByRole('button', { name: '재설정 링크 보내기' }))
+
+    await screen.findByText('이메일을 확인하세요')
+    expect(screen.queryByTestId('invite-only-note')).toBeNull()
+  })
 })

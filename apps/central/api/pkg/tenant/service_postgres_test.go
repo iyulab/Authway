@@ -218,6 +218,12 @@ func TestUpdateTenant_SignupModeRoundTripsThroughToPublic(t *testing.T) {
 	if got := tn.ToPublic().Settings.SignupMode; got != "" {
 		t.Fatalf("SignupMode on a freshly created tenant = %q, want empty (invite-only default)", got)
 	}
+	if got := svc.SignupMode(tn.ID); got != SignupModeInviteOnly {
+		t.Fatalf("SignupMode() of a tenant that never chose = %q, want %q", got, SignupModeInviteOnly)
+	}
+	if got := svc.SignupMode(uuid.New()); got != SignupModeInviteOnly {
+		t.Fatalf("SignupMode() of a tenant that cannot be read = %q, want %q (the gate's answer too)", got, SignupModeInviteOnly)
+	}
 
 	updated, err := svc.UpdateTenant(tn.ID, UpdateTenantRequest{
 		Settings: &TenantSettings{SignupMode: SignupModeOpen},
@@ -227,6 +233,9 @@ func TestUpdateTenant_SignupModeRoundTripsThroughToPublic(t *testing.T) {
 	}
 	if got := updated.ToPublic().Settings.SignupMode; got != SignupModeOpen {
 		t.Fatalf("SignupMode after update = %q, want %q", got, SignupModeOpen)
+	}
+	if got := svc.SignupMode(tn.ID); got != SignupModeOpen {
+		t.Fatalf("SignupMode() after update = %q, want %q", got, SignupModeOpen)
 	}
 
 	refetched, err := svc.GetTenantByID(tn.ID)

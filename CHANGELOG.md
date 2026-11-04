@@ -2,13 +2,31 @@
 
 ### Added
 
+- **The sign-in screen says who can sign in** — a tenant takes people in by
+  invitation only unless it chose otherwise, and someone who cannot sign in
+  used to find that out nowhere. The login flow now carries the tenant's
+  `signup_mode` (`invite_only` or `open`, the values of
+  `capabilities.signup_modes`), and so do the answers to a request for an
+  emailed link that names an application (`client_id`: a password reset, a new
+  verification link) or belongs to a flow (an emailed sign-in link). It is a
+  fact about the tenant, so the answer is the same for an address with an
+  account and one without. The login screen shows one line under the form where
+  the tenant is invite-only, and the three request screens show it after a
+  request. A client that builds its own sign-in screen can read the field the
+  same way; nothing that reads these answers needs to change.
+
+- The login flow no longer answers with `tenant_id`, a field the contract never
+  listed and no screen read.
+
 - **The contract's types, generated** — `packages/contract/schema.d.ts` is read
   from `openapi.yaml` (`pnpm --filter @authway/contract run generate`; CI fails
   when it is stale), and the administration console takes the shapes of the API
   from it instead of writing them out a second time. Reading the contract that
-  way showed two gaps, now closed: a client's `description` is part of the
-  contract, and an administered invitation always carries `created_at` and
-  `updated_at`.
+  way showed more gaps, now closed: a client's `description` is part of the
+  contract, an administered invitation always carries `created_at` and
+  `updated_at`, and a user always carries `email_verified`, `active` and
+  `created_at` — the contract now lists them as always present, as every
+  implementation sends them.
 
 - **Two more capabilities** — `capabilities.webhooks` and
   `capabilities.client_provider_apps` say whether an installation has webhooks

@@ -125,6 +125,31 @@ describe('LoginPage', () => {
       expect(document.querySelector('input#email')!.closest('form')).toBe(document.querySelector('input[type="password"]')!.closest('form'))
     })
 
+    it('says the service is for invited people where the tenant is invite-only, and only there', async () => {
+      const form = (signupMode: string) =>
+        http.get('http://localhost:8080/api/v1/login-flows/:flow', () =>
+          HttpResponse.json({
+            next: 'form',
+            flow: 'test-challenge',
+            client_name: 'Test App',
+            requested_scope: ['openid'],
+            signup_mode: signupMode,
+            client: { client_id: 'test-client-id', sign_in_methods: ['email'] },
+          })
+        )
+
+      server.use(form('invite_only'))
+      const first = render(<LoginPage />)
+      const note = await screen.findByTestId('invite-only-note')
+      expect(note).toHaveTextContent('초대를 받은 분만 쓸 수 있습니다')
+      first.unmount()
+
+      server.use(form('open'))
+      render(<LoginPage />)
+      await waitFor(() => expect(document.querySelector('input[type="password"]')).not.toBeNull())
+      expect(screen.queryByTestId('invite-only-note')).toBeNull()
+    })
+
     it('renders login form with client info', async () => {
       render(<LoginPage />)
 

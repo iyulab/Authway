@@ -42,6 +42,8 @@ type EmailHandler struct {
 	// organization names a tenant in the mail ("" when it cannot): one
 	// address can have accounts in several.
 	organization func(tenantID uuid.UUID) string
+	// signupMode is how a tenant takes people in (see AnnouncesSignupMode).
+	signupMode func(tenantID uuid.UUID) string
 	// mailLimit counts the messages sent to one account (see LimitsMailPerAccount).
 	mailLimit ephemeral.Store
 }
@@ -142,8 +144,9 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	if errors.Is(err, errUnknownClient) {
 		return refuseUnknownClient(c)
 	}
+	answer := h.mailAnswer(verificationRequested, req.ClientID)
 	if err != nil || usr.EmailVerified || !usr.Active || !h.mayMail("verification", usr.ID) {
-		return c.JSON(fiber.Map{"message": verificationRequested})
+		return c.JSON(answer)
 	}
 
 	// Delete old verifications for this user
@@ -163,7 +166,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 		h.logger.Error("Failed to send verification email", zap.Error(err))
 	}
 
-	return c.JSON(fiber.Map{"message": verificationRequested})
+	return c.JSON(answer)
 }
 
 // VerifyEmail godoc
@@ -244,8 +247,9 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	if errors.Is(err, errUnknownClient) {
 		return refuseUnknownClient(c)
 	}
+	answer := h.mailAnswer(passwordResetRequested, req.ClientID)
 	if err != nil || !usr.Active || !h.mayMail("reset", usr.ID) {
-		return c.JSON(fiber.Map{"message": passwordResetRequested})
+		return c.JSON(answer)
 	}
 
 	// Create password reset token
@@ -260,7 +264,31 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 		h.logger.Error("Failed to send reset email", zap.Error(err))
 	}
 
-	return c.JSON(fiber.Map{"message": passwordResetRequested})
+	return c.JSON(answer)
+}
+
+// mailAnswer is what a request for an emailed link (a password reset, a new
+// verification link) is answered with, whichever way it went. Where the
+// request names an application it also says how that application's tenant
+// takes people in, so the screen can tell someone who gets no mail that the
+// service is for invited people — a fact about the tenant that every holder of
+// its application id may read, and that is the same for every address.
+func (h *EmailHandler) mailAnswer(message, clientID string) fiber.Map {
+	answer := fiber.Map{"message": message}
+	if clientID == "" || h.signupMode == nil {
+		return answer
+	}
+	if requestedClient, err := h.clientSvc.GetByClientID(clientID); err == nil {
+		answer["signup_mode"] = h.signupMode(requestedClient.TenantID)
+	}
+	return answer
+}
+
+// AnnouncesSignupMode makes a password reset answer say how the tenant of the
+// application it names takes people in (see mailAnswer).
+func (h *EmailHandler) AnnouncesSignupMode(of func(tenantID uuid.UUID) string) *EmailHandler {
+	h.signupMode = of
+	return h
 }
 
 // VerifyResetToken godoc

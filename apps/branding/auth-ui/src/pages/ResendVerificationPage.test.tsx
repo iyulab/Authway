@@ -69,4 +69,27 @@ describe('ResendVerificationPage', () => {
       expect(requestBody).toEqual({ email: 'test@example.com' })
     })
   })
+
+  it('says the service is for invited people when the answer names an invite-only tenant, and not otherwise', async () => {
+    server.use(
+      http.post('http://localhost:8080/api/v1/email/send-verification', () =>
+        HttpResponse.json({ message: 'ok', signup_mode: 'invite_only' })
+      )
+    )
+    renderAt('/resend-verification?client_id=test-client-id', <ResendVerificationPage />)
+    await user.type(screen.getByLabelText('이메일 주소'), 'nobody@example.com')
+    await user.click(screen.getByRole('button', { name: '인증 이메일 보내기' }))
+    expect(await screen.findByTestId('invite-only-note')).toHaveTextContent('초대를 받은 분만 쓸 수 있습니다')
+  })
+
+  it('says nothing of invitations when the answer does not name one', async () => {
+    server.use(
+      http.post('http://localhost:8080/api/v1/email/send-verification', () => HttpResponse.json({ message: 'ok' }))
+    )
+    renderAt('/resend-verification', <ResendVerificationPage />)
+    await user.type(screen.getByLabelText('이메일 주소'), 'test@example.com')
+    await user.click(screen.getByRole('button', { name: '인증 이메일 보내기' }))
+    await waitFor(() => expect(screen.getByText(/스팸 폴더/)).toBeInTheDocument())
+    expect(screen.queryByTestId('invite-only-note')).toBeNull()
+  })
 })

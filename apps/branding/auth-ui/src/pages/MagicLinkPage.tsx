@@ -76,6 +76,7 @@ const MagicLinkPage: React.FC = () => {
 
   const [email, setEmail] = useState('')
   const [isSent, setIsSent] = useState(false)
+  const [inviteOnly, setInviteOnly] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null)
@@ -113,6 +114,7 @@ const MagicLinkPage: React.FC = () => {
       const data = await requestMagicLink(flow, email)
       if (data.next === 'email_sent') {
         rememberSentFlow(flow)
+        setInviteOnly(data.signup_mode === 'invite_only')
         setIsSent(true)
       } else {
         setError(problemMessage(data, t('auth:magicLink.sendFailed')))
@@ -234,6 +236,11 @@ const MagicLinkPage: React.FC = () => {
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.checkEmail')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.sentTo')}</p>
         <p className="font-medium text-gray-900">{email}</p>
+        {inviteOnly && (
+          <p data-testid="invite-only-note" className="mt-4 text-sm text-gray-600">
+            {t('auth:login.inviteOnly')}
+          </p>
+        )}
         <p className="mt-4 text-sm text-gray-500">
           {t('auth:magicLink.sameBrowser')}
         </p>

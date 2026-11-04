@@ -183,4 +183,19 @@ describe('MagicLinkPage', () => {
 
     expect(await screen.findByText('이 링크는 더 이상 유효하지 않습니다. 처음부터 다시 시작하세요.')).toBeInTheDocument()
   })
+
+  it('says the service is for invited people once a link was asked for, where the tenant is invite-only', async () => {
+    mockSearchParams.set('flow', 'flow-1=')
+    server.use(
+      http.post('http://localhost:8080/api/v1/login-flows/:flow/magic-link', () =>
+        HttpResponse.json({ next: 'email_sent', signup_mode: 'invite_only' })
+      )
+    )
+
+    render(<MagicLinkPage />)
+    await user.type(screen.getByRole('textbox'), 'nobody@example.com')
+    await user.click(screen.getByRole('button', { name: /link|링크/i }))
+
+    expect(await screen.findByTestId('invite-only-note')).toHaveTextContent('초대를 받은 분만 쓸 수 있습니다')
+  })
 })

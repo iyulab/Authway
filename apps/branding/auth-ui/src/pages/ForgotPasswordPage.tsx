@@ -12,6 +12,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [inviteOnly, setInviteOnly] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,11 +21,12 @@ export default function ForgotPasswordPage() {
     setError('');
 
     try {
-      const { response, error: refusal } = await contract().POST('/api/v1/email/forgot-password', {
+      const { response, data, error: refusal } = await contract().POST('/api/v1/email/forgot-password', {
         body: clientId ? { email, client_id: clientId } : { email },
       });
 
       if (response.ok) {
+        setInviteOnly(data?.signup_mode === 'invite_only');
         setIsSuccess(true);
       } else {
         setError(problemMessage(refusal, t('password:forgot.errors.failed')));
@@ -73,6 +75,11 @@ export default function ForgotPasswordPage() {
                   <br />{t('password:forgot.success.infoList')}
                 </p>
               </div>
+              {inviteOnly && (
+                <p data-testid="invite-only-note" className="text-sm text-gray-600 mb-6">
+                  {t('auth:login.inviteOnly')}
+                </p>
+              )}
               <Link
                 to="/login"
                 className="inline-block w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"

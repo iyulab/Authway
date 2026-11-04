@@ -64,9 +64,21 @@ Errors are problem details ([Errors](errors.md)): show `detail`, branch on `code
   "client": {
     "client_id": "…",
     "sign_in_methods": ["email", "magic_link", "google"]
-  }
+  },
+  "signup_mode": "invite_only"
 }
 ```
+
+`signup_mode` is how people come to have an account in the client's tenant:
+`invite_only` (the default — only by an invitation) or `open` (a first
+sign-in by another provider or by an emailed link may create one). It is a
+fact about the tenant, the same for every address, so a screen can say so to
+someone who cannot sign in — "this service is for invited people" — without
+telling anyone which addresses have an account. The answers to a request for
+an emailed link carry the same field: `next: email_sent` of a sign-in link,
+and the `message` answers of `POST /api/v1/email/forgot-password` and
+`POST /api/v1/email/send-verification` when the request names an application
+(`client_id`).
 
 `hints` is what the application's authorization request asked of the screen,
 which otherwise only has the flow id: `sign_in_method` (the request's
@@ -160,8 +172,9 @@ authorization request with an OAuth error.
 
 ### `POST /api/v1/login-flows/{flow}/magic-link`
 
-`{"email": "…"}` → `next: email_sent` — whether or not the address may sign
-in, so the answer reveals nothing about accounts. The email links to
+`{"email": "…"}` → `next: email_sent` (with the tenant's `signup_mode`) —
+whether or not the address may sign in, so the answer reveals nothing about
+accounts. The email links to
 `<login UI>/magic-link?token=…&code=…` and also shows the code. That page
 should:
 

@@ -362,6 +362,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	delegationHandler := delegation.NewHandler(delegationService, hydraClient, newFeatureServices.AuditService, zapLogger)
 	authHandler := handler.NewAuthHandler(userService, clientService, claimsService, mfaService, hydraClient, zapLogger, newFeatureServices.AuditService, signInState, socialHandler, signInPolicy)
 	authHandler.GrantsDelegations(delegationService)
+	authHandler.AnnouncesSignupMode(tenantService.SignupMode)
 	// Passkeys are scoped to the login UI's host. Where that cannot be a
 	// relying party id (an IP address, an id the host is not within) they are
 	// off, and the endpoints say so; nothing else depends on them.
@@ -377,7 +378,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	authHandler.GrantsPasskeys(passkeyCeremonies)
 	passkeyHandler := handler.NewPasskeyHandler(userService, passkeyService, clientService, passkeyCeremonies, tenantService.Name, newFeatureServices.AuditService, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
-	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name).LimitsMailPerAccount(signInState)
+	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name).LimitsMailPerAccount(signInState).AnnouncesSignupMode(tenantService.SignupMode)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
 	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)

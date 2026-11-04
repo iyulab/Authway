@@ -21,7 +21,8 @@ import (
 //   - {"next":"form","flow":…,"client":{…}} — show the sign-in form.
 //     client.sign_in_methods lists what to offer ("email" for the password
 //     form, then social providers): what the client allows and this
-//     deployment can actually run.
+//     deployment can actually run. signup_mode is the tenant's, the same for
+//     every address (see SignupMode in the contract).
 func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 	flow := flowParam(c)
 
@@ -61,7 +62,7 @@ func (h *AuthHandler) GetLoginFlow(c *fiber.Ctx) error {
 		"client_name":     loginReq.Client.ClientName,
 		"client_logo_uri": loginReq.Client.LogoURI,
 		"requested_scope": loginReq.RequestedScope,
-		"tenant_id":       requestedClient.TenantID.String(),
+		"signup_mode":     h.signupModeOf(requestedClient.TenantID),
 		"client": fiber.Map{
 			"client_id":       requestedClient.ClientID,
 			"sign_in_methods": methods,

@@ -100,6 +100,20 @@ func (s *Service) Name(id uuid.UUID) string {
 	return t.Name
 }
 
+// SignupMode is how a person comes to have an account in the tenant:
+// SignupModeOpen where the tenant chose it, SignupModeInviteOnly for every
+// other tenant — including one that cannot be read, which is the answer
+// invitation.Gate gives it too (only the literal "open" relaxes the default).
+// It is a property of the tenant, not of any address, so a screen may show it
+// to anyone who holds one of the tenant's application ids.
+func (s *Service) SignupMode(id uuid.UUID) string {
+	t, err := s.GetTenantByID(id)
+	if err != nil || t.Settings.SignupMode != SignupModeOpen {
+		return SignupModeInviteOnly
+	}
+	return SignupModeOpen
+}
+
 // SessionTimeout is how long a sign-in session of the tenant's users lasts
 // (its session_timeout setting), or zero when the tenant has none or cannot
 // be read — the caller then applies its default.
