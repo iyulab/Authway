@@ -52,23 +52,23 @@ func NewService(config Config, logger *zap.Logger) *Service {
 }
 
 // SendVerificationEmail sends an email verification link
-func (s *Service) SendVerificationEmail(toEmail, organization, token string) error {
-	return s.send(toEmail)(verificationMessage(organization, maillink.VerifyEmail(s.frontendURL, token)))
+func (s *Service) SendVerificationEmail(toEmail, locale, organization, token string) error {
+	return s.send(toEmail)(verificationMessage(locale, organization, maillink.VerifyEmail(s.frontendURL, token)))
 }
 
 // SendPasswordResetEmail sends a password reset link
-func (s *Service) SendPasswordResetEmail(toEmail, organization, token string) error {
-	return s.send(toEmail)(resetMessage(organization, maillink.ResetPassword(s.frontendURL, token)))
+func (s *Service) SendPasswordResetEmail(toEmail, locale, organization, token string) error {
+	return s.send(toEmail)(resetMessage(locale, organization, maillink.ResetPassword(s.frontendURL, token)))
 }
 
 // SendInvitationEmail sends a tenant invitation link via SMTP
-func (s *Service) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	return s.send(toEmail)(invitationMessage(inviterName, tenantName, message, inviteURL))
+func (s *Service) SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error {
+	return s.send(toEmail)(invitationMessage(locale, inviterName, tenantName, message, inviteURL))
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via SMTP
-func (s *Service) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	return s.send(toEmail)(magicLinkMessage(organization, linkURL, code, isNewUser))
+func (s *Service) SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error {
+	return s.send(toEmail)(magicLinkMessage(locale, organization, linkURL, code, isNewUser))
 }
 
 // send sends a rendered message to `to`; a message that failed to render is

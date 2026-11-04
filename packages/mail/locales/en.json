@@ -1,0 +1,49 @@
+{
+  "common": {
+    "lang": "en",
+    "organization": "This message is about your account at «{{organization}}».",
+    "greeting": "Hello!",
+    "copyLink": "Or copy and paste the link below into your browser:",
+    "notRequested": "If you did not request this, you can ignore this email."
+  },
+  "verification": {
+    "subject": "Authway - Verify your email{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "🔐 Verify your Authway email",
+    "intro": "Welcome to Authway. Click the button below to verify your email address.",
+    "textIntro": "Click the link below to verify your email:",
+    "button": "Verify email",
+    "expiry": "This link is valid for 6 hours."
+  },
+  "reset": {
+    "subject": "Authway - Reset your password{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "🔑 Reset your password",
+    "intro": "You asked to reset the password of your Authway account.",
+    "action": "Click the button below to set a new password.",
+    "textIntro": "Click the link below to reset your password:",
+    "button": "Reset password",
+    "warningTitle": "⚠️ Security notice",
+    "warning": "If you did not request this, change your password right away.",
+    "expiry": "This link is valid for 1 hour.",
+    "relogin": "For your security, you will need to sign in again on all devices after resetting your password."
+  },
+  "invitation": {
+    "subject": "Authway - Invitation to {{tenantName}}",
+    "heading": "📨 Workspace invitation",
+    "invited": "{{inviterName}} invited you to the {{tenantName}} workspace.",
+    "intro": "Click the button below to accept the invitation.",
+    "button": "Accept invitation",
+    "linkLabel": "Invitation link:",
+    "messageLabel": "Message:",
+    "notRequested": "If you were not expecting this invitation, you can ignore this email."
+  },
+  "magiclink": {
+    "subject": "{{#newUser}}Authway - Your sign-up and sign-in link{{/newUser}}{{^newUser}}Authway - Your sign-in link{{/newUser}}{{#organization}} ({{organization}}){{/organization}}",
+    "heading": "{{#newUser}}🎉 Welcome — your sign-up and sign-in link{{/newUser}}{{^newUser}}🔗 Your sign-in link{{/newUser}}",
+    "intro": "{{#newUser}}We have sent you a link to sign up and sign in to Authway in one step. Click the button below to get started.{{/newUser}}{{^newUser}}Click the button below to sign in to Authway.{{/newUser}}",
+    "textIntro": "Click the link below to sign in:",
+    "button": "Sign in",
+    "codeIntro": "If you are reading this email on a different device, enter the code below on the screen where you started signing in:",
+    "textCode": "If you are reading this email on a different device, enter this code on the screen where you started signing in: {{code}}",
+    "expiry": "The link and the code expire after a short time and can be used only once."
+  }
+}

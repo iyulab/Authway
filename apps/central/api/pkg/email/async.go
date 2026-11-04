@@ -90,22 +90,22 @@ func (a *Async) Close(ctx context.Context) error {
 	return a.queue.Close(ctx)
 }
 
-func (a *Async) SendVerificationEmail(toEmail, organization, token string) error {
-	return a.send("verification", toEmail, func() error { return a.inner.SendVerificationEmail(toEmail, organization, token) })
+func (a *Async) SendVerificationEmail(toEmail, locale, organization, token string) error {
+	return a.send("verification", toEmail, func() error { return a.inner.SendVerificationEmail(toEmail, locale, organization, token) })
 }
 
-func (a *Async) SendPasswordResetEmail(toEmail, organization, token string) error {
-	return a.send("password_reset", toEmail, func() error { return a.inner.SendPasswordResetEmail(toEmail, organization, token) })
+func (a *Async) SendPasswordResetEmail(toEmail, locale, organization, token string) error {
+	return a.send("password_reset", toEmail, func() error { return a.inner.SendPasswordResetEmail(toEmail, locale, organization, token) })
 }
 
-func (a *Async) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
+func (a *Async) SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error {
 	return a.send("invitation", toEmail, func() error {
-		return a.inner.SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL)
+		return a.inner.SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL)
 	})
 }
 
-func (a *Async) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
+func (a *Async) SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error {
 	return a.send("magic_link", toEmail, func() error {
-		return a.inner.SendMagicLinkEmail(toEmail, organization, linkURL, code, isNewUser)
+		return a.inner.SendMagicLinkEmail(toEmail, locale, organization, linkURL, code, isNewUser)
 	})
 }

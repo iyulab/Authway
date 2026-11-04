@@ -75,6 +75,9 @@ type CreateInvitationRequest struct {
 	// ClientID optionally names the application the invitation is for, by
 	// its OAuth client_id — one of the tenant's clients.
 	ClientID string `json:"client_id"`
+	// Locale is the language the invitation email is written in: set by the
+	// handler from the request's Accept-Language, never read from the body.
+	Locale string `json:"-"`
 }
 
 // InvitationApp is the application an invitation is for, as the screen that

@@ -90,23 +90,23 @@ func NewSendwayEmailService(config SendwayEmailConfig, logger *zap.Logger) *Send
 }
 
 // SendVerificationEmail sends an email verification link via Sendway.
-func (s *SendwayEmailService) SendVerificationEmail(toEmail, organization, token string) error {
-	return s.send(toEmail)(verificationMessage(organization, maillink.VerifyEmail(s.frontendURL, token)))
+func (s *SendwayEmailService) SendVerificationEmail(toEmail, locale, organization, token string) error {
+	return s.send(toEmail)(verificationMessage(locale, organization, maillink.VerifyEmail(s.frontendURL, token)))
 }
 
 // SendPasswordResetEmail sends a password reset link via Sendway.
-func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, organization, token string) error {
-	return s.send(toEmail)(resetMessage(organization, maillink.ResetPassword(s.frontendURL, token)))
+func (s *SendwayEmailService) SendPasswordResetEmail(toEmail, locale, organization, token string) error {
+	return s.send(toEmail)(resetMessage(locale, organization, maillink.ResetPassword(s.frontendURL, token)))
 }
 
 // SendInvitationEmail sends a tenant invitation link via Sendway.
-func (s *SendwayEmailService) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	return s.send(toEmail)(invitationMessage(inviterName, tenantName, message, inviteURL))
+func (s *SendwayEmailService) SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error {
+	return s.send(toEmail)(invitationMessage(locale, inviterName, tenantName, message, inviteURL))
 }
 
 // SendMagicLinkEmail sends a passwordless magic link via Sendway.
-func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	return s.send(toEmail)(magicLinkMessage(organization, linkURL, code, isNewUser))
+func (s *SendwayEmailService) SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error {
+	return s.send(toEmail)(magicLinkMessage(locale, organization, linkURL, code, isNewUser))
 }
 
 // send hands a rendered message to Sendway; a message that failed to render

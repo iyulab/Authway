@@ -34,7 +34,8 @@ var (
 
 // EmailSender interface for sending emails
 type EmailSender interface {
-	SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error
+	// locale is the language of the message (a tag or an Accept-Language value).
+	SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error
 }
 
 // Inviter is who sends an invitation. The zero value is the system actor (the
@@ -82,7 +83,8 @@ type Service interface {
 	ListByTenant(tenantID uuid.UUID, status InvitationStatus, limit, offset int) ([]Invitation, int64, error)
 	Accept(token string, userID *uuid.UUID, name, password string) (*user.User, error)
 	Revoke(id uuid.UUID) error
-	Resend(id uuid.UUID) error
+	// Resend issues a new link for a pending invitation and emails it in locale.
+	Resend(id uuid.UUID, locale string) error
 	CleanupExpired() (int64, error)
 	// PurgeClosed removes the invitations that were accepted, revoked or
 	// expired more than closedFor ago — and with them the invited address
@@ -185,7 +187,7 @@ func (s *service) Create(tenantID uuid.UUID, by Inviter, req *CreateInvitationRe
 	invitation.App = app
 	if s.emailSender != nil {
 		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
-		if err := s.emailSender.SendInvitationEmail(email, inviterName, t.Name, req.Message, inviteURL); err != nil {
+		if err := s.emailSender.SendInvitationEmail(email, req.Locale, inviterName, t.Name, req.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to send invitation email", zap.Error(err), zap.String("email", email))
 		}
 	}
@@ -506,7 +508,7 @@ func (s *service) Revoke(id uuid.UUID) error {
 	return nil
 }
 
-func (s *service) Resend(id uuid.UUID) error {
+func (s *service) Resend(id uuid.UUID, locale string) error {
 	inv, err := s.GetByID(id)
 	if err != nil {
 		return err
@@ -525,7 +527,7 @@ func (s *service) Resend(id uuid.UUID) error {
 	}
 	if s.emailSender != nil {
 		inviteURL := maillink.InvitationAccept(s.frontendURL, token)
-		if err := s.emailSender.SendInvitationEmail(inv.Email, inv.InviterName, inv.TenantName, inv.Message, inviteURL); err != nil {
+		if err := s.emailSender.SendInvitationEmail(inv.Email, locale, inv.InviterName, inv.TenantName, inv.Message, inviteURL); err != nil {
 			s.logger.Error("Failed to resend invitation email", zap.Error(err), zap.String("email", inv.Email))
 		}
 	}

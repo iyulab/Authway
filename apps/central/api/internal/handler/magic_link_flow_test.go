@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,13 +22,14 @@ type fakeLinks struct {
 	sentTenant uuid.UUID
 	sentEmail  string
 	sentFlow   string
+	sentLocale string
 	link       *passwordless.MagicLink
 	user       *user.User
 	redeemed   bool
 }
 
-func (f *fakeLinks) SendMagicLink(tenantID uuid.UUID, email, loginFlow, _, _ string) (*passwordless.MagicLinkResponse, error) {
-	f.sentTenant, f.sentEmail, f.sentFlow = tenantID, email, loginFlow
+func (f *fakeLinks) SendMagicLink(tenantID uuid.UUID, email, loginFlow, _, _, locale string) (*passwordless.MagicLinkResponse, error) {
+	f.sentTenant, f.sentEmail, f.sentFlow, f.sentLocale = tenantID, email, loginFlow, locale
 	return &passwordless.MagicLinkResponse{}, nil
 }
 
@@ -155,5 +158,32 @@ func TestMagicLink_CodeCompletesItsFlowOnce(t *testing.T) {
 	}
 	if *acceptCount != 1 {
 		t.Errorf("hydra accept called %d times, want 1", *acceptCount)
+	}
+}
+
+// The sign-in link is written in the language of the browser that asked for
+// it: the sign-in screen sends the language its reader chose as
+// Accept-Language, and the handler hands the resolved locale on.
+func TestMagicLink_SendCarriesTheLanguageOfTheRequest(t *testing.T) {
+	for header, want := range map[string]string{
+		"ko":                      "ko",
+		"ko-KR,ko;q=0.9,en;q=0.8": "ko",
+		"en-US,en;q=0.9":          "en",
+		"fr-FR,fr;q=0.9":          "en",
+		"":                        "en",
+	} {
+		app, links, _, _ := newMagicLinkTestApp(t, []string{"email", "magic_link"})
+		req := httptest.NewRequest("POST", "/login-flows/flow-1%3D/magic-link", strings.NewReader(`{"email":"someone@example.com"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if header != "" {
+			req.Header.Set("Accept-Language", header)
+		}
+		resp, err := app.Test(req)
+		if err != nil || resp.StatusCode != fiber.StatusOK {
+			t.Fatalf("Accept-Language %q: status %v, error %v", header, resp.StatusCode, err)
+		}
+		if links.sentLocale != want {
+			t.Errorf("Accept-Language %q: link sent in %q, want %q", header, links.sentLocale, want)
+		}
 	}
 }

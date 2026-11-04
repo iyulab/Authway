@@ -46,7 +46,7 @@ func TestSendwayEmailService_SendVerificationEmail_SendsExpectedRequest(t *testi
 	defer ts.Close()
 
 	svc := newTestSendwayService(t, ts)
-	if err := svc.SendVerificationEmail("user@example.com", "", "tok-123"); err != nil {
+	if err := svc.SendVerificationEmail("user@example.com", "ko", "", "tok-123"); err != nil {
 		t.Fatalf("SendVerificationEmail: %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestSendwayEmailService_TakesAnAcceptedMessageAsHandedOver(t *testing.T) {
 			w.WriteHeader(status)
 			w.Write([]byte(`{"id":"msg-1","status":"Queued"}`))
 		}))
-		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "", "tok")
+		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "", "", "tok")
 		ts.Close()
 		if err != nil {
 			t.Errorf("status %d: %v, want the message taken as handed over", status, err)
@@ -102,7 +102,7 @@ func TestSendwayEmailService_SendEmail_ErrorsOnUpstreamFailure(t *testing.T) {
 		defer ts.Close()
 
 		svc := newTestSendwayService(t, ts)
-		err := svc.SendVerificationEmail("not-an-email", "", "tok")
+		err := svc.SendVerificationEmail("not-an-email", "", "", "tok")
 		if err == nil {
 			t.Fatal("expected an error on a 400 response")
 		}
@@ -119,7 +119,7 @@ func TestSendwayEmailService_SendEmail_ErrorsOnUpstreamFailure(t *testing.T) {
 		defer ts.Close()
 
 		svc := newTestSendwayService(t, ts)
-		err := svc.SendVerificationEmail("user@example.com", "", "tok")
+		err := svc.SendVerificationEmail("user@example.com", "", "", "tok")
 		if err == nil {
 			t.Fatal("expected an error on a 502 response")
 		}
@@ -141,14 +141,14 @@ func TestSendwayEmailService_SendMagicLinkEmail_SubjectVariesByIsNewUser(t *test
 	defer ts.Close()
 	svc := newTestSendwayService(t, ts)
 
-	if err := svc.SendMagicLinkEmail("user@example.com", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", false); err != nil {
+	if err := svc.SendMagicLinkEmail("user@example.com", "ko", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", false); err != nil {
 		t.Fatalf("SendMagicLinkEmail (returning user): %v", err)
 	}
 	if strings.Contains(captured.Subject, "가입") {
 		t.Fatalf("expected a returning-user subject with no signup wording, got %q", captured.Subject)
 	}
 
-	if err := svc.SendMagicLinkEmail("user@example.com", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", true); err != nil {
+	if err := svc.SendMagicLinkEmail("user@example.com", "ko", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", true); err != nil {
 		t.Fatalf("SendMagicLinkEmail (new user): %v", err)
 	}
 	if !strings.Contains(captured.Subject, "가입") {
@@ -173,12 +173,12 @@ func TestSendwayEmailService_HtmlBody_PopulatedForEveryEmailType(t *testing.T) {
 		name string
 		send func() error
 	}{
-		{"reset", func() error { return svc.SendPasswordResetEmail("user@example.com", "", "tok") }},
+		{"reset", func() error { return svc.SendPasswordResetEmail("user@example.com", "", "", "tok") }},
 		{"invitation", func() error {
-			return svc.SendInvitationEmail("user@example.com", "Alice", "Acme", "welcome", "https://app.example.com/invite?token=t")
+			return svc.SendInvitationEmail("user@example.com", "", "Alice", "Acme", "welcome", "https://app.example.com/invite?token=t")
 		}},
 		{"magic-link", func() error {
-			return svc.SendMagicLinkEmail("user@example.com", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", false)
+			return svc.SendMagicLinkEmail("user@example.com", "", "", "https://app.example.com/magic?token=t", "BCDF-GHJK", false)
 		}},
 	}
 
@@ -208,7 +208,7 @@ func TestSendwayEmailService_IdempotencyKeyFollowsTheMessage(t *testing.T) {
 	svc := newTestSendwayService(t, ts)
 
 	for _, token := range []string{"tok-a", "tok-a", "tok-b"} {
-		if err := svc.SendPasswordResetEmail("user@example.com", "", token); err != nil {
+		if err := svc.SendPasswordResetEmail("user@example.com", "", "", token); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -234,7 +234,7 @@ func TestSendwayEmailService_MarksTransientFailures(t *testing.T) {
 			w.WriteHeader(status)
 			json.NewEncoder(w).Encode(sendwayErrorResponse{Error: "nope"})
 		}))
-		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "", "tok")
+		err := newTestSendwayService(t, ts).SendVerificationEmail("user@example.com", "", "", "tok")
 		ts.Close()
 		if err == nil {
 			t.Fatalf("status %d: want an error", status)
@@ -247,7 +247,7 @@ func TestSendwayEmailService_MarksTransientFailures(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	svc := newTestSendwayService(t, ts)
 	ts.Close() // nothing answers
-	if err := svc.SendVerificationEmail("user@example.com", "", "tok"); !errors.Is(err, ErrTransient) {
+	if err := svc.SendVerificationEmail("user@example.com", "", "", "tok"); !errors.Is(err, ErrTransient) {
 		t.Errorf("unreachable mail service: %v, want ErrTransient", err)
 	}
 }
@@ -274,7 +274,7 @@ func TestSendwayEmailService_LogsHowLongEachAttemptTook(t *testing.T) {
 		if handler == nil {
 			ts.Close()
 		}
-		_ = svc.SendVerificationEmail("user@example.com", "", "tok")
+		_ = svc.SendVerificationEmail("user@example.com", "", "", "tok")
 		ts.Close()
 
 		entries := logs.FilterMessage(message).All()
@@ -297,10 +297,73 @@ func TestSendwayEmailService_SendsNothingWhenTheLinkIsNotAnAddress(t *testing.T)
 	defer ts.Close()
 	svc := newTestSendwayService(t, ts)
 	svc.frontendURL = ""
-	if err := svc.SendVerificationEmail("user@example.com", "", "tok"); err == nil {
+	if err := svc.SendVerificationEmail("user@example.com", "", "", "tok"); err == nil {
 		t.Fatal("a message with a relative link was sent")
 	}
 	if calls != 0 {
 		t.Fatalf("the mail service was called %d times", calls)
+	}
+}
+
+// The language of a message follows the locale it is sent with: a language
+// tag or an Accept-Language value, and the default (English) for none.
+func TestSendwayEmailService_WritesEachMessageInTheLocaleItIsGiven(t *testing.T) {
+	var captured sendwayEmailRequest
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&captured)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(sendwaySuccessResponse{ID: "msg-1"})
+	}))
+	defer ts.Close()
+	svc := newTestSendwayService(t, ts)
+
+	const ko, en = "Authway - 이메일 인증", "Authway - Verify your email"
+	for locale, subject := range map[string]string{
+		"ko":                      ko,
+		"ko-KR":                   ko,
+		"ko-KR,ko;q=0.9,en;q=0.8": ko,
+		"en":                      en,
+		"en-US,en;q=0.9,ko;q=0.8": en,
+		"":                        en,
+		"fr-FR":                   en,
+	} {
+		if err := svc.SendVerificationEmail("user@example.com", locale, "", "tok"); err != nil {
+			t.Fatalf("locale %q: %v", locale, err)
+		}
+		if captured.Subject != subject {
+			t.Errorf("locale %q: subject %q, want %q", locale, captured.Subject, subject)
+		}
+	}
+
+	sends := map[string]func(locale string) error{
+		"reset": func(l string) error { return svc.SendPasswordResetEmail("user@example.com", l, "", "tok") },
+		"invitation": func(l string) error {
+			return svc.SendInvitationEmail("user@example.com", l, "Alice", "Acme", "", "https://app.example.com/invite?token=t")
+		},
+		"magic link": func(l string) error {
+			return svc.SendMagicLinkEmail("user@example.com", l, "", "https://app.example.com/magic?token=t", "BCDF-GHJK", false)
+		},
+	}
+	hangul := func(s string) bool {
+		for _, r := range s {
+			if r >= 0xAC00 && r <= 0xD7AF {
+				return true
+			}
+		}
+		return false
+	}
+	for name, send := range sends {
+		if err := send("ko"); err != nil {
+			t.Fatalf("%s ko: %v", name, err)
+		}
+		if !hangul(captured.Subject) || !hangul(captured.Body) || !strings.Contains(captured.HtmlBody, `lang="ko"`) {
+			t.Errorf("%s in ko is not Korean: %q", name, captured.Subject)
+		}
+		if err := send("en"); err != nil {
+			t.Fatalf("%s en: %v", name, err)
+		}
+		if hangul(captured.Subject) || hangul(captured.Body) || hangul(captured.HtmlBody) || !strings.Contains(captured.HtmlBody, `lang="en"`) {
+			t.Errorf("%s in en is not English: %q", name, captured.Subject)
+		}
 	}
 }

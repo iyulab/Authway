@@ -21,7 +21,7 @@ locales/
    as absent. A `link` must be an absolute `http` or `https` address — refuse
    to render otherwise.
 2. Its strings are `common` with the message's own strings over it, from
-   `locales/<locale>.json` (falling back to `ko`). Each string is itself a
+   `locales/<locale>.json` (falling back to `en`; see "Choosing the locale"). Each string is itself a
    template: render it as **text** (no escaping) against the values.
 3. Add the rendered strings to the values as `t`, and the message's entry in
    `styles.json` as `style`.
@@ -41,6 +41,25 @@ locales/
 `organization` names the tenant whose account a message is about, when the
 address may have accounts in several.
 
+## Choosing the locale
+
+The locales are the files in `locales/` — `en` and `ko` — and every locale
+holds the same strings, each using the same values (a test in the Go package
+checks this). The locale a message is rendered in is the reader's preference,
+resolved like this:
+
+- A preference is an `Accept-Language` value (`ko-KR,ko;q=0.9,en;q=0.8`) or a
+  single language tag (`ko`, `en-US`). Tags are read case-insensitively and a
+  region tag matches its language (`ko-KR` → `ko`).
+- Tags are taken by weight (`q`), highest first, and in the order written when
+  the weights are equal; a tag of weight 0 is refused. The first tag whose
+  language has a locale wins.
+- Nothing usable (no preference, `*` alone, only languages with no locale)
+  gives `en`.
+
+Each locale carries its own language tag as the string `lang`, which the
+layout puts on `<html lang>`.
+
 ## Template language
 
 The files use this part of [Mustache](https://mustache.github.io/mustache.5.html):
@@ -54,4 +73,5 @@ specification asks) renders the same text as one that does not.
 
 Change the files here: every implementation that renders them sends the
 change. A new value a message needs is a new row in the table above, which
-each implementation passes.
+each implementation passes. A new string goes into every locale file; a new
+locale is a new file with every string.

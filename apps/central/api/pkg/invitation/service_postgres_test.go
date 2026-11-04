@@ -25,9 +25,11 @@ import (
 type stubEmailSender struct {
 	lastLinkURL     string
 	lastInviterName string
+	lastLocale      string
 }
 
-func (s *stubEmailSender) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
+func (s *stubEmailSender) SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error {
+	s.lastLocale = locale
 	s.lastLinkURL = inviteURL
 	s.lastInviterName = inviterName
 	return nil
@@ -387,5 +389,29 @@ func TestPurgeClosed_RemovesInvitationsLongClosedAndNothingPending(t *testing.T)
 		if count(id) != 1 {
 			t.Errorf("invitation %d should stay", i)
 		}
+	}
+}
+
+// The invitation email is written in the language it was sent with, both when
+// it is issued and when it is sent again.
+func TestInvitationEmail_FollowsTheLocaleOfTheRequest(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts, _, sender := newTestServiceWithSender(t, db)
+	tn := freshTenant(t, ts)
+
+	email := fmt.Sprintf("locale-%s@example.com", uuid.New().String()[:8])
+	inv, err := svc.Create(tn.ID, Inviter{}, &CreateInvitationRequest{Email: email, Locale: "ko"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	defer db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
+	if sender.lastLocale != "ko" {
+		t.Errorf("issued in %q, want ko", sender.lastLocale)
+	}
+	if err := svc.Resend(inv.ID, "en"); err != nil {
+		t.Fatalf("resend: %v", err)
+	}
+	if sender.lastLocale != "en" {
+		t.Errorf("sent again in %q, want en", sender.lastLocale)
 	}
 }

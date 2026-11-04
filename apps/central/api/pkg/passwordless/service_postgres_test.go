@@ -30,11 +30,12 @@ type stubEmailSender struct {
 	lastLinkURL      string
 	lastCode         string
 	lastOrganization string
+	lastLocale       string
 	refuse           error
 }
 
-func (s *stubEmailSender) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	s.lastLinkURL, s.lastCode, s.lastOrganization = linkURL, code, organization
+func (s *stubEmailSender) SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error {
+	s.lastLinkURL, s.lastCode, s.lastOrganization, s.lastLocale = linkURL, code, organization, locale
 	return s.refuse
 }
 
@@ -143,7 +144,7 @@ func TestSendMagicLink_UninvitedAddress_IssuesNoToken(t *testing.T) {
 	f := newFixture(t)
 	email := fmt.Sprintf("stranger-%s@example.com", uuid.New().String()[:8])
 
-	resp, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test")
+	resp, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", "")
 	if err != nil {
 		t.Fatalf("response must not reveal that the address is uninvited, got error: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestMagicLink_InvitedAddress_ProvisionsUser(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	if n := f.linkCount(t, email); n != 1 {
@@ -206,7 +207,7 @@ func TestVerifyMagicLink_RevokedInvitation_Denies(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -236,7 +237,7 @@ func TestSendMagicLink_ExistingUser_IsUnaffected(t *testing.T) {
 	}
 	defer f.db.Exec(`DELETE FROM users WHERE id = ?`, u.ID)
 
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	if n := f.linkCount(t, email); n != 1 {
@@ -271,11 +272,11 @@ func TestSendMagicLink_RefusedMail_AnswersLikeUninvited(t *testing.T) {
 	stranger := fmt.Sprintf("stranger-%s@example.com", uuid.New().String()[:8])
 	f.sender.refuse = errors.New("mail queue is full")
 
-	got, err := f.svc.SendMagicLink(f.tenant.ID, member, "flow-1", "127.0.0.1", "test")
+	got, err := f.svc.SendMagicLink(f.tenant.ID, member, "flow-1", "127.0.0.1", "test", "")
 	if err != nil {
 		t.Fatalf("send to member with refused mail: %v — must answer as if sent", err)
 	}
-	want, err := f.svc.SendMagicLink(f.tenant.ID, stranger, "flow-1", "127.0.0.1", "test")
+	want, err := f.svc.SendMagicLink(f.tenant.ID, stranger, "flow-1", "127.0.0.1", "test", "")
 	if err != nil {
 		t.Fatalf("send to stranger: %v", err)
 	}
@@ -297,7 +298,7 @@ func TestInspectMagicLink_DoesNotConsume(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -341,7 +342,7 @@ func TestVerifyMagicLink_IsSingleUse(t *testing.T) {
 		t.Fatalf("invite: %v", err)
 	}
 	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	token := f.lastToken(t)
@@ -376,5 +377,23 @@ func TestMayProvision_FailsClosed(t *testing.T) {
 
 	if ungated.mayProvision(f.tenant.ID, "anyone@example.com") {
 		t.Error("a missing invitation gate must deny provisioning, not allow it")
+	}
+}
+
+// The sign-in email is written in the language the request asked for.
+func TestSendMagicLink_IsWrittenInTheLocaleOfTheRequest(t *testing.T) {
+	f := newFixture(t)
+	email := fmt.Sprintf("locale-%s@example.com", uuid.New().String()[:8])
+	inv, err := f.invitation.Create(f.tenant.ID, invitation.Inviter{}, &invitation.CreateInvitationRequest{Email: email})
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	defer f.db.Exec(`DELETE FROM invitations WHERE id = ?`, inv.ID)
+
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, "flow-1", "127.0.0.1", "test", "ko"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if f.sender.lastLocale != "ko" {
+		t.Errorf("sent in %q, want ko", f.sender.lastLocale)
 	}
 }

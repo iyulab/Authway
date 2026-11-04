@@ -22,7 +22,8 @@ import (
 // EmailSender interface for sending emails
 type EmailSender interface {
 	// code is the link's code as the reader types it (XXXX-XXXX).
-	SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error
+	// locale is the language of the message (a tag or an Accept-Language value).
+	SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error
 }
 
 // InvitationGate reports whether a magic-link sign-in may create a new
@@ -44,7 +45,8 @@ type InvitationGate interface {
 type Service interface {
 	// SendMagicLink emails a link that signs email in to loginFlow. An
 	// address that may not sign in gets the same answer and no link.
-	SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent string) (*MagicLinkResponse, error)
+	// locale is the language of the email (a tag or an Accept-Language value).
+	SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent, locale string) (*MagicLinkResponse, error)
 	// VerifyMagicLink consumes the token: it marks the link used and may
 	// provision a user. It is not idempotent and must never back a GET.
 	VerifyMagicLink(token string) (*MagicLink, *user.User, error)
@@ -164,7 +166,7 @@ func (s *service) mayProvision(tenantID uuid.UUID, email string) bool {
 	return allowed
 }
 
-func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent string) (*MagicLinkResponse, error) {
+func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress, userAgent, locale string) (*MagicLinkResponse, error) {
 	email = emailaddr.Normalize(email)
 	token, err := generateToken()
 	if err != nil {
@@ -244,7 +246,7 @@ func (s *service) SendMagicLink(tenantID uuid.UUID, email, loginFlow, ipAddress,
 		isNewUser := tokenType == TokenTypeRegister
 		// A link that could not be handed to the sender gets the same answer
 		// as one that was: the answer must not depend on the address.
-		if err := s.emailSender.SendMagicLinkEmail(email, s.organizationOf(tenantID), linkURL, displayCode(code), isNewUser); err != nil {
+		if err := s.emailSender.SendMagicLinkEmail(email, locale, s.organizationOf(tenantID), linkURL, displayCode(code), isNewUser); err != nil {
 			s.logger.Error("Failed to send magic link email", zap.Error(err), zap.String("email", email))
 		}
 	}

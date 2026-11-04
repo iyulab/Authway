@@ -29,7 +29,7 @@ func (f *fixture) member(t *testing.T) string {
 
 func (f *fixture) send(t *testing.T, email, flow string) {
 	t.Helper()
-	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, flow, "127.0.0.1", "test"); err != nil {
+	if _, err := f.svc.SendMagicLink(f.tenant.ID, email, flow, "127.0.0.1", "test", ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	t.Cleanup(func() { f.db.Exec(`DELETE FROM magic_link_tokens WHERE login_flow = ?`, flow) })
@@ -148,7 +148,7 @@ func TestSendMagicLink_AMailboxGetsAFewAtATime(t *testing.T) {
 		f.send(t, email, flow)
 	}
 	before := f.sender.lastLinkURL
-	resp, err := f.svc.SendMagicLink(f.tenant.ID, strings.ToUpper(email), flow, "127.0.0.1", "test")
+	resp, err := f.svc.SendMagicLink(f.tenant.ID, strings.ToUpper(email), flow, "127.0.0.1", "test", "")
 	if err != nil || resp == nil || resp.Message == "" {
 		t.Fatalf("the answer past the limit must look like any other: %v %v", resp, err)
 	}

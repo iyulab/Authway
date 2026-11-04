@@ -164,8 +164,8 @@ type invitationEmailAdapterImpl struct {
 	emailService email.EmailService
 }
 
-func (a *invitationEmailAdapterImpl) SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL string) error {
-	return a.emailService.SendInvitationEmail(toEmail, inviterName, tenantName, message, inviteURL)
+func (a *invitationEmailAdapterImpl) SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL string) error {
+	return a.emailService.SendInvitationEmail(toEmail, locale, inviterName, tenantName, message, inviteURL)
 }
 
 // passwordlessEmailAdapterImpl implements passwordless.EmailSender by delegating
@@ -174,6 +174,6 @@ type passwordlessEmailAdapterImpl struct {
 	emailService email.EmailService
 }
 
-func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, organization, linkURL, code string, isNewUser bool) error {
-	return a.emailService.SendMagicLinkEmail(toEmail, organization, linkURL, code, isNewUser)
+func (a *passwordlessEmailAdapterImpl) SendMagicLinkEmail(toEmail, locale, organization, linkURL, code string, isNewUser bool) error {
+	return a.emailService.SendMagicLinkEmail(toEmail, locale, organization, linkURL, code, isNewUser)
 }

@@ -8,6 +8,7 @@ import (
 	"authway/apps/central/api/pkg/email"
 	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/user"
+	"authway/packages/mail"
 	"context"
 	"errors"
 	"net/http"
@@ -158,7 +159,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	}
 
 	// Send verification email
-	if err := h.emailSvc.SendVerificationEmail(usr.Email, h.organizationOf(usr.TenantID), verification.Token); err != nil {
+	if err := h.emailSvc.SendVerificationEmail(usr.Email, mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage)), h.organizationOf(usr.TenantID), verification.Token); err != nil {
 		h.logger.Error("Failed to send verification email", zap.Error(err))
 	}
 
@@ -255,7 +256,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	// Send reset email
-	if err := h.emailSvc.SendPasswordResetEmail(usr.Email, h.organizationOf(usr.TenantID), reset.Token); err != nil {
+	if err := h.emailSvc.SendPasswordResetEmail(usr.Email, mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage)), h.organizationOf(usr.TenantID), reset.Token); err != nil {
 		h.logger.Error("Failed to send reset email", zap.Error(err))
 	}
 

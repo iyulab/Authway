@@ -9,9 +9,10 @@ import (
 
 const link = "https://login.example.com/x?token=abc&next=1"
 
+// mustRender renders in Korean: the assertions below read its words.
 func mustRender(t *testing.T, name string, vars map[string]any) Message {
 	t.Helper()
-	m, err := Render(name, DefaultLocale, vars)
+	m, err := Render(name, "ko", vars)
 	if err != nil {
 		t.Fatalf("render %s: %v", name, err)
 	}
@@ -105,7 +106,7 @@ func TestRender_RefusesAnUnknownMessageAndFallsBackFromAnUnknownLocale(t *testin
 	if _, err := Render("welcome", DefaultLocale, nil); err == nil {
 		t.Error("an unknown message rendered")
 	}
-	if m, err := Render("verification", "xx", map[string]any{"link": link}); err != nil || m.Subject != "Authway - 이메일 인증" {
+	if m, err := Render("verification", "xx", map[string]any{"link": link}); err != nil || m.Subject != "Authway - Verify your email" {
 		t.Errorf("an unknown locale did not fall back: %q %v", m.Subject, err)
 	}
 }

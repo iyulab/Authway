@@ -9,6 +9,7 @@ import (
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/middleware"
 	"authway/apps/central/api/pkg/passwordless"
+	"authway/packages/mail"
 )
 
 // nextEmailSent tells the sign-in screen a link is on its way.
@@ -59,7 +60,7 @@ func (h *MagicLinkFlowHandler) Send(c *fiber.Ctx) error {
 	// A request refused above sends nothing.
 	middleware.IncrementRateLimitOnFailure(c)
 
-	if _, err := h.links.SendMagicLink(cl.TenantID, strings.TrimSpace(req.Email), flow, c.IP(), c.Get("User-Agent")); err != nil {
+	if _, err := h.links.SendMagicLink(cl.TenantID, strings.TrimSpace(req.Email), flow, c.IP(), c.Get("User-Agent"), mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage))); err != nil {
 		h.auth.logger.Error("Failed to issue magic link", zap.Error(err))
 		return apierror.Refuse(c, fiber.StatusInternalServerError, "internal_error", "The sign-in link could not be issued. Try again shortly.")
 	}

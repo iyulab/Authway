@@ -7,6 +7,7 @@ import (
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/user"
+	"authway/packages/mail"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -71,6 +72,9 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return apierror.Invalid(c, err)
 	}
 
+	// The email is written in the language of whoever sends the invitation:
+	// the one thing known about the reader of it is where it came from.
+	req.Locale = mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage))
 	invitation, err := h.service.Create(tenantID, by, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
@@ -296,7 +300,7 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 		return err
 	}
 
-	if err := h.service.Resend(id); err != nil {
+	if err := h.service.Resend(id, mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage))); err != nil {
 		h.logger.Warn("Failed to resend invitation", zap.Error(err), zap.String("invitation_id", idStr))
 		return h.refuseByID(c, err, "failed to resend invitation")
 	}

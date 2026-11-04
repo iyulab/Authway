@@ -19,7 +19,7 @@ var files embed.FS
 
 // DefaultLocale is the language a message is written in when no other is asked
 // for, or the one asked for has no strings.
-const DefaultLocale = "ko"
+const DefaultLocale = "en"
 
 // Message is one rendered message.
 type Message struct {
@@ -31,8 +31,12 @@ type Message struct {
 // Render renders the message `name` in `locale` with the values in vars. An
 // empty value counts as absent, so a section on it is skipped. A "link" must
 // be an absolute http or https address. A message that fails to render is an
-// error, never a partial body: a partial body would still be sent.
+// error, never a partial body: a partial body would still be sent. `locale`
+// is a language tag or an Accept-Language value; see Negotiate.
 func Render(name, locale string, vars map[string]any) (Message, error) {
+	// A region tag (ko-KR) or an unknown language still gets a message: the
+	// locale is whatever Negotiate makes of it.
+	locale = Negotiate(locale)
 	data := map[string]any{}
 	for k, v := range vars {
 		if s, ok := v.(string); ok && s == "" {

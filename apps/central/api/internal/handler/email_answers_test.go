@@ -26,8 +26,8 @@ import (
 // when its queue is full.
 type refusingMailer struct{ email.EmailService }
 
-func (refusingMailer) SendVerificationEmail(string, string, string) error  { return email.ErrMailQueueFull }
-func (refusingMailer) SendPasswordResetEmail(string, string, string) error { return email.ErrMailQueueFull }
+func (refusingMailer) SendVerificationEmail(string, string, string, string) error  { return email.ErrMailQueueFull }
+func (refusingMailer) SendPasswordResetEmail(string, string, string, string) error { return email.ErrMailQueueFull }
 
 func emailApp(h *EmailHandler) *fiber.App {
 	app := fiber.New()
@@ -128,6 +128,64 @@ func TestEmailRequests_RefusedMailAnswersLikeNoAccount(t *testing.T) {
 		}
 		if messageOf(t, memberBody) != messageOf(t, nobodyBody) {
 			t.Errorf("%s: member answered %q, nobody %q — they must match", path, memberBody, nobodyBody)
+		}
+	}
+}
+
+// localeMailer records the language each message is handed over with.
+type localeMailer struct {
+	email.EmailService
+	verification, reset string
+}
+
+func (m *localeMailer) SendVerificationEmail(_, locale, _, _ string) error {
+	m.verification = locale
+	return nil
+}
+func (m *localeMailer) SendPasswordResetEmail(_, locale, _, _ string) error {
+	m.reset = locale
+	return nil
+}
+
+// The verification and the reset email are written in the language the
+// request's Accept-Language names; none names the default, English.
+func TestEmailRequests_AreWrittenInTheLanguageOfTheRequest(t *testing.T) {
+	db := handlerPostgres(t)
+	suffix := uuid.New().String()[:8]
+	tn, err := tenant.NewService(db).CreateTenant(tenant.CreateTenantRequest{Name: "mail-locale-" + suffix, Slug: "mail-locale-" + suffix})
+	if err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM tenants WHERE id = ?`, tn.ID) })
+	users := user.NewService(db, zap.NewNop())
+	u, err := users.Create(tn.ID, &user.CreateUserRequest{Email: "member-" + suffix + "@example.com", Name: "Member"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+
+	for header, want := range map[string]string{"ko-KR,ko;q=0.9,en;q=0.8": "ko", "en-US": "en", "": "en"} {
+		mailer := &localeMailer{}
+		h := &EmailHandler{
+			emailRepo: email.NewRepository(db), emailSvc: mailer, userSvc: users,
+			clientSvc: newFakeClientService(), validator: validator.New(), logger: zap.NewNop(),
+		}
+		app := emailApp(h)
+		for path, got := range map[string]*string{
+			"/api/v1/email/send-verification": &mailer.verification,
+			"/api/v1/email/forgot-password":   &mailer.reset,
+		} {
+			req := httptest.NewRequest("POST", path, strings.NewReader(fmt.Sprintf(`{"email":%q}`, u.Email)))
+			req.Header.Set("Content-Type", "application/json")
+			if header != "" {
+				req.Header.Set("Accept-Language", header)
+			}
+			if res, err := app.Test(req, -1); err != nil || res.StatusCode != 200 {
+				t.Fatalf("POST %s: status %v, error %v", path, res.StatusCode, err)
+			}
+			if *got != want {
+				t.Errorf("%s with Accept-Language %q: written in %q, want %q", path, header, *got, want)
+			}
 		}
 	}
 }
