@@ -364,6 +364,21 @@ LOG_LEVEL=info
 AUTHWAY_CORS_ALLOWED_ORIGINS=https://auth.example.com,https://admin.example.com
 ```
 
+#### Refusing passwords from known data breaches
+
+```bash
+AUTHWAY_BREACHED_PASSWORD_CHECK=true                                      # default: off
+AUTHWAY_BREACHED_PASSWORD_API_URL=https://api.pwnedpasswords.com/range/   # default; a mirror address in a closed network
+```
+
+Off by default: a deployment asks nobody outside it anything until this is set. When on, a password someone
+**chooses** (accepting an invitation, changing it, resetting it) is refused with `400 password_breached` when it is in a
+known breach; a password that is already set is not looked at again, and signing in does not ask. The check sends
+only the first five characters of the password's SHA-1 hash to the range service (Pwned Passwords' k-anonymity API)
+and compares the rest locally, so neither the password nor its full hash leaves the deployment. If the service does not
+answer in two seconds the password is accepted and a warning is logged, so an outage elsewhere never blocks
+sign-up. `capabilities.breached_password_check` tells a client whether the check is on.
+
 ### Hydra
 
 ```bash

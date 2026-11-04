@@ -150,17 +150,25 @@ try {
     Write-Host "✓ 비밀 반영 완료" -ForegroundColor Green
     Write-Host ""
 
-    # Optional: a deployment that shares its Redis names its share. An empty
-    # array adds no argument.
-    $redisKeyPrefixEnv = @()
+    # Optional settings the target chooses; each is added only when its .env says
+    # so. An empty array adds no argument.
+    # A deployment that shares its Redis names its share.
+    $optionalTargetEnv = @()
     if ($envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
-        $redisKeyPrefixEnv = @("AUTHWAY_REDIS_KEY_PREFIX=$($envVars['AUTHWAY_REDIS_KEY_PREFIX'])")
+        $optionalTargetEnv = @("AUTHWAY_REDIS_KEY_PREFIX=$($envVars['AUTHWAY_REDIS_KEY_PREFIX'])")
         Write-Host "🔑 Redis key prefix: $($envVars['AUTHWAY_REDIS_KEY_PREFIX'])" -ForegroundColor Gray
     }
     # Optional: a Redis that shards keys over nodes needs the cluster client.
     if ($envVars['AUTHWAY_REDIS_CLUSTER'] -eq 'true') {
-        $redisKeyPrefixEnv += 'AUTHWAY_REDIS_CLUSTER=true'
+        $optionalTargetEnv += 'AUTHWAY_REDIS_CLUSTER=true'
         Write-Host "🔑 Redis cluster client" -ForegroundColor Gray
+    }
+    # Optional: refuse a password that is being chosen when it is in a known data
+    # breach (asks the public range service the first five characters of its
+    # hash; off unless the target says so).
+    if ($envVars['AUTHWAY_BREACHED_PASSWORD_CHECK'] -eq 'true') {
+        $optionalTargetEnv += 'AUTHWAY_BREACHED_PASSWORD_CHECK=true'
+        Write-Host "🔑 Breached password check on" -ForegroundColor Gray
     }
 
     Write-Host "🔄 이미지 및 환경 변수 업데이트 중..." -ForegroundColor Yellow
@@ -187,7 +195,7 @@ try {
             "AUTHWAY_REDIS_PORT=$($envVars['AUTHWAY_REDIS_PORT'])" `
             "AUTHWAY_REDIS_PASSWORD=secretref:redis-password" `
             "AUTHWAY_REDIS_DB=$($envVars['AUTHWAY_REDIS_DB'])" `
-            $redisKeyPrefixEnv `
+            $optionalTargetEnv `
             "AUTHWAY_REDIS_TLS_ENABLED=$($envVars['AUTHWAY_REDIS_TLS_ENABLED'])" `
             "AUTHWAY_HYDRA_ADMIN_URL=$($envVars['HYDRA_ADMIN_INTERNAL_URL'])" `
             "AUTHWAY_HYDRA_PUBLIC_URL=$($envVars['HYDRA_ISSUER'])" `
@@ -230,6 +238,9 @@ try {
     # only adds variables.
     if (-not $envVars['AUTHWAY_REDIS_KEY_PREFIX']) {
         $staleEnv += 'AUTHWAY_REDIS_KEY_PREFIX'
+    }
+    if ($envVars['AUTHWAY_BREACHED_PASSWORD_CHECK'] -ne 'true') {
+        $staleEnv += 'AUTHWAY_BREACHED_PASSWORD_CHECK'
     }
     if ($envVars['AUTHWAY_REDIS_CLUSTER'] -ne 'true') {
         $staleEnv += 'AUTHWAY_REDIS_CLUSTER'

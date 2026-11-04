@@ -657,6 +657,19 @@ VALUES (gen_random_uuid(), '$Tenant', '$verifyEmail', '$VerifyPasswordHash', 'po
                 Write-Host "❌ 계정 앱 code 교환 실패: $accountResp" -ForegroundColor Red
                 exit 1
             }
+
+            # 유출 비밀번호 검사(capabilities.breached_password_check)가 켜진 배포는 알려진 유출 비밀번호를 거절한다 —
+            # 거절이라 비밀번호는 바뀌지 않는다. 외부 서비스에 닿지 못하면 통과(fail-open)하므로 이 확인은
+            # 켜진 배포가 실제로 바깥에 닿는지도 보여 준다.
+            if ($caps.breached_password_check) {
+                $breachBody = @{ current_password = $VerifyPassword; new_password = 'password123' } | ConvertTo-Json -Compress
+                $breachResp = $breachBody | & curl.exe -s -X POST "$apiUrl/api/v1/users/password" -H "Authorization: Bearer $accountToken" -H 'Content-Type: application/json' --data-binary '@-' | ConvertFrom-Json
+                if ($breachResp.code -ne 'password_breached') {
+                    Write-Host "❌ 유출 비밀번호 검사가 켜져 있는데 알려진 유출 비밀번호가 거절되지 않음: code='$($breachResp.code)'" -ForegroundColor Red
+                    exit 1
+                }
+                Write-Host "   ✅ 유출 비밀번호 거절(password_breached)" -ForegroundColor Green
+            }
             $seen = & curl.exe -s "$apiUrl/api/v1/users/approvals/$approvalId" -H "Authorization: Bearer $accountToken" | ConvertFrom-Json
             if ($seen.binding_message -ne "V-$suffix" -or $seen.status -ne 'pending') {
                 Write-Host "❌ 사용자가 보는 승인 요청이 다름: binding='$($seen.binding_message)' status='$($seen.status)'" -ForegroundColor Red
