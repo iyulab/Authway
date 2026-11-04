@@ -377,7 +377,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	authHandler.GrantsPasskeys(passkeyCeremonies)
 	passkeyHandler := handler.NewPasskeyHandler(userService, passkeyService, clientService, passkeyCeremonies, tenantService.Name, newFeatureServices.AuditService, zapLogger)
 	clientHandler := handler.NewClientHandler(services, zapLogger, newFeatureServices.AuditService)
-	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name)
+	emailHandler := handler.NewEmailHandler(emailRepo, mailer, userService, clientService, hydraClient, validate, zapLogger, newFeatureServices.AuditService, tenantService.Name).LimitsMailPerAccount(signInState)
 	logoutFlowHandler := handler.NewLogoutFlowHandler(hydraClient, authHandler, zapLogger)
 	userHandler := handler.NewUserHandler(services, hydraClient, zapLogger, newFeatureServices.AuditService)
 	mfaHandler := handler.NewMFAHandler(mfaService, userService, zapLogger, newFeatureServices.AuditService, hydraClient)
@@ -392,6 +392,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// office signing in together behind one address stays far below.
 	flowStartLimit := ratelimitmw.FlowStartRateLimit(signInState)
 	redeemLimit := ratelimitmw.TokenRedemptionRateLimit(signInState)
+	mailLimit := ratelimitmw.MailRequestRateLimit(signInState)
 	app.Get("/flows/login", flowEntryHandler.Login)
 	app.Get("/flows/consent", flowEntryHandler.Consent)
 	app.Get("/flows/logout", flowEntryHandler.Logout)
@@ -451,7 +452,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	v1 := app.Group("/api/v1")
 
 	// Email verification and password reset routes
-	emailHandler.RegisterRoutes(v1, redeemLimit)
+	emailHandler.RegisterRoutes(v1, redeemLimit, mailLimit)
 
 	// What this deployment offers, so screens show only what works.
 	capabilities := handler.NewCapabilitiesHandler(socialHandler)

@@ -11,13 +11,15 @@ import (
 // it in front answers 429 without reaching its handler.
 func refuse(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusTooManyRequests) }
 
-// The routes that redeem a reset link have the redemption limit in front.
+// The routes that redeem a reset link, and those that send a message to an address, have their limit in front.
 func TestEmailRoutes_RedeemingAResetLinkIsLimited(t *testing.T) {
 	app := fiber.New()
-	(&EmailHandler{}).RegisterRoutes(app.Group("/api/v1"), refuse)
+	(&EmailHandler{}).RegisterRoutes(app.Group("/api/v1"), refuse, refuse)
 	for _, route := range []struct{ method, path string }{
 		{"POST", "/api/v1/email/reset-password"},
 		{"GET", "/api/v1/email/verify-reset-token"},
+		{"POST", "/api/v1/email/forgot-password"},
+		{"POST", "/api/v1/email/send-verification"},
 	} {
 		res, err := app.Test(httptest.NewRequest(route.method, route.path, nil), -1)
 		if err != nil {

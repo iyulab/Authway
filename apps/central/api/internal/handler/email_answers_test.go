@@ -31,7 +31,8 @@ func (refusingMailer) SendPasswordResetEmail(string, string, string) error { ret
 
 func emailApp(h *EmailHandler) *fiber.App {
 	app := fiber.New()
-	h.RegisterRoutes(app.Group("/api/v1"), func(c *fiber.Ctx) error { return c.Next() })
+	pass := func(c *fiber.Ctx) error { return c.Next() }
+	h.RegisterRoutes(app.Group("/api/v1"), pass, pass)
 	return app
 }
 

@@ -6,9 +6,12 @@ import (
 	"authway/apps/central/api/pkg/audit"
 	"authway/apps/central/api/pkg/client"
 	"authway/apps/central/api/pkg/email"
+	"authway/apps/central/api/pkg/ephemeral"
 	"authway/apps/central/api/pkg/user"
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -38,6 +41,8 @@ type EmailHandler struct {
 	// organization names a tenant in the mail ("" when it cannot): one
 	// address can have accounts in several.
 	organization func(tenantID uuid.UUID) string
+	// mailLimit counts the messages sent to one account (see LimitsMailPerAccount).
+	mailLimit ephemeral.Store
 }
 
 // NewEmailHandler creates a new email handler
@@ -136,7 +141,7 @@ func (h *EmailHandler) SendVerificationEmail(c *fiber.Ctx) error {
 	if errors.Is(err, errUnknownClient) {
 		return refuseUnknownClient(c)
 	}
-	if err != nil || usr.EmailVerified || !usr.Active {
+	if err != nil || usr.EmailVerified || !usr.Active || !h.mayMail("verification", usr.ID) {
 		return c.JSON(fiber.Map{"message": verificationRequested})
 	}
 
@@ -238,7 +243,7 @@ func (h *EmailHandler) ForgotPassword(c *fiber.Ctx) error {
 	if errors.Is(err, errUnknownClient) {
 		return refuseUnknownClient(c)
 	}
-	if err != nil || !usr.Active {
+	if err != nil || !usr.Active || !h.mayMail("reset", usr.ID) {
 		return c.JSON(fiber.Map{"message": passwordResetRequested})
 	}
 
@@ -375,14 +380,48 @@ func (h *EmailHandler) ResetPassword(c *fiber.Ctx) error {
 	})
 }
 
+// mailsPerAccount is how many messages of one kind the endpoints send to one
+// account in mailWindow, however many sources ask.
+const (
+	mailsPerAccount = 3
+	mailWindow      = 15 * time.Minute
+)
+
+// LimitsMailPerAccount has the endpoints that send a message to an address
+// the caller names stop sending to one account after a few in a short while.
+// Anyone can ask for anyone's address, and a limit per source alone does not
+// stop a mailbox from being filled by many; the answer is the same whether a
+// message was sent or not, so it says nothing about the account.
+func (h *EmailHandler) LimitsMailPerAccount(store ephemeral.Store) *EmailHandler {
+	h.mailLimit = store
+	return h
+}
+
+// mayMail counts a message of the kind to the account and says whether it may be sent.
+func (h *EmailHandler) mayMail(kind string, account uuid.UUID) bool {
+	if h.mailLimit == nil {
+		return true
+	}
+	sent, err := h.mailLimit.Hit(context.Background(), "ratelimit:mailaccount:"+kind+":"+account.String(), mailWindow)
+	if err != nil {
+		// A store that cannot count does not stop a person from getting their own mail.
+		return true
+	}
+	if sent > mailsPerAccount {
+		h.logger.Warn("Not sending another message to an account that has had several lately", zap.String("kind", kind), zap.String("user_id", account.String()))
+		return false
+	}
+	return true
+}
+
 // RegisterRoutes registers email routes. redeemLimit bounds how often one
-// address may redeem a reset link.
-func (h *EmailHandler) RegisterRoutes(router fiber.Router, redeemLimit fiber.Handler) {
+// address may redeem a reset link, mailLimit how often it may ask for a message to be sent.
+func (h *EmailHandler) RegisterRoutes(router fiber.Router, redeemLimit, mailLimit fiber.Handler) {
 	email := router.Group("/email")
 	{
-		email.Post("/send-verification", h.SendVerificationEmail)
+		email.Post("/send-verification", mailLimit, h.SendVerificationEmail)
 		email.Get("/verify", h.VerifyEmail)
-		email.Post("/forgot-password", h.ForgotPassword)
+		email.Post("/forgot-password", mailLimit, h.ForgotPassword)
 		email.Get("/verify-reset-token", redeemLimit, h.VerifyResetToken)
 		email.Post("/reset-password", redeemLimit, h.ResetPassword)
 	}

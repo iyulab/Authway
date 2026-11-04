@@ -118,6 +118,13 @@
   `429 too_many_requests` with `retry_after`, for a minute and for 15 minutes
   respectively. The ceilings are far above what a person, or an office signing
   in together behind one address, makes.
+- **Asking for a password-reset or verification message is limited** — anyone
+  can ask for anyone's address (`POST /api/v1/email/forgot-password`,
+  `POST /api/v1/email/send-verification`), and nothing stopped a mailbox from
+  being filled that way. One network address may ask 20 times in 15 minutes
+  (`429 too_many_requests`), and an account is sent at most 3 messages of a kind
+  in 15 minutes however many addresses ask; the answer is the same whether a
+  message went out or not, so it still says nothing about the account.
 - **A first password is set on the account screen only** — an account that has no
   password (it signs in by link, by a provider or by a passkey) can set its first
   one with a token issued to the account screen and a recent sign-in; any other

@@ -1272,6 +1272,7 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
       responses:
         '200': { $ref: '#/components/responses/Message' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/email/verify:
@@ -1290,6 +1291,7 @@ paths:
       requestBody: { $ref: '#/components/requestBodies/EmailAddress' }
       responses:
         '200': { $ref: '#/components/responses/Message' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '400': { $ref: '#/components/responses/Error' }
 
   /api/v1/email/verify-reset-token:

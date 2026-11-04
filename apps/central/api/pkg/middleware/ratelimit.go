@@ -249,3 +249,21 @@ func TokenRedemptionRateLimit(store ephemeral.Store) fiber.Handler {
 		CountEveryRequest: true,
 	})
 }
+
+// MailRequestRateLimit bounds the requests one network address makes to the
+// endpoints that send a message to an address the caller names — a password
+// reset, a verification. Anyone can ask, for anyone's address, so the message
+// reaches a person who did not; this is the ceiling per source, and the mailbox
+// has its own (see the email handler), since a source can be many. Every
+// request counts.
+func MailRequestRateLimit(store ephemeral.Store) fiber.Handler {
+	return RateLimit(RateLimitConfig{
+		Store:             store,
+		MaxAttempts:       20,
+		WindowDuration:    15 * time.Minute,
+		BlockDuration:     15 * time.Minute,
+		KeyPrefix:         "ratelimit:mailrequest:",
+		SkipOnError:       true,
+		CountEveryRequest: true,
+	})
+}
