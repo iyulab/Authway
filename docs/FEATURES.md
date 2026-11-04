@@ -237,6 +237,8 @@ redirect URI, when:
 | `no account for this address; ask an administrator for an invitation` | The tenant is invitation-only and nobody invited the address. |
 | `the sign-in provider has not verified this email address` | The provider did not state that the person controls the address. Without that, whoever controls the provider-side account could sign in as the owner of the address. |
 | `this email address already signs in with a different account at this provider` | The account with that address is linked to another account at the same provider. |
+| `the account with this email address has not verified it yet; verify it first, then sign in with this provider` | The account with that address exists but nobody has proved the address yet (the mailed link does that). Without this, whoever holds a provider account with the address could take the account before its owner had used it. |
+| `This account is suspended. Contact the administrator of the application.` | The account with that address is suspended. It is refused before anything is linked to it, so the provider account is not left attached to a suspended account. |
 
 ### What counts as verified
 

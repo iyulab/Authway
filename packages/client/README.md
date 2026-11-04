@@ -135,6 +135,10 @@ const response = await fetch('http://localhost:8080/api/v1/profile/me', {
 })
 ```
 
+`profile/me` 는 토큰이 받은 범위만큼만 사용자를 알려 줍니다 — 주소(`email`·`email_verified`)는
+`email` 범위가, 이름(`name`)은 `profile` 범위가 있을 때만 실립니다. 기본 범위
+(`openid profile email`)는 둘 다 포함합니다.
+
 ## 클레임
 
 ```typescript
