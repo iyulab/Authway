@@ -404,7 +404,7 @@ so in its log when it starts.
 | `auth_time:<session>` | When and how the user of a browser session last signed in — the `auth_time` of access tokens and the `amr` of ID tokens issued on a reused session, and the check before deleting an account | 30 days | Until the user signs in again, access tokens issued on that session carry no `auth_time` and ID tokens no `amr`; an operation that needs a recent sign-in asks for one |
 | `mfa_challenge:<id>` | A sign-in that passed its first factor and owes the second | 10 minutes | The user starts the sign-in again |
 | `oauth:state:<state>` | A sign-in sent to a social provider and not yet back | 10 minutes | The user starts the sign-in again |
-| `ratelimit:…` | Attempt counters and blocks, per route and address | 1 minute to 1 hour | Counters start from zero |
+| `ratelimit:…` | Attempt counters and blocks, per route and address (`login`, `magiclink`, `flowstart`, `redeem`, `mailrequest`), and the messages sent to one account (`mailaccount`) | 1 minute to 1 hour | Counters start from zero |
 
 ### Size
 
