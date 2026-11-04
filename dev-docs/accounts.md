@@ -71,7 +71,11 @@ was used.
    to anyone's.
 5. **Sign-up is invited unless a tenant opens it.** An account starts from an
    invitation; magic links, provider sign-in and passkeys are gated by the same
-   policy and never become a side door.
+   policy and never become a side door. How a tenant takes people in is a fact
+   about the tenant, not about any address: the sign-in flow and the answers to
+   a request for an emailed link carry it, the same for an address with an account
+   and one without, so a screen can tell someone who cannot sign in that the
+   service is for invited people without saying who has an account.
 6. **Passwords are checked where they are stored.** Every way of setting one —
    accepting an invitation, changing it, resetting it — meets the same rule: the tenant's least length,
    the greatest length the hash reads, and, where the deployment turns it on, a
