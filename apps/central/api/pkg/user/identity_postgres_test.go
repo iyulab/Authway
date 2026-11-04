@@ -109,3 +109,75 @@ func TestIdentities_TheLastWayToSignInStays(t *testing.T) {
 		t.Errorf("identities after refusing = %d, want 1", len(after.Identities))
 	}
 }
+
+// A sign-in identity and a passkey name an account of their own tenant: the
+// database refuses a row that repeats another tenant, and a row still goes with
+// its account.
+func TestIdentitiesAndPasskeys_BelongToTheTenantOfTheirAccount(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	home := freshTenant(t, db, ts)
+	away := freshTenant(t, db, ts)
+	u := newAccount(t, svc, home.ID, "correct-horse-9")
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+
+	err := db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject)
+		VALUES (?, ?, ?, 'google', ?)`, uuid.New(), away.ID, u.ID, "g-"+uuid.NewString()).Error
+	if err == nil {
+		t.Error("an identity named the account of another tenant and was stored")
+	}
+	err = db.Exec(`INSERT INTO user_passkeys (id, tenant_id, user_id, credential_id, public_key)
+		VALUES (?, ?, ?, ?, ?)`, uuid.New(), away.ID, u.ID, []byte(uuid.NewString()), []byte("key")).Error
+	if err == nil {
+		t.Error("a passkey named the account of another tenant and was stored")
+	}
+
+	// Their own tenant is accepted, and the rows go with the account.
+	if err := db.Exec(`INSERT INTO user_identities (id, tenant_id, user_id, provider, subject)
+		VALUES (?, ?, ?, 'github', ?)`, uuid.New(), home.ID, u.ID, "gh-"+uuid.NewString()).Error; err != nil {
+		t.Fatalf("an identity of the account's own tenant: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO user_passkeys (id, tenant_id, user_id, credential_id, public_key)
+		VALUES (?, ?, ?, ?, ?)`, uuid.New(), home.ID, u.ID, []byte(uuid.NewString()), []byte("key")).Error; err != nil {
+		t.Fatalf("a passkey of the account's own tenant: %v", err)
+	}
+	if err := db.Exec(`DELETE FROM users WHERE id = ?`, u.ID).Error; err != nil {
+		t.Fatalf("delete account: %v", err)
+	}
+	for _, table := range []string{"user_identities", "user_passkeys"} {
+		var left int64
+		db.Raw(`SELECT count(*) FROM `+table+` WHERE user_id = ?`, u.ID).Scan(&left)
+		if left != 0 {
+			t.Errorf("%s rows left after the account was deleted = %d, want 0", table, left)
+		}
+	}
+}
+
+// The same key holds for the claims, delegations and approval requests of an
+// account: each names its account by tenant and id together.
+func TestAccountData_IsKeyedToTheTenantOfItsAccount(t *testing.T) {
+	db := setupPostgres(t)
+	svc, ts := newTestService(t, db)
+	home := freshTenant(t, db, ts)
+	away := freshTenant(t, db, ts)
+	u := newAccount(t, svc, home.ID, "correct-horse-9")
+	t.Cleanup(func() { db.Exec(`DELETE FROM users WHERE id = ?`, u.ID) })
+
+	for _, table := range []string{"user_identities", "user_passkeys", "user_claims", "delegation_grants", "approval_requests"} {
+		var def string
+		db.Raw(`SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = ?::regclass AND contype = 'f' AND confrelid = 'users'::regclass`, table).Scan(&def)
+		if def != "FOREIGN KEY (tenant_id, user_id) REFERENCES users(tenant_id, id) ON DELETE CASCADE" {
+			t.Errorf("%s: the key to the account is %q, want the (tenant_id, user_id) pair", table, def)
+		}
+	}
+
+	err := db.Exec(`INSERT INTO user_claims (id, user_id, tenant_id, claim_key, claim_value)
+		VALUES (?, ?, ?, 'plan', '"pro"')`, uuid.New(), u.ID, away.ID).Error
+	if err == nil {
+		t.Error("a claim named the account of another tenant and was stored")
+	}
+	if err := db.Exec(`INSERT INTO user_claims (id, user_id, tenant_id, claim_key, claim_value)
+		VALUES (?, ?, ?, 'plan', '"pro"')`, uuid.New(), u.ID, home.ID).Error; err != nil {
+		t.Errorf("a claim of the account's own tenant: %v", err)
+	}
+}

@@ -290,6 +290,15 @@
   contract `email`, `email_verified` and `name` of `OwnProfile` are no longer
   always present.
 
+- **What belongs to an account can only belong to an account of its own tenant**
+  — linked sign-in accounts, passkeys, claims, delegations and approval requests
+  each repeat the tenant of their account, but the database did not check that
+  the two agreed. Migration 058 adds the key that does: a row names its account
+  by tenant and id together, and a row that names an account of another tenant is
+  refused by the database itself. Rows go with their account as before, and
+  nothing the application writes changes. Before applying it, count the rows that
+  already disagree (the query is at the top of the migration); there should be none.
+
 ### Fixed
 
 - **A sign-in flow submitted again is the same sign-in**: the sign-in screen stays
