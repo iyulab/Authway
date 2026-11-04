@@ -41,6 +41,9 @@ const accept = (token: string, password: string) =>
     body: JSON.stringify({ token, password, name: 'Conformance User' }),
   })
 
+// Tenants are made and configured by these scenarios: an installation with one has no tenants to make.
+const { multi_tenant: multiTenant } = await provider.capabilities()
+
 describe('accounts: what an account is created with', () => {
   const created: string[] = []
   const tenants: string[] = []
@@ -76,7 +79,7 @@ describe('accounts: what an account is created with', () => {
     created.push(((await accepted.json()) as { user: { id: string } }).user.id)
   })
 
-  it('refuses tenant settings that could not be ones', async () => {
+  it.skipIf(!multiTenant)('refuses tenant settings that could not be ones', async () => {
     for (const settings of [
       { password_min_length: 5 },
       { password_min_length: 100 },
@@ -95,7 +98,7 @@ describe('accounts: what an account is created with', () => {
     }
   })
 
-  it('tells the screen that is about to ask for a password how long it has to be', async () => {
+  it.skipIf(!multiTenant)('tells the screen that is about to ask for a password how long it has to be', async () => {
     const shownLength = async (token: string) => {
       const shown = await fetch(`${provider.config.api}/api/v1/invitations/token/${encodeURIComponent(token)}`)
       await conform('GET', '/api/v1/invitations/token/{token}', shown.clone())
@@ -150,7 +153,7 @@ describe('accounts: what an account is created with', () => {
     await asTenant(tenant.id, `/api/v1/users/${id}`, { method: 'DELETE' })
   })
 
-  it('takes invitations only for addresses in the domains a tenant names', async () => {
+  it.skipIf(!multiTenant)('takes invitations only for addresses in the domains a tenant names', async () => {
     const res = await provider.admin('/api/v1/tenants', {
       method: 'POST',
       body: JSON.stringify({

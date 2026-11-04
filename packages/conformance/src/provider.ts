@@ -136,6 +136,15 @@ export class Provider {
     return fetch(`${this.config.api}${path}`, { ...init, headers })
   }
 
+  /**
+   * What this installation offers (GET /api/v1/capabilities). A scenario that needs more than the installation
+   * has — several tenants, say — reads it and is skipped, rather than failing on a feature that was never offered.
+   */
+  async capabilities(): Promise<{ multi_tenant: boolean; providers: string[] } & Record<string, unknown>> {
+    const res = await fetch(`${this.config.api}/api/v1/capabilities`)
+    return (await res.json()) as { multi_tenant: boolean; providers: string[] } & Record<string, unknown>
+  }
+
   async tenantId(): Promise<string> {
     if (this.config.tenantId) return this.config.tenantId
     if (!this.tenant) {
@@ -362,6 +371,10 @@ export class Provider {
    * a screen of the login UI (it carries a flow id) or the client's redirect.
    */
   private async followUntil(browser: Browser, url: string, done: (u: URL) => boolean): Promise<URL> {
+    // An address that is already where this stops is not fetched: a provider may hand the browser straight
+    // to the application, with no hop of its own in between.
+    const start = new URL(url)
+    if (done(start)) return start
     let next = await browser.redirectFrom(url)
     for (let hops = 0; hops < 5 && !done(next); hops++) {
       next = await browser.redirectFrom(next.toString())

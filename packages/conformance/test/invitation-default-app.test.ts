@@ -20,7 +20,10 @@ const asTenant = (tenantId: string, path: string, init: RequestInit = {}) =>
 // An invitation that names no application still leads the person somewhere
 // when the tenant has exactly one application to lead to — and nowhere
 // otherwise: which application is meant is not guessed.
-describe('an invitation that names no application', () => {
+// The scenarios make tenants with exactly the applications they need: an installation with one tenant has no tenant to spare.
+const { multi_tenant: multiTenant } = await provider.capabilities()
+
+describe.skipIf(!multiTenant)('an invitation that names no application', () => {
   const tenants: string[] = []
 
   afterAll(async () => {
