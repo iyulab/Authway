@@ -2,6 +2,8 @@ module authway
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/fxamacker/cbor/v2 v2.9.4
