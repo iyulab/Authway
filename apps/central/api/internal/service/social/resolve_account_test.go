@@ -155,6 +155,20 @@ func TestResolveAccount(t *testing.T) {
 		}
 	})
 
+	t.Run("a suspended account is refused before anything is linked to it", func(t *testing.T) {
+		accounts := newFakeAccounts()
+		suspended := accounts.add(tenantID, victimEmail)
+		suspended.Active = false
+
+		got, err := resolveAccount(accounts, &stubGate{invited: true}, zap.NewNop(), tenantID, verified)
+		if !errors.Is(err, ErrAccountSuspended) {
+			t.Fatalf("got %v, %v; want ErrAccountSuspended", got, err)
+		}
+		if suspended.SubjectAt("google") != "" || accounts.linked != 0 {
+			t.Errorf("the suspended account was linked (%q, %d links)", suspended.SubjectAt("google"), accounts.linked)
+		}
+	})
+
 	t.Run("a link in another tenant does not count", func(t *testing.T) {
 		accounts := newFakeAccounts()
 		elsewhere := accounts.add(uuid.New(), victimEmail)

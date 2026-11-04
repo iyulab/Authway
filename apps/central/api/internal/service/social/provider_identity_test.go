@@ -145,7 +145,7 @@ func (f *fakeAccounts) add(tenantID uuid.UUID, email string) *user.User {
 }
 
 func (f *fakeAccounts) addUnverified(tenantID uuid.UUID, email string) *user.User {
-	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: email}
+	u := &user.User{ID: uuid.New(), TenantID: tenantID, Email: email, Active: true}
 	f.users = append(f.users, u)
 	return u
 }

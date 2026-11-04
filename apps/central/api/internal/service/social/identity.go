@@ -45,6 +45,11 @@ var ErrLinkedToAnother = errors.New("this email address already signs in with a 
 // address first (the email link), then signs in with the provider.
 var ErrAccountNotVerified = errors.New("the account with this email address has not verified it yet; verify it first, then sign in with this provider")
 
+// ErrAccountSuspended refuses to link a provider account to an account that is
+// suspended: a suspended account signs in nowhere, so a link made on the way to
+// being refused would only be left behind.
+var ErrAccountSuspended = errors.New("the account with this email address is suspended")
+
 // accounts is the part of the user service that resolving an identity needs.
 type accounts interface {
 	GetByProviderSubject(tenantID uuid.UUID, provider, subject string) (*user.User, error)
@@ -94,6 +99,11 @@ func resolveAccount(users accounts, gate InvitationGate, logger *zap.Logger, ten
 	account, err := users.GetByEmailAndTenant(tenantID, id.Email)
 	switch {
 	case err == nil:
+		if !account.Active {
+			logger.Warn("Social sign-in denied: the account with this address is suspended",
+				zap.String("provider", id.Provider), zap.String("user_id", account.ID.String()))
+			return nil, ErrAccountSuspended
+		}
 		if !account.EmailVerified {
 			logger.Warn("Social sign-in denied: the account with this address has not verified it",
 				zap.String("provider", id.Provider), zap.String("user_id", account.ID.String()))

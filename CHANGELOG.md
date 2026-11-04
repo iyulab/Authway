@@ -282,6 +282,11 @@
 
 ### Fixed
 
+- **A provider sign-in does not link to a suspended account**: a first sign-in
+  with a provider whose verified address matched a suspended account was linked
+  to it and then refused at the end of the flow, leaving the link behind. It is
+  refused before anything is linked, with the same `access_denied` the
+  application got.
 - **The link that verifies an email address survives a token that needs
   escaping**: the login screen put the token into the address as it was, so a
   token with a `+`, `&` or `=` in it did not arrive as it was sent.
