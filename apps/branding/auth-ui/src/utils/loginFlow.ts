@@ -1,5 +1,5 @@
-import { languageHeader } from './language'
 import { getConfig } from '../config'
+import { contract } from './contract'
 
 export type SocialProvider = 'google' | 'github' | 'microsoft' | 'apple'
 
@@ -41,29 +41,81 @@ export function nextScreen(step: FlowStep, flow?: string | null): string | undef
   return undefined
 }
 
-export type FlowKind = 'login-flows' | 'consent-flows' | 'logout-flows' | 'device-flows'
+/**
+ * What a flow endpoint answers, whether it went well or not: the next step, or
+ * the problem that stopped it. Both are read the same way by the screens.
+ */
+export type FlowAnswer = FlowStep & Record<string, any>
 
-/** URL of a flow endpoint. The flow id is opaque; it is only ever passed back. */
-export function flowUrl(kind: FlowKind, flow: string, path = ''): string {
-  return `${getConfig().apiUrl}/api/v1/${kind}/${encodeURIComponent(flow)}${path}`
+/** Reads either answer of a call to the contract's client; an empty body is an empty answer. */
+async function answer(call: Promise<{ data?: unknown; error?: unknown }>): Promise<FlowAnswer> {
+  const { data, error } = await call
+  return (data ?? error ?? {}) as FlowAnswer
 }
 
-export function loginFlowUrl(flow: string, path = ''): string {
-  return flowUrl('login-flows', flow, path)
+/** The flow id is opaque to the screens; they only pass it back. */
+const flowParams = (flow: string) => ({ params: { path: { flow } } })
+
+/** What a login flow shows: the form, or a way on without one. */
+export function getLoginFlow(flow: string): Promise<FlowAnswer> {
+  return answer(contract().GET('/api/v1/login-flows/{flow}', flowParams(flow)))
 }
 
-/** POSTs a step of a flow and returns the backend's answer. */
-export async function submitFlowStep(kind: FlowKind, flow: string, path: string, body?: unknown): Promise<FlowStep> {
-  const response = await fetch(flowUrl(kind, flow, path), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...languageHeader() },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  return response.json()
+export function submitPassword(flow: string, email: string, password: string, remember: boolean): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/password', { ...flowParams(flow), body: { email, password, remember } }))
 }
 
-export function submitLoginStep(flow: string, path: string, body: unknown): Promise<FlowStep> {
-  return submitFlowStep('login-flows', flow, path, body)
+/** The second factor: a code from the authenticator, or a recovery code. */
+export function submitSecondFactor(flow: string, mfaChallenge: string, code: string, recovery: boolean): Promise<FlowAnswer> {
+  const body = { mfa_challenge: mfaChallenge, code }
+  return answer(
+    recovery
+      ? contract().POST('/api/v1/login-flows/{flow}/mfa/recovery', { ...flowParams(flow), body })
+      : contract().POST('/api/v1/login-flows/{flow}/mfa', { ...flowParams(flow), body }),
+  )
+}
+
+export function requestMagicLink(flow: string, email: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/magic-link', { ...flowParams(flow), body: { email } }))
+}
+
+export function submitMagicLinkCode(flow: string, code: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/magic-link/code', { ...flowParams(flow), body: { code } }))
+}
+
+/** The documents the tenant asks the user to accept, for the challenge a sign-in answered with. */
+export function getTerms(flow: string, termsChallenge: string): Promise<FlowAnswer> {
+  return answer(contract().GET('/api/v1/login-flows/{flow}/terms', { ...flowParams(flow), params: { path: { flow }, query: { terms_challenge: termsChallenge } } }))
+}
+
+export function acceptTerms(flow: string, termsChallenge: string, accepted: { kind: string; version: string }[]): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/terms', { ...flowParams(flow), body: { terms_challenge: termsChallenge, accepted } }))
+}
+
+export function declineTerms(flow: string, termsChallenge: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/terms/decline', { ...flowParams(flow), body: { terms_challenge: termsChallenge } }))
+}
+
+/** What a consent flow asks, or a way on without asking. */
+export function getConsentFlow(flow: string): Promise<FlowAnswer> {
+  return answer(contract().GET('/api/v1/consent-flows/{flow}', flowParams(flow)))
+}
+
+export function acceptConsent(flow: string, grantScope: string[], remember: boolean): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/consent-flows/{flow}/accept', { ...flowParams(flow), body: { grant_scope: grantScope, remember } }))
+}
+
+export function rejectConsent(flow: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/consent-flows/{flow}/reject', flowParams(flow)))
+}
+
+export function completeLogout(flow: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/logout-flows/{flow}', flowParams(flow)))
+}
+
+/** The code a user typed on the device page. */
+export function submitDeviceUserCode(flow: string, userCode: string): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/device-flows/{flow}', { ...flowParams(flow), body: { user_code: userCode } }))
 }
 
 /** What starting a passkey sign-in answers: the browser's input, or why not. */
@@ -74,12 +126,12 @@ export interface PasskeyBegin extends FlowStep {
 }
 
 export function beginPasskeySignIn(flow: string): Promise<PasskeyBegin> {
-  return submitLoginStep(flow, '/passkey/begin', {}) as Promise<PasskeyBegin>
+  return answer(contract().POST('/api/v1/login-flows/{flow}/passkey/begin', flowParams(flow))) as Promise<PasskeyBegin>
 }
 
 /** Sends the device's answer (PublicKeyCredential.toJSON()) and returns the flow's next step. */
-export function finishPasskeySignIn(flow: string, ceremonyId: string, credential: Record<string, unknown>, remember: boolean): Promise<FlowStep> {
-  return submitLoginStep(flow, '/passkey/finish', { ceremony_id: ceremonyId, credential, remember })
+export function finishPasskeySignIn(flow: string, ceremonyId: string, credential: Record<string, unknown>, remember: boolean): Promise<FlowAnswer> {
+  return answer(contract().POST('/api/v1/login-flows/{flow}/passkey/finish', { ...flowParams(flow), body: { ceremony_id: ceremonyId, credential, remember } }))
 }
 
 /**
@@ -113,5 +165,5 @@ export function startSocialSignIn(flow: string, provider: SocialProvider): void 
   } else {
     sessionStorage.removeItem('authway_popup_mode')
   }
-  window.location.assign(loginFlowUrl(flow, `/social/${provider}`))
+  window.location.assign(`${getConfig().apiUrl}/api/v1/login-flows/${encodeURIComponent(flow)}/social/${provider}`)
 }

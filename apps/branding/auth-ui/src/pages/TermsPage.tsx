@@ -2,7 +2,7 @@ import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { followRedirect, loginFlowUrl, submitLoginStep, type FlowStep, type TermsDocument } from '../utils/loginFlow'
+import { acceptTerms, declineTerms, followRedirect, getTerms, type FlowStep, type TermsDocument } from '../utils/loginFlow'
 import { useLoad } from '../utils/useLoad'
 
 const versionKey = (d: TermsDocument) => `${d.kind}\u0000${d.version}`
@@ -43,8 +43,7 @@ const TermsPage: React.FC = () => {
     useCallback(
       async (signal: AbortSignal) => {
         if (!flow || !challenge) return
-        const res = await fetch(`${loginFlowUrl(flow, '/terms')}?${new URLSearchParams({ terms_challenge: challenge })}`, { signal })
-        const step = (await res.json()) as FlowStep
+        const step = (await getTerms(flow, challenge)) as FlowStep
         if (signal.aborted) return
         if (step.next === 'terms' && step.terms) {
           setTerms(step.terms)
@@ -76,10 +75,7 @@ const TermsPage: React.FC = () => {
     setBusy(true)
     setError(null)
     try {
-      const step = await submitLoginStep(flow, '/terms', {
-        terms_challenge: challenge,
-        accepted: terms.map(({ kind, version }) => ({ kind, version })),
-      })
+      const step = await acceptTerms(flow, challenge ?? '', terms.map(({ kind, version }) => ({ kind, version })))
       if (step.next === 'redirect' && step.redirect_to) {
         followRedirect(step.redirect_to)
         return
@@ -103,7 +99,7 @@ const TermsPage: React.FC = () => {
     setBusy(true)
     setError(null)
     try {
-      const step = await submitLoginStep(flow, '/terms/decline', { terms_challenge: challenge })
+      const step = await declineTerms(flow, challenge ?? '')
       if (step.next === 'redirect' && step.redirect_to) {
         followRedirect(step.redirect_to)
         return

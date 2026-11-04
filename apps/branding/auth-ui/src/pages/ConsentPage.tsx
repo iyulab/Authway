@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
-import { flowUrl, followRedirect, submitFlowStep, type FlowStep } from '../utils/loginFlow'
+import { acceptConsent, followRedirect, getConsentFlow, rejectConsent, type FlowStep } from '../utils/loginFlow'
 import ClientLogo from '../components/ClientLogo'
 import { useLoad } from '../utils/useLoad'
 
@@ -39,8 +39,7 @@ const ConsentPage: React.FC = () => {
           setIsLoading(false)
           return
         }
-        const res = await fetch(flowUrl('consent-flows', flow), { signal })
-        const data = await res.json()
+        const data = await getConsentFlow(flow)
         if (signal.aborted) return
         if (data.next === 'redirect' && data.redirect_to) {
           // Nothing to ask (the client skips consent, or single sign-on).
@@ -50,7 +49,7 @@ const ConsentPage: React.FC = () => {
           setError(problemMessage(data, t('consent:errors.fetchFailed')))
           setIsLoading(false)
         } else {
-          setConsentInfo(data)
+          setConsentInfo(data as ConsentPageInfo)
           // Every requested scope starts selected.
           setSelectedScopes(data.requested_scope || [])
           setIsLoading(false)
@@ -75,10 +74,7 @@ const ConsentPage: React.FC = () => {
   // Accept consent mutation
   const acceptMutation = useMutation({
     mutationFn: (): Promise<FlowStep> =>
-      submitFlowStep('consent-flows', flow ?? '', '/accept', {
-        grant_scope: selectedScopes,
-        remember: rememberConsent,
-      }),
+      acceptConsent(flow ?? '', selectedScopes, rememberConsent),
     onSuccess: handleAnswer(t('consent:errors.approveFailed')),
     onError: (error) => {
       console.error('Consent accept error:', error)
@@ -88,7 +84,7 @@ const ConsentPage: React.FC = () => {
 
   // Reject consent mutation
   const rejectMutation = useMutation({
-    mutationFn: (): Promise<FlowStep> => submitFlowStep('consent-flows', flow ?? '', '/reject'),
+    mutationFn: (): Promise<FlowStep> => rejectConsent(flow ?? ''),
     onSuccess: handleAnswer(t('consent:errors.denyFailed')),
     onError: (error) => {
       console.error('Consent reject error:', error)

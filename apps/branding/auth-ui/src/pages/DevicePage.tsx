@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import CodeInput from '../components/CodeInput'
-import { followRedirect, submitFlowStep } from '../utils/loginFlow'
+import { followRedirect, submitDeviceUserCode } from '../utils/loginFlow'
 
 /** The answers the backend gives that this page explains itself. */
 const KNOWN_ERRORS = ['user_code_invalid', 'user_code_required', 'invalid_flow', 'flow_expired', 'too_many_requests']
@@ -32,7 +32,7 @@ const DevicePage: React.FC = () => {
     setIsSubmitting(true)
     setError(null)
     try {
-      const step = await submitFlowStep('device-flows', flow ?? '', '', { user_code: code })
+      const step = await submitDeviceUserCode(flow ?? '', code)
       if (step.next === 'redirect' && step.redirect_to) {
         followRedirect(step.redirect_to)
         return

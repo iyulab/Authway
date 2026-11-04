@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import CodeInput from '../components/CodeInput'
 import { getConfig } from '../config'
-import { followRedirect, nextScreen, submitLoginStep, type FlowStep } from '../utils/loginFlow'
+import { followRedirect, nextScreen, requestMagicLink, submitMagicLinkCode, type FlowStep } from '../utils/loginFlow'
 import { useLoad } from '../utils/useLoad'
 
 interface LinkInfo {
@@ -110,7 +110,7 @@ const MagicLinkPage: React.FC = () => {
     setIsBusy(true)
     setError(null)
     try {
-      const data = await submitLoginStep(flow, '/magic-link', { email })
+      const data = await requestMagicLink(flow, email)
       if (data.next === 'email_sent') {
         rememberSentFlow(flow)
         setIsSent(true)
@@ -153,7 +153,7 @@ const MagicLinkPage: React.FC = () => {
   const handleCode = (e: React.FormEvent) => {
     e.preventDefault()
     if (!flow || !code.trim()) return
-    signIn(submitLoginStep(flow, '/magic-link/code', { code }), t('auth:magicLink.invalidCode'))
+    signIn(submitMagicLinkCode(flow, code), t('auth:magicLink.invalidCode'))
   }
 
   const page = (children: React.ReactNode) => (

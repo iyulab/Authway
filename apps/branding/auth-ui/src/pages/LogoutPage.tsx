@@ -2,7 +2,7 @@ import { problemMessage } from '../utils/problem'
 import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { submitFlowStep } from '../utils/loginFlow'
+import { completeLogout } from '../utils/loginFlow'
 
 interface LogoutErrorState {
   message: string
@@ -49,7 +49,7 @@ const LogoutPage: React.FC = () => {
     if (submittedRef.current === flow) return
     submittedRef.current = flow
 
-    submitFlowStep('logout-flows', flow, '')
+    completeLogout(flow)
       .then((data) => {
         if (data.next === 'redirect' && data.redirect_to) {
           window.location.href = data.redirect_to

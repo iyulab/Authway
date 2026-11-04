@@ -2,7 +2,7 @@ import { problemMessage } from '../utils/problem'
 import React, { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
+import { followRedirect, nextScreen, submitSecondFactor } from '../utils/loginFlow'
 
 const MFAVerifyPage: React.FC = () => {
   const { t } = useTranslation(['auth', 'common'])
@@ -29,10 +29,7 @@ const MFAVerifyPage: React.FC = () => {
     setError(null)
 
     try {
-      const data = await submitLoginStep(flow ?? '', useRecovery ? '/mfa/recovery' : '/mfa', {
-        mfa_challenge: mfaChallenge,
-        code: code.replace(/\s/g, ''),
-      })
+      const data = await submitSecondFactor(flow ?? '', mfaChallenge ?? '', code.replace(/\s/g, ''), useRecovery)
 
       const next = nextScreen(data, flow)
       if (data.next === 'redirect' && data.redirect_to) {

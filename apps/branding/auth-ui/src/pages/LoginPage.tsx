@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
-import { followRedirect, loginFlowUrl, nextScreen, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
+import { followRedirect, getLoginFlow, nextScreen, startSocialSignIn, submitPassword, type FlowStep, type SocialProvider } from '../utils/loginFlow'
 import i18n from '../i18n'
 import ClientLogo from '../components/ClientLogo'
 import { passkeysSupported } from '../utils/passkey'
@@ -116,8 +116,7 @@ const LoginPage: React.FC = () => {
       return
     }
 
-    fetch(loginFlowUrl(flow))
-      .then(res => res.json())
+    getLoginFlow(flow)
       .then(data => {
         // SSO auto-login or a cleared session — either way no form is needed
         if (data.next === 'redirect' && data.redirect_to) {
@@ -140,7 +139,7 @@ const LoginPage: React.FC = () => {
           const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
           setError(key ? t(key) : problemMessage(data, t('auth:errors.loginInfoFailed')))
         } else {
-          setLoginInfo(data)
+          setLoginInfo(data as LoginPageInfo)
         }
       })
       .catch(err => {
@@ -213,11 +212,7 @@ const LoginPage: React.FC = () => {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: (data: LoginFormData): Promise<FlowStep> =>
-      submitLoginStep(flow ?? '', '/password', {
-        email: data.email,
-        password: data.password,
-        remember: data.remember,
-      }),
+      submitPassword(flow ?? '', data.email, data.password, !!data.remember),
     onSuccess: continueWith,
     onError: (error) => {
       console.error('Login error:', error)
