@@ -23,8 +23,9 @@
   language of the person invited; a server calling on an application's behalf
   sends no `Accept-Language`, so the email used to go out in English. A language
   there is no email in is `400 invalid_request` (`field: locale`). Nothing is
-  stored. `Authway.Client`: `Invitations.CreateAsync(..., locale:)` and
-  `Invitations.ResendAsync(id, locale)`.
+  stored. The administration console's invite form offers the language (starting
+  as the console's own); `Authway.Client`: `Invitations.CreateAsync(..., locale:)`
+  and `Invitations.ResendAsync(id, locale)`.
 
 - **Korean and English everywhere** — the login screens, the administration
   console, the React SDK components, the landing page and the samples are
@@ -254,6 +255,13 @@
 
 ### Fixed
 
+- **The link that verifies an email address survives a token that needs
+  escaping**: the login screen put the token into the address as it was, so a
+  token with a `+`, `&` or `=` in it did not arrive as it was sent.
+- **An application is not told `login_hint=undefined`**: after an invitation
+  was accepted with a provider, the screen sent the person on to the
+  application with the invited address as the hint even when it did not know
+  it (the receipt may not carry it); it now sends the hint only when it has one.
 - **The sign-in link limit no longer outlives its window**: an address that asked
   for a sign-in link now and then was blocked after its 20th request however
   long the requests were spread out, because the counter lived as long as the
