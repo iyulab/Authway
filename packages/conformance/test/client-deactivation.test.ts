@@ -91,15 +91,18 @@ describe('turning a client off', () => {
 
     // The access tokens it held are no longer accepted.
     expect((await provider.userinfo(before.tokens.access_token)).status).toBe(401)
-    const introspected = await fetch(`${config.api}/api/v1/oauth2/introspect`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${encodeURIComponent(resourceServer.clientId)}:${encodeURIComponent(resourceServer.secret)}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({ token: machineToken }),
-    })
-    expect(((await introspected.json()) as { active: boolean }).active).toBe(false)
+    // Where a resource server can ask, it is told the client's own token is no good either.
+    if (await provider.offers('token_introspection')) {
+      const introspected = await fetch(`${config.api}/api/v1/oauth2/introspect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(`${encodeURIComponent(resourceServer.clientId)}:${encodeURIComponent(resourceServer.secret)}`).toString('base64')}`,
+        },
+        body: new URLSearchParams({ token: machineToken }),
+      })
+      expect(((await introspected.json()) as { active: boolean }).active).toBe(false)
+    }
 
     await setActive(app, true)
     await setActive(service, true)

@@ -74,7 +74,8 @@ describe('suspending a user', () => {
 // asks the provider about it — Authway's own endpoints, userinfo and
 // introspection — whichever form it was issued in. Only a resource server
 // that verifies a JWT itself keeps accepting it until it expires.
-describe("a suspended user's access tokens", () => {
+// (Where a resource server cannot ask the provider, there is nothing to be refused at once.)
+describe.skipIf(!(await provider.offers('token_introspection')))("a suspended user's access tokens", () => {
   const cleanup: Array<() => Promise<void>> = []
   let resourceServer: TestClient & { secret: string }
 
