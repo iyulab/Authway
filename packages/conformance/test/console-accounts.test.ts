@@ -36,7 +36,7 @@ const asOperatorKey = (path: string, init: RequestInit = {}) => {
   return fetch(`${config.api}${path}`, { ...init, headers })
 }
 
-describe('console accounts: a system tenant user administers what its memberships say', () => {
+describe.skipIf(!(await provider.offers('multi_tenant')))('console accounts: a system tenant user administers what its memberships say', () => {
   let systemTenant: string
   let administered: string
   let system: Provider

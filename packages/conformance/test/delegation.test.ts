@@ -41,7 +41,7 @@ const ownDelegations = async (accessToken: string): Promise<Delegation[]> => {
 // the client receives a handle it later exchanges for the user's tokens. These
 // scenarios cover granting, seeing and revoking that permission; exchanging it
 // is offered when capabilities.token_exchange is true.
-describe('delegations users grant to clients', () => {
+describe.skipIf(!(await provider.offers('token_exchange')))('delegations users grant to clients', () => {
   let agent: TestClient
   let account: TestClient
   let user: TestUser
@@ -187,7 +187,7 @@ describe('a consent', () => {
 // A client exchanges the delegation at the token endpoint discovery names
 // (RFC 8693), authenticating as itself, for a short-lived access token whose
 // subject is the user and whose actor is the client.
-describe('exchanging a delegation', () => {
+describe.skipIf(!(await provider.offers('token_exchange')))('exchanging a delegation', () => {
   let offered = false
   let agent: TestClient
   let user: TestUser

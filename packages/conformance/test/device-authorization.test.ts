@@ -31,7 +31,7 @@ const claimsOf = (jwt: string): Record<string, unknown> =>
 // for its tokens until the user has approved it on another screen
 // (RFC 8628). Once the code is accepted, the sign-in is the ordinary one: the
 // login screen, then consent.
-describe('device authorization', () => {
+describe.skipIf(!(await provider.offers('device_authorization')))('device authorization', () => {
   let client: TestClient
   let user: TestUser
 

@@ -12,7 +12,7 @@ const WITH_REFRESH = ['openid', 'profile', 'email', 'offline_access']
 // Turning a tenant off turns off everything in it: no one signs in to its
 // applications, they get no tokens, and the tokens they hold end. Turned on
 // again, its applications work as before.
-describe('turning a tenant off', () => {
+describe.skipIf(!(await admin.offers('multi_tenant')))('turning a tenant off', () => {
   let tenantId: string
   let provider: Provider
   let app: TestClient

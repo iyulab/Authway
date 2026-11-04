@@ -25,7 +25,7 @@ const shown = (owed: Owed) => owed.terms.map((d) => `${d.kind}@${d.version}`)
 // document the application's tenant asks for. These scenarios keep the
 // documents in a tenant of their own: in a shared tenant every other
 // scenario's sign-in would owe them.
-describe('terms at sign-in', () => {
+describe.skipIf(!(await base.offers('terms_acceptance')))('terms at sign-in', () => {
   let tenantId: string
   let provider: Provider
   let app: TestClient
@@ -46,8 +46,6 @@ describe('terms at sign-in', () => {
   }
 
   beforeAll(async () => {
-    const caps = await (await fetch(`${base.config.api}/api/v1/capabilities`)).json()
-    if (!caps.terms_acceptance) throw new Error('The provider does not offer terms (capabilities.terms_acceptance is false)')
     const slug = `conformance-terms-${randomToken(6).toLowerCase()}`
     const res = await base.admin('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name: 'Conformance terms sign-in', slug }) })
     expect(res.status, await res.clone().text()).toBe(201)

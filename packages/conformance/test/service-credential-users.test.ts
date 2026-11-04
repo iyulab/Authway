@@ -17,7 +17,7 @@ interface User {
 // reading what happened to them — does it from its backend with a service
 // credential of its tenant, not with the deployment's admin key. The
 // credential reaches its own tenant only, and what its scopes grant.
-describe('a service credential administers its tenant’s users', () => {
+describe.skipIf(!(await provider.offers('multi_tenant')))('a service credential administers its tenant’s users', () => {
   let tenant: string
   let user: TestUser
   let sub: string

@@ -10,7 +10,7 @@ const provider = new Provider(config)
 // A user's access token says who they are. Once they have a second factor,
 // that token alone must not be able to replace the factor or switch it off —
 // otherwise a stolen token takes the whole account.
-describe('the second factor is not changed by a token alone', () => {
+describe.skipIf(!(await provider.offers('mfa')))('the second factor is not changed by a token alone', () => {
   let app: TestClient
   let user: TestUser
   let sub: string

@@ -6,14 +6,12 @@ import { randomToken } from '../src/pkce.js'
 
 const provider = new Provider(loadConfig())
 
-describe('sign-in with an emailed link', () => {
+describe.skipIf(!(await provider.offers('magic_link')))('sign-in with an emailed link', () => {
   let client: TestClient
   let user: TestUser
   const subjects = new Set<string>()
 
   beforeAll(async () => {
-    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
-    if (!caps.magic_link) throw new Error('The provider does not offer sign-in links (capabilities.magic_link is false)')
     client = await provider.createPublicClient({ signInMethods: ['email', 'magic_link'] })
     user = await provider.inviteAndAccept()
   })

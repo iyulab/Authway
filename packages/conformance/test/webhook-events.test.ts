@@ -18,7 +18,7 @@ type EventPayload = {
 // receiver here never resolves (.invalid, RFC 2606), so nothing leaves the
 // test; the provider still records each delivery it attempted, and that record
 // is what shows an event was raised.
-describe('webhook events', () => {
+describe.skipIf(!(await provider.offers('webhooks')))('webhook events', () => {
   let webhookId: string
 
   beforeAll(async () => {

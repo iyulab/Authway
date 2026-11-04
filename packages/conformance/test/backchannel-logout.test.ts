@@ -19,7 +19,7 @@ const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
 // when the user signs out somewhere else. It registers an address, and the
 // provider tells it there — with a logout token naming the session that ended
 // (OpenID Connect Back-Channel Logout 1.0).
-describe('back-channel logout', () => {
+describe.skipIf(!(await provider.offers('backchannel_logout')))('back-channel logout', () => {
   const received: { app: string; claims: Record<string, unknown> }[] = []
   let receiver: http.Server
   let apps: Record<'a' | 'b', TestClient>

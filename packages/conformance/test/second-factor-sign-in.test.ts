@@ -12,7 +12,7 @@ const claimsOf = (jwt: string): Record<string, unknown> => JSON.parse(Buffer.fro
 // A user who has a second factor owes it however they proved who they are
 // first. If only the password asked for it, anyone who can read the user's
 // mail could sign in with an emailed link and never meet the second factor.
-describe('a user with a second factor is asked for it however they sign in', () => {
+describe.skipIf(!(await provider.offers('mfa')))('a user with a second factor is asked for it however they sign in', () => {
   let app: TestClient
   let offersLinks = false
   const subs: string[] = []

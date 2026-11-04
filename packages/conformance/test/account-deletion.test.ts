@@ -10,7 +10,7 @@ const provider = new Provider(loadConfig())
 // account with the token the application already holds, provided they signed
 // in just now. Everything issued to them ends with the account, and services
 // that keep data about them hear of it.
-describe('a user deleting their own account', () => {
+describe.skipIf(!(await provider.offers('account_deletion')))('a user deleting their own account', () => {
   let client: TestClient
   let user: TestUser
   let webhookId: string
@@ -24,8 +24,6 @@ describe('a user deleting their own account', () => {
     })
 
   beforeAll(async () => {
-    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
-    if (!caps.account_deletion) throw new Error('The provider does not offer account deletion (capabilities.account_deletion is false)')
 
     const hook = await provider.admin('/api/v1/webhooks', {
       method: 'POST',

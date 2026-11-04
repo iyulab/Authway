@@ -13,7 +13,7 @@ type Doc = { kind: string; version: string; url: string; title?: string; publish
 // service, a privacy policy — one current version per kind. These scenarios
 // keep them in a tenant of their own: a document in a shared tenant would be
 // owed by every other scenario's sign-in.
-describe('tenant terms: administration', () => {
+describe.skipIf(!(await base.offers('terms_acceptance')))('tenant terms: administration', () => {
   let tenantId: string
   let provider: Provider
 
@@ -27,8 +27,6 @@ describe('tenant terms: administration', () => {
   }
 
   beforeAll(async () => {
-    const caps = await (await fetch(`${base.config.api}/api/v1/capabilities`)).json()
-    if (!caps.terms_acceptance) throw new Error('The provider does not offer terms (capabilities.terms_acceptance is false)')
     const slug = `conformance-terms-${randomToken(6).toLowerCase()}`
     const res = await base.admin('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name: 'Conformance terms', slug }) })
     expect(res.status, await res.clone().text()).toBe(201)

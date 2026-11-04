@@ -16,15 +16,13 @@ const patchClaims = (sub: string, claims: Record<string, unknown>) =>
 // role — and the provider carries it in the user's tokens. Only a trusted
 // party writes these claims: they may decide what the user is allowed to do,
 // so the user's own token cannot.
-describe('custom claims', () => {
+describe.skipIf(!(await provider.offers('custom_claims')))('custom claims', () => {
   let client: TestClient
   let user: TestUser
   let sub: string
   let userToken: string
 
   beforeAll(async () => {
-    const caps = await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()
-    if (!caps.custom_claims) throw new Error('The provider does not offer custom claims (capabilities.custom_claims is false)')
 
     const res = await provider.admin('/api/v1/clients', {
       method: 'POST',

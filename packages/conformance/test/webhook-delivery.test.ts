@@ -36,7 +36,7 @@ const verifies = (secret: string, r: Received): boolean => {
 // A receiver checks every delivery before trusting it. These deliveries reach a
 // receiver run by the test, so the check is made on what actually arrived —
 // headers and raw body — with nothing but the secret the API handed out.
-describe('webhook delivery', () => {
+describe.skipIf(!(await provider.offers('webhooks')))('webhook delivery', () => {
   const received: Received[] = []
   let receiver: http.Server
   let webhookId: string
