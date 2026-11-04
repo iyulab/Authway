@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLoad } from '../utils/useLoad'
@@ -64,7 +65,7 @@ const AccountConnections: React.FC<Props> = ({ call, signInAgain, goTo = (url) =
       }
       const body = await res.json().catch(() => ({}))
       if (body.code === 'insufficient_user_authentication') setNeedsSignIn(true)
-      else setError(body.detail ?? t('common:errorOccurred'))
+      else setError(problemMessage(body, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {
@@ -85,7 +86,7 @@ const AccountConnections: React.FC<Props> = ({ call, signInAgain, goTo = (url) =
       const body = await res.json().catch(() => ({}))
       if (body.code === 'insufficient_user_authentication') setNeedsSignIn(true)
       else if (body.code === 'last_sign_in_method') setError(t('auth:account.connections.lastWay'))
-      else setError(body.detail ?? t('common:errorOccurred'))
+      else setError(problemMessage(body, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {

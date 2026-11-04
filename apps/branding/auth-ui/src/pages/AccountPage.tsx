@@ -1,7 +1,7 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import AccountPassword from './AccountPassword'
 import AccountConnections, { PROVIDER_NAMES } from './AccountConnections'
 import AccountPasskeys from './AccountPasskeys'
@@ -171,7 +171,7 @@ const AccountPage: React.FC = () => {
     const res = await call(path, { method, body: JSON.stringify({ code: code.trim() }) })
     if (res.ok) return res
     const problem = await refusal(res)
-    setError(problem.code === 'invalid_code' || problem.code === 'mfa_code_required' ? t('auth:account.wrongCode') : (problem.detail ?? t('common:errorOccurred')))
+    setError(problem.code === 'invalid_code' || problem.code === 'mfa_code_required' ? t('auth:account.wrongCode') : problemMessage(problem, t('common:errorOccurred')))
     return null
   }
 
@@ -216,9 +216,6 @@ const AccountPage: React.FC = () => {
 
   const page = (body: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher />
-      </div>
       <div className="max-w-md w-full space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 text-center">{t('auth:account.title')}</h1>

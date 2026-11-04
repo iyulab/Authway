@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useForm } from 'react-hook-form'
@@ -6,7 +7,6 @@ import { z } from 'zod'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { getConfig } from '../config'
 
 /** What every tenant asks of a password; a tenant may ask for more. */
@@ -200,7 +200,7 @@ const AcceptInvitationPage: React.FC = () => {
           throw new Error(t('auth:validation.passwordMin', { length: body.min_length ?? LEAST_PASSWORD_LENGTH }))
         }
         if (body.code === 'password_breached') throw new Error(t('auth:validation.passwordBreached'))
-        throw new Error(body.detail || 'accept failed')
+        throw new Error(problemMessage(body, t('common:errorOccurred')))
       }
       return body
     },
@@ -229,9 +229,6 @@ const AcceptInvitationPage: React.FC = () => {
 
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full space-y-8">{children}</div>
     </div>
   )

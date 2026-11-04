@@ -45,7 +45,7 @@ describe('MFAVerifyPage', () => {
       expect(requestPath).toBe('/api/v1/login-flows/flow-1%3D/mfa')
       expect(requestBody).toEqual({ mfa_challenge: 'chal-123', code: '123456' })
     })
-    expect(await screen.findByText('invalid verification code')).toBeInTheDocument()
+    expect(await screen.findByText('유효하지 않은 코드입니다.')).toBeInTheDocument()
   })
 
   it('explains an expired challenge when the flow or mfa_challenge is missing', () => {

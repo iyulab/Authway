@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
@@ -41,7 +42,7 @@ const LogoutPage: React.FC = () => {
 
   useEffect(() => {
     if (!flow) {
-      setError({ message: t('auth:logout.missingFlow', 'This sign-out link is not valid.'), fallbackRedirect: referrerOrigin() })
+      setError({ message: t('auth:logout.missingFlow'), fallbackRedirect: referrerOrigin() })
       return
     }
     // Strict Mode mounts twice; a logout flow can only be completed once.
@@ -53,12 +54,12 @@ const LogoutPage: React.FC = () => {
         if (data.next === 'redirect' && data.redirect_to) {
           window.location.href = data.redirect_to
         } else {
-          setError({ message: data.detail || t('auth:logout.error'), fallbackRedirect: referrerOrigin() })
+          setError({ message: problemMessage(data, t('auth:logout.error')), fallbackRedirect: referrerOrigin() })
         }
       })
       .catch((err) => {
         console.error('[Authway Logout] Network or parsing error', err)
-        setError({ message: t('auth:logout.networkError', 'Signing out failed because of a network error.'), fallbackRedirect: referrerOrigin() })
+        setError({ message: t('auth:logout.networkError'), fallbackRedirect: referrerOrigin() })
       })
   }, [flow, t])
 
@@ -69,9 +70,9 @@ const LogoutPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 mb-4">{t('auth:logout.error')}</h1>
           <p className="text-red-600 mb-4 text-sm">{error.message}</p>
           {error.fallbackRedirect ? (
-            <p className="text-gray-600">{t('auth:logout.redirecting', 'Redirecting you back...')}</p>
+            <p className="text-gray-600">{t('auth:logout.redirecting')}</p>
           ) : (
-            <p className="text-gray-600">{t('auth:logout.closeWindow', 'Please close this window or return to your application.')}</p>
+            <p className="text-gray-600">{t('auth:logout.closeWindow')}</p>
           )}
         </div>
       </div>

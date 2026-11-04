@@ -1,3 +1,5 @@
+import { languageHeader } from '../utils/language'
+import { problemMessage } from '../utils/problem'
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
@@ -25,6 +27,7 @@ export default function ResendVerificationPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...languageHeader(),
           },
           body: JSON.stringify(clientId ? { email, client_id: clientId } : { email }),
         }
@@ -39,7 +42,7 @@ export default function ResendVerificationPage() {
         setMessage(t('auth:resendVerification.success.message'));
       } else {
         setStatus('error');
-        setMessage(data.detail || t('auth:resendVerification.error.failed'));
+        setMessage(problemMessage(data, t('auth:resendVerification.error.failed')));
       }
     } catch {
       setStatus('error');

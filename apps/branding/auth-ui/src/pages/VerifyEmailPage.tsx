@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
@@ -28,10 +29,10 @@ export default function VerifyEmailPage() {
 
         if (response.ok) {
           setStatus('success');
-          setMessage(data.message || t('auth:verifyEmail.success.message'));
+          setMessage(t('auth:verifyEmail.success.message'));
         } else {
           setStatus('error');
-          setMessage(data.detail || t('auth:verifyEmail.error.failed'));
+          setMessage(problemMessage(data, t('auth:verifyEmail.error.failed')));
         }
       } catch {
         setStatus('error');

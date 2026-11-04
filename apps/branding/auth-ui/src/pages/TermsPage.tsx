@@ -1,7 +1,7 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, loginFlowUrl, submitLoginStep, type FlowStep, type TermsDocument } from '../utils/loginFlow'
 import { useLoad } from '../utils/useLoad'
 
@@ -90,7 +90,7 @@ const TermsPage: React.FC = () => {
         setTicked(new Set())
         setRevised(true)
       } else {
-        setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.detail ?? t('auth:terms.failed')))
+        setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : problemMessage(step, t('auth:terms.failed')))
       }
     } catch {
       setError(t('auth:terms.failed'))
@@ -108,7 +108,7 @@ const TermsPage: React.FC = () => {
         followRedirect(step.redirect_to)
         return
       }
-      setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : (step.detail ?? t('auth:terms.failed')))
+      setError(step.code === 'invalid_terms_challenge' ? t('auth:terms.expired') : problemMessage(step, t('auth:terms.failed')))
     } catch {
       setError(t('auth:terms.failed'))
     }
@@ -119,9 +119,6 @@ const TermsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full space-y-6 bg-white p-8 rounded-lg shadow">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{t('auth:terms.title')}</h2>

@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router'
 import { useForm } from 'react-hook-form'
@@ -6,7 +7,6 @@ import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation, Trans } from 'react-i18next'
 import { SocialLoginButton, SOCIAL_PROVIDERS } from '../components/SocialLoginButtons'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, loginFlowUrl, nextScreen, startSocialSignIn, submitLoginStep, type FlowStep, type SocialProvider } from '../utils/loginFlow'
 import i18n from '../i18n'
 import ClientLogo from '../components/ClientLogo'
@@ -138,7 +138,7 @@ const LoginPage: React.FC = () => {
 
         if (data.detail) {
           const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
-          setError(key ? t(key) : data.detail)
+          setError(key ? t(key) : problemMessage(data, t('auth:errors.loginInfoFailed')))
         } else {
           setLoginInfo(data)
         }
@@ -190,7 +190,7 @@ const LoginPage: React.FC = () => {
       followRedirect(data.redirect_to)
     } else if (data.detail) {
       const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
-      setError(key ? t(key) : data.detail)
+      setError(key ? t(key) : problemMessage(data, t('auth:errors.loginFailed')))
     }
   }
 
@@ -274,10 +274,6 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      {/* Language Switcher - positioned at top right */}
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
@@ -440,7 +436,7 @@ const LoginPage: React.FC = () => {
                     to={`/magic-link?flow=${encodeURIComponent(flow)}`}
                     className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
-                    {t('auth:magicLink.useLink', 'Email me a sign-in link')}
+                    {t('auth:magicLink.useLink')}
                   </Link>
                 )}
                 {SOCIAL_PROVIDERS.filter(isProviderEnabled).map((provider) => (

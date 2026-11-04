@@ -38,6 +38,9 @@ i18n
   .init({
     resources,
     fallbackLng: 'en',
+    // Two languages are supported; a region tag (ko-KR) reads as its language.
+    supportedLngs: ['ko', 'en'],
+    nonExplicitSupportedLngs: true,
     defaultNS: 'common',
     ns: ['common', 'auth', 'consent', 'password', 'errors'],
 
@@ -56,5 +59,13 @@ i18n
       useSuspense: false,
     },
   })
+
+// The document says which language it is in: screen readers, hyphenation and
+// the browser's own translation offer all read it.
+const setDocumentLanguage = (lng: string) => {
+  document.documentElement.lang = lng.split('-')[0]
+}
+i18n.on('languageChanged', setDocumentLanguage)
+if (i18n.language) setDocumentLanguage(i18n.language)
 
 export default i18n

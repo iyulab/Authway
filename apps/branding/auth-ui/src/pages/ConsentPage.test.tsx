@@ -123,7 +123,7 @@ describe('ConsentPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('오류 발생')).toBeInTheDocument()
-        expect(screen.getByText('Server error')).toBeInTheDocument()
+        expect(screen.getByText('동의 정보를 가져오는데 실패했습니다.')).toBeInTheDocument()
       })
     })
 
@@ -311,7 +311,7 @@ describe('ConsentPage', () => {
     it('handles consent approval error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/consent-flows/:flow/accept', () => {
-          return HttpResponse.json({ detail: 'Consent processing failed' })
+          return HttpResponse.json({ detail: 'Consent processing failed', code: 'internal_error' })
         })
       )
 
@@ -319,7 +319,7 @@ describe('ConsentPage', () => {
       await user.click(approveButton)
 
       await waitFor(() => {
-        expect(screen.getByText('Consent processing failed')).toBeInTheDocument()
+        expect(screen.getByText('동의 처리 중 오류가 발생했습니다.')).toBeInTheDocument()
       })
     })
 
@@ -400,7 +400,7 @@ describe('ConsentPage', () => {
     it('handles consent rejection error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/consent-flows/:flow/reject', () => {
-          return HttpResponse.json({ detail: 'Rejection processing failed' })
+          return HttpResponse.json({ detail: 'Rejection processing failed', code: 'internal_error' })
         })
       )
 
@@ -408,7 +408,7 @@ describe('ConsentPage', () => {
       await user.click(rejectButton)
 
       await waitFor(() => {
-        expect(screen.getByText('Rejection processing failed')).toBeInTheDocument()
+        expect(screen.getByText('거부 처리 중 오류가 발생했습니다.')).toBeInTheDocument()
       })
     })
 

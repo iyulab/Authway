@@ -4,7 +4,6 @@ import { startSocialSignIn, type SocialProvider } from '../utils/loginFlow'
 
 interface ProviderLook {
   labelKey: string
-  defaultLabel: string
   className: string
   icon: React.ReactNode
 }
@@ -14,7 +13,6 @@ const BASE_CLASS = 'relative w-full flex justify-center items-center px-4 py-3 b
 const PROVIDERS: Record<SocialProvider, ProviderLook> = {
   google: {
     labelKey: 'common:googleLogin',
-    defaultLabel: 'Sign in with Google',
     className: 'text-gray-700 bg-white hover:bg-gray-50 focus:ring-blue-500',
     icon: (
       <svg
@@ -43,7 +41,6 @@ const PROVIDERS: Record<SocialProvider, ProviderLook> = {
   },
   github: {
     labelKey: 'common:githubLogin',
-    defaultLabel: 'Sign in with GitHub',
     className: 'text-gray-700 bg-white hover:bg-gray-50 focus:ring-gray-500',
     icon: (
       <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
@@ -53,7 +50,6 @@ const PROVIDERS: Record<SocialProvider, ProviderLook> = {
   },
   microsoft: {
     labelKey: 'common:microsoftLogin',
-    defaultLabel: 'Sign in with Microsoft',
     className: 'text-gray-700 bg-white hover:bg-gray-50 focus:ring-blue-500',
     icon: (
       <svg className="w-5 h-5 mr-3" viewBox="0 0 23 23">
@@ -67,7 +63,6 @@ const PROVIDERS: Record<SocialProvider, ProviderLook> = {
   },
   apple: {
     labelKey: 'common:appleLogin',
-    defaultLabel: 'Sign in with Apple',
     className: 'text-white bg-black hover:bg-gray-800 focus:ring-gray-500',
     icon: (
       <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
@@ -110,7 +105,7 @@ export const SocialLoginButton: React.FC<SocialLoginButtonProps> = ({ provider, 
       ) : (
         <div className="flex items-center">
           {look.icon}
-          {t(look.labelKey, look.defaultLabel)}
+          {t(look.labelKey)}
         </div>
       )}
     </button>

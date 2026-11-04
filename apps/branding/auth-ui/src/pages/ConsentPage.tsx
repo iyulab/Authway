@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
@@ -46,7 +47,7 @@ const ConsentPage: React.FC = () => {
           // Keep the loading state while the browser leaves.
           followRedirect(data.redirect_to)
         } else if (data.detail) {
-          setError(data.detail)
+          setError(problemMessage(data, t('consent:errors.fetchFailed')))
           setIsLoading(false)
         } else {
           setConsentInfo(data)
@@ -63,11 +64,11 @@ const ConsentPage: React.FC = () => {
     },
   )
 
-  const handleAnswer = (data: FlowStep) => {
+  const handleAnswer = (failed: string) => (data: FlowStep) => {
     if (data.next === 'redirect' && data.redirect_to) {
       followRedirect(data.redirect_to)
     } else if (data.detail) {
-      setError(data.detail)
+      setError(problemMessage(data, failed))
     }
   }
 
@@ -78,7 +79,7 @@ const ConsentPage: React.FC = () => {
         grant_scope: selectedScopes,
         remember: rememberConsent,
       }),
-    onSuccess: handleAnswer,
+    onSuccess: handleAnswer(t('consent:errors.approveFailed')),
     onError: (error) => {
       console.error('Consent accept error:', error)
       setError(t('consent:errors.approveFailed'))
@@ -88,7 +89,7 @@ const ConsentPage: React.FC = () => {
   // Reject consent mutation
   const rejectMutation = useMutation({
     mutationFn: (): Promise<FlowStep> => submitFlowStep('consent-flows', flow ?? '', '/reject'),
-    onSuccess: handleAnswer,
+    onSuccess: handleAnswer(t('consent:errors.denyFailed')),
     onError: (error) => {
       console.error('Consent reject error:', error)
       setError(t('consent:errors.denyFailed'))

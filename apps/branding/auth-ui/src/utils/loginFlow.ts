@@ -1,3 +1,4 @@
+import { languageHeader } from './language'
 import { getConfig } from '../config'
 
 export type SocialProvider = 'google' | 'github' | 'microsoft' | 'apple'
@@ -55,7 +56,7 @@ export function loginFlowUrl(flow: string, path = ''): string {
 export async function submitFlowStep(kind: FlowKind, flow: string, path: string, body?: unknown): Promise<FlowStep> {
   const response = await fetch(flowUrl(kind, flow, path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...languageHeader() },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   return response.json()

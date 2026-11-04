@@ -1,3 +1,5 @@
+import { languageHeader } from '../utils/language'
+import { problemMessage } from '../utils/problem'
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { KeyRound, ArrowLeft, Mail } from 'lucide-react';
@@ -25,6 +27,7 @@ export default function ForgotPasswordPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...languageHeader(),
           },
           body: JSON.stringify(clientId ? { email, client_id: clientId } : { email }),
         }
@@ -35,7 +38,7 @@ export default function ForgotPasswordPage() {
       if (response.ok) {
         setIsSuccess(true);
       } else {
-        setError(data.detail || t('password:forgot.errors.failed'));
+        setError(problemMessage(data, t('password:forgot.errors.failed')));
       }
     } catch {
       setError(t('password:forgot.errors.serverError'));

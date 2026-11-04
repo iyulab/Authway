@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLoad } from '../utils/useLoad'
@@ -65,7 +66,7 @@ const AccountPassword: React.FC<Props> = ({ call, signInAgain }) => {
       else if (body.code === 'invalid_current_password') setError(t('auth:account.password.wrongCurrent'))
       else if (body.code === 'password_too_short') setError(t('auth:account.password.tooShort', { count: body.min_length }))
       else if (body.code === 'password_breached') setError(t('auth:validation.passwordBreached'))
-      else setError(body.detail ?? t('common:errorOccurred'))
+      else setError(problemMessage(body, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {

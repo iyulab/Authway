@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLoad } from '../utils/useLoad'
@@ -50,7 +51,7 @@ const AccountDelegations: React.FC<Props> = ({ call }) => {
         return
       }
       const body = await res.json().catch(() => ({}))
-      setError(body.detail ?? t('common:errorOccurred'))
+      setError(problemMessage(body, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {

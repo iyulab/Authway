@@ -119,7 +119,7 @@ describe('MagicLinkPage', () => {
 
     await user.type(input, 'bcdf-ghjx')
     await user.click(screen.getByRole('button', { name: /continue|계속/i }))
-    expect(await screen.findByText('this code is not valid')).toBeInTheDocument()
+    expect(await screen.findByText('유효하지 않은 코드입니다.')).toBeInTheDocument()
 
     await user.clear(input)
     await user.type(input, 'bcdf-ghjk')
@@ -175,12 +175,12 @@ describe('MagicLinkPage', () => {
     mockSearchParams.set('token', 'spent')
     server.use(
       http.post('http://localhost:8080/api/v1/magic-links/inspect', () =>
-        HttpResponse.json({ valid: false, detail: 'magic link has already been used' })
+        HttpResponse.json({ valid: false, code: 'invalid_link', detail: 'magic link has already been used' })
       )
     )
 
     render(<MagicLinkPage />)
 
-    expect(await screen.findByText('magic link has already been used')).toBeInTheDocument()
+    expect(await screen.findByText('이 링크는 더 이상 유효하지 않습니다. 처음부터 다시 시작하세요.')).toBeInTheDocument()
   })
 })

@@ -1,7 +1,8 @@
+import { languageHeader } from '../utils/language'
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import CodeInput from '../components/CodeInput'
 import { getConfig } from '../config'
 import { followRedirect, nextScreen, submitLoginStep, type FlowStep } from '../utils/loginFlow'
@@ -83,7 +84,7 @@ const MagicLinkPage: React.FC = () => {
   const post = async (path: string, body: unknown, signal?: AbortSignal) => {
     const res = await fetch(`${getConfig().apiUrl}/api/v1${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...languageHeader() },
       body: JSON.stringify(body),
       signal,
     })
@@ -114,10 +115,10 @@ const MagicLinkPage: React.FC = () => {
         rememberSentFlow(flow)
         setIsSent(true)
       } else {
-        setError(data.detail || t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
+        setError(problemMessage(data, t('auth:magicLink.sendFailed')))
       }
     } catch {
-      setError(t('auth:magicLink.sendFailed', 'The sign-in link could not be sent.'))
+      setError(t('auth:magicLink.sendFailed'))
     } finally {
       setIsBusy(false)
     }
@@ -139,7 +140,7 @@ const MagicLinkPage: React.FC = () => {
         navigate(next)
         return
       }
-      setError(data.detail || failed)
+      setError(problemMessage(data, failed))
     } catch {
       setError(failed)
     }
@@ -147,19 +148,16 @@ const MagicLinkPage: React.FC = () => {
   }
 
   const handleRedeem = () =>
-    signIn(post('/magic-links/redeem', { token }), t('auth:magicLink.invalidLink', 'Invalid sign-in link'))
+    signIn(post('/magic-links/redeem', { token }), t('auth:magicLink.invalidLink'))
 
   const handleCode = (e: React.FormEvent) => {
     e.preventDefault()
     if (!flow || !code.trim()) return
-    signIn(submitLoginStep(flow, '/magic-link/code', { code }), t('auth:magicLink.invalidCode', 'This code is not valid.'))
+    signIn(submitLoginStep(flow, '/magic-link/code', { code }), t('auth:magicLink.invalidCode'))
   }
 
   const page = (children: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full space-y-8">{children}</div>
     </div>
   )
@@ -177,9 +175,9 @@ const MagicLinkPage: React.FC = () => {
       return page(
         <div className="text-center">
           {cardIcon('red', ERROR_ICON)}
-          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
-          <p className="mt-2 text-sm text-red-600">{error || linkInfo.detail}</p>
-          <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink')}</h2>
+          <p className="mt-2 text-sm text-red-600">{error || problemMessage(linkInfo, t('auth:magicLink.sendFailed'))}</p>
+          <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain')}</p>
         </div>
       )
     }
@@ -189,9 +187,9 @@ const MagicLinkPage: React.FC = () => {
       return page(
         <div className="text-center">
           {cardIcon('indigo', MAIL_ICON)}
-          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.otherDeviceTitle', 'Finish where you started')}</h2>
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.otherDeviceTitle')}</h2>
           <p className="mt-2 text-sm text-gray-600">
-            {t('auth:magicLink.otherDeviceMessage', 'Enter this code on the screen where you started signing in:')}
+            {t('auth:magicLink.otherDeviceMessage')}
           </p>
           <p className="mt-6 font-mono text-3xl font-bold tracking-widest text-gray-900" data-testid="link-code">
             {linkCode}
@@ -203,8 +201,8 @@ const MagicLinkPage: React.FC = () => {
     return page(
       <div className="text-center">
         {cardIcon('indigo', LINK_ICON)}
-        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.confirmTitle', 'Sign in')}</h2>
-        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.confirmAs', 'Continue as')}</p>
+        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.confirmTitle')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.confirmAs')}</p>
         <p className="font-medium text-gray-900">{linkInfo.email}</p>
         <button
           type="button"
@@ -212,7 +210,7 @@ const MagicLinkPage: React.FC = () => {
           disabled={isBusy}
           className="mt-6 w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
         >
-          {t('auth:magicLink.continue', 'Continue')}
+          {t('auth:magicLink.continue')}
         </button>
       </div>
     )
@@ -223,8 +221,8 @@ const MagicLinkPage: React.FC = () => {
     return page(
       <div className="text-center">
         {cardIcon('red', ERROR_ICON)}
-        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink', 'Invalid sign-in link')}</h2>
-        <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain', 'Start again from the application.')}</p>
+        <h2 className="mt-6 text-2xl font-bold text-gray-900">{t('auth:magicLink.invalidLink')}</h2>
+        <p className="mt-4 text-sm text-gray-600">{t('auth:magicLink.startAgain')}</p>
       </div>
     )
   }
@@ -233,28 +231,28 @@ const MagicLinkPage: React.FC = () => {
     return page(
       <div className="text-center">
         {cardIcon('green', MAIL_ICON)}
-        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.checkEmail', 'Check your email')}</h2>
-        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.sentTo', 'If this address can sign in, we sent a link to')}</p>
+        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.checkEmail')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.sentTo')}</p>
         <p className="font-medium text-gray-900">{email}</p>
         <p className="mt-4 text-sm text-gray-500">
-          {t('auth:magicLink.sameBrowser', 'Open the link in this browser within 15 minutes to sign in.')}
+          {t('auth:magicLink.sameBrowser')}
         </p>
         <form onSubmit={handleCode} className="mt-8 space-y-4 text-left">
           <p className="text-sm text-gray-600 text-center">
-            {t('auth:magicLink.codePrompt', 'Reading the email on another device? Enter the code it shows.')}
+            {t('auth:magicLink.codePrompt')}
           </p>
           {error && (
             <div className="rounded-md bg-red-50 p-4" role="alert">
               <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
-          <CodeInput id="magic_link_code" label={t('auth:magicLink.codeLabel', 'Code from the email')} value={code} onChange={setCode} />
+          <CodeInput id="magic_link_code" label={t('auth:magicLink.codeLabel')} value={code} onChange={setCode} />
           <button
             type="submit"
             disabled={isBusy || !code.trim()}
             className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {t('auth:magicLink.continue', 'Continue')}
+            {t('auth:magicLink.continue')}
           </button>
         </form>
       </div>
@@ -265,8 +263,8 @@ const MagicLinkPage: React.FC = () => {
     <>
       <div className="text-center">
         {cardIcon('indigo', LINK_ICON)}
-        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.title', 'Sign in with an email link')}</h2>
-        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.description', "We'll email you a link to sign in without a password")}</p>
+        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:magicLink.title')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('auth:magicLink.description')}</p>
       </div>
       <form onSubmit={handleSend} className="mt-8 space-y-6">
         {error && (
@@ -276,7 +274,7 @@ const MagicLinkPage: React.FC = () => {
         )}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            {t('auth:login.emailLabel', 'Email address')}
+            {t('auth:login.emailLabel')}
           </label>
           <input
             id="email"
@@ -284,7 +282,7 @@ const MagicLinkPage: React.FC = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            placeholder={t('auth:login.emailPlaceholder', 'you@example.com')}
+            placeholder={t('auth:login.emailPlaceholder')}
             autoComplete="email"
             autoFocus
           />
@@ -294,7 +292,7 @@ const MagicLinkPage: React.FC = () => {
           disabled={isBusy || !email}
           className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {t('auth:magicLink.sendLink', 'Email me a sign-in link')}
+          {t('auth:magicLink.sendLink')}
         </button>
         <div className="text-center">
           <button
@@ -302,7 +300,7 @@ const MagicLinkPage: React.FC = () => {
             onClick={() => navigate(`/login?flow=${encodeURIComponent(flow)}`)}
             className="text-sm text-indigo-600 hover:text-indigo-500"
           >
-            {t('auth:magicLink.backToLogin', 'Back to sign in')}
+            {t('auth:magicLink.backToLogin')}
           </button>
         </div>
       </form>

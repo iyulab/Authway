@@ -1,7 +1,7 @@
+import { problemMessage } from '../utils/problem'
 import React, { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import CodeInput from '../components/CodeInput'
 import { followRedirect, submitFlowStep } from '../utils/loginFlow'
 
@@ -37,7 +37,7 @@ const DevicePage: React.FC = () => {
         followRedirect(step.redirect_to)
         return
       }
-      setError(step.code && KNOWN_ERRORS.includes(step.code) ? t(`auth:device.errors.${step.code}`) : (step.detail ?? t('common:errorOccurred')))
+      setError(step.code && KNOWN_ERRORS.includes(step.code) ? t(`auth:device.errors.${step.code}`) : problemMessage(step, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {
@@ -59,9 +59,6 @@ const DevicePage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:device.title')}</h2>

@@ -1,6 +1,5 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 
 /**
  * Where a device sign-in ends in the browser: the device receives its tokens
@@ -10,9 +9,6 @@ const DeviceDonePage: React.FC = () => {
   const { t } = useTranslation(['auth'])
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
       <div className="max-w-md w-full text-center">
         <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-green-100">
           <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

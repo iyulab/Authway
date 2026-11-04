@@ -37,7 +37,7 @@ describe('LogoutPage', () => {
     expect(requested).toEqual(['/api/v1/logout-flows/lf-1%3D'])
   })
 
-  it('shows the backend error when the flow cannot be completed', async () => {
+  it('says in the language of the screen why the flow cannot be completed', async () => {
     mockSearchParams.set('flow', 'spent')
     server.use(
       http.post('http://localhost:8080/api/v1/logout-flows/:flow', () =>
@@ -47,6 +47,6 @@ describe('LogoutPage', () => {
 
     render(<LogoutPage />)
 
-    expect(await screen.findByText('This sign-in has expired or was already completed.')).toBeInTheDocument()
+    expect(await screen.findByText('로그인 요청이 만료되었거나 이미 완료되었습니다. 애플리케이션에서 다시 시작해주세요.')).toBeInTheDocument()
   })
 })

@@ -1,3 +1,4 @@
+import { problemMessage } from '../utils/problem'
 import { useCallback, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router';
 import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
@@ -46,7 +47,7 @@ export default function ResetPasswordPage() {
         } else if (data.code === 'account_suspended') {
           setError(t('auth:errors.accountSuspended'));
         } else {
-          setError(data.detail || t('password:reset.errors.tokenExpired'));
+          setError(problemMessage(data, t('password:reset.errors.tokenExpired')));
         }
         setIsValidating(false);
       },
@@ -108,7 +109,7 @@ export default function ResetPasswordPage() {
       } else if (data.code === 'account_suspended') {
         setError(t('auth:errors.accountSuspended'));
       } else {
-        setError(data.detail || t('password:reset.errors.resetFailed'));
+        setError(problemMessage(data, t('password:reset.errors.resetFailed')));
       }
     } catch {
       setError(t('password:reset.errors.serverError'));

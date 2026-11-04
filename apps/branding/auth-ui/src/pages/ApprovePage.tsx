@@ -1,7 +1,7 @@
+import { problemMessage } from '../utils/problem'
 import React, { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { useLoad } from '../utils/useLoad'
 import { httpsUrl, refusal, useAccountSession } from './accountSession'
 
@@ -73,7 +73,7 @@ const ApprovePage: React.FC = () => {
       if (problem.code === 'insufficient_user_authentication') setNeedsSignIn(true)
       else if (problem.code === 'approval_settled') setOutcome('settled')
       else if (res.status === 404) setOutcome('notFound')
-      else setError(problem.detail ?? t('common:errorOccurred'))
+      else setError(problemMessage(problem, t('common:errorOccurred')))
     } catch {
       setError(t('common:errorOccurred'))
     } finally {
@@ -86,9 +86,6 @@ const ApprovePage: React.FC = () => {
 
   const page = (body: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher />
-      </div>
       <div className="max-w-md w-full space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 text-center">{t('auth:approve.title')}</h1>

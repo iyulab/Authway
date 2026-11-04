@@ -18,5 +18,12 @@
   "goHome": "홈으로 돌아가기",
   "contactSupport": "문제가 계속되면 시스템 관리자에게 문의하세요.",
   "googleLogin": "Google로 로그인",
-  "connecting": "연결 중..."
+  "connecting": "연결 중...",
+  "verify": "확인",
+  "verifying": "확인하는 중...",
+  "switchLanguage": "언어 전환: {{language}}",
+  "language": "언어",
+  "githubLogin": "GitHub로 로그인",
+  "microsoftLogin": "Microsoft로 로그인",
+  "appleLogin": "Apple로 로그인"
 }

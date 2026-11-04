@@ -16,10 +16,15 @@ import DevicePage from './pages/DevicePage'
 import DeviceDonePage from './pages/DeviceDonePage'
 import AccountPage, { AccountCallbackPage } from './pages/AccountPage'
 import ApprovePage from './pages/ApprovePage'
+import LanguageSwitcher from './components/LanguageSwitcher'
 
 function App() {
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100">
+      {/* Every screen can be read in either language: the choice is made here, once. */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageSwitcher variant="minimal" />
+      </div>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />

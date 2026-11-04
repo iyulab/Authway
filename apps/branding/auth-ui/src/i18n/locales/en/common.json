@@ -18,5 +18,12 @@
   "goHome": "Go to Home",
   "contactSupport": "If the problem persists, please contact the system administrator.",
   "googleLogin": "Sign in with Google",
-  "connecting": "Connecting..."
+  "connecting": "Connecting...",
+  "verify": "Verify",
+  "verifying": "Verifying...",
+  "switchLanguage": "Switch language: {{language}}",
+  "language": "Language",
+  "githubLogin": "Sign in with GitHub",
+  "microsoftLogin": "Sign in with Microsoft",
+  "appleLogin": "Sign in with Apple"
 }

@@ -51,7 +51,7 @@ describe('AccountDelegations', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Revoke' }))
     await user.click(screen.getByRole('button', { name: 'Stop Orders agent' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('The delegation could not be revoked. Try again shortly.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The authorization server is unavailable. Try again shortly.')
     expect(screen.getByText('Orders agent')).toBeInTheDocument()
   })
 

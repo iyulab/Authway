@@ -77,7 +77,7 @@ describe('LoginPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('오류 발생')).toBeInTheDocument()
-        expect(screen.getByText('Server error')).toBeInTheDocument()
+        expect(screen.getByText('로그인 정보를 가져오는데 실패했습니다.')).toBeInTheDocument()
       })
     })
   })
@@ -408,7 +408,7 @@ describe('LoginPage', () => {
     it('handles login error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
-          return HttpResponse.json({ detail: 'Invalid credentials' })
+          return HttpResponse.json({ detail: 'Invalid credentials', code: 'invalid_credentials' })
         })
       )
 
@@ -421,7 +421,7 @@ describe('LoginPage', () => {
       await user.click(submitButton)
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid credentials')).toBeInTheDocument()
+        expect(screen.getByText('이메일 또는 비밀번호가 올바르지 않습니다.')).toBeInTheDocument()
       })
     })
 

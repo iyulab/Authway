@@ -1,7 +1,7 @@
+import { problemMessage } from '../utils/problem'
 import React, { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { followRedirect, nextScreen, submitLoginStep } from '../utils/loginFlow'
 
 const MFAVerifyPage: React.FC = () => {
@@ -21,7 +21,7 @@ const MFAVerifyPage: React.FC = () => {
     e.preventDefault()
 
     if (!code) {
-      setError(t('auth:mfa.codeRequired', 'Please enter a code'))
+      setError(t('auth:mfa.codeRequired'))
       return
     }
 
@@ -40,12 +40,12 @@ const MFAVerifyPage: React.FC = () => {
       } else if (next) {
         navigate(next)
       } else if (data.detail) {
-        throw new Error(data.detail)
+        throw new Error(problemMessage(data, t('auth:mfa.failed')))
       } else {
         navigate('/')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed')
+      setError(err instanceof Error ? err.message : t('auth:mfa.failed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -56,10 +56,10 @@ const MFAVerifyPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900">
-            {t('auth:mfa.invalidChallenge', 'Invalid MFA Challenge')}
+            {t('auth:mfa.invalidChallenge')}
           </h2>
           <p className="mt-2 text-gray-600">
-            {t('auth:mfa.challengeExpired', 'The MFA challenge has expired or is invalid.')}
+            {t('auth:mfa.challengeExpired')}
           </p>
         </div>
       </div>
@@ -68,10 +68,6 @@ const MFAVerifyPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
-      <div className="absolute top-4 right-4">
-        <LanguageSwitcher variant="minimal" />
-      </div>
-
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-indigo-100">
@@ -80,12 +76,12 @@ const MFAVerifyPage: React.FC = () => {
             </svg>
           </div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            {t('auth:mfa.verifyTitle', 'Two-Factor Authentication')}
+            {t('auth:mfa.verifyTitle')}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             {useRecovery
-              ? t('auth:mfa.enterRecoveryCode', 'Enter one of your recovery codes')
-              : t('auth:mfa.enterCode', 'Enter the 6-digit code from your authenticator app')}
+              ? t('auth:mfa.enterRecoveryCode')
+              : t('auth:mfa.enterCode')}
           </p>
         </div>
 
@@ -99,8 +95,8 @@ const MFAVerifyPage: React.FC = () => {
           <div>
             <label htmlFor="code" className="sr-only">
               {useRecovery
-                ? t('auth:mfa.recoveryCodeLabel', 'Recovery Code')
-                : t('auth:mfa.codeLabel', 'Verification Code')}
+                ? t('auth:mfa.recoveryCodeLabel')
+                : t('auth:mfa.codeLabel')}
             </label>
             <input
               id="code"
@@ -128,10 +124,10 @@ const MFAVerifyPage: React.FC = () => {
               {isSubmitting ? (
                 <span className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {t('common:verifying', 'Verifying...')}
+                  {t('common:verifying')}
                 </span>
               ) : (
-                t('common:verify', 'Verify')
+                t('common:verify')
               )}
             </button>
           </div>
@@ -147,8 +143,8 @@ const MFAVerifyPage: React.FC = () => {
               className="text-sm text-indigo-600 hover:text-indigo-500"
             >
               {useRecovery
-                ? t('auth:mfa.useAuthenticator', 'Use authenticator app instead')
-                : t('auth:mfa.useRecoveryCode', 'Use a recovery code instead')}
+                ? t('auth:mfa.useAuthenticator')
+                : t('auth:mfa.useRecoveryCode')}
             </button>
           </div>
         </form>
