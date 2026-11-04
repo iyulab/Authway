@@ -36,6 +36,11 @@ func adminDB(t *testing.T) (*gorm.DB, *url.URL) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	return db, u
 }
 
@@ -73,6 +78,11 @@ func freshDatabase(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("connect to %s: %v", name, err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	t.Cleanup(func() {
 		if sqlDB, err := db.DB(); err == nil {
 			sqlDB.Close()

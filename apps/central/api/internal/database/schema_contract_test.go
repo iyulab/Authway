@@ -51,6 +51,11 @@ func setup(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	if err := database.RunMigrations(db, zap.NewNop()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
