@@ -2,6 +2,15 @@
 
 ### Added
 
+- **The .NET server works behind a proxy that ends TLS** — it took the address it
+  tells people to use (the issuer, the redirects, the https it insists on) from
+  the request it saw, which behind IIS, a load balancer or an ingress is plain
+  http for the proxy's own address. `Authway:Proxy:ForwardedHeaders` now reads
+  `X-Forwarded-Proto`, `-Host` and `-For` from the proxies named in
+  `Authway:Proxy:KnownProxies` and `KnownNetworks` (the same machine when none is
+  named). Off by default: anyone can send those headers, so they are believed
+  only from the proxies an installation names.
+
 - **The sign-in screen says who can sign in** — a tenant takes people in by
   invitation only unless it chose otherwise, and someone who cannot sign in
   used to find that out nowhere. The login flow now carries the tenant's
