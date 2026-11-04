@@ -4,6 +4,7 @@ import { useTenantStore } from '@/stores/tenant'
 import { consolePath, getConfig } from '../config'
 import i18n from '@/i18n'
 import type { Client, SupportAccess, Tenant, TenantSettings } from './contract'
+import { route } from './route'
 
 // The shapes of the API are the contract's (contract.ts); the screens import them from here.
 export type { Client, SupportAccess, Tenant, TenantSettings }
@@ -117,7 +118,7 @@ export interface ConsoleMe {
 }
 
 export const consoleApi = {
-  me: () => api.get<ConsoleMe>('/api/v1/console/me'),
+  me: () => api.get<ConsoleMe>(route('get', '/api/v1/console/me')),
 }
 
 /**
@@ -130,25 +131,25 @@ export const needsSupportAccess = (me: ConsoleMe | undefined) =>
   Boolean(me && me.operator && me.actor_type === 'console_user')
 
 export const supportAccessApi = {
-  list: () => api.get<{ support_access: SupportAccess[] }>('/api/v1/console/support-access'),
+  list: () => api.get<{ support_access: SupportAccess[] }>(route('get', '/api/v1/console/support-access')),
   start: (tenantId: string, reason: string) =>
-    api.post<{ support_access: SupportAccess }>('/api/v1/console/support-access', { tenant_id: tenantId, reason }),
-  end: (id: string) => api.delete<void>(`/api/v1/console/support-access/${id}`),
+    api.post<{ support_access: SupportAccess }>(route('post', '/api/v1/console/support-access'), { tenant_id: tenantId, reason }),
+  end: (id: string) => api.delete<void>(route('delete', '/api/v1/console/support-access/{id}', { id })),
 }
 
 // Users API
 export const usersApi = {
   list: (params?: { limit?: number; offset?: number; tenant_id?: string }) =>
-    api.get<{ users: User[]; total: number; limit: number; offset: number }>('/api/v1/users', { params }),
+    api.get<{ users: User[]; total: number; limit: number; offset: number }>(route('get', '/api/v1/users'), { params }),
 
   get: (id: string) =>
-    api.get<{ user: User }>(`/api/v1/users/${id}`),
+    api.get<{ user: User }>(route('get', '/api/v1/users/{id}', { id })),
 
   update: (id: string, data: { name?: string; avatar_url?: string; active?: boolean }) =>
-    api.put<{ message: string; user: User }>(`/api/v1/users/${id}`, data),
+    api.put<{ message: string; user: User }>(route('put', '/api/v1/users/{id}', { id }), data),
 
   delete: (id: string) =>
-    api.delete<{ message: string }>(`/api/v1/users/${id}`),
+    api.delete<{ message: string }>(route('delete', '/api/v1/users/{id}', { id })),
 }
 
 /** What this deployment offers (GET /api/v1/capabilities). */
@@ -171,7 +172,7 @@ export interface Capabilities {
 }
 
 export const capabilitiesApi = {
-  get: () => api.get<Capabilities>('/api/v1/capabilities'),
+  get: () => api.get<Capabilities>(route('get', '/api/v1/capabilities')),
 }
 
 /** What the API says about itself (GET /health): the deployed version and the database migrations it ships. */
@@ -182,16 +183,16 @@ export interface Health {
 }
 
 export const healthApi = {
-  get: () => api.get<Health>('/health'),
+  get: () => api.get<Health>(route('get', '/health')),
 }
 
 // Clients API
 export const clientsApi = {
   list: (params?: { limit?: number; offset?: number; tenant_id?: string }) =>
-    api.get<{ clients: Client[]; total: number; limit: number; offset: number }>('/api/v1/clients', { params }),
+    api.get<{ clients: Client[]; total: number; limit: number; offset: number }>(route('get', '/api/v1/clients'), { params }),
 
   get: (id: string) =>
-    api.get<{ client: Client }>(`/api/v1/clients/${id}`),
+    api.get<{ client: Client }>(route('get', '/api/v1/clients/{id}', { id })),
 
   create: (data: {
     tenant_id: string
@@ -213,7 +214,7 @@ export const clientsApi = {
     skip_logout_consent?: boolean
     access_token_strategy?: string
   }) =>
-    api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>('/api/v1/clients', data),
+    api.post<{ message: string; client: Client; credentials: { client_id: string; client_secret: string } }>(route('post', '/api/v1/clients'), data),
 
   // access_token_strategy accepts '' on update, which the API reads as "clear the
   // pin and go back to inheriting the server setting". The response never uses ''.
@@ -222,22 +223,22 @@ export const clientsApi = {
     data: Partial<Omit<Client, 'access_token_strategy'>> & {
       access_token_strategy?: 'jwt' | 'opaque' | ''
     }
-  ) => api.put<{ message: string; client: Client }>(`/api/v1/clients/${id}`, data),
+  ) => api.put<{ message: string; client: Client }>(route('put', '/api/v1/clients/{id}', { id }), data),
 
   delete: (id: string) =>
-    api.delete<{ message: string }>(`/api/v1/clients/${id}`),
+    api.delete<{ message: string }>(route('delete', '/api/v1/clients/{id}', { id })),
 
   regenerateSecret: (id: string) =>
-    api.post<{ message: string; credentials: { client_id: string; client_secret: string } }>(`/api/v1/clients/${id}/regenerate-secret`),
+    api.post<{ message: string; credentials: { client_id: string; client_secret: string } }>(route('post', '/api/v1/clients/{id}/regenerate-secret', { id })),
 }
 
 // Tenants API
 export const tenantsApi = {
   list: (params?: { limit?: number; offset?: number }) =>
-    api.get<Tenant[]>('/api/v1/tenants', { params }),
+    api.get<Tenant[]>(route('get', '/api/v1/tenants'), { params }),
 
   get: (id: string) =>
-    api.get<Tenant>(`/api/v1/tenants/${id}`),
+    api.get<Tenant>(route('get', '/api/v1/tenants/{id}', { id })),
 
   create: (data: {
     name: string
@@ -245,12 +246,12 @@ export const tenantsApi = {
     description?: string
     settings?: TenantSettings
   }) =>
-    api.post<Tenant>('/api/v1/tenants', data),
+    api.post<Tenant>(route('post', '/api/v1/tenants'), data),
 
   update: (id: string, data: Partial<Tenant>) =>
-    api.put<Tenant>(`/api/v1/tenants/${id}`, data),
+    api.put<Tenant>(route('put', '/api/v1/tenants/{id}', { id }), data),
 
   delete: (id: string) =>
-    api.delete<void>(`/api/v1/tenants/${id}`),
+    api.delete<void>(route('delete', '/api/v1/tenants/{id}', { id })),
 }
 
