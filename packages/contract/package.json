@@ -6,11 +6,21 @@
   "type": "module",
   "exports": {
     "./openapi.yaml": "./openapi.yaml",
-    "./runtime-config.schema.json": "./runtime-config.schema.json"
+    "./runtime-config.schema.json": "./runtime-config.schema.json",
+    "./schema": {
+      "types": "./schema.d.ts"
+    }
   },
   "files": [
     "openapi.yaml",
-    "runtime-config.schema.json"
+    "runtime-config.schema.json",
+    "schema.d.ts"
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  },
+  "scripts": {
+    "generate": "openapi-typescript openapi.yaml -o schema.d.ts"
+  }
 }

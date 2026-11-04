@@ -218,10 +218,12 @@ const WebhooksPage: React.FC = () => {
       toast.error(t('form.timeoutInvalid'))
       return
     }
+    // The events are the ones GET /webhooks/events offered; the API judges them against the contract's list.
+    const data = { ...formData, events: formData.events as Webhook['events'] }
     if (selectedWebhook) {
-      updateMutation.mutate({ id: selectedWebhook.id, data: formData })
+      updateMutation.mutate({ id: selectedWebhook.id, data })
     } else {
-      createMutation.mutate(formData)
+      createMutation.mutate(data)
     }
   }
 

@@ -3,6 +3,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import { consolePath, getConfig } from '../config'
 import i18n from '@/i18n'
+import type { Client, SupportAccess, Tenant, TenantSettings } from './contract'
+
+// The shapes of the API are the contract's (contract.ts); the screens import them from here.
+export type { Client, SupportAccess, Tenant, TenantSettings }
 
 const API_BASE_URL = getConfig().apiUrl
 
@@ -85,77 +89,6 @@ export interface User {
   updated_at: string
 }
 
-export interface Client {
-  /** Part of Authway — the tenant's account screen client; it cannot be changed or deleted. */
-  system?: boolean
-  id: string
-  tenant_id: string
-  client_id: string
-  name: string
-  description?: string
-  // The application's home page — where a user goes back to from Authway's
-  // screens. An absolute https URL; '' on update clears it.
-  client_uri?: string
-  // Where the application starts a sign-in when Authway sends a user to it
-  // (an accepted invitation), with iss and login_hint. '' on update clears it.
-  initiate_login_uri?: string
-  logo?: string
-  redirect_uris: string[]
-  post_logout_redirect_uris?: string[]
-  // CORS allow-list for browser-based OAuth flows. Required by the API for a
-  // public client using authorization_code — without it, the reverse proxy
-  // has nothing to validate a cross-origin token request against.
-  allowed_origins?: string[]
-  // The APIs this client's access tokens are for (their `aud` claim).
-  audience?: string[]
-  // Where the client's backend is told that a user's session has ended.
-  // '' on update clears it.
-  backchannel_logout_uri?: string
-  grant_types: string[]
-  scopes: string[]
-  public: boolean
-  active: boolean
-  // Authentication Provider Settings
-  enabled_auth_providers?: string[]
-  // Consent Flow Configuration (first-party clients bypass consent/logout screens)
-  skip_consent?: boolean
-  skip_logout_consent?: boolean
-  // Access token format. null/undefined inherits the deployment-wide strategy.
-  access_token_strategy?: 'jwt' | 'opaque' | null
-  // Social OAuth Settings
-  google_oauth_enabled?: boolean
-  github_oauth_enabled?: boolean
-  microsoft_oauth_enabled?: boolean
-  apple_oauth_enabled?: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface TenantSettings {
-  // The least password length the tenant asks for, when more than 8.
-  password_min_length?: number
-  session_timeout?: number
-  // The only email domains accounts can be created for; empty allows any.
-  allowed_domains?: string[]
-  // signup_mode: 'invite_only' (default — a first-time sign-in needs a
-  // pending invitation) or 'open' (any address auto-provisions). Absent,
-  // empty, or any other value behaves as 'invite_only'.
-  signup_mode?: 'invite_only' | 'open' | string
-  // Days the audit log keeps an entry; 0 or absent keeps it 365.
-  audit_retention_days?: number
-}
-
-export interface Tenant {
-  id: string
-  name: string
-  slug: string
-  description?: string
-  settings?: TenantSettings
-  active: boolean
-  created_at: string
-  updated_at: string
-}
-
 export interface LoginRequest {
   password: string
 }
@@ -192,14 +125,6 @@ export const consoleApi = {
  * tenant's audit log records. An operator signed in with a console account
  * reaches into a tenant only while it holds one open.
  */
-export interface SupportAccess {
-  id: string
-  tenant_id: string
-  reason: string
-  started_at: string
-  expires_at: string
-}
-
 /** Whether the caller reaches into a tenant only through support access. */
 export const needsSupportAccess = (me: ConsoleMe | undefined) =>
   Boolean(me && me.operator && me.actor_type === 'console_user')

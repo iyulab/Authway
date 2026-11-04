@@ -178,6 +178,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
 
+      # The screens read their request and answer types from the contract
+      # (packages/contract/schema.d.ts); a contract change that leaves them
+      # behind would let a screen be compiled against an API that is gone.
+      - name: The contract's generated types are current
+        run: |
+          pnpm --filter @authway/contract run generate
+          git diff --exit-code -- packages/contract/schema.d.ts
+
       # The native sign-in clients (clients/) are driven end to end by the
       # suite: each example signs in through its loopback port, refreshes and
       # signs out against the stack below.

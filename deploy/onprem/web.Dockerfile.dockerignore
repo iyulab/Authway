@@ -6,6 +6,7 @@
 !apps/branding/auth-ui/
 !apps/central/admin/
 !packages/ui/
+!packages/contract/schema.d.ts
 !deploy/onprem/Caddyfile
 **/node_modules/
 **/dist/

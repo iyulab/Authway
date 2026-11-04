@@ -2,6 +2,14 @@
 
 ### Added
 
+- **The contract's types, generated** — `packages/contract/schema.d.ts` is read
+  from `openapi.yaml` (`pnpm --filter @authway/contract run generate`; CI fails
+  when it is stale), and the administration console takes the shapes of the API
+  from it instead of writing them out a second time. Reading the contract that
+  way showed two gaps, now closed: a client's `description` is part of the
+  contract, and an administered invitation always carries `created_at` and
+  `updated_at`.
+
 - **Two more capabilities** — `capabilities.webhooks` and
   `capabilities.client_provider_apps` say whether an installation has webhooks
   and applications' own social-provider apps (both `true` here). An installation

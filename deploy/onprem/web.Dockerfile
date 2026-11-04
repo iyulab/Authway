@@ -18,6 +18,8 @@ RUN cd apps/central/admin && npm ci --no-audit --no-fund
 COPY apps/branding/auth-ui/ apps/branding/auth-ui/
 COPY apps/central/admin/ apps/central/admin/
 COPY packages/ui/ packages/ui/
+# The screens are compiled against the contract's types.
+COPY packages/contract/schema.d.ts packages/contract/schema.d.ts
 RUN node packages/ui/build.mjs --no-install
 
 FROM caddy:2.10-alpine

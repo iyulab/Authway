@@ -11,7 +11,7 @@ import {
   CheckIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { apiErrorMessage, clientsApi, serverRefusal } from '@/lib/api'
+import { apiErrorMessage, clientsApi, serverRefusal, type Client } from '@/lib/api'
 import { Button, Card, Loading, Badge, ConfirmDialog, Modal } from '@/components/ui'
 import { ClientForm, ClientFormData, lines } from '@/components/clients'
 
@@ -59,7 +59,8 @@ const ClientDetailPage: React.FC = () => {
         // Sent as they stand: an empty list or '' clears what was there.
         audience,
         backchannel_logout_uri: backChannelLogoutUri,
-        grant_types: data.grant_types,
+        // The form passes through grants it does not offer (a device client's, say); the API judges them.
+        grant_types: data.grant_types as Client['grant_types'],
         scopes: data.scopes,
         public: data.public,
         enabled_auth_providers: data.enabled_auth_providers || ['email', 'google'],

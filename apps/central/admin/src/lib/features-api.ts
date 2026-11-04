@@ -1,73 +1,8 @@
 ﻿import { api } from './api'
+import type { AuditLog, Invitation, Webhook, WebhookDelivery } from './contract'
 
-// Webhook types
-export interface Webhook {
-  id: string
-  tenant_id: string
-  name: string
-  url: string
-  events: string[]
-  enabled: boolean
-  retry_count: number
-  timeout_secs: number
-  created_at: string
-  updated_at: string
-}
-
-export interface WebhookDelivery {
-  id: string
-  webhook_id: string
-  event_type: string
-  payload: string
-  status_code: number
-  response_body: string
-  attempt: number
-  delivered_at: string
-  success: boolean
-  error_message: string
-}
-
-// Audit Log types
-export interface AuditLog {
-  id: string
-  tenant_id: string
-  actor_id: string | null
-  actor_email: string
-  actor_type: string
-  action: string
-  resource_type: string
-  resource_id: string
-  ip_address: string
-  user_agent: string
-  severity: 'info' | 'warning' | 'error' | 'critical'
-  success: boolean
-  // JSON text recorded with the event ("{}" when there is nothing to add).
-  details: string
-  // Why the action failed; empty when success is true.
-  error_msg: string
-  created_at: string
-}
-
-// Invitation types
-export interface Invitation {
-  id: string
-  tenant_id: string
-  email: string
-  // null when the invitation was issued by the system actor (admin API key),
-  // which has no user behind it.
-  inviter_id: string | null
-  // Display name derived by the API — 'system' for system-actor invitations.
-  inviter_name: string
-  tenant_name: string
-  status: 'pending' | 'accepted' | 'expired' | 'revoked'
-  // The application the invitation is for, when it names one.
-  client?: { client_id: string; name: string; initiate_login_uri?: string; client_uri?: string }
-  message?: string
-  expires_at: string
-  accepted_at?: string
-  created_at: string
-  updated_at: string
-}
+// The shapes below are the contract's (contract.ts); the screens import them from here.
+export type { AuditLog, Invitation, Webhook, WebhookDelivery }
 
 // Webhooks API
 export const webhooksApi = {

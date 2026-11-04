@@ -4101,7 +4101,7 @@ components:
 
     AdminInvitation:
       type: object
-      required: [id, tenant_id, email, status, expires_at]
+      required: [id, tenant_id, email, status, expires_at, created_at, updated_at]
       properties:
         id: { type: string }
         tenant_id: { type: string }
@@ -4632,6 +4632,7 @@ components:
         tenant_id: { type: string }
         client_id: { type: string, description: The OAuth client_id. }
         name: { type: string }
+        description: { type: string, description: What the application is for; empty when nothing was said. }
         public: { type: boolean }
         redirect_uris: { type: [array, 'null'], items: { type: string } }
         post_logout_redirect_uris: { type: [array, 'null'], items: { type: string } }

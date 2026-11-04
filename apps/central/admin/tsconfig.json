@@ -22,7 +22,8 @@
 
     /* Path mapping (resolved relative to this file; baseUrl is deprecated) */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@authway/contract/schema": ["../../../packages/contract/schema.d.ts"]
     }
   },
   "include": ["src"],
