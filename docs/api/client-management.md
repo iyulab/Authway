@@ -259,6 +259,17 @@ registering a second one takes the destination away again, so an invitation
 that must always lead somewhere should name its `client_id`. The sender's
 `message` is shown on the screen after accepting, as plain text.
 
+The invitation email is written in the language **you** name: send
+`"locale": "ko"` (or `"en"`; a regional form such as `ko-KR` reads as its
+language) on `POST /api/v1/invitations`, and on
+`POST /api/v1/invitations/{id}/resend` when the new email should be in a
+particular language. Authway does not know the language of the person invited;
+you do. Without `locale` the email follows the request's `Accept-Language` —
+which a server calling the administration API sends none of, so it is English.
+A language Authway has no email in is `400 invalid_request` (`field: locale`),
+never answered in another language. The language is not stored: a resend that
+names none follows `Accept-Language` again.
+
 ### Accepting an invitation with Google
 
 When the invitation's application (the one it names, else the tenant's only

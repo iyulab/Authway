@@ -53,6 +53,7 @@ func TestRequestBodies_AreTheContractsOwn(t *testing.T) {
 		{"POST /api/v1/email/forgot-password", email.ForgotPasswordRequest{}},
 		{"POST /api/v1/email/reset-password", email.ResetPasswordRequest{}},
 		{"POST /api/v1/invitations", invitation.CreateInvitationRequest{}},
+		{"POST /api/v1/invitations/{id}/resend", invitation.ResendInvitationRequest{}},
 		{"POST /api/v1/invitations/accept", invitation.AcceptInvitationRequest{}},
 		{"POST /api/v1/tenants", tenant.CreateTenantRequest{}},
 		{"PUT /api/v1/tenants/{id}", tenant.UpdateTenantRequest{}},

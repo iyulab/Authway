@@ -3,6 +3,14 @@
 All notable changes to `Authway.Client` are recorded here. The package follows its own version line, apart from the
 Authway service.
 
+## Unreleased
+
+### Added
+
+- `Invitations.CreateAsync(..., locale:)` and `Invitations.ResendAsync(id, locale)` name the language of the
+  invitation email (`ko`, `en`). A server sends no `Accept-Language`, so without it the email is in English.
+  `CreateAsync` gains `locale` before `cancellationToken`: a caller passing the token positionally names it.
+
 ## 0.1.0 — 2026-10-16
 
 ### Added

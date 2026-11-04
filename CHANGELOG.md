@@ -2,6 +2,16 @@
 
 ### Added
 
+- **An invitation names the language of its email** — `POST /api/v1/invitations`
+  (and `POST /api/v1/invitations/{id}/resend`, whose body is optional) takes an
+  optional `locale` (`ko`, `en`; a regional form such as `ko-KR` reads as its
+  language) that wins over `Accept-Language`. The one who invites knows the
+  language of the person invited; a server calling on an application's behalf
+  sends no `Accept-Language`, so the email used to go out in English. A language
+  there is no email in is `400 invalid_request` (`field: locale`). Nothing is
+  stored. `Authway.Client`: `Invitations.CreateAsync(..., locale:)` and
+  `Invitations.ResendAsync(id, locale)`.
+
 - **Korean and English everywhere** — the login screens, the administration
   console, the React SDK components, the landing page and the samples are
   available in both languages, chosen by `?lang=`, then the language switcher

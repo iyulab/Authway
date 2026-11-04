@@ -75,9 +75,19 @@ type CreateInvitationRequest struct {
 	// ClientID optionally names the application the invitation is for, by
 	// its OAuth client_id — one of the tenant's clients.
 	ClientID string `json:"client_id"`
-	// Locale is the language the invitation email is written in: set by the
-	// handler from the request's Accept-Language, never read from the body.
-	Locale string `json:"-"`
+	// Locale optionally names the language the invitation email is written in
+	// ("ko", "en"), over the request's Accept-Language. The one who invites
+	// knows the language of the one invited; a server calling on an
+	// application's behalf sends no Accept-Language at all. A language Authway
+	// has no strings for is refused, not answered in another. The handler
+	// replaces it with the locale the email is written in.
+	Locale string `json:"locale" validate:"omitempty,max=35"`
+}
+
+// ResendInvitationRequest is the optional body of a resend: the language of
+// the new email, with the same meaning as on a new invitation.
+type ResendInvitationRequest struct {
+	Locale string `json:"locale" validate:"omitempty,max=35"`
 }
 
 // InvitationApp is the application an invitation is for, as the screen that

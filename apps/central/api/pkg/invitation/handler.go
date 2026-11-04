@@ -4,6 +4,7 @@ import (
 	"authway/apps/central/api/pkg/tenantscope"
 	"errors"
 	"net/url"
+	"strings"
 
 	"authway/apps/central/api/pkg/apierror"
 	"authway/apps/central/api/pkg/user"
@@ -72,9 +73,11 @@ func (h *Handler) CreateInvitation(c *fiber.Ctx) error {
 		return apierror.Invalid(c, err)
 	}
 
-	// The email is written in the language of whoever sends the invitation:
-	// the one thing known about the reader of it is where it came from.
-	req.Locale = mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage))
+	locale, ok := mailLocale(c, req.Locale)
+	if !ok {
+		return refuseLocale(c)
+	}
+	req.Locale = locale
 	invitation, err := h.service.Create(tenantID, by, &req)
 	if err != nil {
 		h.logger.Warn("Failed to create invitation", zap.Error(err), zap.String("email", req.Email))
@@ -300,12 +303,45 @@ func (h *Handler) ResendInvitation(c *fiber.Ctx) error {
 		return err
 	}
 
-	if err := h.service.Resend(id, mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage))); err != nil {
+	// The body is optional: a resend without one is written in the language
+	// the request asks for.
+	var req ResendInvitationRequest
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return apierror.Refuse(c, fiber.StatusBadRequest, "invalid_request", "invalid request body")
+		}
+		if err := h.validate.Struct(&req); err != nil {
+			return apierror.Invalid(c, err)
+		}
+	}
+	locale, ok := mailLocale(c, req.Locale)
+	if !ok {
+		return refuseLocale(c)
+	}
+
+	if err := h.service.Resend(id, locale); err != nil {
 		h.logger.Warn("Failed to resend invitation", zap.Error(err), zap.String("invitation_id", idStr))
 		return h.refuseByID(c, err, "failed to resend invitation")
 	}
 
 	return c.JSON(fiber.Map{"message": "invitation resent"})
+}
+
+// mailLocale is the language an invitation email is written in: the one the
+// call names, else the one its Accept-Language asks for, else English. The
+// second answer is false when the call names a language there is nothing
+// written in.
+func mailLocale(c *fiber.Ctx, named string) (string, bool) {
+	if strings.TrimSpace(named) == "" {
+		return mail.Negotiate(c.Get(fiber.HeaderAcceptLanguage)), true
+	}
+	return mail.Pick(named)
+}
+
+// refuseLocale answers a call that named a language there is no email in.
+func refuseLocale(c *fiber.Ctx) error {
+	return apierror.RefuseWith(c, fiber.StatusBadRequest, "invalid_request",
+		"locale must be one of: "+strings.Join(mail.Locales(), ", "), fiber.Map{"field": "locale"})
 }
 
 // refuseByID answers a failed lookup or state change of one invitation.

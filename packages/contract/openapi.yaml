@@ -2399,6 +2399,19 @@ paths:
                     client_id that names none of the tenant's clients is `400
                     unknown_client`.
                   type: string
+                locale:
+                  description: |
+                    The language the invitation email is written in — the
+                    person invited is not known to Authway, but whoever
+                    invites them knows theirs. One language tag (`ko`, `en`,
+                    or a regional form such as `ko-KR`); it wins over the
+                    request's `Accept-Language`, which a server calling for an
+                    application sends none of. Without it the email follows
+                    `Accept-Language`, and is English when that names nothing
+                    Authway has strings for. A language Authway has no strings
+                    for is `400 invalid_request` (field `locale`) — never
+                    answered in another language.
+                  type: string
       responses:
         '201':
           description: Created and emailed
@@ -2477,6 +2490,21 @@ paths:
       security: [{ adminKey: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale:
+                  description: |
+                    The language of the new email, with the meaning it has
+                    when creating an invitation (an unsupported language is
+                    `400 invalid_request`, field `locale`). The language of
+                    the first email is not kept: without it the email follows
+                    `Accept-Language`, English when that names nothing.
+                  type: string
       responses:
         '200': { $ref: '#/components/responses/Message' }
         '400': { $ref: '#/components/responses/Error' }

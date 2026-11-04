@@ -128,6 +128,28 @@ public class ClientTests
     }
 
     [Fact]
+    public async Task Names_the_language_of_the_invitation_email_when_one_is_given()
+    {
+        var (client, handler) = Answering(HttpStatusCode.Created,
+            """{"invitation":{"id":"i1","email":"a@example.com","status":"pending","expires_at":"2026-10-22T02:40:46Z"}}""");
+
+        await client.Invitations.CreateAsync("a@example.com", locale: "ko", cancellationToken: TestContext.Current.CancellationToken);
+
+        handler.Seen.Single().Body.Should().Be("""{"email":"a@example.com","locale":"ko"}""");
+    }
+
+    [Fact]
+    public async Task Resends_with_a_body_only_when_a_language_is_named()
+    {
+        var (client, handler) = Answering(HttpStatusCode.OK, """{"message":"invitation resent"}""");
+
+        await client.Invitations.ResendAsync("i1", TestContext.Current.CancellationToken);
+        await client.Invitations.ResendAsync("i1", "ko", TestContext.Current.CancellationToken);
+
+        handler.Seen.Select(s => s.Body).Should().Equal(null, """{"locale":"ko"}""");
+    }
+
+    [Fact]
     public async Task Patches_claims_as_a_json_object()
     {
         var (client, handler) = Answering(HttpStatusCode.OK, """{"claims":{"roles":["editor"]}}""");

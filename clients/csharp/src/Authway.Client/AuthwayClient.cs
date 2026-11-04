@@ -215,15 +215,20 @@ public sealed class InvitationsApi
     /// <param name="clientId">
     /// The OAuth <c>client_id</c> of the application the invitation is for: once accepted, the person is sent on to it.
     /// </param>
+    /// <param name="locale">
+    /// The language of the invitation email, one language tag (<c>ko</c>, <c>en</c>). You know the language of the
+    /// person you invite and Authway does not; a server sends no <c>Accept-Language</c>, so without this the email is
+    /// in English.
+    /// </param>
     /// <exception cref="AuthwayException">
-    /// Code <c>user_already_member</c> or <c>invitation_already_pending</c> (409), <c>email_domain_not_allowed</c> or
-    /// <c>unknown_client</c> (400).
+    /// Code <c>user_already_member</c> or <c>invitation_already_pending</c> (409), <c>email_domain_not_allowed</c>,
+    /// <c>unknown_client</c> or, for a <paramref name="locale"/> there is no email in, <c>invalid_request</c> (400).
     /// </exception>
-    public async Task<SentInvitation> CreateAsync(string email, string? clientId = null, string? message = null, string? role = null, CancellationToken cancellationToken = default)
+    public async Task<SentInvitation> CreateAsync(string email, string? clientId = null, string? message = null, string? role = null, string? locale = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(email);
         return (await client.SendAsync(HttpMethod.Post, "api/v1/invitations",
-            AuthwayClient.Json(new NewInvitationBody(email, role, message, clientId), ClientJsonContext.Default.NewInvitationBody),
+            AuthwayClient.Json(new NewInvitationBody(email, role, message, clientId, locale), ClientJsonContext.Default.NewInvitationBody),
             ClientJsonContext.Default.SentInvitationBody, cancellationToken).ConfigureAwait(false)).Invitation;
     }
 
@@ -249,6 +254,15 @@ public sealed class InvitationsApi
     /// <summary>Sends a pending invitation's email again.</summary>
     public Task ResendAsync(string id, CancellationToken cancellationToken = default) =>
         client.SendAsync(HttpMethod.Post, "api/v1/invitations/" + AuthwayClient.Id(id) + "/resend", cancellationToken);
+
+    /// <summary>Sends a pending invitation's email again, in the language <paramref name="locale"/> names.</summary>
+    /// <param name="locale">One language tag (<c>ko</c>, <c>en</c>); see <see cref="CreateAsync"/>. The language of the first email is not kept.</param>
+    public async Task ResendAsync(string id, string? locale, CancellationToken cancellationToken = default)
+    {
+        using var _ = await client.SendAsync(HttpMethod.Post, "api/v1/invitations/" + AuthwayClient.Id(id) + "/resend",
+            locale is null ? null : AuthwayClient.Json(new ResendInvitationBody(locale), ClientJsonContext.Default.ResendInvitationBody),
+            cancellationToken).ConfigureAwait(false);
+    }
 }
 
 /// <summary>The tenant's users.</summary>

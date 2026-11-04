@@ -11,11 +11,24 @@ interface MailHogMessage {
   MIME?: { Parts?: MailHogPart[] } | null
 }
 
-/** Decodes quoted-printable soft line breaks and =XX escapes. */
+/**
+ * Decodes quoted-printable soft line breaks and =XX escapes. The escapes are
+ * bytes, so the text is read as UTF-8 once they are bytes again: a character
+ * outside ASCII is several of them.
+ */
 function decodeQuotedPrintable(input: string): string {
-  return input
-    .replace(/=\r?\n/g, '')
-    .replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+  const text = input.replace(/=\r?\n/g, '')
+  const bytes: number[] = []
+  for (let i = 0; i < text.length; i++) {
+    const hex = text[i] === '=' ? text.slice(i + 1, i + 3) : ''
+    if (/^[0-9A-F]{2}$/i.test(hex)) {
+      bytes.push(parseInt(hex, 16))
+      i += 2
+    } else {
+      bytes.push(...Buffer.from(text[i], 'utf8'))
+    }
+  }
+  return Buffer.from(bytes).toString('utf8')
 }
 
 /**
@@ -75,3 +88,32 @@ export async function waitForLink(
   }
   throw new Error(`No mail to ${recipient} containing a ${path} link within ${timeoutMs}ms`)
 }
+
+/**
+ * Waits for a message addressed to `recipient` that `accept` takes (its decoded
+ * text, every part joined) and returns that text — newest message first.
+ */
+export async function waitForMessage(
+  mailApi: string,
+  recipient: string,
+  accept: (text: string) => boolean = () => true,
+  timeoutMs = 15_000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs
+  const query = `${mailApi}/api/v2/search?kind=to&query=${encodeURIComponent(recipient)}`
+  while (Date.now() < deadline) {
+    const res = await fetch(query)
+    if (res.ok) {
+      const { items } = (await res.json()) as { items: MailHogMessage[] }
+      for (const message of items) {
+        const text = bodies(message).join('\n')
+        if (accept(text)) return text
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error(`No mail to ${recipient} that the scenario takes within ${timeoutMs}ms`)
+}
+
+/** Whether a text is written in Korean: it carries Hangul, which no English string of Authway's does. */
+export const isKorean = (text: string): boolean => /[가-힣]/.test(text)

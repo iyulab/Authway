@@ -46,6 +46,8 @@
     "helpNone": "Without an application the user finishes on Authway after accepting, and has to be told where to sign in.",
     "helpNoAddress": "This application has no sign-in start URL or home page yet, so the user stays on Authway after accepting. Add one on the application.",
     "helpChosen": "After accepting, the user is sent on to this application to sign in.",
+    "language": "Language of the email",
+    "languageHelp": "The invitation is written in this language. Choose the language of the person you invite.",
     "message": "Message (optional)",
     "messagePlaceholder": "Personal message to include in the invitation...",
     "note": "The invitation is valid for 7 days. It gives no role or permission — the application decides those.",

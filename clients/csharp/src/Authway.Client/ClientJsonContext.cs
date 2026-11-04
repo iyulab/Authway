@@ -15,7 +15,9 @@ internal sealed record InvitationList(IReadOnlyList<Invitation> Invitations, int
 
 internal sealed record InvitationBody(Invitation Invitation);
 
-internal sealed record NewInvitationBody(string Email, string? Role, string? Message, string? ClientId);
+internal sealed record NewInvitationBody(string Email, string? Role, string? Message, string? ClientId, string? Locale);
+
+internal sealed record ResendInvitationBody(string? Locale);
 
 internal sealed record SentInvitationBody(SentInvitation Invitation);
 
@@ -74,6 +76,7 @@ internal sealed record NewClientBody(
 [JsonSerializable(typeof(InvitationList))]
 [JsonSerializable(typeof(InvitationBody))]
 [JsonSerializable(typeof(NewInvitationBody))]
+[JsonSerializable(typeof(ResendInvitationBody))]
 [JsonSerializable(typeof(SentInvitationBody))]
 [JsonSerializable(typeof(UserList))]
 [JsonSerializable(typeof(UserBody))]

@@ -51,6 +51,35 @@ func TestNegotiate(t *testing.T) {
 	}
 }
 
+func TestPick(t *testing.T) {
+	for _, c := range []struct {
+		tag  string
+		want string
+		ok   bool
+	}{
+		{"ko", "ko", true},
+		{"en", "en", true},
+		{"ko-KR", "ko", true},
+		{"KO_kr", "ko", true},
+		{" en-US ", "en", true},
+		// a language with no locale is refused, not answered in another one
+		{"fr", "", false},
+		{"fr-FR", "", false},
+		{"", "", false},
+		{"   ", "", false},
+		{"*", "", false},
+		// a list is a preference (Negotiate), not a language that was named
+		{"ko, en", "", false},
+		{"ko;q=0.9", "", false},
+		{"garbage;;,,", "", false},
+	} {
+		got, ok := Pick(c.tag)
+		if got != c.want || ok != c.ok {
+			t.Errorf("Pick(%q) = (%q, %v), want (%q, %v)", c.tag, got, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestRender_ReadsALocaleTagOrAnAcceptLanguageValue(t *testing.T) {
 	vars := map[string]any{"link": link}
 	for locale, subject := range map[string]string{

@@ -91,6 +91,26 @@ describe('inviting a user to an application', () => {
     expect(create.mock.calls[0][0]).not.toHaveProperty('client_id')
   })
 
+  it('writes the invitation in the console’s language unless the administrator picks the invited person’s', async () => {
+    const create = vi.spyOn(invitationsApi, 'create').mockResolvedValue(answer({ invitation: {}, message: 'ok' }))
+    const user = userEvent.setup()
+    render(<InvitationsPage />)
+    await openDialog(user)
+
+    expect(screen.getByLabelText('Language of the email')).toHaveValue('en')
+    await user.click(screen.getByRole('button', { name: 'Send Invitation' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0][0]).toMatchObject({ locale: 'en' })
+
+    // The dialog closed on success; the next one starts from the console's language again.
+    await openDialog(user)
+    expect(screen.getByLabelText('Language of the email')).toHaveValue('en')
+    await user.selectOptions(screen.getByLabelText('Language of the email'), '한국어')
+    await user.click(screen.getByRole('button', { name: 'Send Invitation' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2))
+    expect(create.mock.calls[1][0]).toMatchObject({ locale: 'ko' })
+  })
+
   it('says so when the chosen application has nowhere to send the user', async () => {
     const user = userEvent.setup()
     render(<InvitationsPage />)

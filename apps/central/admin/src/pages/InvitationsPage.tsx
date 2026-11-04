@@ -25,6 +25,7 @@ import {
   Select,
 } from '@/components/ui'
 import { useTenantStore } from '@/stores/tenant'
+import { SUPPORTED_LANGUAGES, currentLanguage, type LanguageCode } from '@/i18n'
 
 interface InvitationFormData {
   email: string
@@ -80,6 +81,11 @@ const InvitationsPage: React.FC = () => {
   const [pickedApplication, setPickedApplication] = useState<string | null>(null)
   const applicationId = pickedApplication ?? defaultApplication
   const chosenApplication = applications.find((c) => c.client_id === applicationId)
+
+  // The language of the invitation email. The administrator knows the person
+  // they invite; Authway does not. It starts as the console's own language.
+  const [pickedLanguage, setPickedLanguage] = useState<LanguageCode | null>(null)
+  const mailLanguage = pickedLanguage ?? currentLanguage()
 
   const invitations = data?.data.invitations || []
   const totalInvitations = data?.data.total || 0
@@ -137,11 +143,13 @@ const InvitationsPage: React.FC = () => {
     createMutation.reset()
     setFormData(emptyForm)
     setPickedApplication(null)
+    setPickedLanguage(null)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    createMutation.mutate(applicationId ? { ...formData, client_id: applicationId } : formData)
+    const body = { ...formData, locale: mailLanguage }
+    createMutation.mutate(applicationId ? { ...body, client_id: applicationId } : body)
   }
 
   const getStatusBadge = (status: string) => {
@@ -378,6 +386,19 @@ const InvitationsPage: React.FC = () => {
                   ? t('form.helpNoAddress')
                   : t('form.helpChosen')
             }
+          />
+
+          <Select
+            id="invitation-language"
+            label={t('form.language')}
+            value={mailLanguage}
+            onChange={(e) => {
+              if (createMutation.error) createMutation.reset()
+              setPickedLanguage(e.target.value as LanguageCode)
+            }}
+            error={refused('locale')}
+            options={SUPPORTED_LANGUAGES.map((l) => ({ value: l.code, label: l.name }))}
+            helperText={t('form.languageHelp')}
           />
 
           <div>

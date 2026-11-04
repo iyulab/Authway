@@ -45,9 +45,15 @@ switcher on every screen it has, and says which language the document is in
 language the person chose there, not the one the browser prefers. The API picks
 the best supported language of that header, and English when there is none.
 
-An invitation is worded in the language of the person who invited, because the
-person invited is not known to have one yet. Authway stores no language for a
-tenant or a user.
+An invitation is the one mail whose reader is not the one who asks for it, and
+who is not yet a user: Authway does not know their language, and the server that
+sends the invitation on an application's behalf sends no `Accept-Language`. So
+the call that creates or resends an invitation can name the language
+(`locale`, one tag), and that wins over the header. A language there is no mail
+in is refused (`400 invalid_request`, `field: locale`), never answered in
+another one. Every other mail is requested by the person who reads it, in their
+own language. Authway stores no language for a tenant, a user or an invitation:
+a resend that names none follows its own `Accept-Language`.
 
 Every implementation of Authway renders these same files, so a language is added
 once: a locale file with the same keys and the same `{{values}}`, and the

@@ -22,6 +22,25 @@ func Locales() []string {
 	return out
 }
 
+// Pick resolves a language a caller names outright — one tag, "ko" or "ko-KR"
+// or "ko_KR" — to the locale it stands for. Unlike Negotiate it does not fall
+// back: a tag with no locale, an empty tag, a list or a "*" answers false, so a
+// caller that asked for a language is told when there is none instead of being
+// answered in another one.
+func Pick(tag string) (string, bool) {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	if tag == "" || strings.ContainsAny(tag, ",;* ") {
+		return "", false
+	}
+	lang, _, _ := strings.Cut(strings.ReplaceAll(tag, "_", "-"), "-")
+	for _, l := range Locales() {
+		if l == lang {
+			return l, true
+		}
+	}
+	return "", false
+}
+
 // Negotiate picks the locale for a language preference: an Accept-Language
 // header ("ko-KR,ko;q=0.9,en;q=0.8"), or a single tag a person chose ("ko",
 // "en-US"). The best-ranked tag whose language has a locale wins, so a region
