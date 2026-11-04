@@ -223,6 +223,11 @@ describe('admin API: a chosen client_id', () => {
 // change leaves as it is; credentials of a provider not enabled are kept.
 describe("admin API: a client's own provider credentials", () => {
   let id: string | undefined
+  let offered: string[] = []
+
+  beforeAll(async () => {
+    offered = ((await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()) as { providers: string[] }).providers
+  })
 
   afterAll(async () => {
     if (id) await provider.admin(`/api/v1/clients/${id}`, { method: 'DELETE' })
@@ -233,7 +238,32 @@ describe("admin API: a client's own provider credentials", () => {
     expect(await res.json()).toMatchObject({ code: 'incomplete_provider_credentials', field })
   }
 
-  it('are complete for an enabled provider, when created and when changed', async () => {
+  // A provider the installation does not offer has no credentials to keep:
+  // every member of it is refused, enabling it or not.
+  it('are refused for a provider the installation does not offer', async () => {
+    const notOffered = ['google', 'github', 'microsoft', 'apple'].filter((p) => !offered.includes(p))
+    for (const name of notOffered) {
+      for (const member of [`${name}_oauth_enabled`, `${name}_client_id`]) {
+        const res = await provider.admin('/api/v1/clients', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenant_id: await provider.tenantId(),
+            name: `conformance-no-${name}-${randomToken(6)}`,
+            grant_types: ['client_credentials'],
+            scopes: ['openid'],
+            [member]: member.endsWith('enabled') ? true : 'app',
+          }),
+        })
+        await conform('POST', '/api/v1/clients', res.clone())
+        expect(res.status, member).toBe(400)
+        expect(await res.json(), member).toMatchObject({ code: 'provider_unavailable', field: member })
+      }
+    }
+  })
+
+  it('are complete for an enabled provider, when created and when changed', async (context) => {
+    // Needs every one of the four: the scenario enables Apple, Microsoft and GitHub.
+    if (!['apple', 'microsoft', 'github'].every((p) => offered.includes(p))) context.skip()
     const register = async (extra: Record<string, unknown>) =>
       provider.admin('/api/v1/clients', {
         method: 'POST',

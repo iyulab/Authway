@@ -2003,7 +2003,10 @@ paths:
                     enabled it uses the deployment's, and credentials given
                     are kept for when it is. `google_redirect_uri` is optional:
                     the deployment's callback without one. Secrets are stored
-                    sealed and never returned.
+                    sealed and never returned. Offered for the providers
+                    capabilities.providers lists; an installation that does
+                    not offer one refuses every member of that provider with
+                    `400 provider_unavailable` (field the member).
                   type: boolean
                 google_client_id: { type: string }
                 google_client_secret: { type: string, writeOnly: true }
@@ -2177,7 +2180,10 @@ paths:
                     enabled it uses the deployment's, and credentials given
                     are kept for when it is. `google_redirect_uri` is optional:
                     the deployment's callback without one. Secrets are stored
-                    sealed and never returned.
+                    sealed and never returned. Offered for the providers
+                    capabilities.providers lists; an installation that does
+                    not offer one refuses every member of that provider with
+                    `400 provider_unavailable` (field the member).
                   type: boolean
                 google_client_id: { type: string }
                 google_client_secret: { type: string, writeOnly: true }
