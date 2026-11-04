@@ -61,7 +61,8 @@ was used.
 3. **A link is made only on a verified address.** A provider account links to an
    existing account automatically only when the provider verified the address and
    the account's own address is verified; otherwise the person signs in to the
-   account first and adds the provider account from the account screen.
+   account first and adds the provider account from the account screen. A
+   suspended account is refused before anything is linked to it.
 4. **A token an application holds is not the person.** A way to sign in that the
    account did not have — a first password, a passkey — is added with a token
    issued to the **account screen** and a recent sign-in; another application's
