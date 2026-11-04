@@ -53,7 +53,10 @@ was used.
    the account in one tenant; the same person in two tenants has two accounts, and
    a credential of one tenant never opens another. A provider account is unique
    within a tenant (tenant, provider, subject); a passkey's credential id is
-   unique within a tenant only.
+   unique within a tenant only. The database holds the wall for what hangs on an
+   account — linked provider accounts, passkeys, claims, delegations and approval
+   requests name their account by tenant and id together, so a row cannot name an
+   account of another tenant.
 2. **The last way in stays.** Removing a way to sign in is refused when it is the
    account's last one — a password, a provider account or a passkey. Removals that
    race for the last one are serialized, so the check cannot be passed by two
