@@ -131,7 +131,9 @@ describe('login UI backend routes', () => {
   })
 
   for (const step of ['/mfa', '/mfa/recovery']) {
-    it(`refuses the ${step} step without the challenge the password step issues`, async () => {
+    it(`refuses the ${step} step without the challenge the password step issues`, async (context) => {
+      // The step exists where a second factor can be enrolled.
+      if (!(await provider.offers('mfa'))) context.skip()
       const res = await fetch(provider.loginFlowUrl(flow, step), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

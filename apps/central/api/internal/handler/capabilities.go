@@ -89,6 +89,10 @@ func NewCapabilitiesHandler(social *SocialHandler) *CapabilitiesHandler {
 //     (400 password_breached) when it is in a known data breach; only the
 //     first five characters of its hash are sent out, and when the check
 //     cannot be made the password is accepted
+//   - client_provider_apps: an application carries the credentials of its own
+//     social-provider apps (google_oauth_enabled, google_client_id, ...)
+//   - webhooks: an administrator registers webhooks that are told of the
+//     events of the tenant (/api/v1/webhooks, Standard Webhooks)
 //   - ciba: decoupled approval in the shape of OpenID CIBA (with an ID token)
 //     — not offered
 func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
@@ -108,6 +112,8 @@ func (h *CapabilitiesHandler) Get(c *fiber.Ctx) error {
 		"approval_requests":       h.approvals,
 		"passkeys":                h.passkeys,
 		"breached_password_check": h.breachedPasswords,
+		"webhooks":                true,
+		"client_provider_apps":    true,
 		"ciba":                    false,
 	})
 }

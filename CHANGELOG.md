@@ -2,6 +2,12 @@
 
 ### Added
 
+- **Two more capabilities** — `capabilities.webhooks` and
+  `capabilities.client_provider_apps` say whether an installation has webhooks
+  and applications' own social-provider apps (both `true` here). An installation
+  that has neither — a single-tenant edition, say — says `false`, and the
+  conformance suite skips what it does not offer instead of failing on it.
+
 - **An invitation names the language of its email** — `POST /api/v1/invitations`
   (and `POST /api/v1/invitations/{id}/resend`, whose body is optional) takes an
   optional `locale` (`ko`, `en`; a regional form such as `ko-KR` reads as its

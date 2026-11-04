@@ -60,10 +60,22 @@ describe('discovery as Authway offers it', () => {
     expect(d.response_types_supported).toEqual(['code'])
     expect(d.grant_types_supported).not.toContain('implicit')
     expect(d.token_endpoint_auth_methods_supported).not.toContain('client_secret_basic')
-    expect(d.token_endpoint_auth_signing_alg_values_supported).toContain('ES256')
     expect(d.frontchannel_logout_supported).toBe(false)
     expect(d.request_uri_parameter_supported).toBe(false)
-    expect(d.introspection_endpoint).toBe(`${provider.config.api}/api/v1/oauth2/introspect`)
+
+    // What discovery lists is what a client can use: a way to authenticate, or an endpoint, the
+    // installation does not offer is not in it.
+    if (await provider.authenticatesClientsWith('private_key_jwt')) {
+      expect(d.token_endpoint_auth_signing_alg_values_supported).toContain('ES256')
+    } else {
+      expect(d.token_endpoint_auth_methods_supported).not.toContain('private_key_jwt')
+      expect(d).not.toHaveProperty('token_endpoint_auth_signing_alg_values_supported')
+    }
+    if (await provider.offers('token_introspection')) {
+      expect(d.introspection_endpoint).toBe(`${provider.config.api}/api/v1/oauth2/introspect`)
+    } else {
+      expect(d).not.toHaveProperty('introspection_endpoint')
+    }
 
     const caps = (await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()) as Record<string, unknown>
     if (caps.token_exchange) expect(d.grant_types_supported).toContain('urn:ietf:params:oauth:grant-type:token-exchange')

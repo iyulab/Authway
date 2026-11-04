@@ -34,7 +34,8 @@ const registerApp = async (tenant: string, name: string): Promise<Client> => {
 // A user reaches the account screen from an application. The screen signs them
 // in with a client of their tenant that Authway owns — registered the first
 // time, the same one after that — and the administration API cannot change it.
-describe('the account screen entry', () => {
+// Each tenant has its own account client: this is about installations with several tenants.
+describe.skipIf(!(await provider.offers('multi_tenant')))('the account screen entry', () => {
   let tenant: string | undefined
 
   afterAll(async () => {

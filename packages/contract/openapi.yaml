@@ -4791,6 +4791,21 @@ components:
             accepted. A password already set is not looked at again. Absent or
             false where the deployment has not turned it on.
           type: boolean
+        webhooks:
+          description: |
+            An administrator registers webhooks that are told of the events of
+            the tenant (`/api/v1/webhooks`, Standard Webhooks). Absent or false
+            where they are not offered: the routes answer 404.
+          type: boolean
+        client_provider_apps:
+          description: |
+            An application carries the credentials of its own social-provider
+            apps (`google_oauth_enabled`, `google_client_id`, … on the client),
+            so its people sign in with the application's own Google or GitHub
+            app. Absent or false where the installation has no such thing:
+            setting any of those members is `400 provider_unavailable`
+            (naming the member).
+          type: boolean
         ciba: { type: boolean }
 
     Introspection:

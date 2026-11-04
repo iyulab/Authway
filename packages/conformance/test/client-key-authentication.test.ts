@@ -20,7 +20,8 @@ const newKey = async (kid: string, alg = 'RS256') => {
 // A client that can keep a key proves who it is at the token endpoint with a
 // signed assertion (RFC 7523 — `private_key_jwt`), so that no secret is
 // shared with the provider or kept where the client runs.
-describe('clients: authenticating with a key instead of a secret', () => {
+// Where discovery does not list `private_key_jwt`, no client can be registered to use it.
+describe.skipIf(!(await provider.authenticatesClientsWith('private_key_jwt')))('clients: authenticating with a key instead of a secret', () => {
   const created: string[] = []
 
   afterAll(async () => {

@@ -12,7 +12,8 @@ type Delivery = { id: string; success: boolean; status_code: number; attempt: nu
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
 const json = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) })
 
-describe('admin API: managing webhooks', () => {
+// Webhooks are offered where `capabilities.webhooks` says so.
+describe.skipIf(!(await provider.offers('webhooks')))('admin API: managing webhooks', () => {
   const name = `conformance-${randomToken(6)}`
   // .invalid never resolves (RFC 2606), so deliveries fail at once on any
   // provider and nothing leaves the test.

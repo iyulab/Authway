@@ -223,10 +223,10 @@ describe('admin API: a chosen client_id', () => {
 // change leaves as it is; credentials of a provider not enabled are kept.
 describe("admin API: a client's own provider credentials", () => {
   let id: string | undefined
-  let offered: string[] = []
+  let offered = false
 
   beforeAll(async () => {
-    offered = ((await (await fetch(`${provider.config.api}/api/v1/capabilities`)).json()) as { providers: string[] }).providers
+    offered = await provider.offers('client_provider_apps')
   })
 
   afterAll(async () => {
@@ -238,11 +238,10 @@ describe("admin API: a client's own provider credentials", () => {
     expect(await res.json()).toMatchObject({ code: 'incomplete_provider_credentials', field })
   }
 
-  // An installation that offers no sign-in with another provider has no use
-  // for a client's own provider apps: every member of them is refused,
-  // enabling it or not.
-  it('are refused where the installation offers no sign-in with another provider', async (context) => {
-    if (offered.length > 0) context.skip()
+  // An installation with no provider apps of a client's own refuses every
+  // member of them, enabling it or not.
+  it('are refused where the installation has no provider apps of a client’s own', async (context) => {
+    if (offered) context.skip()
     for (const name of ['google', 'github', 'microsoft', 'apple']) {
       for (const member of [`${name}_oauth_enabled`, `${name}_client_id`]) {
         const res = await provider.admin('/api/v1/clients', {
@@ -263,8 +262,8 @@ describe("admin API: a client's own provider credentials", () => {
   })
 
   it('are complete for an enabled provider, when created and when changed', async (context) => {
-    // Where the installation offers no provider these are refused (above).
-    if (offered.length === 0) context.skip()
+    // Where the installation has no provider apps of a client's own these are refused (above).
+    if (!offered) context.skip()
     const register = async (extra: Record<string, unknown>) =>
       provider.admin('/api/v1/clients', {
         method: 'POST',

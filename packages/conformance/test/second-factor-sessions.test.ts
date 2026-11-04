@@ -13,7 +13,7 @@ type SignedIn = Extract<LoginOutcome, { kind: 'code' }>
 // factor, and so were its tokens. If they outlived the moment the factor is
 // turned on, whoever already held one would keep the account past it — the
 // very thing the user turned the factor on against.
-describe('turning the second factor on ends the sessions opened before it', () => {
+describe.skipIf(!(await provider.offers('mfa')))('turning the second factor on ends the sessions opened before it', () => {
   let app: TestClient
   let user: TestUser
   let here: SignedIn

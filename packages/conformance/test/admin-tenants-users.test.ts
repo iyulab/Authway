@@ -10,7 +10,7 @@ type Tenant = { id: string; name: string; slug: string; active?: boolean; settin
 
 const code = async (res: Response) => ((await res.json()) as { code: string }).code
 
-describe('admin API: managing tenants', () => {
+describe.skipIf(!(await provider.offers('multi_tenant')))('admin API: managing tenants', () => {
   const slug = `conformance-${randomToken(4).toLowerCase()}`
   let tenant: Tenant | undefined
 
@@ -164,7 +164,7 @@ describe('admin API: managing users', () => {
 
 // A tenant's service credential, and what keeps a tenant from being deleted:
 // a tenant is deleted only once nothing that signs in to it is left.
-describe('admin API: service credentials and deleting a tenant that is not empty', () => {
+describe.skipIf(!(await provider.offers('multi_tenant')))('admin API: service credentials and deleting a tenant that is not empty', () => {
   let tenant: Tenant | undefined
 
   afterAll(async () => {

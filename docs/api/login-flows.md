@@ -353,6 +353,8 @@ authorization request.
   "device_authorization": true,
   "terms_acceptance": true,
   "token_exchange": true,
+  "webhooks": true,
+  "client_provider_apps": true,
   "ciba": false
 }
 ```
@@ -360,4 +362,7 @@ authorization request.
 `providers` are the social providers this deployment has credentials for (a
 client may add its own credentials for any of them). `passkeys` is whether users
 register passkeys and sign in with them; absent or `false` where they are not set
-up.
+up. `webhooks` is whether administrators register webhooks, and
+`client_provider_apps` whether an application carries the credentials of its own
+social-provider apps; where either is absent or `false`, its routes answer 404 or
+set `400 provider_unavailable` on the member.

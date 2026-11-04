@@ -125,6 +125,22 @@ export class Provider {
     return this.discoveryDoc
   }
 
+  /**
+   * Whether this installation offers a capability (GET /api/v1/capabilities): `true`, or a list with something in
+   * it. A scenario for something it does not offer is skipped, not failed — a whole file with
+   * `describe.skipIf(!(await provider.offers('multi_tenant')))`.
+   */
+  async offers(capability: string): Promise<boolean> {
+    const value = (await this.capabilities())[capability]
+    return Array.isArray(value) ? value.length > 0 : value === true
+  }
+
+  /** Whether the token endpoint takes a way for a client to authenticate, as discovery says (`token_endpoint_auth_methods_supported`). */
+  async authenticatesClientsWith(method: string): Promise<boolean> {
+    const methods = (await this.discovery()).token_endpoint_auth_methods_supported
+    return Array.isArray(methods) && methods.includes(method)
+  }
+
   // ---- admin provisioning -------------------------------------------------
 
   /** Calls the admin API with the configured admin credential and tenant. */

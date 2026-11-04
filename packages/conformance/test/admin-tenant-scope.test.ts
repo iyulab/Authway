@@ -16,7 +16,8 @@ const asOtherTenant = (path: string, init: RequestInit = {}) =>
     headers: { Authorization: `Bearer ${provider.config.adminKey}`, 'X-Tenant-ID': randomUUID() },
   })
 
-describe('admin API: a resource is reached only through its own tenant', () => {
+// There is a tenant to be reached through only where there are several.
+describe.skipIf(!(await provider.offers('multi_tenant')))('admin API: a resource is reached only through its own tenant', () => {
   it('answers not_found for a webhook read, changed, tested or deleted under another tenant', async () => {
     const created = await provider.admin('/api/v1/webhooks', {
       method: 'POST',

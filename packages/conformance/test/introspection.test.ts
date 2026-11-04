@@ -12,7 +12,7 @@ const PATH = '/api/v1/oauth2/introspect'
 // token until it expires. One that must know at once that a user signed out
 // asks the provider about each token instead (RFC 7662), as a confidential
 // client of the same tenant.
-describe('token introspection', () => {
+describe.skipIf(!(await provider.offers('token_introspection')))('token introspection', () => {
   let app: TestClient
   let resourceServer: TestClient & { secret: string }
   let user: TestUser
