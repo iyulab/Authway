@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config.js'
 import { conform } from '../src/contract.js'
-import { randomToken } from '../src/pkce.js'
 import { Provider } from '../src/provider.js'
 
 const provider = new Provider(loadConfig())
@@ -25,41 +24,38 @@ async function eventually(find: () => Promise<Entry[]>, withinMs = 20_000): Prom
 }
 
 describe('admin API: reading the audit log', () => {
-  const name = `conformance-${randomToken(6)}`
-  let webhookId: string
-
+  // Registering an application is an audited admin write every installation has, which the suite can make and undo.
   it('records an admin change and finds it by action and resource', async () => {
-    // Creating a webhook is an audited admin write the suite can make and undo.
-    const created = await provider.admin('/api/v1/webhooks', {
-      method: 'POST',
-      body: JSON.stringify({ name, url: 'https://conformance.invalid/webhook', events: ['user.created'], enabled: false }),
-    })
-    expect(created.status).toBe(201)
-    webhookId = ((await created.json()) as { webhook: { id: string } }).webhook.id
+    const app = await provider.createPublicClient()
+    try {
+      const entries = await eventually(async () => {
+        const res = await provider.admin(`/api/v1/audit/logs?action=client.created&resource_id=${app.id}&limit=5`)
+        await conform('GET', '/api/v1/audit/logs', res)
+        expect(res.status).toBe(200)
+        return ((await res.json()) as { logs: Entry[] }).logs
+      })
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ action: 'client.created', resource_id: app.id, success: true })
 
-    const entries = await eventually(async () => {
-      const res = await provider.admin(`/api/v1/audit/logs?action=webhook.created&resource_id=${webhookId}&limit=5`)
-      await conform('GET', '/api/v1/audit/logs', res)
+      const one = await provider.admin(`/api/v1/audit/logs/${entries[0].id}`)
+      await conform('GET', '/api/v1/audit/logs/{id}', one)
+      expect(((await one.json()) as { log: Entry }).log.id).toBe(entries[0].id)
+    } finally {
+      await provider.deleteClient(app)
+    }
+
+    // Removing it is recorded too.
+    const removed = await eventually(async () => {
+      const res = await provider.admin(`/api/v1/audit/logs?action=client.deleted&resource_id=${app.id}&limit=5`)
       expect(res.status).toBe(200)
       return ((await res.json()) as { logs: Entry[] }).logs
     })
-    expect(entries).toHaveLength(1)
-    expect(entries[0]).toMatchObject({ action: 'webhook.created', resource_id: webhookId, success: true })
-
-    const one = await provider.admin(`/api/v1/audit/logs/${entries[0].id}`)
-    await conform('GET', '/api/v1/audit/logs/{id}', one)
-    expect(((await one.json()) as { log: Entry }).log.id).toBe(entries[0].id)
-
-    await provider.admin(`/api/v1/webhooks/${webhookId}`, { method: 'DELETE' })
+    expect(removed).toHaveLength(1)
   })
 
   it('narrows by the kind of resource and by when it happened', async () => {
-    const created = await provider.admin('/api/v1/webhooks', {
-      method: 'POST',
-      body: JSON.stringify({ name: `${name}-filters`, url: 'https://conformance.invalid/webhook', events: ['user.created'], enabled: false }),
-    })
-    expect(created.status).toBe(201)
-    const id = ((await created.json()) as { webhook: { id: string } }).webhook.id
+    const app = await provider.createPublicClient()
+    const id = app.id
     const find = async (query: string): Promise<Entry[]> => {
       const res = await provider.admin(`/api/v1/audit/logs?resource_id=${id}&limit=5&${query}`)
       await conform('GET', '/api/v1/audit/logs', res)
@@ -67,7 +63,7 @@ describe('admin API: reading the audit log', () => {
       return ((await res.json()) as { logs: Entry[] }).logs
     }
     try {
-      const entries = await eventually(() => find('action=webhook.created'))
+      const entries = await eventually(() => find('action=client.created'))
       expect(entries).toHaveLength(1)
       const [entry] = entries
       expect(entry.resource_type).toBeTruthy()
@@ -92,7 +88,7 @@ describe('admin API: reading the audit log', () => {
       expect(await find(`start_time=${iso(at + 60_000)}`)).toHaveLength(0)
       expect(await find(`start_time=${iso(at - 60_000)}&end_time=${iso(at + 60_000)}`)).toHaveLength(1)
     } finally {
-      await provider.admin(`/api/v1/webhooks/${id}`, { method: 'DELETE' })
+      await provider.deleteClient(app)
     }
   })
 
@@ -105,7 +101,9 @@ describe('admin API: reading the audit log', () => {
     }
   })
 
-  it('refuses a read that names no tenant', async () => {
+  // Only where there is a tenant to name: an installation with one takes a call that names none to be about it.
+  it('refuses a read that names no tenant', async (context) => {
+    if (!(await provider.offers('multi_tenant'))) context.skip()
     const res = await fetch(`${provider.config.api}/api/v1/audit/logs`, {
       headers: { Authorization: `Bearer ${provider.config.adminKey}` },
     })
@@ -125,7 +123,10 @@ describe('admin API: reading the audit log', () => {
     const actions = await provider.admin('/api/v1/audit/actions')
     await conform('GET', '/api/v1/audit/actions', actions)
     const listed = ((await actions.json()) as { actions: { action: string }[] }).actions.map((a) => a.action)
-    expect(listed).toEqual(expect.arrayContaining(['user.login_failed', 'webhook.created', 'tenant.created']))
+    // Every action listed is one the installation records: these two every installation does.
+    expect(listed).toEqual(expect.arrayContaining(['user.login_failed', 'client.created']))
+    if (await provider.offers('multi_tenant')) expect(listed).toContain('tenant.created')
+    if (await provider.offers('webhooks')) expect(listed).toContain('webhook.created')
 
     const summary = await provider.admin('/api/v1/audit/summary')
     await conform('GET', '/api/v1/audit/summary', summary)
