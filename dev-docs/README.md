@@ -14,6 +14,7 @@ how to use it is in `docs/`.
 | [deployment.md](deployment.md) | L1 | Which processes make up a deployment, and how they talk |
 | [sign-in-flow.md](sign-in-flow.md) | L2 | In what order an application, the browser, the API and the authorization server cooperate until the application holds a token |
 | [accounts.md](accounts.md) | L3 | What an account is made of, and which rules about how it signs in always hold |
+| [languages.md](languages.md) | L3 | In which language a person reads a screen, an error or a mail, and who decides |
 
 ## Project map
 

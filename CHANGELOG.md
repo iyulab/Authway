@@ -2,6 +2,15 @@
 
 ### Added
 
+- **Korean and English everywhere** — the login screens, the administration
+  console, the React SDK components, the landing page and the samples are
+  available in both languages, chosen by `?lang=`, then the language switcher
+  (now on every screen), then the browser, with English as the fallback. The
+  document says which language it is in (`<html lang>`). Mail is available in
+  English as well (`packages/mail/locales/en.json`) and is worded in the
+  language of the request's `Accept-Language`; the login screens and the
+  console send the language the person chose. See `dev-docs/languages.md`.
+
 - **Breached password check** — a password that is being set (accepting an
   invitation, changing a password, resetting it) is refused with `400 password_breached` when it is in a
   known data breach. Only the first five characters of its SHA-1 hash are sent,
@@ -99,6 +108,15 @@
   the schema does not declare.
 
 ### Changed
+
+- **Mail is worded in the language of the request, English by default** — a
+  request without `Accept-Language` (a script, a server-to-server call) now gets
+  English mail where it used to get Korean. `mail.Render` chooses the best
+  supported language of what it is given and falls back to English.
+- **Screens show a refusal in their own language** — the login screens and the
+  console translate a refusal by its `code`; the login screens no longer show the
+  API's `detail` text, and the console shows it only for a refusal that names a
+  form field. The API's refusals themselves are unchanged.
 
 - **A tenant has no `logo` or `primary_color`** — **breaking, before 1.0**. Both
   were kept and returned as given and no screen ever showed them, so they are
