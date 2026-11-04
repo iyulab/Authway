@@ -4341,13 +4341,18 @@ components:
         created_at: { type: string }
 
     OwnProfile:
+      description: |
+        What the signed-in user's token may say about them, as at userinfo:
+        `email` and `email_verified` are there when the token was granted the
+        `email` scope, `name` when it was granted `profile`. A token with
+        `openid` alone gets the id and the account facts below.
       type: object
-      required: [id, email, email_verified]
+      required: [id]
       properties:
         id: { type: string, description: The user's id — the sub of their tokens. }
-        email: { type: string }
-        name: { type: ['null', string] }
-        email_verified: { type: boolean }
+        email: { type: string, description: Present with the `email` scope. }
+        name: { type: ['null', string], description: Present with the `profile` scope. }
+        email_verified: { type: boolean, description: Present with the `email` scope. }
         has_password:
           type: boolean
           description: Whether the account has a password — one that signs in only by link or by another provider has none.

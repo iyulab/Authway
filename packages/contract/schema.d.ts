@@ -2743,12 +2743,21 @@ export interface components {
             revoked_at?: null | string;
             created_at: string;
         };
+        /**
+         * @description What the signed-in user's token may say about them, as at userinfo:
+         *     `email` and `email_verified` are there when the token was granted the
+         *     `email` scope, `name` when it was granted `profile`. A token with
+         *     `openid` alone gets the id and the account facts below.
+         */
         OwnProfile: {
             /** @description The user's id — the sub of their tokens. */
             id: string;
-            email: string;
+            /** @description Present with the `email` scope. */
+            email?: string;
+            /** @description Present with the `profile` scope. */
             name?: null | string;
-            email_verified: boolean;
+            /** @description Present with the `email` scope. */
+            email_verified?: boolean;
             /** @description Whether the account has a password — one that signs in only by link or by another provider has none. */
             has_password?: boolean;
             created_at?: string;

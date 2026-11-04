@@ -271,6 +271,15 @@
   invalid_client_id`) — the form of a user's id, which a client's own token
   would then read as. Generated ones never had it.
 
+- **`GET /api/v1/profile/me` follows the scopes of the token** — it gave the
+  address and the name to any user token, so an application that asked for
+  `openid` alone could read both. It now says what `userinfo` says: `email` and
+  `email_verified` with the `email` scope, `name` with the `profile` scope. The
+  id and the account facts (`has_password`, `created_at`) stay. A caller that
+  read the address or the name from this answer needs the scope; in the
+  contract `email`, `email_verified` and `name` of `OwnProfile` are no longer
+  always present.
+
 ### Fixed
 
 - **The link that verifies an email address survives a token that needs

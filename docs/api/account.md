@@ -22,6 +22,11 @@ answers `{ "id", "email", "name", "email_verified", "has_password",
 `has_password` is false for an account that signs in only by an emailed link
 or another provider.
 
+What the answer says about the person follows the scopes the token was granted,
+as `userinfo` does: `email` and `email_verified` come with the `email` scope,
+`name` with the `profile` scope. A token granted `openid` alone gets the id and
+the account facts, not the address or the name.
+
 ---
 
 ## 2. Deleting the account

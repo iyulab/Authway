@@ -775,17 +775,28 @@ func (h *AuthHandler) ProfileMe(c *fiber.Ctx) error {
 		return apierror.Refuse(c, 404, apierror.CodeForStatus(404), "User not found")
 	}
 
-	return c.JSON(fiber.Map{
-		"id":             user.ID,
-		"email":          user.Email,
-		"name":           user.Name,
-		"email_verified": user.EmailVerified,
+	// What the token may say about the user is what its scopes name, as at
+	// userinfo: the address (and whether it is verified) with email, the name
+	// with profile. An application that asked for openid alone learns who
+	// signed in, not their address.
+	scopes, _ := c.Locals("token_scopes").([]string)
+	granted := func(scope string) bool { return slices.Contains(scopes, scope) }
+	profile := fiber.Map{
+		"id": user.ID,
 		// Whether the account has a password — the account screen offers to
 		// change it, or to set one.
 		"has_password": user.PasswordHash != "",
 		"created_at":   user.CreatedAt,
 		"updated_at":   user.UpdatedAt,
-	})
+	}
+	if granted("email") {
+		profile["email"] = user.Email
+		profile["email_verified"] = user.EmailVerified
+	}
+	if granted("profile") {
+		profile["name"] = user.Name
+	}
+	return c.JSON(profile)
 }
 
 // respondInvalidCredentials answers a failed password check without ending

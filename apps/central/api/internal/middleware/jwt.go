@@ -92,6 +92,11 @@ func JWTAuth(logger *zap.Logger, hydraClient *hydra.Client, db ...*gorm.DB) fibe
 		c.Locals("access_token", token)
 		// The client the token was issued to.
 		c.Locals("client_id", found.clientID)
+		// The scopes the token was granted — what an answer about the user
+		// may say (the address needs email, the name needs profile). Not the
+		// "scopes" an API-scope check reads: that one is for tokens of a
+		// service, not of a user.
+		c.Locals("token_scopes", found.scopes)
 		// When the user of the session this token came from last proved who
 		// they are; absent when that is not known.
 		if !authTime.IsZero() {
@@ -126,6 +131,8 @@ type introspected struct {
 	// delegated is true for a token a client was issued to act for the user
 	// (it names the actor, act).
 	delegated bool
+	// scopes are the scopes the token was granted.
+	scopes []string
 }
 
 func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger) (*introspected, error) {
@@ -170,6 +177,7 @@ func introspectToken(token string, hydraClient *hydra.Client, logger *zap.Logger
 	return &introspected{
 		userID: userID, tenantID: tenantID, authTime: authTime, sessionID: sessionID,
 		clientID: introspectResp.ClientID, delegated: delegated,
+		scopes: strings.Fields(introspectResp.Scope),
 	}, nil
 }
 
