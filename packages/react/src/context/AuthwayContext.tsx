@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 import { AuthwayClient, LogoutOptions, User } from '@authway/client'
+import type { Locale } from '../i18n'
 
 export interface AuthState {
   isAuthenticated: boolean
@@ -16,6 +17,8 @@ export interface AuthContextValue extends AuthState {
   getAccessToken: () => Promise<string>
   getAccessTokenWithPopup: (options?: any) => Promise<string>
   getIdTokenClaims: () => Promise<any | null>
+  /** The language of the words this package puts on screen. */
+  locale: Locale
 }
 
 export const AuthwayContext = createContext<AuthContextValue | null>(null)

@@ -36,6 +36,18 @@
       margin-bottom: 1rem;
     }
     h1 { font-size: 1.75rem; margin: 0; }
+    .lang {
+      margin-left: auto;
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.25rem 0.6rem;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .lang:hover { color: var(--text); border-color: var(--text-dim); }
     .tagline {
       font-size: 1.15rem;
       color: var(--text-dim);
@@ -104,8 +116,9 @@
   <div class="wrap">
     <header>
       <h1>Authway</h1>
+      <button type="button" class="lang" id="lang" aria-label="Language"></button>
     </header>
-    <p class="tagline">Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra.</p>
+    <p class="tagline" data-i18n="tagline">Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra.</p>
 
     <div class="badges">
       <a href="https://github.com/iyulab/authway/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache License 2.0" /></a>
@@ -113,25 +126,114 @@
       <a href="https://www.npmjs.com/package/@authway/react"><img src="https://img.shields.io/npm/v/@authway/react?label=%40authway%2Freact&color=blue" alt="@authway/react version" /></a>
     </div>
 
-    <h2>Features</h2>
+    <h2 data-i18n="features">Features</h2>
     <ul class="features">
-      <li><strong>OAuth 2.0 / OIDC</strong><span>Standards-compliant authentication with PKCE support</span></li>
-      <li><strong>Multi-Tenancy</strong><span>Fully isolated tenant support</span></li>
-      <li><strong>MFA (TOTP)</strong><span>Encrypted secrets and backup codes</span></li>
-      <li><strong>Passwordless</strong><span>Magic-link email and social sign-in</span></li>
-      <li><strong>Webhooks</strong><span>Subscribe to account and session lifecycle events</span></li>
-      <li><strong>TypeScript SDKs</strong><span>@authway/client and @authway/react</span></li>
+      <li><strong data-i18n="oidc.title">OAuth 2.0 / OIDC</strong><span data-i18n="oidc.text">Standards-compliant authentication with PKCE support</span></li>
+      <li><strong data-i18n="tenancy.title">Multi-Tenancy</strong><span data-i18n="tenancy.text">Fully isolated tenant support</span></li>
+      <li><strong data-i18n="mfa.title">MFA (TOTP)</strong><span data-i18n="mfa.text">Encrypted secrets and backup codes</span></li>
+      <li><strong data-i18n="passwordless.title">Passwordless</strong><span data-i18n="passwordless.text">Magic-link email and social sign-in</span></li>
+      <li><strong data-i18n="webhooks.title">Webhooks</strong><span data-i18n="webhooks.text">Subscribe to account and session lifecycle events</span></li>
+      <li><strong data-i18n="sdks.title">TypeScript SDKs</strong><span data-i18n="sdks.text">@authway/client and @authway/react</span></li>
     </ul>
 
     <div class="links">
       <a class="primary" href="https://github.com/iyulab/authway">GitHub</a>
-      <a href="https://github.com/iyulab/authway/blob/main/docs/README.md">Documentation</a>
-      <a href="https://github.com/iyulab/authway/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/iyulab/authway/blob/main/docs/README.md" data-i18n="docs">Documentation</a>
+      <a href="https://github.com/iyulab/authway/blob/main/CHANGELOG.md" data-i18n="changelog">Changelog</a>
     </div>
 
-    <footer>
+    <footer data-i18n-html="license">
       Released under the <a href="https://github.com/iyulab/authway/blob/main/LICENSE">Apache License 2.0</a>.
     </footer>
   </div>
+  <script>
+    // English and Korean. The page is English as served; this picks the visitor's
+    // language the way the sign-in screens do: ?lang=, then the language they
+    // chose before, then the browser's, otherwise English.
+    (function () {
+      var LICENSE = 'https://github.com/iyulab/authway/blob/main/LICENSE';
+      var T = {
+        en: {
+          title: 'Authway — OAuth 2.0 / OIDC Authentication',
+          description: 'Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra, with TypeScript SDKs for vanilla JS and React.',
+          tagline: 'Modern OAuth 2.0 / OpenID Connect authentication system built on Ory Hydra.',
+          features: 'Features',
+          'oidc.title': 'OAuth 2.0 / OIDC', 'oidc.text': 'Standards-compliant authentication with PKCE support',
+          'tenancy.title': 'Multi-Tenancy', 'tenancy.text': 'Fully isolated tenant support',
+          'mfa.title': 'MFA (TOTP)', 'mfa.text': 'Encrypted secrets and backup codes',
+          'passwordless.title': 'Passwordless', 'passwordless.text': 'Magic-link email and social sign-in',
+          'webhooks.title': 'Webhooks', 'webhooks.text': 'Subscribe to account and session lifecycle events',
+          'sdks.title': 'TypeScript SDKs', 'sdks.text': '@authway/client and @authway/react',
+          docs: 'Documentation',
+          changelog: 'Changelog',
+          license: 'Released under the <a href="' + LICENSE + '">Apache License 2.0</a>.',
+          switchTo: 'English',
+          switchLabel: 'View in English'
+        },
+        ko: {
+          title: 'Authway — OAuth 2.0 / OIDC 인증',
+          description: 'Ory Hydra 기반의 현대적인 OAuth 2.0 / OpenID Connect 인증 시스템. 바닐라 JS와 React용 TypeScript SDK를 제공합니다.',
+          tagline: 'Ory Hydra 기반의 현대적인 OAuth 2.0 / OpenID Connect 인증 시스템.',
+          features: '주요 기능',
+          'oidc.title': 'OAuth 2.0 / OIDC', 'oidc.text': 'PKCE를 지원하는 표준 준수 인증',
+          'tenancy.title': '멀티 테넌시', 'tenancy.text': '완전히 분리된 테넌트 지원',
+          'mfa.title': 'MFA (TOTP)', 'mfa.text': '암호화된 비밀과 백업 코드',
+          'passwordless.title': '비밀번호 없는 로그인', 'passwordless.text': '매직 링크 이메일과 소셜 로그인',
+          'webhooks.title': '웹훅', 'webhooks.text': '계정과 세션 생명주기 이벤트 구독',
+          'sdks.title': 'TypeScript SDK', 'sdks.text': '@authway/client 와 @authway/react',
+          docs: '문서',
+          changelog: '변경 내역',
+          license: '<a href="' + LICENSE + '">Apache License 2.0</a>에 따라 배포됩니다.',
+          switchTo: '한국어',
+          switchLabel: '한국어로 보기'
+        }
+      };
+      var KEY = 'authway-language';
+
+      function pick(pref) {
+        var tags = String(pref || '').split(',').map(function (part, order) {
+          var bits = part.split(';');
+          var q = 1;
+          bits.slice(1).forEach(function (b) {
+            var kv = b.split('=');
+            if (kv[0].trim().toLowerCase() === 'q' && !isNaN(parseFloat(kv[1]))) q = parseFloat(kv[1]);
+          });
+          return { lang: bits[0].trim().toLowerCase().replace('_', '-').split('-')[0], q: q, order: order };
+        }).filter(function (x) { return x.lang && x.lang !== '*' && x.q > 0; });
+        tags.sort(function (a, b) { return b.q - a.q || a.order - b.order; });
+        for (var i = 0; i < tags.length; i++) if (T[tags[i].lang]) return tags[i].lang;
+        return null;
+      }
+
+      function stored() {
+        try { return localStorage.getItem(KEY); } catch (e) { return null; }
+      }
+
+      function detect() {
+        var query = new URLSearchParams(location.search).get('lang');
+        return pick(query) || pick(stored()) || pick((navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).join(',')) || 'en';
+      }
+
+      var button = document.getElementById('lang');
+
+      function apply(lang) {
+        var m = T[lang];
+        document.documentElement.lang = lang;
+        document.title = m.title;
+        document.querySelector('meta[name="description"]').setAttribute('content', m.description);
+        document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = m[el.getAttribute('data-i18n')]; });
+        document.querySelectorAll('[data-i18n-html]').forEach(function (el) { el.innerHTML = m[el.getAttribute('data-i18n-html')]; });
+        var other = lang === 'ko' ? 'en' : 'ko';
+        button.textContent = T[other].switchTo;
+        button.setAttribute('aria-label', T[other].switchLabel);
+        button.onclick = function () {
+          try { localStorage.setItem(KEY, other); } catch (e) { /* storage may be blocked */ }
+          apply(other);
+        };
+      }
+
+      apply(detect());
+    })();
+  </script>
 </body>
 </html>

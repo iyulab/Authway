@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AuthwayProvider, useAuth } from '@authway/react'
+import { AuthwayProvider, useAuth, detectLocale, LANGUAGE_STORAGE_KEY, type Locale } from '@authway/react'
 import type { AuthwayConfig } from '@authway/client'
+import { messages, type Messages } from './messages'
 
 // A browser application that signs users in with Authway and calls an API
 // with their access token.
@@ -33,8 +34,21 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // English or Korean: the person's choice if they made one (it is kept, and
+  // the sign-in screens read the same key), otherwise their browser's.
+  const [locale, setLocale] = useState<Locale>(detectLocale)
+  const t = messages[locale]
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+  const otherLocale: Locale = locale === 'ko' ? 'en' : 'ko'
+  const switchLanguage = () => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, otherLocale)
+    setLocale(otherLocale)
+  }
+
   if (!config.clientId) {
-    return <p className="error">Set VITE_AUTHWAY_CLIENT_ID in .env.local — see the README.</p>
+    return <p className="error">{t.setClientId}</p>
   }
 
   return (
@@ -45,54 +59,59 @@ export default function App() {
       // in. The browser goes there and back without showing anything. This is
       // the default; it is spelled out here because the sample relies on it.
       checkSessionOnLoad
+      // Chosen here, so the components of the SDK speak the same language and
+      // the sign-in screen is opened in it too (OpenID Connect ui_locales).
+      // Leave it out and both follow the person's browser instead.
+      locale={locale}
       // The browser has come back from Authway, after a sign-in or after that
       // question. appState.returnTo is where the user was; an application
       // with a router navigates there.
       onRedirectCallback={(appState) => go(appState?.returnTo ?? '/')}
     >
       <nav>
-        <a href="/" onClick={(e) => (e.preventDefault(), go('/'))}>Home</a>
-        <a href="/api" onClick={(e) => (e.preventDefault(), go('/api'))}>Call the API</a>
+        <a href="/" onClick={(e) => (e.preventDefault(), go('/'))}>{t.home}</a>
+        <a href="/api" onClick={(e) => (e.preventDefault(), go('/api'))}>{t.callTheApi}</a>
+        <button onClick={switchLanguage}>{otherLocale === 'ko' ? '한국어' : 'English'}</button>
       </nav>
-      <Page path={path} />
+      <Page path={path} t={t} />
     </AuthwayProvider>
   )
 }
 
-function Page({ path }: { path: string }) {
+function Page({ path, t }: { path: string; t: Messages }) {
   const { isLoading, isAuthenticated, error, user, loginWithRedirect, logout } = useAuth()
 
   // Also true while the browser is away asking Authway for the session.
-  if (isLoading) return <p>Loading…</p>
+  if (isLoading) return <p>{t.loading}</p>
 
   // The provider refused the sign-in (the user denied consent, has no
   // account, …). "Nobody is signed in" is not an error and does not come here.
-  if (error) return <p className="error">Sign-in failed: {error.message}</p>
+  if (error) return <p className="error">{t.signInFailed}: {error.message}</p>
 
   if (!isAuthenticated) {
     return (
       <>
-        <h1>Signed out</h1>
-        <button onClick={() => loginWithRedirect({ appState: { returnTo: path } })}>Sign in</button>
+        <h1>{t.signedOut}</h1>
+        <button onClick={() => loginWithRedirect({ appState: { returnTo: path } })}>{t.signIn}</button>
       </>
     )
   }
 
   return (
     <>
-      <h1>Signed in</h1>
+      <h1>{t.signedIn}</h1>
       {/* sub identifies the user at this issuer: key your own records on it, not on the email address. */}
       <p>
         {user?.name} &lt;{user?.email}&gt; — sub <code>{user?.sub}</code>
       </p>
-      {path === '/api' && <CallTheApi />}
+      {path === '/api' && <CallTheApi t={t} />}
       {/* Ends the session at Authway too, for every application signed in on it. */}
-      <button onClick={() => logout()}>Sign out</button>
+      <button onClick={() => logout()}>{t.signOut}</button>
     </>
   )
 }
 
-function CallTheApi() {
+function CallTheApi({ t }: { t: Messages }) {
   const { getAccessToken } = useAuth()
   const [answer, setAnswer] = useState('')
 
@@ -109,7 +128,7 @@ function CallTheApi() {
 
   return (
     <section>
-      <h2>The API</h2>
+      <h2>{t.theApi}</h2>
       <button onClick={() => call('/api/me')}>GET /api/me</button>
       <button onClick={() => call('/api/email')}>GET /api/email</button>
       {answer && <pre>{answer}</pre>}

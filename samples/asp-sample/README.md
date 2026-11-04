@@ -18,6 +18,7 @@ works against any Authway deployment.
 | Only the ID token is carried into the session | `/signin-complete` | It is needed to sign out at the provider (`id_token_hint`). Access and refresh tokens are not kept, because this sample calls no API for the user. |
 | Sign-out ends both sessions | `Account.cshtml.cs` | The application's cookie first, then RP-initiated logout at the provider. |
 | The client secret is not in a tracked file | `dotnet user-secrets` | See below. |
+| English and Korean, and the sign-in screen in the same language | `Texts.cs`, `UseRequestLocalization`, `OnRedirectToIdentityProvider` | The language is `?lang=`, then the choice remembered in a cookie (`/language`), then the browser's. The application sends it to the provider as `ui_locales`, so the person does not meet another language at the sign-in screen. |
 
 ## Run it
 

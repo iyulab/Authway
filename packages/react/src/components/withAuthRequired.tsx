@@ -1,5 +1,6 @@
 import React, { ComponentType, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { message } from '../i18n'
 
 export interface WithAuthRequiredOptions {
   /**
@@ -38,8 +39,8 @@ export function withAuthRequired<P extends object>(
   options: WithAuthRequiredOptions = {}
 ): React.FC<P> {
   return function WithAuthRequiredWrapper(props: P) {
-    const { isAuthenticated, isLoading, loginWithRedirect } = useAuth()
-    const { onRedirecting = () => <div>Loading...</div> } = options
+    const { isAuthenticated, isLoading, loginWithRedirect, locale } = useAuth()
+    const { onRedirecting = () => <div>{message(locale, 'loading')}</div> } = options
 
     useEffect(() => {
       if (!isLoading && !isAuthenticated) {

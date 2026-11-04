@@ -1,8 +1,11 @@
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 using System.Security.Claims;
 using AuthwaySample;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 // A server-side relying party: the browser signs in at the identity provider,
@@ -28,6 +31,8 @@ if (string.IsNullOrEmpty(authority) || string.IsNullOrEmpty(clientId) || string.
 }
 
 builder.Services.AddRazorPages();
+// Write Korean as itself, not as numeric character references.
+builder.Services.AddWebEncoders(o => o.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.BasicLatin, UnicodeRanges.HangulSyllables));
 builder.Services.AddSingleton<AppUsers>();
 
 builder.Services
@@ -81,6 +86,15 @@ builder.Services
         // the user would keep the access and refresh tokens server-side.
         options.SaveTokens = true;
 
+        // Ask for the sign-in screen in the language this page is shown in
+        // (OpenID Connect ui_locales), so the person does not meet another
+        // language at the provider.
+        options.Events.OnRedirectToIdentityProvider = context =>
+        {
+            context.ProtocolMessage.UiLocales = Texts.Language;
+            return Task.CompletedTask;
+        };
+
         options.CallbackPath = "/signin-oidc";
         options.SignedOutCallbackPath = "/signout-callback-oidc";
     });
@@ -96,10 +110,32 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+// English and Korean. The language is ?lang=, then the choice remembered in
+// the culture cookie (see /language below), then the browser's Accept-Language.
+app.UseRequestLocalization(options =>
+{
+    options.SetDefaultCulture("en").AddSupportedCultures(Texts.Languages).AddSupportedUICultures(Texts.Languages);
+    options.RequestCultureProviders.OfType<QueryStringRequestCultureProvider>().Single().QueryStringKey = "lang";
+    options.RequestCultureProviders.OfType<QueryStringRequestCultureProvider>().Single().UIQueryStringKey = "lang";
+});
+
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Remembers the language a person chose, then goes back to where they were.
+app.MapGet("/language", (HttpContext context, string? lang, string? returnUrl) =>
+{
+    if (Texts.Languages.Contains(lang))
+    {
+        context.Response.Cookies.Append(
+            CookieRequestCultureProvider.DefaultCookieName,
+            CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(lang!)),
+            new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1), IsEssential = true });
+    }
+    return Results.LocalRedirect(Local(returnUrl));
+});
 
 // Sends the browser to the provider. The provider's callback (/signin-oidc)
 // is handled by the OpenID Connect middleware, which then comes here ↓.

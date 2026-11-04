@@ -16,6 +16,7 @@ with their access token. It is meant to be read and copied: the whole of it is
 | The user is identified by `sub` | `Page` | It is stable and unique per issuer; an email address can change. |
 | The access token is asked for on each call | `CallTheApi` | The SDK hands out the current one and renews it when it can; the application keeps no copy. |
 | Signing out ends the session at Authway too | `logout()` | And with it the session of every application the user was signed in to there. |
+| English and Korean, and the sign-in screen in the same language | `messages.ts`, `locale` on `AuthwayProvider` | The person's choice (kept in `localStorage` under `authway-language`, the key the sign-in screens read) or else their browser's. The SDK's own words follow `locale`, and the sign-in screen is opened in it (`ui_locales`). |
 
 ## Run it
 

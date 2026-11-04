@@ -1,9 +1,10 @@
 import { ReactNode, ButtonHTMLAttributes, MouseEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { message } from '../i18n'
 import { LogoutOptions } from '@authway/client'
 
 export interface LogoutButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Custom children to render instead of default "Log Out" text */
+  /** Custom children to render instead of the default text ("Log Out", or "로그아웃" in Korean) */
   children?: ReactNode
   /** Options to pass to logout */
   logoutOptions?: LogoutOptions
@@ -27,13 +28,13 @@ export interface LogoutButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
  * ```
  */
 export function LogoutButton({
-  children = 'Log Out',
+  children,
   logoutOptions,
   className = '',
   onClick,
   ...buttonProps
 }: LogoutButtonProps) {
-  const { logout, isLoading } = useAuth()
+  const { logout, isLoading, locale } = useAuth()
 
   // The application's own onClick runs first, and may call preventDefault()
   // to keep the button from signing the user out.
@@ -50,7 +51,7 @@ export function LogoutButton({
       disabled={isLoading || buttonProps.disabled}
       className={className}
     >
-      {children}
+      {children ?? message(locale, 'logOut')}
     </button>
   )
 }

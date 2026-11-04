@@ -1,5 +1,7 @@
 import { HTMLAttributes } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import { useUser } from '../hooks/useUser'
+import { message } from '../i18n'
 
 export interface UserProfileProps extends HTMLAttributes<HTMLDivElement> {
   /** Show user avatar */
@@ -32,11 +34,12 @@ export function UserProfile({
   ...divProps
 }: UserProfileProps) {
   const { user, isLoading } = useUser()
+  const { locale } = useAuth()
 
   if (isLoading) {
     return (
       <div className={className} {...divProps}>
-        <span>Loading...</span>
+        <span>{message(locale, 'loading')}</span>
       </div>
     )
   }
@@ -50,7 +53,7 @@ export function UserProfile({
       {showAvatar && user.picture && (
         <img
           src={user.picture}
-          alt={user.name || 'User avatar'}
+          alt={user.name || message(locale, 'userAvatar')}
           style={{ width: 40, height: 40, borderRadius: '50%' }}
         />
       )}

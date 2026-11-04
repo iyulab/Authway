@@ -1,22 +1,24 @@
+@using AuthwaySample
 <!DOCTYPE html>
-<html lang="en">
+<html lang="@Texts.Language">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@ViewData["Title"] — Authway ASP.NET sample</title>
+    <title>@ViewData["Title"] — @Texts.Get("site")</title>
     <link rel="stylesheet" href="~/css/site.css" />
 </head>
 <body>
     <header>
-        <a href="/">Authway ASP.NET sample</a>
+        <a href="/">@Texts.Get("site")</a>
         <nav>
+            <a href="/language?lang=@Texts.Other.Code&returnUrl=@Uri.EscapeDataString(Context.Request.Path + Context.Request.QueryString)">@Texts.Other.Name</a>
             @if (User.Identity?.IsAuthenticated == true)
             {
                 <a href="/Account">@User.Identity.Name</a>
             }
             else
             {
-                <a href="/login">Sign in</a>
+                <a href="/login">@Texts.Get("signIn")</a>
             }
         </nav>
     </header>

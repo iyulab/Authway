@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useRef, ReactNode } from 'react'
 import { AuthwayClient, AuthwayConfig, LogoutOptions } from '@authway/client'
 import { AuthwayContext, AuthState } from './AuthwayContext'
 import { initialize } from './initialize'
+import { DEFAULT_LOCALE, detectLocale, negotiateLocale, type Locale } from '../i18n'
 
 export interface AuthwayProviderProps {
   config: AuthwayConfig
@@ -26,6 +27,18 @@ export interface AuthwayProviderProps {
    * @default true
    */
   checkSessionOnLoad?: boolean
+  /**
+   * The language of the words this package puts on screen (button labels,
+   * loading text): a language tag such as `'ko'` or `'en-US'`, or an
+   * `Accept-Language` style list. Supported languages are `en` and `ko`.
+   *
+   * When it is set the sign-in screen is asked for the same language
+   * (`ui_locales`), unless a login call names its own. When it is not set the
+   * language follows the person: the `lang` query parameter, the language they
+   * chose on a sign-in screen, then their browser's — and English otherwise.
+   * The sign-in screen then follows the person the same way.
+   */
+  locale?: string
 }
 
 const defaultOnRedirectCallback = (appState?: any) => {
@@ -39,7 +52,8 @@ export function AuthwayProvider({
   children,
   onRedirectCallback = defaultOnRedirectCallback,
   skipRedirectCallback = false,
-  checkSessionOnLoad = true
+  checkSessionOnLoad = true,
+  locale: localeProp
 }: AuthwayProviderProps) {
   // Check if we're in a popup callback context BEFORE creating client
   // This handles the Auth0-style auto popup callback
@@ -48,6 +62,16 @@ export function AuthwayProvider({
     AuthwayClient.handlePopupCallback()
     return new AuthwayClient(config)
   })
+  // The first render is the same wherever it runs (server or browser), so
+  // what the browser prefers is read after mounting, not while rendering.
+  const chosenLocale = negotiateLocale(localeProp)
+  const [detectedLocale, setDetectedLocale] = useState<Locale>(DEFAULT_LOCALE)
+  useEffect(() => {
+    if (!chosenLocale) setDetectedLocale(detectLocale())
+  }, [chosenLocale])
+  const locale = chosenLocale ?? detectedLocale
+  // An application that chose a language has the sign-in screen opened in it.
+  const uiLocales = chosenLocale
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     isLoading: true,
@@ -106,16 +130,16 @@ export function AuthwayProvider({
 
   const loginWithRedirect = useCallback(
     async (options?: any) => {
-      await client.loginWithRedirect(options)
+      await client.loginWithRedirect(uiLocales ? { ui_locales: uiLocales, ...options } : options)
     },
-    [client]
+    [client, uiLocales]
   )
 
   const loginWithPopup = useCallback(
     async (options?: any) => {
       try {
         setState(prev => ({ ...prev, isLoading: true, error: null }))
-        const result = await client.loginWithPopup(options)
+        const result = await client.loginWithPopup(uiLocales ? { ui_locales: uiLocales, ...options } : options)
         setState({
           isAuthenticated: true,
           isLoading: false,
@@ -131,7 +155,7 @@ export function AuthwayProvider({
         throw error
       }
     },
-    [client]
+    [client, uiLocales]
   )
 
   const logout = useCallback(
@@ -176,7 +200,8 @@ export function AuthwayProvider({
     logout,
     getAccessToken,
     getAccessTokenWithPopup,
-    getIdTokenClaims
+    getIdTokenClaims,
+    locale
   }
 
   return (

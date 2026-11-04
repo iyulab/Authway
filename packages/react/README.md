@@ -238,6 +238,20 @@ import { ProtectedRoute } from '@authway/react'
 </ProtectedRoute>
 ```
 
+## 언어 (한국어 / English)
+
+`LoginButton`·`LogoutButton`·`UserProfile`·`withAuthRequired` 가 화면에 내는 문구(기본 버튼 라벨, 로딩 문구, 아바타 대체 텍스트)는 한국어(`ko`)와 영어(`en`)를 기본 지원합니다. 애플리케이션이 `children`·`onRedirecting` 으로 넘긴 문구는 번역하지 않습니다.
+
+```tsx
+// 언어를 고정: 컴포넌트 문구가 이 언어로 나오고, 로그인 화면도 같은 언어로 열립니다(`ui_locales`).
+<AuthwayProvider config={config} locale="ko">
+
+// 지정하지 않으면 사용자를 따릅니다: `?lang=` → 로그인 화면에서 고른 언어(localStorage `authway-language`) → 브라우저 언어 → en
+<AuthwayProvider config={config}>
+```
+
+`locale` 은 `'ko'`·`'en-US'` 같은 언어 태그나 `Accept-Language` 형식 값을 받습니다. 지원하지 않는 언어는 영어입니다. 서버 렌더링에서는 첫 렌더가 언제나 같도록(하이드레이션 불일치 방지) 영어로 시작하고, 마운트 뒤에 사용자의 언어로 바뀝니다 — 서버가 언어를 알면 `locale` 로 넘기세요. `useAuth()` 가 현재 `locale` 을 돌려줍니다. 로그인 호출이 자기 `ui_locales` 를 지정하면 그것이 우선합니다.
+
 ## 고급 사용법
 
 ### React Query와 함께 사용하기
