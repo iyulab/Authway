@@ -27,12 +27,16 @@ const MFAVerifyPage: React.FC = () => {
 
     setIsSubmitting(true)
     setError(null)
+    // Once the sign-in is over the form stays locked until the browser has left:
+    // the same flow submitted again is not another sign-in.
+    let leaving = false
 
     try {
       const data = await submitSecondFactor(flow ?? '', mfaChallenge ?? '', code.replace(/\s/g, ''), useRecovery)
 
       const next = nextScreen(data, flow)
       if (data.next === 'redirect' && data.redirect_to) {
+        leaving = true
         followRedirect(data.redirect_to)
       } else if (next) {
         navigate(next)
@@ -44,7 +48,7 @@ const MFAVerifyPage: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth:mfa.failed'))
     } finally {
-      setIsSubmitting(false)
+      if (!leaving) setIsSubmitting(false)
     }
   }
 

@@ -48,6 +48,31 @@ describe('MFAVerifyPage', () => {
     expect(await screen.findByText('유효하지 않은 코드입니다.')).toBeInTheDocument()
   })
 
+  it('stays locked once the sign-in succeeded, so the code is not sent twice while the browser leaves', async () => {
+    mockSearchParams.set('flow', 'flow-1')
+    mockSearchParams.set('mfa_challenge', 'chal-123')
+    let submits = 0
+    server.use(
+      http.post('http://localhost:8080/api/v1/login-flows/:flow/mfa', () => {
+        submits += 1
+        return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
+      })
+    )
+    delete (window as any).location
+    window.location = { ...window.location, href: '' }
+
+    render(<MFAVerifyPage />)
+    await user.type(screen.getByPlaceholderText('000000'), '123456')
+    await user.click(screen.getByRole('button', { name: /verify|확인|인증/i }))
+    await waitFor(() => {
+      expect(window.location.href).toBe('http://example.com/callback')
+    })
+
+    expect(screen.getByRole('button', { name: /verifying|확인하는 중/i })).toBeDisabled()
+    await user.type(screen.getByPlaceholderText('000000'), '{Enter}')
+    expect(submits).toBe(1)
+  })
+
   it('explains an expired challenge when the flow or mfa_challenge is missing', () => {
     mockSearchParams.set('mfa_challenge', 'chal-123')
 

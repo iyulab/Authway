@@ -430,6 +430,34 @@ describe('LoginPage', () => {
       })
     })
 
+    it('locks the form once the sign-in succeeded, so the flow is not submitted twice while the browser leaves', async () => {
+      let submits = 0
+      server.use(
+        http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {
+          submits += 1
+          return HttpResponse.json({ next: 'redirect', redirect_to: 'http://example.com/callback' })
+        })
+      )
+
+      delete (window as any).location
+      window.location = { ...window.location, href: '' }
+
+      await user.type(screen.getByLabelText('이메일'), 'test@example.com')
+      await user.type(screen.getByLabelText('비밀번호'), 'password123')
+      await user.click(screen.getByRole('button', { name: '로그인' }))
+
+      await waitFor(() => {
+        expect(window.location.href).toBe('http://example.com/callback')
+      })
+
+      // The page is still up, as it is until the navigation completes.
+      const leaving = await screen.findByRole('button', { name: '앱으로 이동하는 중...' })
+      expect(leaving).toBeDisabled()
+      await user.click(leaving)
+      await user.type(screen.getByLabelText('비밀번호'), '{Enter}')
+      expect(submits).toBe(1)
+    })
+
     it('handles login error from server', async () => {
       server.use(
         http.post('http://localhost:8080/api/v1/login-flows/:flow/password', () => {

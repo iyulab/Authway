@@ -135,8 +135,8 @@ func (s *signIn) proved(flow string, u *user.User, method signInMethod, keepSign
 			Provider: method.provider, KeepSignedIn: keepSignedIn,
 		}, due)
 	}
-	redirectTo, err := s.accept(flow, u, method, keepSignedIn)
-	return signInStep{RedirectTo: redirectTo}, err
+	redirectTo, replayed, err := s.accept(flow, u, method, keepSignedIn)
+	return signInStep{RedirectTo: redirectTo, Replayed: replayed}, err
 }
 
 func (s *signIn) park(p *pendingTerms, due []terms.Document) (signInStep, error) {
@@ -264,10 +264,11 @@ func (h *AuthHandler) AcceptTerms(c *fiber.Ctx) error {
 
 	method := pending.method()
 	var redirectTo string
+	var replayed bool
 	if pending.Reused {
 		redirectTo, err = h.flows.reuse(flow, u, pending.AMR)
 	} else {
-		redirectTo, err = h.flows.accept(flow, u, method, pending.KeepSignedIn)
+		redirectTo, replayed, err = h.flows.accept(flow, u, method, pending.KeepSignedIn)
 	}
 	if err != nil {
 		h.logger.Error("Failed to accept login request", zap.Error(err))
@@ -276,7 +277,7 @@ func (h *AuthHandler) AcceptTerms(c *fiber.Ctx) error {
 	if pending.Reused {
 		return c.JSON(fiber.Map{"next": nextRedirect, "redirect_to": redirectTo})
 	}
-	return h.signedIn(c, flow, u, method, pending.KeepSignedIn, redirectTo)
+	return h.signedIn(c, flow, u, method, pending.KeepSignedIn, redirectTo, replayed)
 }
 
 // DeclineTermsRequest is the body of POST /api/v1/login-flows/:flow/terms/decline.

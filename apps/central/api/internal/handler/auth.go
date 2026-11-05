@@ -189,6 +189,17 @@ func (h *AuthHandler) SubmitPassword(c *fiber.Ctx) error {
 		return respondInvalidCredentials(c)
 	}
 
+	// A flow that was signed in belongs to the user it signed in. A password for
+	// anyone else's account is not checked, so the answer cannot say whether it
+	// was right: it is refused as a wrong one is.
+	if owner, _, signedIn := h.flows.accepted.Recall(flow); signedIn && owner != user.ID {
+		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "flow_of_another_user", map[string]any{
+			"user_id": user.ID.String(),
+		})
+		middleware.IncrementRateLimitOnFailure(c)
+		return respondInvalidCredentials(c)
+	}
+
 	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		h.logAuthFailure(c, user.TenantID, audit.ActionUserLoginFailed, req.Email, "invalid_password", map[string]any{
 			"user_id": user.ID.String(),
@@ -230,13 +241,17 @@ func (h *AuthHandler) firstFactorPassed(c *fiber.Ctx, flow string, u *user.User,
 			"flow":          flow,
 		})
 	}
-	return h.signedIn(c, flow, u, first, keepSignedIn, step.RedirectTo)
+	return h.signedIn(c, flow, u, first, keepSignedIn, step.RedirectTo, step.Replayed)
 }
 
-// signedIn records a completed sign-in and sends the screen on.
-func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, keepSignedIn bool, redirectTo string) error {
+// signedIn records a completed sign-in and sends the screen on. A sign-in
+// that was already completed for the flow (replayed) is answered again but not
+// recorded again: it is the same sign-in.
+func (h *AuthHandler) signedIn(c *fiber.Ctx, flow string, u *user.User, method signInMethod, keepSignedIn bool, redirectTo string, replayed bool) error {
 	middleware.ResetRateLimitOnSuccess(c)
-	h.logUserAudit(c, u, audit.ActionUserLogin, method.details(flow, keepSignedIn))
+	if !replayed {
+		h.logUserAudit(c, u, audit.ActionUserLogin, method.details(flow, keepSignedIn))
+	}
 
 	return c.JSON(fiber.Map{
 		"next":        nextRedirect,
@@ -309,7 +324,7 @@ func (h *AuthHandler) verifySecondFactor(c *fiber.Ctx, phase string, verify func
 	if step.TermsChallenge != "" {
 		return c.JSON(termsStep(pending.HydraChallenge, step))
 	}
-	return h.signedIn(c, pending.HydraChallenge, u, method, pending.KeepSignedIn, step.RedirectTo)
+	return h.signedIn(c, pending.HydraChallenge, u, method, pending.KeepSignedIn, step.RedirectTo, step.Replayed)
 }
 
 func respondInvalidMFAChallenge(c *fiber.Ctx) error {

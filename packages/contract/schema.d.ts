@@ -200,6 +200,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description A flow is signed in once. The sign-in screen stays up while the browser
+         *     follows the redirect, so the same flow may be submitted again: for ten
+         *     minutes after it was signed in, the user it signed in who proves who
+         *     they are again gets the same `redirect` answer and no second sign-in is
+         *     recorded. A password for another account is refused as a wrong one is.
+         */
         post: operations["submitPassword"];
         delete?: never;
         options?: never;

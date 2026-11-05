@@ -89,8 +89,15 @@ one answer whatever the reason, so the answer does not tell who has an account.
 
 ## Invariants
 
-- The flow id is opaque and single-use; an unknown one is `400 invalid_flow`, one
-  that expired or was already completed is `410 flow_expired`.
+- The flow id is opaque. A flow is signed in once: an unknown id is
+  `400 invalid_flow`, one that expired or was already completed is
+  `410 flow_expired`. The sign-in screen stays up while the browser follows the
+  redirect, so a flow that was signed in answers the user it signed in once
+  more, for ten minutes, when they prove who they are again: the same redirect,
+  and no second `user.login` entry. Submits that overlap are taken one after the
+  other. A password for anyone else's account is not checked and is refused as a
+  wrong one is, so the answer says nothing of whether it was right; a wrong
+  credential is a failure like any other.
 - A sign-in only opens the tenant the client belongs to; a person with accounts in
   two tenants has two accounts.
 - A method is offered only where the client allows it: passkeys wherever the

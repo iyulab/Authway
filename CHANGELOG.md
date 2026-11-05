@@ -291,6 +291,20 @@
 
 ### Fixed
 
+- **A sign-in flow submitted again is the same sign-in**: the sign-in screen stays
+  up while the browser follows the redirect, and a second click or a retry on a
+  slow network submitted the same flow again. The authorization server took it
+  again, so every submit was recorded as another `user.login` (a few clicks, a
+  few entries) and each answer carried a different redirect, which an embedded
+  browser that restricts navigation could cancel. Now, for ten minutes after a
+  flow was signed in, the user it signed in who proves who they are again gets
+  the same redirect and nothing is recorded again; submits that overlap are
+  taken one after the other, and a password for another account is refused as
+  a wrong one is. The password form, the second-factor form and the sign-in
+  button lock once the sign-in succeeded, and show that the browser is on its way.
+  The .NET server answers the same way (it used to answer `410` to the second
+  submit), and the flow's cap on wrong answers also holds for a flow that was
+  signed in.
 - **A provider sign-in does not link to a suspended account**: a first sign-in
   with a provider whose verified address matched a suspended account was linked
   to it and then refused at the end of the flow, leaving the link behind. It is

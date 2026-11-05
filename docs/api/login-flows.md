@@ -51,6 +51,14 @@ Errors are problem details ([Errors](errors.md)): show `detail`, branch on `code
 `400 invalid_flow`; one that expired or was already completed is
 `410 flow_expired`.
 
+A sign-in screen stays up while the browser follows the redirect, and a second
+click or a retry on a slow network submits the same flow again. For ten minutes
+after a flow was signed in, the user it signed in who proves who they are again
+gets the same `redirect` answer and no second `user.login` is recorded; a
+password for another account is refused as a wrong one is (`401
+invalid_credentials`). A screen should still lock its form once it has
+the `redirect`, so nothing is submitted while the browser leaves.
+
 ## Login
 
 ### `GET /api/v1/login-flows/{flow}`

@@ -79,6 +79,10 @@ const LoginPage: React.FC = () => {
   const [loginInfo, setLoginInfo] = useState<LoginPageInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // The sign-in succeeded and the browser is on its way to the application. The
+  // page stays up until the navigation completes, and every way of signing in
+  // again would be the same flow submitted twice.
+  const [leaving, setLeaving] = useState(false)
 
   // Ref to track which flow has been processed to prevent duplicates
   const processedFlowRef = useRef<string | null>(null)
@@ -188,6 +192,7 @@ const LoginPage: React.FC = () => {
     if (next) {
       navigate(next)
     } else if (data.next === 'redirect' && data.redirect_to) {
+      setLeaving(true)
       followRedirect(data.redirect_to)
     } else if (data.detail) {
       const key = data.code ? LOGIN_ERROR_KEYS[data.code] : undefined
@@ -223,9 +228,13 @@ const LoginPage: React.FC = () => {
   })
 
   const onSubmit = (data: LoginFormData) => {
+    if (leaving) return
     setError(null)
     loginMutation.mutate(data)
   }
+
+  // Nothing more is sent while a request is out or the sign-in is over.
+  const busy = isSubmitting || loginMutation.isPending || leaving
 
   // The backend lists what this client can actually use here.
   const signInMethods = loginInfo?.client?.sign_in_methods ?? []
@@ -386,13 +395,13 @@ const LoginPage: React.FC = () => {
               <div>
                 <button
                   type="submit"
-                  disabled={isSubmitting || loginMutation.isPending}
+                  disabled={busy}
                   className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting || loginMutation.isPending ? (
+                  {busy ? (
                     <div className="flex items-center">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {t('auth:login.submitting')}
+                      {leaving ? t('auth:login.redirecting') : t('auth:login.submitting')}
                     </div>
                   ) : (
                     t('auth:login.submitButton')
@@ -422,7 +431,7 @@ const LoginPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={passkey.signIn}
-                    disabled={passkey.busy || isSubmitting || loginMutation.isPending}
+                    disabled={passkey.busy || busy}
                     className="relative w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {passkey.busy ? t('auth:login.passkeyWaiting') : t('auth:login.passkey')}
@@ -441,7 +450,7 @@ const LoginPage: React.FC = () => {
                     key={provider}
                     provider={provider}
                     flow={flow}
-                    disabled={isSubmitting || loginMutation.isPending}
+                    disabled={busy}
                   />
                 ))}
               </div>

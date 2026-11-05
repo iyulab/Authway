@@ -108,6 +108,73 @@ describe('password login through the authorization-code flow', () => {
     if (retry.kind === 'code') subjects.add(retry.sub)
   })
 
+  it('answers a flow that was already signed in the same way, and records one sign-in', async () => {
+    // A sign-in screen stays up while the browser follows the redirect, so a
+    // second click or a retry on a slow network submits the same flow again.
+    const logins = async (sub: string): Promise<number> => {
+      const res = await provider.admin(`/api/v1/audit/logs?action=user.login&resource_id=${sub}&limit=50`)
+      expect(res.status).toBe(200)
+      return ((await res.json()) as { logs: unknown[] }).logs.length
+    }
+    const settled = async (sub: string, want: number): Promise<number> => {
+      // The entry is written asynchronously.
+      let seen = 0
+      for (let i = 0; i < 40; i++) {
+        seen = await logins(sub)
+        if (seen >= want) break
+        await new Promise((r) => setTimeout(r, 250))
+      }
+      return seen
+    }
+
+    // One earlier sign-in learns the user's id and the count to compare with.
+    const earlier = await provider.login(client, user)
+    if (earlier.kind !== 'code') throw new Error(`login failed: ${JSON.stringify(earlier)}`)
+    subjects.add(earlier.sub)
+    const baseline = await settled(earlier.sub, 1)
+
+    const attempt = await provider.startLogin(client)
+    const first = await provider.submitPassword(attempt.browser, attempt.flow, user)
+    expect(first.status).toBe(200)
+    const firstStep = (await first.json()) as { next?: string; redirect_to?: string }
+    expect(firstStep.next).toBe('redirect')
+
+    const again = await provider.submitPassword(attempt.browser, attempt.flow, user)
+    expect(again.status).toBe(200)
+    const againStep = (await again.json()) as { next?: string; redirect_to?: string }
+    expect(againStep).toEqual(firstStep)
+
+    // It is the same sign-in, so it still ends in a code.
+    const outcome = await provider.continueLogin(attempt, user)
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('code')
+    if (outcome.kind !== 'code') return
+    subjects.add(outcome.sub)
+
+    // Three submits, one more sign-in on record.
+    expect(await settled(outcome.sub, baseline + 1)).toBe(baseline + 1)
+    await new Promise((r) => setTimeout(r, 1000))
+    expect(await logins(outcome.sub)).toBe(baseline + 1)
+  })
+
+  it('refuses the password of another account on a flow that was signed in, as it refuses a wrong one', async () => {
+    const other = await provider.inviteAndAccept()
+    const attempt = await provider.startLogin(client)
+    expect((await provider.submitPassword(attempt.browser, attempt.flow, user)).status).toBe(200)
+    const right = await provider.submitPassword(attempt.browser, attempt.flow, other)
+    const wrong = await provider.submitPassword(attempt.browser, attempt.flow, { ...other, password: `${other.password}-wrong` })
+    expect(right.status).toBe(401)
+    expect(wrong.status).toBe(401)
+    expect(await right.json()).toEqual(await wrong.json())
+  })
+
+  it('does not let a flow that was signed in be signed in again with a wrong password', async () => {
+    const attempt = await provider.startLogin(client)
+    expect((await provider.submitPassword(attempt.browser, attempt.flow, user)).status).toBe(200)
+    const wrong = await provider.submitPassword(attempt.browser, attempt.flow, { ...user, password: `${user.password}-wrong` })
+    expect(wrong.status).toBeGreaterThanOrEqual(400)
+    expect(wrong.status).toBeLessThan(500)
+  })
+
   it('rejects an unknown flow id as a client error, not a server error', async () => {
     const res = await fetch(provider.loginFlowUrl('not-a-real-flow', '/password'), {
       method: 'POST',

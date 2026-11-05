@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"authway/apps/central/api/pkg/ephemeral"
 	"go.uber.org/zap"
 
@@ -23,6 +25,7 @@ type signIn struct {
 	users           user.Service
 	logger          *zap.Logger
 	authentications *AuthenticationStore
+	accepted        *AcceptedFlowStore
 	pending         *MFAChallengeStore
 	owing           *TermsChallengeStore
 	sessions        SessionPolicy
@@ -45,7 +48,8 @@ func newSignIn(hc *hydra.Client, users user.Service, logger *zap.Logger, store e
 		sessions:        policy.Sessions,
 		terms:           policy.Terms,
 		authentications: NewAuthenticationStore(store),
-		pending:         NewMFAChallengeStore(store),
+		accepted:        NewAcceptedFlowStore(store),
+		pending:        NewMFAChallengeStore(store),
 		owing:           NewTermsChallengeStore(store),
 	}
 }
@@ -63,6 +67,9 @@ type signInStep struct {
 	Terms          []terms.Document
 	// RedirectTo is set once the flow has been accepted.
 	RedirectTo string
+	// Replayed is set when the flow had already been accepted for this user
+	// and RedirectTo is the answer given then: nothing new was signed in.
+	Replayed bool
 }
 
 // errAccountSuspended refuses a sign-in to an account an administrator has
@@ -101,6 +108,15 @@ func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod,
 	return signInStep{MFAChallenge: challenge}, nil
 }
 
+// replay answers a submit of a flow that was already accepted, for owner and
+// to: the same answer for the user it was accepted for, none for anyone else.
+func replay(owner uuid.UUID, to string, u *user.User) (string, bool, error) {
+	if owner != u.ID {
+		return "", false, fmt.Errorf("%w: the flow was accepted for another user", hydra.ErrFlowExpired)
+	}
+	return to, true, nil
+}
+
 // accept signs u in to flow by method and returns where the browser goes next.
 //
 // Every sign-in opens a session at the authorization server. Without one the
@@ -108,10 +124,27 @@ func (s *signIn) afterFirstFactor(flow string, u *user.User, first signInMethod,
 // end, and applications are not told when the user is signed out elsewhere —
 // none of which a user asked for by leaving "keep me signed in" unticked.
 // That choice decides only how long the session lasts.
-func (s *signIn) accept(flow string, u *user.User, method signInMethod, keepSignedIn bool) (string, error) {
+//
+// A flow is signed in to once. Asked again — the screen is still up while the
+// browser follows the redirect — the user it was accepted for gets the same
+// redirect, replayed set, and nothing is signed in a second time; anyone else
+// is told the flow is over.
+func (s *signIn) accept(flow string, u *user.User, method signInMethod, keepSignedIn bool) (redirectTo string, replayed bool, err error) {
 	if !u.Active {
-		return "", errAccountSuspended
+		return "", false, errAccountSuspended
 	}
+	if owner, to, ok := s.accepted.Recall(flow); ok {
+		return replay(owner, to, u)
+	}
+	// Two submits that overlap are one sign-in: the second waits for the
+	// first's answer instead of having the flow accepted again.
+	if !s.accepted.Begin(flow) {
+		if owner, to, ok := s.accepted.Await(flow); ok {
+			return replay(owner, to, u)
+		}
+		// The other submit did not get the flow accepted; this one tries.
+	}
+	defer s.accepted.End(flow)
 	resp, err := acceptAuthenticatedLogin(s.hydra, s.authentications, flow, &hydra.AcceptLoginRequest{
 		Subject:     u.ID.String(),
 		Remember:    true,
@@ -124,11 +157,12 @@ func (s *signIn) accept(flow string, u *user.User, method signInMethod, keepSign
 		},
 	})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
+	s.accepted.Remember(flow, u.ID, resp.RedirectTo)
 	// The user is signed in whether or not this is recorded.
 	if err := s.users.UpdateLastLogin(u.ID); err != nil {
 		s.logger.Error("Failed to update last login time", zap.Error(err))
 	}
-	return resp.RedirectTo, nil
+	return resp.RedirectTo, false, nil
 }
