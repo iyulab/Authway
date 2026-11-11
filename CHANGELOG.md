@@ -313,6 +313,12 @@
   `prompt=login`), so the first answer counts. Applications that asked for
   `prompt=none` still get `login_required`; nothing in the contract changes.
 
+- **A browser whose session belongs to an account that no longer exists signs in
+  the first time** — the session was ended and the application got
+  `error=login_required` back, so the first attempt was lost and only the second
+  showed the sign-in. The request now starts again asking for a sign-in; an
+  application that asked for no prompt still gets `login_required`.
+
 - **A sign-in flow submitted again is the same sign-in**: the sign-in screen stays
   up while the browser follows the redirect, and a second click or a retry on a
   slow network submitted the same flow again. The authorization server took it

@@ -68,6 +68,8 @@ type sessionHydra struct {
 	acceptedLogin   *hydra.AcceptLoginRequest
 	rejectedLogin   map[string]string
 	acceptedConsent *hydra.AcceptConsentRequest
+	// revokedFor lists the subjects whose login sessions were ended.
+	revokedFor []string
 }
 
 func (f *sessionHydra) client(t *testing.T) *hydra.Client {
@@ -85,6 +87,13 @@ func (f *sessionHydra) client(t *testing.T) *hydra.Client {
 			f.rejectedLogin = map[string]string{}
 			_ = json.NewDecoder(r.Body).Decode(&f.rejectedLogin)
 			_, _ = w.Write([]byte(`{"redirect_to":"https://app.example/callback?error=login_required"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/sessions/consent"):
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/sessions/"):
+			if strings.HasSuffix(r.URL.Path, "/sessions/login") {
+				f.revokedFor = append(f.revokedFor, r.URL.Query().Get("subject"))
+			}
+			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/requests/consent"):
 			_ = json.NewEncoder(w).Encode(f.consent)
 		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/requests/consent/accept"):
@@ -221,6 +230,49 @@ func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 		}
 		if h.rejectedLogin != nil || h.acceptedLogin != nil {
 			t.Errorf("%s: the flow was settled (accept %v, reject %v) before the user signed in", tc.name, h.acceptedLogin, h.rejectedLogin)
+		}
+	}
+}
+
+// A browser session whose user is gone is ended, and the user is asked to sign
+// in on a request that does not reuse it. Rejecting the request instead sends
+// the browser back to the application with an error: the first attempt is lost.
+func TestGetLoginFlow_SessionOfAUserWhoIsGone(t *testing.T) {
+	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
+	c := &client.Client{Active: true, ID: uuid.New(), TenantID: u.TenantID, ClientID: testClientID}
+	gone := uuid.NewString()
+	request := func(requestURL string) *sessionHydra {
+		return &sessionHydra{login: hydra.LoginRequest{
+			Challenge: "flow-1", Skip: true, Subject: gone, RequestURL: requestURL,
+			Client: &hydra.OAuth2Client{ClientID: testClientID, ClientName: "Test App"},
+		}}
+	}
+
+	for _, tc := range []struct {
+		name       string
+		requestURL string
+		want       string
+		rejected   bool
+	}{
+		{"plain request", "https://issuer.example/oauth2/auth?client_id=" + testClientID,
+			"https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=login", false},
+		{"asked without a prompt", "https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=none",
+			"https://app.example/callback?error=login_required", true},
+		{"no request address to start again from", "", "https://app.example/callback?error=login_required", true},
+	} {
+		h := request(tc.requestURL)
+		status, body := getJSON(t, newSessionFlowApp(t, h, u, c), "/api/v1/login-flows/flow-1")
+		if status != fiber.StatusOK || body["next"] != "redirect" || body["redirect_to"] != tc.want {
+			t.Errorf("%s: status %d body %v, want a redirect to %s", tc.name, status, body, tc.want)
+		}
+		if (h.rejectedLogin != nil) != tc.rejected {
+			t.Errorf("%s: rejected = %v, want rejected = %v", tc.name, h.rejectedLogin, tc.rejected)
+		}
+		if len(h.revokedFor) != 1 || h.revokedFor[0] != gone {
+			t.Errorf("%s: sessions ended for %v, want the session's subject", tc.name, h.revokedFor)
+		}
+		if h.acceptedLogin != nil {
+			t.Errorf("%s: a session without a user was accepted", tc.name)
 		}
 	}
 }

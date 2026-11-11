@@ -189,8 +189,15 @@ func (h *AuthHandler) skipLoginForm(ctx context.Context, flow string, loginReq *
 		h.logger.Warn("Clearing a session that no longer maps to a user",
 			zap.String("subject", loginReq.Subject), zap.String("reason", reason))
 		logBestEffortRevocation(h.logger, "Clearing a session with no user", loginReq.Subject, h.hydraClient.RevokeUserSessions(loginReq.Subject))
-		// login_required restarts the flow with a form instead of surfacing an
-		// error to the OAuth client.
+		// The session is gone, so the same request starts again as one that
+		// asks for a sign-in. Rejecting it would send the browser back to the
+		// application with an error. An application that asked for no prompt
+		// is owed that answer.
+		if !asksForNoPrompt(loginReq.RequestURL) {
+			if restart, ok := askingForSignIn(loginReq.RequestURL); ok {
+				return fiber.Map{"next": nextRedirect, "redirect_to": restart, "session_cleared": true}, true, nil
+			}
+		}
 		resp, err := h.hydraClient.RejectLoginRequest(flow, "login_required", "Please login again")
 		if err != nil {
 			return nil, false, err
