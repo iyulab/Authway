@@ -301,6 +301,18 @@
 
 ### Fixed
 
+- **Signing in on a browser that holds another tenant's session works the first
+  time** — a browser still signed in to an application of one tenant, sent to
+  sign in to an application of another, was shown the sign-in form, took the
+  right password, and was shown the form again: the sign-in only worked the
+  second time. The authorization server hands a browser with a session a login
+  request that reuses it, and such a request can only be accepted for the
+  session's own user; accepted for anyone else, the answer is dropped and the
+  browser is sent to sign in again. The form is now shown on a request that asks
+  for a sign-in (the same authorization request, started again with
+  `prompt=login`), so the first answer counts. Applications that asked for
+  `prompt=none` still get `login_required`; nothing in the contract changes.
+
 - **A sign-in flow submitted again is the same sign-in**: the sign-in screen stays
   up while the browser follows the redirect, and a second click or a retry on a
   slow network submitted the same flow again. The authorization server took it

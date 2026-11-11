@@ -152,8 +152,10 @@ func (h *AuthHandler) LoginWithoutScreen(c *fiber.Ctx, flow string) (string, boo
 
 // loginWithoutForm settles a login flow that needs no form: the browser has a
 // session this client can use, or the application asked for an answer without
-// a prompt and there is no such session. It reports settled=false when the
-// user has to sign in.
+// a prompt and there is no such session. A browser whose session is of no use
+// to this client is sent back to the authorization server with the request
+// asking for a sign-in (see askingForSignIn): the form is shown on that one.
+// It reports settled=false when the user has to sign in on this flow.
 func (h *AuthHandler) loginWithoutForm(ctx context.Context, flow string, loginReq *hydra.LoginRequest, clientTenantID uuid.UUID) (fiber.Map, bool, error) {
 	if !loginReq.Skip || loginReq.Subject == "" {
 		return nil, false, nil
@@ -162,7 +164,11 @@ func (h *AuthHandler) loginWithoutForm(ctx context.Context, flow string, loginRe
 		return step, settled, err
 	}
 	if !asksForNoPrompt(loginReq.RequestURL) {
-		return nil, false, nil
+		restart, ok := askingForSignIn(loginReq.RequestURL)
+		if !ok {
+			return nil, false, nil
+		}
+		return fiber.Map{"next": nextRedirect, "redirect_to": restart}, true, nil
 	}
 	// The application asked for an answer without the user being shown
 	// anything, and the browser's session is not one this client can use.

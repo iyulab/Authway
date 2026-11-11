@@ -168,7 +168,9 @@ func newSessionFlowApp(t *testing.T, h *sessionHydra, u *user.User, clients ...*
 
 // A browser session of another tenant is not this client's to use. Asked for
 // an answer without a prompt, the application is told so; asked plainly, the
-// user gets the form.
+// request starts again as one that asks the user to sign in — a request that
+// reuses the session can only be accepted for the session's own user, so a
+// sign-in accepted on it would be thrown away and the user asked a second time.
 func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 	u := &user.User{ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com", Active: true}
 	c := &client.Client{Active: true, ID: uuid.New(), TenantID: uuid.New(), ClientID: testClientID}
@@ -191,13 +193,35 @@ func TestGetLoginFlow_AnotherTenantsSession(t *testing.T) {
 		t.Error("silent request: another tenant's session was accepted")
 	}
 
-	plain := request("https://issuer.example/oauth2/auth?client_id=" + testClientID)
-	status, body = getJSON(t, newSessionFlowApp(t, plain, u, c), "/api/v1/login-flows/flow-1")
-	if status != fiber.StatusOK || body["next"] != "form" {
-		t.Fatalf("plain request: status %d body %v, want the sign-in form", status, body)
-	}
-	if plain.rejectedLogin != nil || plain.acceptedLogin != nil {
-		t.Errorf("plain request: the flow was settled (accept %v, reject %v) before the user signed in", plain.acceptedLogin, plain.rejectedLogin)
+	for _, tc := range []struct {
+		name       string
+		requestURL string
+		want       string // redirect_to, or "" for the sign-in form
+	}{
+		{"plain request", "https://issuer.example/oauth2/auth?client_id=" + testClientID + "&state=s1",
+			"https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=login&state=s1"},
+		{"another prompt is kept", "https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=consent",
+			"https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=consent+login"},
+		// The request already asks for a sign-in and the session still answers
+		// it: starting again would only come back here.
+		{"already asking for a sign-in", "https://issuer.example/oauth2/auth?client_id=" + testClientID + "&prompt=login", ""},
+		{"no request address to start again from", "", ""},
+	} {
+		h := request(tc.requestURL)
+		status, body = getJSON(t, newSessionFlowApp(t, h, u, c), "/api/v1/login-flows/flow-1")
+		if status != fiber.StatusOK {
+			t.Fatalf("%s: status %d body %v", tc.name, status, body)
+		}
+		if tc.want == "" {
+			if body["next"] != "form" {
+				t.Errorf("%s: body %v, want the sign-in form", tc.name, body)
+			}
+		} else if body["next"] != "redirect" || body["redirect_to"] != tc.want {
+			t.Errorf("%s: body %v, want a redirect to %s", tc.name, body, tc.want)
+		}
+		if h.rejectedLogin != nil || h.acceptedLogin != nil {
+			t.Errorf("%s: the flow was settled (accept %v, reject %v) before the user signed in", tc.name, h.acceptedLogin, h.rejectedLogin)
+		}
 	}
 }
 
@@ -329,7 +353,8 @@ func TestFlowSettler_SettlesWhatNeedsNoScreen(t *testing.T) {
 	}{
 		{"a session the client can use", &sessionHydra{login: session("")}, own, "/login?login_challenge=flow-1", true, "https://issuer.example/after-login"},
 		{"no session: the user signs in", &sessionHydra{login: hydra.LoginRequest{Challenge: "flow-1", Client: &hydra.OAuth2Client{ClientID: testClientID}}}, own, "/login?login_challenge=flow-1", false, testFrontendURL + "/login?flow=flow-1"},
-		{"another tenant's session: the user signs in", &sessionHydra{login: session("")}, foreign, "/login?login_challenge=flow-1", false, testFrontendURL + "/login?flow=flow-1"},
+		{"another tenant's session: the request starts again to ask for a sign-in", &sessionHydra{login: session("https://issuer.example/oauth2/auth?client_id=x")}, foreign, "/login?login_challenge=flow-1", true, "https://issuer.example/oauth2/auth?client_id=x&prompt=login"},
+		{"another tenant's session, no request to start again: the user signs in", &sessionHydra{login: session("")}, foreign, "/login?login_challenge=flow-1", false, testFrontendURL + "/login?flow=flow-1"},
 		{"another tenant's session, asked without a prompt", &sessionHydra{login: session(silent)}, foreign, "/login?login_challenge=flow-1", true, "https://app.example/callback?error=login_required"},
 		{"a client registered to skip consent", &sessionHydra{consent: consentRequestFor(u, false, true, nil)}, own, "/consent?consent_challenge=cf-1", true, "https://issuer.example/after-consent"},
 		{"a remembered consent", &sessionHydra{consent: consentRequestFor(u, true, false, nil)}, own, "/consent?consent_challenge=cf-1", true, "https://issuer.example/after-consent"},

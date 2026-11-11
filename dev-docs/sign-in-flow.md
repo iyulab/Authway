@@ -100,6 +100,13 @@ one answer whatever the reason, so the answer does not tell who has an account.
   credential is a failure like any other.
 - A sign-in only opens the tenant the client belongs to; a person with accounts in
   two tenants has two accounts.
+- A browser's session belongs to one tenant. Where it belongs to another tenant
+  than the client's, it is of no use: an application that asked for no prompt is
+  told `login_required`, and for anyone else the authorization request starts
+  again with `prompt=login` before a screen opens. The authorization server
+  accepts a login that reuses a session only for the session's own user, so a
+  sign-in accepted on that request would be dropped and asked for a second
+  time.
 - A method is offered only where the client allows it: passkeys wherever the
   password form is offered (or where `passkey` is named), a social provider only
   where the client enables it and the deployment has credentials for it.

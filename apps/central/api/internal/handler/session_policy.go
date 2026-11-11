@@ -52,6 +52,35 @@ func (p SessionPolicy) lifetime(tenantID uuid.UUID, keepSignedIn bool) time.Dura
 	return timeout
 }
 
+// askingForSignIn returns the authorization request at requestURL started
+// again with prompt=login, which the authorization server answers with a login
+// request that wants a sign-in instead of one that reuses the browser's
+// session. It reports false when there is no request to start again from, or
+// when the request already asks for a sign-in — starting it again would come
+// back to the same place.
+//
+// A login request that reuses a session can only be accepted for that
+// session's own user: accepted for anyone else, the authorization server drops
+// the answer and sends the browser to sign in again. So when the session is of
+// no use to the client and a person has to sign in, the sign-in has to be
+// asked for on a request that does not reuse it.
+func askingForSignIn(requestURL string) (string, bool) {
+	u, err := url.Parse(requestURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+	q := u.Query()
+	prompts := strings.Fields(q.Get("prompt"))
+	for _, p := range prompts {
+		if p == "login" {
+			return "", false
+		}
+	}
+	q.Set("prompt", strings.Join(append(prompts, "login"), " "))
+	u.RawQuery = q.Encode()
+	return u.String(), true
+}
+
 // asksForNoPrompt reports whether the authorization request at requestURL
 // carries prompt=none: the application wants an answer without the user being
 // shown anything.
