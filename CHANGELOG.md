@@ -2,6 +2,13 @@
 
 ### Added
 
+- **The ceiling for redeeming emailed tokens can be raised** — one network
+  address may accept an invitation, reset a password or confirm an address 60
+  times in 15 minutes, which an office onboarding a team stays far below but a
+  run of the conformance suite, one user per scenario from one address, reaches
+  exactly. `AUTHWAY_LIMITS_REDEMPTIONS_PER_15_MINUTES` sets it (default 60, the
+  value people run with); CI raises it for the suite.
+
 - **The .NET server works behind a proxy that ends TLS** — it took the address it
   tells people to use (the issuer, the redirects, the https it insists on) from
   the request it saw, which behind IIS, a load balancer or an ingress is plain

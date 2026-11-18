@@ -263,6 +263,9 @@ jobs:
           # Console accounts sign in through the console's own client; nothing
           # listens there — the suite takes the code from the redirect.
           AUTHWAY_APP_CONSOLE_URL: http://localhost:3000
+          # The suite onboards a user per scenario from one address — more than
+          # the ceiling people run with in a quarter of an hour.
+          AUTHWAY_LIMITS_REDEMPTIONS_PER_15_MINUTES: '1000'
         run: |
           set -euo pipefail
           go build -o "$RUNNER_TEMP/authway-api" ./apps/central/api/cmd

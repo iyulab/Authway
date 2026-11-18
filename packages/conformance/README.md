@@ -85,6 +85,12 @@ to allow them for the run — a switch every implementation names for itself (th
 Go one: `AUTHWAY_ALLOW_PRIVATE_TARGETS=true`, and
 `CLIENTS_HTTP_DISALLOW_PRIVATE_IP_RANGES=false` on its authorization server).
 
+The suite onboards a user per scenario from one address, which is more
+invitations than a deployment lets one address redeem in a quarter of an hour. A
+deployment that limits that has to raise the ceiling for the run (the Go one:
+`AUTHWAY_LIMITS_REDEMPTIONS_PER_15_MINUTES=1000`; the .NET one:
+`Authway:Limits:MailRequestsPer15Minutes` and `Authway:Limits:SignInPerMinute`).
+
 The provider must send mail to the capture service, and the links in that mail
 must point at its login UI (`/invitation/accept?token=…`). With the repository's
 `docker-compose.yml`, MailHog listens on SMTP `1025` and HTTP `8025`.

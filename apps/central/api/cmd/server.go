@@ -392,7 +392,7 @@ func newServer(cfg *config.Config, zapLogger *zap.Logger) (*server, error) {
 	// Neither has a failure to count: every request counts, against a ceiling an
 	// office signing in together behind one address stays far below.
 	flowStartLimit := ratelimitmw.FlowStartRateLimit(signInState)
-	redeemLimit := ratelimitmw.TokenRedemptionRateLimit(signInState)
+	redeemLimit := ratelimitmw.TokenRedemptionRateLimit(signInState, cfg.Limits.RedemptionsPer15Minutes)
 	mailLimit := ratelimitmw.MailRequestRateLimit(signInState)
 	app.Get("/flows/login", flowEntryHandler.Login)
 	app.Get("/flows/consent", flowEntryHandler.Consent)

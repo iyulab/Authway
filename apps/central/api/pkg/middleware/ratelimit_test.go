@@ -409,7 +409,7 @@ func TestFlowAndRedemptionLimitsAreGenerous(t *testing.T) {
 		sent  int
 	}{
 		"flow start": {FlowStartRateLimit(store), 120},
-		"redeem":     {TokenRedemptionRateLimit(store), 60},
+		"redeem":     {TokenRedemptionRateLimit(store, 0), DefaultRedemptionsPer15Minutes},
 		"mail":       {MailRequestRateLimit(store), 20},
 	} {
 		app := fiber.New()

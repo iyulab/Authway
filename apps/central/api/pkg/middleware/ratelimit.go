@@ -231,17 +231,27 @@ func FlowStartRateLimit(store ephemeral.Store) fiber.Handler {
 	})
 }
 
+// DefaultRedemptionsPer15Minutes is what one address may redeem emailed tokens
+// at when a deployment does not say otherwise.
+const DefaultRedemptionsPer15Minutes = 60
+
 // TokenRedemptionRateLimit bounds the requests one network address makes to the
 // endpoints that redeem a token sent by email — accepting an invitation,
 // resetting a password. A token is long and random, so guessing one is not the
 // worry; the worry is that each redemption costs a password hash and a
 // database round trip and nothing else limited how many an address could ask
 // for. Every request counts; an office that onboards a team behind one address
-// stays far below the ceiling.
-func TokenRedemptionRateLimit(store ephemeral.Store) fiber.Handler {
+// stays far below the ceiling. The ceiling is perWindow requests in 15 minutes
+// (DefaultRedemptionsPer15Minutes when it is not above zero); a run of the
+// conformance suite, which onboards one user per scenario from one address,
+// raises it.
+func TokenRedemptionRateLimit(store ephemeral.Store, perWindow int) fiber.Handler {
+	if perWindow <= 0 {
+		perWindow = DefaultRedemptionsPer15Minutes
+	}
 	return RateLimit(RateLimitConfig{
 		Store:             store,
-		MaxAttempts:       60,
+		MaxAttempts:       perWindow,
 		WindowDuration:    15 * time.Minute,
 		BlockDuration:     15 * time.Minute,
 		KeyPrefix:         "ratelimit:redeem:",

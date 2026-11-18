@@ -42,6 +42,7 @@ type Config struct {
 	App                 AppConfig                 `mapstructure:"app"`
 	Database            DatabaseConfig            `mapstructure:"database"`
 	Redis               RedisConfig               `mapstructure:"redis"`
+	Limits              LimitsConfig              `mapstructure:"limits"`
 	OAuth               OAuthConfig               `mapstructure:"oauth"`
 	Hydra               HydraConfig               `mapstructure:"hydra"`
 	CORS                CORSConfig                `mapstructure:"cors"`
@@ -87,6 +88,16 @@ type DatabaseConfig struct {
 	Password string `mapstructure:"password"`
 	Name     string `mapstructure:"name"`
 	SSLMode  string `mapstructure:"ssl_mode"`
+}
+
+// LimitsConfig holds the ceilings a deployment may move. The defaults are the
+// ones a deployment of people runs with; a run of the conformance suite, which
+// onboards a user per scenario from one address, raises them.
+type LimitsConfig struct {
+	// RedemptionsPer15Minutes is how many emailed tokens — an invitation, a
+	// password reset, a verification link — one network address may redeem in
+	// 15 minutes.
+	RedemptionsPer15Minutes int `mapstructure:"redemptions_per_15_minutes"`
 }
 
 type RedisConfig struct {
@@ -661,6 +672,9 @@ func setDefaults() {
 	viper.SetDefault("database.password", "authway")
 	viper.SetDefault("database.name", "authway")
 	viper.SetDefault("database.ssl_mode", "disable")
+
+	// Limits (a key without a default is not read from the environment)
+	viper.SetDefault("limits.redemptions_per_15_minutes", 60)
 
 	// Redis defaults
 	viper.SetDefault("redis.host", "localhost")
