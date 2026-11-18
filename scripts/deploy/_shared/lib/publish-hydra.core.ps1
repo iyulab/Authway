@@ -40,6 +40,14 @@ $RESOURCE_GROUP = $envVars['RESOURCE_GROUP']
 $CONTAINER_APP_HYDRA = $envVars['CONTAINER_APP_HYDRA']
 $CONTAINER_APP_HYDRA_ADMIN = $envVars['CONTAINER_APP_HYDRA_ADMIN']
 
+# Which browser origins the authorization server answers with CORS headers. The
+# API's list (CORS_ALLOWED_ORIGINS) is the default; HYDRA_CORS_ALLOWED_ORIGINS
+# sets this one apart. The discovery document a browser app reads from the
+# issuer is answered from this list alone — the origins registered on a client
+# do not reach it — so an environment that has no front in the way (staging)
+# opens it with `*`, as the one in production does.
+$HYDRA_CORS_ORIGINS = if ($envVars['HYDRA_CORS_ALLOWED_ORIGINS']) { $envVars['HYDRA_CORS_ALLOWED_ORIGINS'] } else { $envVars['CORS_ALLOWED_ORIGINS'] }
+
 # Where Hydra sends the browser during sign-in (see hydra-flow-urls.ps1), and
 # the settings every deployment shares (configs/hydra.shared.env, see
 # hydra-shared-env.ps1) — token shape, what discovery advertises, lifetimes —
@@ -80,7 +88,7 @@ try {
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
-                "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
+                "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$HYDRA_CORS_ORIGINS" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                 $FlowUrlEnv `
                 $SharedEnv
@@ -147,7 +155,7 @@ try {
                 "URLS_SELF_ISSUER=$($envVars['HYDRA_ISSUER'])" `
                 "SERVE_COOKIES_SAME_SITE_MODE=Lax" `
                 "SERVE_PUBLIC_CORS_ENABLED=true" `
-                "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$($envVars['CORS_ALLOWED_ORIGINS'])" `
+                "SERVE_PUBLIC_CORS_ALLOWED_ORIGINS=$HYDRA_CORS_ORIGINS" `
                 "LOG_LEVEL=$($envVars['LOG_LEVEL'])" `
                 $FlowUrlEnv `
                 $SharedEnv

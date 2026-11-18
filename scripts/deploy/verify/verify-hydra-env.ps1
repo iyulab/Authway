@@ -161,6 +161,30 @@ if (-not [string]::IsNullOrWhiteSpace($publicApp)) {
     }
 }
 
+# What a browser app sees: the issuer's discovery document, asked from an origin
+# the deployment does not know, must carry CORS headers — an app reads it from
+# its own origin before the first sign-in button. Production gets that from the
+# edge in front of the issuer, staging from the authorization server's own list.
+$issuer = $envVars['HYDRA_ISSUER']
+if (-not [string]::IsNullOrWhiteSpace($issuer)) {
+    Write-Host "🔍 발급자 discovery — 낯선 출처에서의 CORS" -ForegroundColor Gray
+    try {
+        $resp = Invoke-WebRequest -Uri ($issuer.TrimEnd('/') + '/.well-known/openid-configuration') `
+            -Headers @{ Origin = 'http://localhost:5173' } -UseBasicParsing -TimeoutSec 120
+        $allow = $resp.Headers['Access-Control-Allow-Origin']
+        if ($allow -is [array]) { $allow = $allow[0] }
+        if ($allow -eq '*' -or $allow -eq 'http://localhost:5173') {
+            Write-Host "✅ 발급자 discovery: Access-Control-Allow-Origin = $allow" -ForegroundColor Green
+        } else {
+            Write-Host "❌ 발급자 discovery 가 낯선 출처에 CORS 를 주지 않음 (Access-Control-Allow-Origin = '$allow')" -ForegroundColor Red
+            $failed = $true
+        }
+    } catch {
+        Write-Host "❌ 발급자 discovery 요청 실패: $_" -ForegroundColor Red
+        $failed = $true
+    }
+}
+
 Write-Host ""
 if ($failed) {
     Write-Host "❌ Hydra env 검증 실패 — 위 항목 참조. 배포가 configs/hydra.shared.env 보다 앞서 나갔거나(재배포 필요) 인자 전개가 깨진 것." -ForegroundColor Red
