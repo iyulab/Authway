@@ -158,6 +158,12 @@ try {
         $optionalTargetEnv = @("AUTHWAY_REDIS_KEY_PREFIX=$($envVars['AUTHWAY_REDIS_KEY_PREFIX'])")
         Write-Host "🔑 Redis key prefix: $($envVars['AUTHWAY_REDIS_KEY_PREFIX'])" -ForegroundColor Gray
     }
+    # Optional: the most connections the app may hold open on a database server
+    # it shares (the default, 100, is for a server of its own).
+    if ($envVars['AUTHWAY_DATABASE_MAX_OPEN_CONNS']) {
+        $optionalTargetEnv += "AUTHWAY_DATABASE_MAX_OPEN_CONNS=$($envVars['AUTHWAY_DATABASE_MAX_OPEN_CONNS'])"
+        Write-Host "🔑 Database connection ceiling: $($envVars['AUTHWAY_DATABASE_MAX_OPEN_CONNS'])" -ForegroundColor Gray
+    }
     # Optional: a Redis that shards keys over nodes needs the cluster client.
     if ($envVars['AUTHWAY_REDIS_CLUSTER'] -eq 'true') {
         $optionalTargetEnv += 'AUTHWAY_REDIS_CLUSTER=true'
@@ -244,6 +250,9 @@ try {
     }
     if ($envVars['AUTHWAY_REDIS_CLUSTER'] -ne 'true') {
         $staleEnv += 'AUTHWAY_REDIS_CLUSTER'
+    }
+    if (-not $envVars['AUTHWAY_DATABASE_MAX_OPEN_CONNS']) {
+        $staleEnv += 'AUTHWAY_DATABASE_MAX_OPEN_CONNS'
     }
     $staleSecrets = @('authway-admin-api-key')
     if (-not $envVars['AUTHWAY_TOTP_ENCRYPTION_PREVIOUS_KEYS']) {

@@ -2,6 +2,12 @@
 
 ### Added
 
+- **The connections the API holds open can be capped** — the pool opened up to
+  100 connections per instance, more than a database server shared with other
+  applications can give one of them. `AUTHWAY_DATABASE_MAX_OPEN_CONNS` sets the
+  most an instance holds (default 100, unchanged for a server of its own); the
+  deploy scripts pass it on when the target's `.env` names it.
+
 - **The ceiling for redeeming emailed tokens can be raised** — one network
   address may accept an invitation, reset a password or confirm an address 60
   times in 15 minutes, which an office onboarding a team stays far below but a

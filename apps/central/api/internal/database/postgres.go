@@ -33,8 +33,12 @@ func Connect(cfg config.DatabaseConfig, appEnv string) (*gorm.DB, error) {
 	}
 
 	// Connection pool settings
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
+	maxOpen := cfg.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 100
+	}
+	sqlDB.SetMaxIdleConns(min(10, maxOpen))
+	sqlDB.SetMaxOpenConns(maxOpen)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	return db, nil

@@ -88,6 +88,10 @@ type DatabaseConfig struct {
 	Password string `mapstructure:"password"`
 	Name     string `mapstructure:"name"`
 	SSLMode  string `mapstructure:"ssl_mode"`
+	// MaxOpenConns is the most connections one instance holds open. A server
+	// shared with other apps gives each a share; an instance that may open more
+	// than the share leaves the others without.
+	MaxOpenConns int `mapstructure:"max_open_conns"`
 }
 
 // LimitsConfig holds the ceilings a deployment may move. The defaults are the
@@ -369,6 +373,11 @@ func Load() (*Config, error) {
 	}
 	if sslMode := os.Getenv("AUTHWAY_DATABASE_SSL_MODE"); sslMode != "" {
 		config.Database.SSLMode = sslMode
+	}
+	if n := os.Getenv("AUTHWAY_DATABASE_MAX_OPEN_CONNS"); n != "" {
+		if conns, err := strconv.Atoi(n); err == nil && conns > 0 {
+			config.Database.MaxOpenConns = conns
+		}
 	}
 
 	// Manual override for Redis config
@@ -672,6 +681,7 @@ func setDefaults() {
 	viper.SetDefault("database.password", "authway")
 	viper.SetDefault("database.name", "authway")
 	viper.SetDefault("database.ssl_mode", "disable")
+	viper.SetDefault("database.max_open_conns", 100)
 
 	// Limits (a key without a default is not read from the environment)
 	viper.SetDefault("limits.redemptions_per_15_minutes", 60)
