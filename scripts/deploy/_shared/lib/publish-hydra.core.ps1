@@ -124,11 +124,6 @@ try {
         $dsnPort = $envVars['AUTHWAY_DATABASE_PORT']
         $dsnName = $envVars['AUTHWAY_DATABASE_NAME']
         $DSN = "postgres://${dsnUser}:${dsnPassword}@${dsnHost}:${dsnPort}/${dsnName}?sslmode=require"
-        # A database server shared with other apps gives this one a share of its
-        # connections: the authorization server holds no more than the target names.
-        if ($envVars['HYDRA_DATABASE_MAX_CONNS']) {
-            $DSN += "&max_conns=$($envVars['HYDRA_DATABASE_MAX_CONNS'])&max_idle_conns=$($envVars['HYDRA_DATABASE_MAX_CONNS'])"
-        }
 
         # The DSN embeds the database password and SECRETS_SYSTEM encrypts
         # what Hydra stores, so both go in as Container App secrets and the
