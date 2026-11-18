@@ -2,7 +2,7 @@ name: Release .NET client
 
 # Authway.Client (clients/csharp) to nuget.org, driven only by a `client-v<version>` tag — a push to main never
 # publishes, and the npm SDK's `js-v*` tags and the product's `v*` tags do not match. The tests ran in CI on the tagged commit; this checks that the
-# tag, the project and the changelog agree and that nuget.org does not have the version yet, then packs and pushes.
+# tag, the project and the changelog agree and that nuget.org does not have the version yet, then packs it and has it pushed.
 # Text under clients/ is checked for internal references by the repository's pre-commit hook before it is committed.
 
 on:
@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: pack and push
+  pack:
+    name: pack
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -43,8 +43,19 @@ jobs:
       - name: Pack
         working-directory: clients/csharp
         run: dotnet pack src/Authway.Client/Authway.Client.csproj --configuration Release --output nupkg
-      - name: Push to nuget.org
-        working-directory: clients/csharp
-        run: dotnet nuget push nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY"
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      # Only the .nupkg / .snupkg files, as the central workflow requires; it takes them from this run.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: clients/csharp/nupkg
+          retention-days: 1
+          if-no-files-found: error
+
+  # The package is not pushed from here: this run packs it and asks the organization's central publishing workflow to
+  # push it (no NuGet credential in this repository), and waits for the answer.
+  nuget:
+    name: publish Authway.Client
+    needs: pack
+    permissions: {}
+    uses: iyulab/nuget-publish/.github/workflows/request.yml@2166748abf716fb58855228f65fc6b8f78c2780f # main, 2026-11-07
+    secrets: inherit
